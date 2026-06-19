@@ -1,10 +1,12 @@
 import type { QualityContract } from '../../../models/quality-contract';
 import type { SpecContract } from '../../../models/spec-contract';
+import type { DisassemblyContract } from '../../../models/disassembly-contract';
 
 // Module-level caches — keyed by subcategory code or 'general'.
 // Cleared by page reload; restart-safe since data comes from API which reads from disk.
 const qualityCache = new Map<string, QualityContract>();
 const specCache = new Map<number, SpecContract>();
+const disassemblyCache = new Map<number, DisassemblyContract>();
 
 export async function fetchQualityContract(key: string | number): Promise<QualityContract | null> {
   const cacheKey = String(key);
@@ -14,6 +16,19 @@ export async function fetchQualityContract(key: string | number): Promise<Qualit
     if (!res.ok) return null;
     const contract = await res.json() as QualityContract;
     qualityCache.set(cacheKey, contract);
+    return contract;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchDisassemblyContract(subCategory: number): Promise<DisassemblyContract | null> {
+  if (disassemblyCache.has(subCategory)) return disassemblyCache.get(subCategory)!;
+  try {
+    const res = await fetch(`/api/contracts/disassembly/${subCategory}`);
+    if (!res.ok) return null;
+    const contract = await res.json() as DisassemblyContract;
+    disassemblyCache.set(subCategory, contract);
     return contract;
   } catch {
     return null;
