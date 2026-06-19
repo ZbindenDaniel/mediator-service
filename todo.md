@@ -19,8 +19,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
-0k. ✅ **Test suite stabilized post-Postgres migration, now re-hardened.** 398 tests passing; 9 skipped; 0 failing. 7 stale assertions fixed (media path, ERP HTML format, Postgres quoting, keep-busy dispatch mock, app-settings mock, removed event topic). ~44 test files still deferred in `jest.config.cjs testPathIgnorePatterns`.
-0l. **Deferred test rewrites needed:** `backend/actions/__tests__/save-item.test.ts` (old `{ get: jest.fn() }` ctx mocks), `backend/agentic/__tests__/dispatch-queue-concurrency.test.ts` + invoker-adapter + item-flow-* (old interface), `test/csv-ingest-*.test.ts` + `test/export-items.test.ts` + `test/apiRoutes.test.ts` (SQLite db.exec/db.prepare), `test/frontend-agentic-review-flow.test.ts` (models alias resolution), `frontend/src/components/__tests__/PlacementScanView.test.tsx` (missing lib/logger mock path).
+0k. ✅ **Test suite stabilized post-Postgres migration, now re-hardened.** 410 tests passing; 9 skipped; 0 failing. 7 stale assertions fixed (media path, ERP HTML format, Postgres quoting, keep-busy dispatch mock, app-settings mock, removed event topic). `save-item.test.ts` rewritten (12 new tests). ~43 test files still deferred in `jest.config.cjs testPathIgnorePatterns`.
+0l. **Deferred test rewrites needed:** `backend/agentic/__tests__/dispatch-queue-concurrency.test.ts` + invoker-adapter + item-flow-* (old interface), `test/csv-ingest-*.test.ts` + `test/export-items.test.ts` + `test/apiRoutes.test.ts` (SQLite db.exec/db.prepare), `test/frontend-agentic-review-flow.test.ts` (models alias resolution), `frontend/src/components/__tests__/PlacementScanView.test.tsx` (missing lib/logger mock path).
 
 0f. ✅ **Quality contracts missing in production build.** `scripts/build.js` now copies `contracts/` → `dist/contracts/` so the backend registry can find general and subcategory quality contracts at runtime.
 0g. ✅ **Attachments binding modal shown without purpose.** Modal now only appears when at least one writable external dir (ALT_DOC_DIRS) is available; without external dirs, files upload directly with no modal.

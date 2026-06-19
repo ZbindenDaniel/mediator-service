@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+832. ✅ Rewrite `backend/actions/__tests__/save-item.test.ts` from old SQLite ctx shape to async Postgres ctx shape
+   - **Why:** 12 tests rewrote `{ get: jest.fn() }` ctx to plain `jest.fn(async () => ...)`, dropped `ctx.db.transaction`, added `jest.mock('../../db-client', ...)` with `withTransaction` and `query`, added `jest.mock('../../db', ...)` for `generateShopwareCorrelationId` and `listRecentAgenticRunReviewHistoryBySubcategory`. Used `sandbox.importFresh` (existing FsSandbox API) so `MEDIA_UPLOAD_STAGING_DIR` resolves inside the temp dir. Removed the file from `testPathIgnorePatterns`.
+   - **Deferred:** Nothing.
 831. ✅ Test hardening: fix 8 stale test assertions across 7 files
    - **Why:** Each failure traced to a production code change that wasn't followed up with a test update: media dir moved (`dist/media` → `dist/backend/media`, entry #803); ERP Langtext format restored to HTML (entry #830); Postgres column quoting (migration); keep-busy dispatch added to agentic queue (entry #796) made mock too broad; `print.ts` acquired a DB-backed `getSetting` call with no mock in the test; `'general'` event topic was removed from event-resources.json.
    - **Deferred:** Nothing. All 7 failing suites (8 tests) are now green: 398 passing, 9 skipped, 0 failing.

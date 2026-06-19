@@ -72,8 +72,6 @@ module.exports = {
     '/backend/agentic/__tests__/item-flow-search-transcript.test.ts',
     '/backend/agentic/__tests__/item-flow-trigger-fragments.test.ts',
     '/backend/agentic/__tests__/restart-review-metadata.test.ts',
-    // Uses old sync ctx API (getItem: { get: jest.fn() }) — needs async ctx update
-    '/backend/actions/__tests__/save-item.test.ts',
     // Use SQLite directly — need Postgres rewrite before running in CI
     '/test/export-items.test.ts',
     '/test/csv-ingest-datum-erfasst.test.ts',
