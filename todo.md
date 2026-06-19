@@ -47,6 +47,8 @@
    - "list button broken" — unclear; may self-resolve now that box-detail is fixed
    - "artikel dupliziert nach umlagern" — likely stale frontend state; may self-resolve with box-detail fix (box item list can now reload after move)
 
+1d. ✅ **Zerlegen: Empty slots blocked Hinzufügen even though a part can always be added.** If the quality assessment said a part was absent (e.g. "RAM: nicht vorhanden"), the slot entered `Empty` state and the Hinzufügen button was hidden. This is wrong — a missing part can be installed later (e.g. RAM added to restore a device). Fixed in `ZubehoerCard.tsx`: button guard changed from `state === 'potential'` to `state === 'potential' || state === 'empty'`. User guide updated to match.
+
 1b. ✅ **Restore bulk-action controls.** `BulkItemActionBar` restored inside `MultiItemDetailPanel` in Layout; reads `selectedIds` from PanelContext and `selectedItems/onClearSelection/onActionComplete` from `BulkSelectionContext`.
 
 2. **Fix agentic runs for references.** Agentic runs are broken for reference items. Runs can be started and run but immediately fall back to not started
