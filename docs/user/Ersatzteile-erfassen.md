@@ -86,4 +86,4 @@ Falls Sie einen Bauteil-Link rückgängig machen möchten (z. B. weil Sie den fa
 
 - **Qualitätsbewertung des Quellgeräts:** Sobald das erste Bauteil entnommen wird, wird die Qualitätsstufe des Geräts automatisch auf *Ersatzteil* gesetzt. Das signalisiert, dass das Gerät nicht mehr vollständig ist.
 - **Suche:** Katalogisierte und entnommene Bauteile sind im System als normale Artikel suchbar. Der Lagerort ist im Feld "Standort" angegeben.
-- **Nicht vorhanden (✕):** Slots mit diesem Status haben keinen "Hinzufügen"-Knopf — das Bauteil wurde bei der Qualitätsprüfung als fehlend bestätigt.
+- **Nicht vorhanden (✕):** Das Bauteil wurde bei der Qualitätsprüfung als fehlend markiert. Sie können es aber jederzeit nachträglich hinzufügen (z. B. wenn RAM nachgerüstet wird) — der "Hinzufügen"-Knopf ist auch in diesem Status sichtbar.

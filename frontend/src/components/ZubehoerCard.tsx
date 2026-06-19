@@ -353,7 +353,7 @@ export default function ZubehoerCard({
                         )}
                       </td>
                       <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                        {state === 'potential' && (
+                        {(state === 'potential' || state === 'empty') && (
                           <div style={{ position: 'relative', display: 'inline-block' }}>
                             <button
                               type="button"

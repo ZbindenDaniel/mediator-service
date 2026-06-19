@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+833. ✅ Zerlegen: allow Hinzufügen on Empty slots (part may be added after assessment)
+   - **Why:** The Empty state (quality said "Nicht vorhanden") blocked the Hinzufügen button entirely. This is wrong — a part can be added later (e.g. RAM installed to make a device functional). One-line fix: `state === 'potential'` → `state === 'potential' || state === 'empty'` in ZubehoerCard. Docs updated to match.
+   - **Deferred:** Nothing.
 832. ✅ Spare Parts Catalog: tests, detail doc, and user guide
    - **Why:** Feature shipped without test coverage, a technical runbook, or a user-facing guide. Added 48 tests across 3 files (`catalog-spare-part`, `remove-from-device`, `quality-contracts` pure functions). Detail doc at `docs/detailed/spare-parts-catalog.md` covers contract schema, quality integration, data model, API, UI, and runtime checklist. German user guide at `docs/user/Ersatzteile-erfassen.md` covers the Zerlegen workflow step by step.
    - **Deferred:** Nothing.
