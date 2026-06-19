@@ -7,6 +7,11 @@ jest.mock('../backend/labelpdf', () => ({
   renderHtmlToPdf: jest.fn()
 }));
 
+jest.mock('../backend/utils/app-settings', () => ({
+  getSetting: jest.fn(async (_key: string, defaultValue = '') => defaultValue ?? ''),
+  getAllSettings: jest.fn(async () => ({})),
+}));
+
 jest.mock('child_process', () => {
   const actual = jest.requireActual('child_process');
   return {

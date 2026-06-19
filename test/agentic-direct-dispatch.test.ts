@@ -116,8 +116,11 @@ describe('agentic direct dispatch', () => {
       expect.objectContaining({ Event: 'AgenticRunQueued', EntityId: queuedRun.Artikel_Nummer })
     );
 
-    // Now dispatch queued runs — mock query to return the queued run
-    mockQuery.mockResolvedValue([queuedRun]);
+    // Now dispatch queued runs — return the run only for queued-status queries; idle-fill returns empty
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes("'queued'")) return [queuedRun];
+      return [];
+    });
     await dispatchQueuedAgenticRuns(deps);
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -178,7 +181,8 @@ describe('agentic direct dispatch', () => {
       ReviewedBy: null,
       LastReviewDecision: null,
       LastReviewNotes: null,
-      RetryCount: 0,
+      // MAX_AUTO_RETRIES = 5; exhausted retries trigger cancelled (not re-queued) path
+      RetryCount: 5,
       NextRetryAt: null,
       LastError: null,
       LastAttemptAt: null
@@ -191,8 +195,11 @@ describe('agentic direct dispatch', () => {
       invokeMock: failingInvoke
     });
 
-    // Mock query to return the queued run for dispatch
-    mockQuery.mockResolvedValue([existingRun]);
+    // Mock query to return the queued run for dispatch; idle-fill returns empty
+    mockQuery.mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes("'queued'")) return [existingRun];
+      return [];
+    });
     await dispatchQueuedAgenticRuns(deps);
 
     await new Promise((resolve) => setImmediate(resolve));
