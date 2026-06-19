@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "subCategory": 201,
+  "parts": [
+    {
+      "key": "fan",
+      "label": "Lüfter",
+      "targetSubcategory": 202,
+      "qualityQuestion": {
+        "id": "has_fan",
+        "type": "boolean",
+        "question": "Lüfter vorhanden?",
+        "qualityImpact": { "false": 1 }
+      }
+    },
+    {
+      "key": "keyboard",
+      "label": "Tastatur",
+      "targetSubcategory": 202,
+      "qualityQuestion": {
+        "id": "has_keyboard",
+        "type": "boolean",
+        "question": "Tastatur vorhanden?",
+        "qualityImpact": { "false": 1 }
+      }
+    },
+    {
+      "key": "display",
+      "label": "Display",
+      "targetSubcategory": 202,
+      "qualityQuestion": {
+        "id": "has_display",
+        "type": "boolean",
+        "question": "Display vorhanden?",
+        "qualityImpact": { "false": 1 }
+      }
+    },
+    {
+      "key": "battery",
+      "label": "Akku",
+      "targetSubcategory": 206,
+      "qualityQuestion": {
+        "id": "battery_condition",
+        "type": "select",
+        "question": "Akkuzustand?",
+        "values": ["Gut (>80%)", "Mittel (50–80%)", "Schwach (<50%)", "Defekt", "Nicht vorhanden"],
+        "qualityImpact": {
+          "Gut (>80%)": 5,
+          "Mittel (50–80%)": 4,
+          "Schwach (<50%)": 3,
+          "Defekt": 2,
+          "Nicht vorhanden": 1
+        },
+        "specField": "Akku",
+        "specValue": "%v"
+      }
+    },
+    {
+      "key": "ram",
+      "label": "Arbeitsspeicher",
+      "targetSubcategory": 603,
+      "qualityQuestion": {
+        "id": "ram_gb",
+        "type": "select",
+        "question": "Wie viel RAM ist verbaut?",
+        "values": ["2", "4", "8", "16", "32", "64"],
+        "specField": "RAM",
+        "specValue": "%v GB"
+      }
+    },
+    {
+      "key": "storage",
+      "label": "SSD / HDD",
+      "targetSubcategory": 901,
+      "qualityQuestion": {
+        "id": "storage_gb",
+        "type": "select",
+        "question": "Speicher (SSD/HDD)?",
+        "values": ["128", "256", "512", "1000", "2000"],
+        "specField": "Speicher",
+        "specValue": "%v GB"
+      }
+    },
+    {
+      "key": "mainboard",
+      "label": "Mainboard",
+      "targetSubcategory": 601,
+      "qualityQuestion": {
+        "id": "has_mainboard",
+        "type": "boolean",
+        "question": "Mainboard vorhanden?",
+        "qualityImpact": { "false": 1 }
+      }
+    }
+  ]
+}

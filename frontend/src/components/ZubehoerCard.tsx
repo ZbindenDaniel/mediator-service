@@ -1,31 +1,85 @@
 import React from 'react';
 import RefSearchInput, { type RefSuggestion } from './RefSearchInput';
 import ZubehoerBadge from './ZubehoerBadge';
+import SparepartSlotPopup from './SparepartSlotPopup';
 import { usePanelContext } from '../context/PanelContext';
+import type { DisassemblyContract, DisassemblyContractPart } from '../../../models/disassembly-contract';
+import { getUser, ensureUser } from '../lib/user';
+
+interface SparePart {
+  ItemUUID: string;
+  slotKey: string | null;
+  Artikel_Nummer: string | null;
+  BoxID: string | null;
+  Location: string | null;
+  Artikelbeschreibung?: string | null;
+  Kurzbeschreibung?: string | null;
+}
+
+type SlotState = 'potential' | 'empty' | 'cataloged' | 'removed';
+
+function deriveSlotState(
+  part: DisassemblyContractPart,
+  spareParts: SparePart[],
+  qualityResponses: Record<string, string>
+): { state: SlotState; sparePart: SparePart | null } {
+  const linked = spareParts.find(sp => sp.slotKey === part.key) ?? null;
+  if (linked) {
+    return { state: linked.BoxID ? 'removed' : 'cataloged', sparePart: linked };
+  }
+  const q = part.qualityQuestion;
+  if (q) {
+    const answer = qualityResponses[q.id];
+    if (answer === 'false' || answer === 'Nicht vorhanden') {
+      return { state: 'empty', sparePart: null };
+    }
+  }
+  return { state: 'potential', sparePart: null };
+}
 
 interface ZubehoerCardProps {
   itemUUID: string;
   artikelNummer?: string | null;
+  deviceLabel?: string | null;
+  deviceHersteller?: string | null;
   connectedAccessories: any[];
   connectedToDevices: any[];
   compatibleAccessoryRefs: any[];
   compatibleParentRefs: any[];
   onRelationChanged: () => void;
+  disassemblyContract?: DisassemblyContract | null;
+  spareParts?: SparePart[];
+  qualityResponses?: Record<string, string>;
+  onSparepartChanged?: () => void;
 }
 
 export default function ZubehoerCard({
   itemUUID,
   artikelNummer,
+  deviceLabel,
+  deviceHersteller,
   connectedAccessories,
   connectedToDevices,
   compatibleAccessoryRefs,
   compatibleParentRefs,
-  onRelationChanged
+  onRelationChanged,
+  disassemblyContract,
+  spareParts = [],
+  qualityResponses = {},
+  onSparepartChanged
 }: ZubehoerCardProps) {
   const { setEntity } = usePanelContext();
   const [linkInput, setLinkInput] = React.useState('');
   const [linkPending, setLinkPending] = React.useState(false);
   const [linkError, setLinkError] = React.useState<string | null>(null);
+
+  // Slot for the open Hinzufügen popup (key of the part, or null if closed)
+  const [openPopupSlot, setOpenPopupSlot] = React.useState<string | null>(null);
+  // Slot for the open Entnehmen form
+  const [removeSlotKey, setRemoveSlotKey] = React.useState<string | null>(null);
+  const [removeBoxInput, setRemoveBoxInput] = React.useState('');
+  const [removePending, setRemovePending] = React.useState(false);
+  const [removeError, setRemoveError] = React.useState<string | null>(null);
 
   const [localCompatRefs, setLocalCompatRefs] = React.useState<any[]>(compatibleAccessoryRefs);
   const [localParentRefs, setLocalParentRefs] = React.useState<any[]>(compatibleParentRefs);
@@ -259,6 +313,165 @@ export default function ZubehoerCard({
         </button>
       </form>
       {linkError && <p className="muted" style={{ color: 'var(--color-error, #d73a49)', marginTop: '4px' }}>{linkError}</p>}
+
+      {disassemblyContract && disassemblyContract.parts.length > 0 && (
+        <>
+          <h3 style={{ marginTop: '1.5rem' }}>Zerlegen</h3>
+          <table className="details" style={{ position: 'relative' }}>
+            <tbody>
+              {disassemblyContract.parts.map((part) => {
+                const { state, sparePart } = deriveSlotState(part, spareParts, qualityResponses);
+                const isRemoveOpen = removeSlotKey === part.key;
+                return (
+                  <React.Fragment key={part.key}>
+                    <tr>
+                      <td style={{ width: '28px' }}>
+                        {state === 'cataloged' && <span title="Im Gerät (katalogisiert)" style={{ color: 'var(--color-orange, #f0a030)' }}>◉</span>}
+                        {state === 'removed' && <span title="Entnommen" style={{ color: 'var(--color-muted, #888)' }}>○</span>}
+                        {state === 'potential' && <span title="Unbekannt / vorhanden" style={{ color: 'var(--color-green, #4caf50)' }}>◎</span>}
+                        {state === 'empty' && <span title="Nicht vorhanden" style={{ color: 'var(--color-error, #d73a49)' }}>✕</span>}
+                      </td>
+                      <td>
+                        <strong>{part.label}</strong>
+                        {sparePart && (
+                          <>
+                            {' '}
+                            <button
+                              type="button"
+                              className="link-btn"
+                              onClick={() => setEntity('item', sparePart.ItemUUID)}
+                            >
+                              {sparePart.Artikelbeschreibung || sparePart.Kurzbeschreibung || sparePart.Artikel_Nummer || sparePart.ItemUUID}
+                            </button>
+                            {state === 'removed' && sparePart.Location && (
+                              <span className="muted"> · {sparePart.Location}</span>
+                            )}
+                          </>
+                        )}
+                        {state === 'empty' && (
+                          <span className="muted"> · Nicht vorhanden (laut Qualitätsprüfung)</span>
+                        )}
+                      </td>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        {state === 'potential' && (
+                          <div style={{ position: 'relative', display: 'inline-block' }}>
+                            <button
+                              type="button"
+                              className="btn sml-btn"
+                              onClick={() => setOpenPopupSlot(openPopupSlot === part.key ? null : part.key)}
+                            >
+                              Hinzufügen
+                            </button>
+                            {openPopupSlot === part.key && (
+                              <SparepartSlotPopup
+                                deviceItemUUID={itemUUID}
+                                deviceLabel={deviceLabel || itemUUID}
+                                deviceHersteller={deviceHersteller}
+                                slotKey={part.key}
+                                slotLabel={part.label}
+                                onComplete={() => {
+                                  setOpenPopupSlot(null);
+                                  onSparepartChanged?.();
+                                }}
+                                onClose={() => setOpenPopupSlot(null)}
+                              />
+                            )}
+                          </div>
+                        )}
+                        {state === 'cataloged' && (
+                          <button
+                            type="button"
+                            className="btn sml-btn"
+                            onClick={() => {
+                              setRemoveSlotKey(isRemoveOpen ? null : part.key);
+                              setRemoveBoxInput('');
+                              setRemoveError(null);
+                            }}
+                          >
+                            {isRemoveOpen ? 'Abbrechen' : 'Entnehmen'}
+                          </button>
+                        )}
+                        {state === 'cataloged' && sparePart && (
+                          <button
+                            type="button"
+                            className="btn sml-btn"
+                            style={{ marginLeft: '4px' }}
+                            title="Verknüpfung aufheben und Instanz löschen"
+                            onClick={async () => {
+                              const actor = await ensureUser();
+                              if (!actor) return;
+                              const ok = confirm(`Eintrag für ${part.label} löschen?`);
+                              if (!ok) return;
+                              try {
+                                await fetch(`/api/items/${encodeURIComponent(sparePart.ItemUUID)}/spare-part-link`, { method: 'DELETE' });
+                                onSparepartChanged?.();
+                              } catch { /* noop */ }
+                            }}
+                          >
+                            Lösen
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                    {isRemoveOpen && sparePart && (
+                      <tr>
+                        <td />
+                        <td colSpan={2}>
+                          <form
+                            onSubmit={async (e) => {
+                              e.preventDefault();
+                              const actor = await ensureUser();
+                              if (!actor) return;
+                              const toBoxId = removeBoxInput.trim();
+                              if (!toBoxId) return;
+                              setRemovePending(true);
+                              setRemoveError(null);
+                              try {
+                                const res = await fetch(`/api/items/${encodeURIComponent(sparePart.ItemUUID)}/remove-from-device`, {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ toBoxId, actor })
+                                });
+                                if (res.ok) {
+                                  setRemoveSlotKey(null);
+                                  setRemoveBoxInput('');
+                                  onSparepartChanged?.();
+                                } else {
+                                  const err = await res.json().catch(() => ({}));
+                                  setRemoveError((err as any).error || 'Fehler beim Entnehmen');
+                                }
+                              } catch {
+                                setRemoveError('Netzwerkfehler');
+                              } finally {
+                                setRemovePending(false);
+                              }
+                            }}
+                            style={{ display: 'flex', gap: '6px', alignItems: 'center', paddingBottom: '0.25rem' }}
+                          >
+                            <input
+                              type="text"
+                              placeholder="Ziel-Box-ID"
+                              value={removeBoxInput}
+                              onChange={(e) => setRemoveBoxInput(e.target.value)}
+                              style={{ flex: 1, minWidth: '140px' }}
+                              disabled={removePending}
+                              autoFocus
+                            />
+                            <button type="submit" className="btn btn--primary sml-btn" disabled={removePending || !removeBoxInput.trim()}>
+                              {removePending ? '…' : 'Entnehmen'}
+                            </button>
+                            {removeError && <span style={{ color: 'var(--color-error, #d73a49)' }}>{removeError}</span>}
+                          </form>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </>
+      )}
     </div>
   );
 }

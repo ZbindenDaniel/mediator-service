@@ -182,6 +182,8 @@
 
 ### Still Open
 
+- For **spare parts `drive_type`**, should this question move to the disassembly contract storage slot (needs `qualityQuestion[]` array support on parts) or stay in quality/201.json as a follow-up spec question? Currently stays in quality/201.json (TBD).
+- For **spare parts bidirectional suggestions**, when a device's quality check says "PS missing", should the system surface matching PS units in inventory for the operator? Deferred to phase 2 — needs structured spec matching.
 - For **shelf totals**, should weight/item count include nested boxes only, loose items only, or both?
 > Actually, the weight of a shelf is not interesting. 
 - For **optional basic-form fields**, should contract changes be backend-first or can the frontend collect them before backend persistence is ready?

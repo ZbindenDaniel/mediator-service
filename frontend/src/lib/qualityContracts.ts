@@ -1,20 +1,33 @@
 import type { QualityContract, QualityQuestion } from '../../../models/quality-contract';
-import { fetchQualityContract } from './contractsApi';
+import type { DisassemblyContract } from '../../../models/disassembly-contract';
+import { fetchQualityContract, fetchDisassemblyContract } from './contractsApi';
 
 export function isQuestionVisible(question: QualityQuestion, answers: Record<string, string>): boolean {
   if (!question.showIf) return true;
   return answers[question.showIf.questionId] === question.showIf.value;
 }
 
+/** Converts disassembly contract part questions into a synthetic QualityContract for rendering/scoring. */
+function disassemblyToQualityContract(dc: DisassemblyContract): QualityContract {
+  return {
+    version: dc.version,
+    subCategory: dc.subCategory,
+    questions: dc.parts.flatMap(p => p.qualityQuestion ? [p.qualityQuestion] : [])
+  };
+}
+
 export async function loadContractsAsync(subCategory?: number): Promise<{
   general: QualityContract | null;
+  disassembly: QualityContract | null;
   subCat: QualityContract | null;
 }> {
-  const [general, subCat] = await Promise.all([
+  const [general, disassemblyRaw, subCat] = await Promise.all([
     fetchQualityContract('general'),
+    subCategory !== undefined ? fetchDisassemblyContract(subCategory) : Promise.resolve(null),
     subCategory !== undefined ? fetchQualityContract(subCategory) : Promise.resolve(null)
   ]);
-  return { general, subCat };
+  const disassembly = disassemblyRaw ? disassemblyToQualityContract(disassemblyRaw) : null;
+  return { general, disassembly, subCat };
 }
 
 /** Derives quality value (1–5) from answers across all provided contracts. */
@@ -36,13 +49,17 @@ export function deriveQualityFromAnswers(
   return scores.length > 0 ? Math.min(...scores) : 3;
 }
 
-/** Returns all questions from all contracts in order: general first, then subcategory. */
+/** Returns all questions from all contracts in order: general → disassembly → subcategory. */
 export function getAllQuestions(
   general: QualityContract | null,
-  subCat: QualityContract | null
+  subCat: QualityContract | null,
+  disassembly?: QualityContract | null
 ): QualityQuestion[] {
-  const base = general?.questions ?? [];
-  return subCat ? [...base, ...subCat.questions] : base;
+  return [
+    ...(general?.questions ?? []),
+    ...(disassembly?.questions ?? []),
+    ...(subCat?.questions ?? [])
+  ];
 }
 
 /** Checks whether all required questions have been answered. */
