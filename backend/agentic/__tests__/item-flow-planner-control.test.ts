@@ -77,21 +77,23 @@ describe('collectSearchContexts planner coordination', () => {
     });
 
     expect(searchInvoker).toHaveBeenCalledTimes(3);
+    // rankPlansForLimit puts dimension-enriched (priority 0) and manufacturer-enriched (priority 2)
+    // ahead of the planner query and basePlan (both priority 3)
     expect(calls.map((entry) => entry.query)).toEqual([
-      'Gerätedaten Laborgerät 3000',
-      'Custom planner query',
-      'Gerätedaten Acme Instruments Laborgerät 3000'
+      'Laborgerät 3000 dimensions',
+      'Acme Instruments Laborgerät 3000',
+      'Gerätedaten Laborgerät 3000'
     ]);
     expect(
       calls[1]?.metadata
     ).toEqual(
       expect.objectContaining({
-        context: 'planner',
-        plannerSource: 'test',
+        context: 'manufacturer_enriched',
         requestIndex: 1
       })
     );
     expect(result.searchContexts).toHaveLength(3);
+    // all 3 sources share example.com; only 2 pass the per-domain cap of 2
     expect(result.aggregatedSources).toHaveLength(2);
   });
 
@@ -130,7 +132,8 @@ describe('collectSearchContexts planner coordination', () => {
       }
     });
 
-    expect(calls).toEqual(['Gerätedaten Laborgerät 3050', 'Hersteller Datenblatt Laborgerät 3050']);
+    // dimensions plan (priority 0) is ranked first; then basePlan and the surviving planner plan
+    expect(calls).toEqual(['Laborgerät 3050 dimensions', 'Gerätedaten Laborgerät 3050', 'Hersteller Datenblatt Laborgerät 3050']);
     expect(logger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         msg: 'taxonomy-targeted search plans rejected',
@@ -189,10 +192,13 @@ describe('collectSearchContexts planner coordination', () => {
     });
 
     expect(searchInvoker).toHaveBeenCalledTimes(3);
+    // priority 0: 'Plan targeting missing fields' (planner, has missingFields) and
+    //             'Laborgerät 4000 dimensions' (missing_fields_enriched);
+    // priority 1: 'Laborgerät 4000 Seriennummer:SN-4000-XYZ' (locked_fields_enriched)
     expect(calls.map((entry) => entry.query)).toEqual([
       'Plan targeting missing fields',
-      'Gerätedaten Laborgerät 4000 Seriennummer:SN-4000-XYZ',
-      'Gerätedaten Acme Instruments Laborgerät 4000'
+      'Laborgerät 4000 dimensions',
+      'Laborgerät 4000 Seriennummer:SN-4000-XYZ'
     ]);
 
     expect(logger.warn).toHaveBeenCalledWith(
@@ -257,7 +263,8 @@ describe('collectSearchContexts planner coordination', () => {
       expect.objectContaining({
         msg: 'search retrieval metrics',
         itemId: 'item-retrieval-metrics',
-        uniqueQueries: 1,
+        // 3 queries run (basePlan + 2 fallbacks after the two duplicate planner plans are deduped)
+        uniqueQueries: 3,
         uniqueDomains: 2,
       })
     );

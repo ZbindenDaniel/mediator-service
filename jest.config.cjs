@@ -56,6 +56,12 @@ module.exports = {
     '/backend/agentic/__tests__/item-flow-search.test.ts',
     '/backend/agentic/__tests__/item-flow-dispatch.test.ts',
     '/test/agentic/item-flow.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /backend/agentic/__tests__/invoker-adapter.test.ts (converted SQLite mocks to async)
+    // /backend/agentic/__tests__/item-flow-planner-control.test.ts (updated stale query assertions)
+    // /backend/agentic/__tests__/item-flow-search-sanitization.test.ts (updated paragraph bound)
+    // /backend/agentic/__tests__/item-flow-search-transcript.test.ts (updated call counts)
+    // /backend/agentic/__tests__/item-flow-trigger-fragments.test.ts (added ../../db mock)
     // CSV import action now requires ZIP archives — test needs rewrite
     '/test/csv-import-duplicate-guard.test.ts',
     // Missing lib/logger module path — needs module resolution fix
@@ -65,11 +71,6 @@ module.exports = {
     // Uses old topic-filter module cache invalidation approach — unreliable in Jest
     '/test/event-log-topics.test.ts',
     // Uses old AgenticServiceDependencies interface (pre-Postgres refactor) — needs rewrite
-    '/backend/agentic/__tests__/invoker-adapter.test.ts',
-    '/backend/agentic/__tests__/item-flow-planner-control.test.ts',
-    '/backend/agentic/__tests__/item-flow-search-sanitization.test.ts',
-    '/backend/agentic/__tests__/item-flow-search-transcript.test.ts',
-    '/backend/agentic/__tests__/item-flow-trigger-fragments.test.ts',
     // Use SQLite directly — need Postgres rewrite before running in CI
     '/test/export-items.test.ts',
     '/test/csv-ingest-datum-erfasst.test.ts',
