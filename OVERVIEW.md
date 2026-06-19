@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+831. ✅ Test hardening: fix 8 stale test assertions across 7 files
+   - **Why:** Each failure traced to a production code change that wasn't followed up with a test update: media dir moved (`dist/media` → `dist/backend/media`, entry #803); ERP Langtext format restored to HTML (entry #830); Postgres column quoting (migration); keep-busy dispatch added to agentic queue (entry #796) made mock too broad; `print.ts` acquired a DB-backed `getSetting` call with no mock in the test; `'general'` event topic was removed from event-resources.json.
+   - **Deferred:** Nothing. All 7 failing suites (8 tests) are now green: 398 passing, 9 skipped, 0 failing.
 830. ✅ Restore ERP Langtext export format to HTML; wire LANGTEXT_EXPORT_FORMAT env var
    - **Why:** Commit e3a84c2 introduced `resolveLangtextExportFormat` and changed ERP format from HTML to markdown without confirming with the downstream importer. The ERP had been receiving HTML for months and broke silently. Restored `'html'` as the default for erp mode. Also wired `LANGTEXT_EXPORT_FORMAT` env var (documented in `.env.example` but never read) so operators can override format without a code change.
    - **Deferred:** Nothing.
