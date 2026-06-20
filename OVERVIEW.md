@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+834. ✅ Reactivate user help pages + informal language rewrite + doc extensions
+   - **Why:** Help pages were deactivated by removing the question-mark nav icon from Header.tsx. Restored the GoQuestion link. Rewrote all 6 German user docs (`docs/user/`) in informal "du" language for a friendlier tone. Extended Erste-Schritte (tabs explanation, daily workflow section, username-change tip), Fehlerbehebung (3 new sections: veraltete Daten, Seite lädt nicht, KI hängt; extended ERP-export recovery), and Ersatzteile-erfassen (reframed with conceptual intro explaining the Zerlegen philosophy, step-by-step laptop example, clarification of what happens to the source device).
+   - **Deferred:** Nothing.
 833. ✅ Zerlegen: allow Hinzufügen on Empty slots (part may be added after assessment)
    - **Why:** The Empty state (quality said "Nicht vorhanden") blocked the Hinzufügen button entirely. This is wrong — a part can be added later (e.g. RAM installed to make a device functional). One-line fix: `state === 'potential'` → `state === 'potential' || state === 'empty'` in ZubehoerCard. Docs updated to match.
    - **Deferred:** Nothing.

@@ -1,7 +1,7 @@
 # Drucker einrichten
 
-Diese Anleitung erklärt, wie Sie einen Etikettendrucker (z.B. Brother QL-500, QL-800) oder
-einen Netzwerkdrucker mit dem System verbinden.
+Diese Anleitung erklärt, wie du einen Etikettendrucker (z.B. Brother QL-500, QL-800) oder
+einen Netzwerkdrucker mit dem System verbindest.
 
 ---
 
@@ -22,25 +22,25 @@ Beides wird über das **Admin-Panel** konfiguriert — kein Neustart nötig.
 
 ### Schritt 1: Treiber installieren
 
-> Überspringen Sie diesen Schritt, wenn der Drucker bereits druckt oder wenn Sie einen
-> Netzwerkdrucker (Brother QL-820NWB, QL-1110NWB, Laserdrucker …) verwenden.
+> Überspring diesen Schritt, wenn der Drucker bereits druckt oder wenn du einen
+> Netzwerkdrucker (Brother QL-820NWB, QL-1110NWB, Laserdrucker …) verwendest.
 
-1. Laden Sie die Treiber für Ihren Brother QL von
+1. Lade die Treiber für deinen Brother QL von
    [support.brother.com](https://support.brother.com) herunter.
-   Sie benötigen **zwei Dateien**:
+   Du brauchst **zwei Dateien**:
    - `brother-QL800lpr-*.i386.deb` — LPR-Druckertreiber
    - `cupswrapperQL800-*.i386.deb` — CUPS-Wrapper
-   *(Modellnummer an Ihren Drucker anpassen)*
-2. Kopieren Sie beide Dateien in den Ordner `cups/drivers/` im Repository.
-3. Bauen Sie den CUPS-Container neu und starten Sie ihn:
+   *(Modellnummer an deinen Drucker anpassen)*
+2. Kopiere beide Dateien in den Ordner `cups/drivers/` im Repository.
+3. Baue den CUPS-Container neu und starte ihn:
    ```
    docker compose up --build cups
    ```
 
 ### Schritt 2: USB-Passthrough aktivieren
 
-Damit CUPS den Drucker sehen kann, müssen Sie den USB-Zugriff freischalten.
-Starten Sie den Stack mit:
+Damit CUPS den Drucker sehen kann, musst du den USB-Zugriff freischalten.
+Starte den Stack mit:
 
 ```
 docker compose -f docker-compose.yml -f docker-compose.usb.yml up -d
@@ -48,16 +48,16 @@ docker compose -f docker-compose.yml -f docker-compose.usb.yml up -d
 
 ### Schritt 3: Drucker erkennen lassen
 
-1. Öffnen Sie das **Admin-Panel** → **Drucker-Queues**.
-2. Klicken Sie auf **Erkennen**.
+1. Öffne das **Admin-Panel** → **Drucker-Queues**.
+2. Klick auf **Erkennen**.
 
 Das System fragt CUPS ab und füllt die Autocomplete-Felder mit den gefundenen Geräten und Treibern.
 
-*Erscheint eine Fehlermeldung statt Geräten, prüfen Sie den USB-Passthrough (Schritt 2).*
+*Erscheint eine Fehlermeldung statt Geräten, prüf den USB-Passthrough (Schritt 2).*
 
 ### Schritt 4: Queue anlegen
 
-Eine **Queue** ist ein benannter Druckkanal. Legen Sie für jede Etikettenrolle oder -grösse
+Eine **Queue** ist ein benannter Druckkanal. Leg für jede Etikettenrolle oder -grösse
 eine eigene Queue an (empfohlen).
 
 | Feld | Beispiel | Hinweis |
@@ -67,11 +67,11 @@ eine eigene Queue an (empfohlen).
 | PPD-Modell | `lsb/usr/Brother/brother_ql800_printer_en.ppd` | Aus Autocomplete wählen |
 | Media | `w62h100` | Grösse der eingelegten Rolle — oder leer lassen (Drucker-Standard) |
 
-Klicken Sie auf **Hinzufügen**.
+Klick auf **Hinzufügen**.
 
 > **Media leer lassen** bedeutet: CUPS verwendet den im PPD definierten Standard.
 > **Explizite Grösse** (z.B. `w62h100`) verhindert, dass der Drucker das Etikett auf
-> die falsche Rollengrösse skaliert — empfohlen, wenn Sie mehrere Rollen verwenden.
+> die falsche Rollengrösse skaliert — empfohlen, wenn du mehrere Rollen verwendest.
 
 Häufige Rollengrössen:
 
@@ -85,7 +85,7 @@ Häufige Rollengrössen:
 
 ### Schritt 5: Label-Typen zuweisen
 
-Öffnen Sie **Admin-Panel** → **Drucker-Einstellungen** und weisen Sie jeder Etikettenart
+Öffne **Admin-Panel** → **Drucker-Einstellungen** und weise jeder Etikettenart
 die passende Queue zu:
 
 | Label-Typ | Queue (Beispiel) |
@@ -107,13 +107,13 @@ unterstützen IPP — es werden **keine Treiber** benötigt.
 | Device URI | `ipps://<IP-Adresse>/ipp/print` |
 | PPD-Modell | `everywhere` |
 
-Ersetzen Sie `<IP-Adresse>` durch die Netzwerkadresse Ihres Druckers.
+Ersetze `<IP-Adresse>` durch die Netzwerkadresse deines Druckers.
 
 Für einen externen CUPS-Druckserver (z.B. Raspberry Pi):
 
-1. Öffnen Sie **Admin-Panel** → **Drucker-Einstellungen**.
-2. Tragen Sie im Feld **Drucker-Server** die Adresse ein: `192.168.x.x:631`
-3. Klicken Sie auf **Speichern**.
+1. Öffne **Admin-Panel** → **Drucker-Einstellungen**.
+2. Trag im Feld **Drucker-Server** die Adresse ein: `192.168.x.x:631`
+3. Klick auf **Speichern**.
 4. Die Geräteerkennung fragt nun den externen Server ab.
 
 ---
@@ -132,19 +132,19 @@ Für einen externen CUPS-Druckserver (z.B. Raspberry Pi):
 
 ## Benutzerdefinierte Etikettengrössen
 
-Falls Ihr Drucker eine Sondergrösse nicht kennt (z.B. 62 × 8 mm):
+Falls dein Drucker eine Sondergrösse nicht kennt (z.B. 62 × 8 mm):
 
-1. Suchen Sie die PPD-Datei des Treibers:
+1. Such die PPD-Datei des Treibers:
    ```
    docker compose exec cups find /usr/share/ppd -name "*ql800*"
    ```
-2. Kopieren Sie sie aus dem Container:
+2. Kopiere sie aus dem Container:
    ```
    docker compose cp cups:/usr/share/ppd/.../brother_ql800_printer_en.ppd cups/ppds/
    ```
-3. Öffnen Sie die Datei und fügen Sie einen neuen `*PageSize`-Eintrag ein
+3. Öffne die Datei und füge einen neuen `*PageSize`-Eintrag ein
    (analog zu den bestehenden Einträgen).
-4. Committen Sie die veränderte PPD nach `cups/ppds/` ins Repository.
+4. Committe die veränderte PPD nach `cups/ppds/` ins Repository.
 5. Neu bauen:
    ```
    docker compose up --build cups

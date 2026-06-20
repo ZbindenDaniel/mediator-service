@@ -1,125 +1,156 @@
 # Erste Schritte
 
-Willkommen im Lagerverwaltungssystem. Dieses System hilft Ihnen dabei, Artikel zu erfassen, zu lagern, zu suchen und ins ERP-System zu übertragen. Diese Anleitung zeigt Ihnen die wichtigsten Schritte für den Einstieg.
+Willkommen im Lagerverwaltungssystem! Hier erfasst du Artikel, lagerst sie, findest sie wieder und überträgst sie ins ERP. Diese Seite zeigt dir die wichtigsten Schritte — lass uns starten.
 
 ---
 
 ## 1. Zugang und Browser
 
-Öffnen Sie die Anwendung in einem aktuellen Browser (Google Chrome oder Firefox empfohlen). Die Anwendung funktioniert auf dem Desktop und auf Mobilgeräten. Für das QR-Scannen benötigen Sie ein Mobilgerät mit Kamera.
+Öffne die App in einem aktuellen Browser — Chrome oder Firefox empfohlen. Die App läuft auf Desktop und Mobilgerät. Für QR-Scanning brauchst du ein Handy mit Kamera.
 
-Beim ersten Aufruf werden Sie nach einem **Benutzernamen** gefragt. Dieser Name erscheint in der Aktivitätshistorie, damit nachvollzogen werden kann, wer was getan hat.
-
----
-
-## 2. Übersicht der Bereiche
-
-Die Navigation befindet sich oben im Bildschirm:
-
-- **+ (Plus-Symbol)** — Neuen Artikel erfassen
-- **Listen-Symbol** — Alle Artikel anzeigen
-- **Karton-Symbol** — Alle Behälter und Regale anzeigen
-- **Puls-Symbol** — Letzte Aktivitäten anzeigen
-- **Etiketten-Symbol** — Unbearbeitete Lieferungen (Stubs)
-- **Fragezeichen-Symbol** — Diese Hilfeseite
-- **Suchfeld** — Direkt nach Artikelnummern, Behälter-IDs oder Beschreibungen suchen
+Beim ersten Aufruf fragt die App nach deinem **Benutzernamen**. Der Name erscheint in der Aktivitätshistorie, damit man sieht, wer was gemacht hat. Du kannst ihn jederzeit ändern — einfach auf deinen Namen oben rechts im Header **doppelklicken**.
 
 ---
 
-## 3. Artikel anlegen
+## 2. Die Navigation auf einen Blick
 
-1. Klicken Sie auf das **+**-Symbol oben links.
-2. Geben Sie eine **Artikelnummer** ein (Pflichtfeld).
-3. Wählen Sie eine **Kategorie** und **Unterkategorie** aus.
-4. Wählen Sie die **Einheit**: **Stück** für Einzelgeräte (mit Seriennummer), **Menge** für Massenware.
-5. Geben Sie optional Maße und Gewicht ein.
-6. Klicken Sie auf **Weiter** — Sie werden zur Qualitätsprüfung weitergeleitet.
-7. Beantworten Sie die Qualitätsfragen und bestätigen Sie.
-8. Klicken Sie auf **Speichern**.
+Oben im Bildschirm findest du die Navigation:
 
-Der Artikel erscheint jetzt in der Artikelliste. Ein QR-Etikett kann direkt nach dem Speichern gedruckt werden.
+| Symbol | Was du dort findest |
+|--------|---------------------|
+| **+** | Neuen Artikel erfassen |
+| Listen-Symbol | Alle Artikel |
+| Karton-Symbol | Alle Behälter und Regale |
+| Puls-Symbol | Letzte Aktivitäten |
+| Etiketten-Symbol | Unbearbeitete Lieferungen (Stubs) |
+| Zahnrad-Symbol | Administration |
+| Fragezeichen | Diese Hilfeseite |
+| Suchfeld | Direkt nach Artikel, Behälter-ID oder Beschreibung suchen |
 
 ---
 
-## 4. QR-Code scannen
+## 3. Die Tabs in der Artikeldetailansicht
 
-Mit der Scan-Funktion können Sie schnell zu einem Artikel oder Behälter navigieren, ohne suchen zu müssen.
+Wenn du einen Artikel öffnest, siehst du oben verschiedene Tabs:
 
-1. Öffnen Sie die Anwendung auf Ihrem Mobilgerät.
-2. Tippen Sie auf das **Scan**-Symbol in der Navigation.
-3. Halten Sie die Kamera auf das QR-Etikett eines Artikels oder Behälters.
+| Tab | Was du dort findest |
+|-----|---------------------|
+| **Referenz** | Grunddaten, Artikelnummer, Spezifikationen, Preis |
+| **Vorrat** | Lagerort, Qualität, Umlagern, Etikett drucken, Finden |
+| **KI** | KI-Anreicherung starten und reviewen |
+| **Bilder** | Fotos hochladen und anzeigen |
+| **Anhänge** | Dokumente und Dateien |
+| **Zubehör** | Verknüpfte Artikel, Ersatzteile (Zerlegen) |
+
+---
+
+## 4. Artikel anlegen
+
+1. Klick auf das **+**-Symbol oben links.
+2. Gib eine **Artikelnummer** ein (Pflichtfeld).
+3. Wähle eine **Kategorie** und **Unterkategorie**.
+4. Wähle die **Einheit**: **Stück** für Einzelgeräte (mit Seriennummer), **Menge** für Massenware.
+5. Optional: Maße und Gewicht eintragen.
+6. Klick auf **Weiter** — die Qualitätsprüfung öffnet sich.
+7. Beantworte die Qualitätsfragen und bestätige.
+8. Klick auf **Speichern**.
+
+Der Artikel erscheint jetzt in der Artikelliste. Du kannst direkt danach ein QR-Etikett drucken.
+
+---
+
+## 5. QR-Code scannen
+
+Mit dem Scan-Symbol navigierst du blitzschnell zu einem Artikel oder Behälter, ohne suchen zu müssen.
+
+1. Öffne die App auf deinem Handy.
+2. Tipp auf das **Scan**-Symbol in der Navigation.
+3. Halte die Kamera auf das QR-Etikett.
 4. Die Detailansicht öffnet sich automatisch.
 
-**Artikel suchen (Finden-Funktion):** Wenn Sie einen bestimmten Artikel physisch suchen, öffnen Sie den Artikel in der Liste, wechseln Sie zum Tab **Vorrat** und tippen Sie auf **Finden**. Scannen Sie dann QR-Codes im Lager, bis das Gerät vibriert und ein Ton ertönt — das bedeutet: gefunden!
+**Artikel physisch suchen (Finden-Funktion):** Wenn du einen bestimmten Artikel im Lager suchen willst, öffne ihn in der Liste → Tab **Vorrat** → **Finden**. Dann scannst du QR-Codes im Lager, bis das Gerät vibriert und ein Ton ertönt — das bedeutet: gefunden!
 
 ---
 
-## 5. Artikel finden
+## 6. Artikel finden
 
-- **Suche:** Geben Sie im Suchfeld oben eine Artikelnummer oder Beschreibung ein.
-- **Filter:** In der Artikelliste können Sie nach Behälter, Qualität, Shop-Status und Platzierungsstatus filtern.
-- **Direktnavigation:** Geben Sie eine Behälter-ID (z. B. `B-042`) direkt ins Suchfeld ein, um sofort zur Behälterdetailansicht zu springen.
+- **Suche:** Artikelnummer oder Beschreibung ins Suchfeld oben eingeben.
+- **Filter:** In der Artikelliste kannst du nach Behälter, Qualität, Shop-Status und Platzierungsstatus filtern.
+- **Direktnavigation:** Behälter-ID (z. B. `B-042`) direkt ins Suchfeld eingeben — springt sofort zur Behälterdetailansicht.
 
 ---
 
-## 6. Artikel und Behälter umlagern
+## 7. Artikel und Behälter umlagern
 
-**Artikel umlagern** (in einen anderen Behälter):
-1. Öffnen Sie den Artikel → Tab **Vorrat** → **Umlagern**.
-2. Scannen Sie den Ziel-Behälter oder geben Sie seine ID ein.
-3. Bestätigen Sie.
+**Artikel in einen anderen Behälter:**
+1. Artikel öffnen → Tab **Vorrat** → **Umlagern**.
+2. Ziel-Behälter scannen oder ID eingeben.
+3. Bestätigen.
 
-**Behälter umlagern** (auf ein anderes Regal):
-1. Öffnen Sie den Behälter → Schaltfläche **Umlagern**.
-2. Wählen Sie das Zielregal aus oder scannen Sie es.
-3. Bestätigen Sie.
+**Behälter auf ein anderes Regal:**
+1. Behälter öffnen → **Umlagern**.
+2. Zielregal auswählen oder scannen.
+3. Bestätigen.
 
 Der neue Standort ist sofort in der Artikel- und Behälteransicht sichtbar.
 
 ---
 
-## 7. Etiketten drucken
+## 8. Etiketten drucken
 
 Jeder Artikel und jeder Behälter hat ein QR-Etikett.
 
-- **Artikeletikett drucken:** Artikel öffnen → Tab **Vorrat** → **Etikett drucken**.
-- **Behälteretikett drucken:** Behälter öffnen → **Etikett drucken**.
+- **Artikeletikett:** Artikel öffnen → Tab **Vorrat** → **Etikett drucken**.
+- **Behälteretikett:** Behälter öffnen → **Etikett drucken**.
 
-Achten Sie darauf, dass der Drucker eingeschaltet und verbunden ist. Bei Problemen wenden Sie sich an die zuständige Person für die Druckerverwaltung.
-
----
-
-## 8. KI-Unterstützung
-
-Das System kann Artikelspezifikationen, Kategorien und Preisvorschläge automatisch ermitteln.
-
-1. Öffnen Sie einen Artikel → Tab **KI**.
-2. Klicken Sie auf **KI-Anreicherung starten**.
-3. Die KI durchläuft mehrere Phasen (Extraktion, Kategorisierung, Preisermittlung).
-4. Wenn der Status **Überprüfung erforderlich** erscheint, klicken Sie auf **Review durchführen**.
-5. Prüfen Sie die Vorschläge und bestätigen Sie oder korrigieren Sie sie.
-6. Klicken Sie auf **Abschließen**.
-
-Nach der Freigabe ist der Artikel für den Export ins ERP-System bereit.
+Achte darauf, dass der Drucker eingeschaltet und verbunden ist. Bei Problemen → siehe **Fehlerbehebung** oder wende dich an die Person, die den Drucker verwaltet.
 
 ---
 
-## 9. ERP-Synchronisation
+## 9. KI-Unterstützung
 
-Freigegebene Artikel können ins ERP-System übertragen werden:
+Die KI kann Spezifikationen, Kategorien und Preisvorschläge automatisch ermitteln.
 
-1. Wählen Sie einen oder mehrere Artikel in der Liste aus (Checkbox).
-2. Klicken Sie in der Aktionsleiste auf **ERP-Sync**.
-3. Bestätigen Sie den Dialog.
+1. Artikel öffnen → Tab **KI**.
+2. Klick auf **KI-Anreicherung starten**.
+3. Die KI durchläuft die Phasen Extraktion → Kategorisierung → Preisermittlung.
+4. Sobald **Überprüfung erforderlich** erscheint, klick auf **Review durchführen**.
+5. Vorschläge prüfen — bestätigen oder korrigieren.
+6. Klick auf **Abschließen**.
 
-Eine Erfolgsmeldung bestätigt die Übertragung. Bei Fehlern wenden Sie sich bitte an Ihre Systemadministration.
+Nach der Freigabe ist der Artikel bereit für den ERP-Export.
 
 ---
 
-## 10. Hilfe und Support
+## 10. ERP-Synchronisation
 
-Bei Fragen zur Bedienung steht Ihnen diese Hilfeseite jederzeit zur Verfügung. Zur Überprüfung einer neuen Softwareversion verwenden Sie bitte die **Freigabe-Checkliste**.
+Freigegebene Artikel ins ERP übertragen:
 
-Bei häufigen Problemen (Drucker, Bilder, WebDAV, versehentliche Fehler) finden Sie Schritt-für-Schritt-Anleitungen in der **Fehlerbehebung**.
+1. In der Artikelliste einen oder mehrere Artikel per Checkbox auswählen.
+2. In der Aktionsleiste auf **ERP-Sync** klicken.
+3. Dialog bestätigen.
 
-Bei technischen Problemen, die Sie selbst nicht lösen können, wenden Sie sich mit einem Screenshot und der Artikelnummer an Ihre Systemadministration.
+Eine Erfolgsmeldung bestätigt die Übertragung. Bei Fehlern → bitte die Systemadministration kontaktieren.
+
+---
+
+## 11. Dein Alltag mit dem System
+
+So läuft ein typischer Tag ab:
+
+1. **Neue Lieferung eingetroffen?** Öffne die App und scanne die Etiketten der Geräte — oder erfasse sie manuell mit dem **+**-Symbol.
+2. **Qualität einschätzen:** Beantworte die Qualitätsfragen direkt beim Erfassen oder später über Tab **Vorrat** → **Qualität bewerten**.
+3. **KI laufen lassen:** Tab **KI** → **KI-Anreicherung starten**. Die KI erledigt Recherche, Kategorisierung und Preisfindung.
+4. **Reviewen und freigeben:** Wenn die KI fertig ist, kurz die Vorschläge prüfen und bestätigen.
+5. **ERP-Export:** Freigegebene Artikel auswählen und mit **ERP-Sync** übertragen.
+6. **Einlagern:** Artikel in den richtigen Behälter legen und ggf. umlagern — der Standort ist immer aktuell im System sichtbar.
+
+---
+
+## 12. Hilfe und Support
+
+Bei Fragen zur Bedienung schau hier in der Hilfe nach — alle Themen findest du in der Seitenleiste links.
+
+Bei häufigen Problemen (Drucker, Bilder, WebDAV, versehentliche Fehler) findest du Schritt-für-Schritt-Hilfe unter **Fehlerbehebung**.
+
+Wenn du etwas nicht lösen kannst: mach einen Screenshot, notiere die Artikelnummer und wende dich an die Systemadministration.

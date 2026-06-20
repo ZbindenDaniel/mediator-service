@@ -6,7 +6,7 @@ Gebrauchte IT-Geräte zu kaufen statt neue zu produzieren spart erheblich CO₂.
 
 ## Warum spart Secondhand-IT CO₂?
 
-Über 70–80 % des CO₂-Fußabdrucks eines Geräts (Laptop, PC, Server usw.) entsteht bei der **Herstellung** – nicht im Betrieb. Wenn ein funktionsfähiges Gerät weiterverwendet wird, muss kein neues produziert werden. Damit entfällt der größte Teil des Lebenszyklus-CO₂.
+Über 70–80 % des CO₂-Fußabdrucks eines Geräts (Laptop, PC, Server usw.) entsteht bei der **Herstellung** — nicht im Betrieb. Wenn ein funktionsfähiges Gerät weiterverwendet wird, muss kein neues produziert werden. Damit entfällt der größte Teil des Lebenszyklus-CO₂.
 
 ---
 
@@ -46,11 +46,11 @@ Das Gerätealter ergibt sich aus dem Erfassungsdatum. Fehlt dieses, wird ein Sta
 
 **Laptop, 3 Jahre alt, Qualität 3:**
 
-- E_neu = 180 kg CO₂e (ADEME-Median für Laptops)  
-- R = 0,85  
-- Gesamtlebensdauer = 8 Jahre, typische Nutzungsdauer neu = 5 Jahre  
-- Verbleibend = 8 − 3 = 5 Jahre → L = 5/5 = 1,0  
-- O_aufarbeit = 10 kg (Qualität 3 → mittel)  
+- E_neu = 180 kg CO₂e (ADEME-Median für Laptops)
+- R = 0,85
+- Gesamtlebensdauer = 8 Jahre, typische Nutzungsdauer neu = 5 Jahre
+- Verbleibend = 8 − 3 = 5 Jahre → L = 5/5 = 1,0
+- O_aufarbeit = 10 kg (Qualität 3 → mittel)
 
 **CO₂_gespart = 180 × 0,85 × 1,0 − 10 = 143 kg CO₂e**
 
