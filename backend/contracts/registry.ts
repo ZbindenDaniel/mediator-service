@@ -2,12 +2,14 @@ import fs from 'fs';
 import path from 'path';
 import type { QualityContract } from '../../models/quality-contract';
 import type { SpecContract } from '../../models/spec-contract';
+import type { DisassemblyContract } from '../../models/disassembly-contract';
 
 const CONTRACTS_DIR = path.resolve(__dirname, '../../contracts');
 
 // Module-level caches — cleared on restart, populated lazily on first access.
 const qualityCache = new Map<string, QualityContract>();
 const specCache = new Map<number, SpecContract>();
+const disassemblyCache = new Map<number, DisassemblyContract>();
 let specSubcategoriesCache: number[] | null = null;
 
 function loadJsonFile<T>(filePath: string): T | null {
@@ -38,6 +40,13 @@ export function getSpecContract(subcategory: number): SpecContract | null {
   if (specCache.has(subcategory)) return specCache.get(subcategory)!;
   const contract = loadJsonFile<SpecContract>(path.join(CONTRACTS_DIR, 'specs', `${subcategory}.json`));
   if (contract) specCache.set(subcategory, contract);
+  return contract;
+}
+
+export function getDisassemblyContract(subCategory: number): DisassemblyContract | null {
+  if (disassemblyCache.has(subCategory)) return disassemblyCache.get(subCategory)!;
+  const contract = loadJsonFile<DisassemblyContract>(path.join(CONTRACTS_DIR, 'disassembly', `${subCategory}.json`));
+  if (contract) disassemblyCache.set(subCategory, contract);
   return contract;
 }
 

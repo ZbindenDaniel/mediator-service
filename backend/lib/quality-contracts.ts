@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import type { QualityContract, QualityQuestion, QualityCheckResponse } from '../../models/quality-contract';
+import type { DisassemblyContract } from '../../models/disassembly-contract';
 import { QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX, QUALITY_LABELS } from '../../models/quality';
 import type { QualityTag } from '../../models/quality';
 
@@ -84,12 +85,26 @@ export function deriveSpecsFromAnswers(
   return specs;
 }
 
+/** Converts disassembly contract part questions into a synthetic QualityContract for scoring/spec derivation. */
+export function disassemblyToQualityContract(dc: DisassemblyContract): QualityContract {
+  return {
+    version: dc.version,
+    subCategory: dc.subCategory,
+    questions: dc.parts.flatMap(p => p.qualityQuestion ? [p.qualityQuestion] : [])
+  };
+}
+
 export function buildQualityCheckResponse(
   generalContract: QualityContract,
   subCatContract: QualityContract | null,
-  answers: Record<string, string>
+  answers: Record<string, string>,
+  disassemblyQualityContract?: QualityContract | null
 ): QualityCheckResponse {
-  const contracts = subCatContract ? [generalContract, subCatContract] : [generalContract];
+  const contracts = [
+    generalContract,
+    ...(disassemblyQualityContract ? [disassemblyQualityContract] : []),
+    ...(subCatContract ? [subCatContract] : [])
+  ];
   const { value, tag } = deriveQualityFromAnswers(contracts, answers);
   const derivedSpecs = deriveSpecsFromAnswers(contracts, answers);
 

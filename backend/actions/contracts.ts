@@ -4,7 +4,8 @@ import {
   getGeneralQualityContract,
   getQualityContract,
   getSpecContract,
-  listSpecContractSubcategories
+  listSpecContractSubcategories,
+  getDisassemblyContract
 } from '../contracts/registry';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -15,6 +16,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 const QUALITY_ROUTE = /^\/api\/contracts\/quality\/(.+)$/;
 const SPECS_SINGLE_ROUTE = /^\/api\/contracts\/specs\/(\d+)$/;
 const SPECS_LIST_ROUTE = /^\/api\/contracts\/specs$/;
+const DISASSEMBLY_ROUTE = /^\/api\/contracts\/disassembly\/(\d+)$/;
 
 const action = defineHttpAction({
   key: 'contracts',
@@ -25,7 +27,8 @@ const action = defineHttpAction({
     return (
       QUALITY_ROUTE.test(path) ||
       SPECS_SINGLE_ROUTE.test(path) ||
-      SPECS_LIST_ROUTE.test(path)
+      SPECS_LIST_ROUTE.test(path) ||
+      DISASSEMBLY_ROUTE.test(path)
     );
   },
   async handle(req: IncomingMessage, res: ServerResponse) {
@@ -60,6 +63,18 @@ const action = defineHttpAction({
 
     if (SPECS_LIST_ROUTE.test(pathname)) {
       sendJson(res, 200, { subcategories: listSpecContractSubcategories() });
+      return;
+    }
+
+    const disassemblyMatch = DISASSEMBLY_ROUTE.exec(pathname);
+    if (disassemblyMatch) {
+      const subCategory = parseInt(disassemblyMatch[1], 10);
+      const contract = getDisassemblyContract(subCategory);
+      if (!contract) {
+        sendJson(res, 404, { error: 'Disassembly contract not found', subCategory });
+        return;
+      }
+      sendJson(res, 200, contract);
       return;
     }
 

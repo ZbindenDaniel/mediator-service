@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "subCategory": 301,
+  "parts": [
+    {
+      "key": "toner",
+      "label": "Toner / Tintenpatrone",
+      "targetSubcategory": 302,
+      "qualityQuestion": {
+        "id": "has_toner",
+        "type": "boolean",
+        "question": "Toner / Tintenpatrone vorhanden?",
+        "qualityImpact": { "false": 2 }
+      }
+    },
+    {
+      "key": "drum",
+      "label": "Trommeleinheit",
+      "targetSubcategory": 302,
+      "qualityQuestion": {
+        "id": "has_drum",
+        "type": "boolean",
+        "question": "Trommeleinheit vorhanden?"
+      }
+    },
+    {
+      "key": "fuser",
+      "label": "Fixiereinheit",
+      "targetSubcategory": 302,
+      "qualityQuestion": {
+        "id": "has_fuser",
+        "type": "boolean",
+        "question": "Fixiereinheit vorhanden?"
+      }
+    }
+  ]
+}

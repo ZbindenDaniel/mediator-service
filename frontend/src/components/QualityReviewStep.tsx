@@ -136,8 +136,9 @@ export default function QualityReviewStep({
   initialAnswers,
   disabled,
 }: QualityReviewStepProps) {
-  const [contracts, setContracts] = useState<{ general: QualityContract | null; subCat: QualityContract | null }>({
+  const [contracts, setContracts] = useState<{ general: QualityContract | null; disassembly: QualityContract | null; subCat: QualityContract | null }>({
     general: null,
+    disassembly: null,
     subCat: null,
   });
   const [contractsLoading, setContractsLoading] = useState(true);
@@ -154,8 +155,8 @@ export default function QualityReviewStep({
     return () => { cancelled = true; };
   }, [subCategory]);
 
-  const { general, subCat } = contracts;
-  const questions = getAllQuestions(general, subCat);
+  const { general, disassembly, subCat } = contracts;
+  const questions = getAllQuestions(general, subCat, disassembly);
 
   const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers ?? {});
   const [notes, setNotes] = useState('');
@@ -174,6 +175,7 @@ export default function QualityReviewStep({
 
   const activeContracts = [
     ...(general ? [general] : []),
+    ...(disassembly ? [disassembly] : []),
     ...(subCat ? [subCat] : [])
   ];
   const qualityValue = deriveQualityFromAnswers(activeContracts, answers);
@@ -201,6 +203,7 @@ export default function QualityReviewStep({
   };
 
   const generalQuestions = general?.questions ?? [];
+  const disassemblyQuestions = disassembly?.questions ?? [];
   const subCatQuestions = subCat?.questions ?? [];
 
   if (contractsLoading) {
@@ -231,6 +234,26 @@ export default function QualityReviewStep({
               onChange={(v) => setAnswer(q.id, v)}
             />
           ) : null
+        )}
+
+        {disassemblyQuestions.length > 0 && (
+          <>
+            <div className="row">
+              <p className="muted" style={{ margin: 0 }}>
+                <strong>Komponenten</strong>
+              </p>
+            </div>
+            {disassemblyQuestions.map((q) =>
+              isQuestionVisible(q, answers) ? (
+                <QuestionRow
+                  key={q.id}
+                  question={q}
+                  value={answers[q.id]}
+                  onChange={(v) => setAnswer(q.id, v)}
+                />
+              ) : null
+            )}
+          </>
         )}
 
         {subCatQuestions.length > 0 && (
