@@ -37,7 +37,7 @@ export function deriveQualityTagFromCondition(answers: PhysicalConditionAnswers)
 }
 
 export function deriveAiPriorityFromAssessment(value: number): AiPriority {
-  if (value <= 2) return 'high';
+  if (value >= 4) return 'high';
   if (value === 3) return 'normal';
   return 'low';
 }

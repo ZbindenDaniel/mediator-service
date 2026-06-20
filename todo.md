@@ -19,8 +19,14 @@
 
 ## Priority 1 — Bugs & Active Work
 
-0k. ✅ **Test suite re-hardened: 625 tests passing.** Rewrote/fixed deferred test files and added new coverage for `cancellation.ts`, `utils/json.ts`, `flow/prompts.ts`, `lib/itemGrouping.ts`, `result-handler.ts`, `forward-agentic-trigger.ts`. 9 skipped; 0 failing.
-0l. **Deferred test rewrites still needed:** `test/csv-ingest-*.test.ts` (9 files) + `test/export-items.test.ts` + `test/langtext-contract.test.ts` + `test/list-items-for-export-order.test.ts` + `test/save-item-quality.test.ts` + `test/item-category-roundtrip.test.ts` + `test/item-persistence-reference-behavior.test.ts` — all use SQLite `db.exec`/`persistItem` directly and need full Postgres mock rewrites. `backend/agentic/__tests__/result-handler.test.ts` uses async SQLite ctx. `backend/actions/__tests__/forward-agentic-trigger.test.ts` needs rewrite for new start→restart flow (no `invokeModel`). Many frontend component tests still deferred (React + complex deps).
+0k. ✅ **Test suite re-hardened: 637 tests passing.** Added coverage for `cancellation.ts`, `utils/json.ts`, `flow/prompts.ts`, `lib/itemGrouping.ts`, `result-handler.ts`, `forward-agentic-trigger.ts`, `models/quality.ts`. Fixed inverted `deriveAiPriorityFromAssessment` (high quality was mapped to low priority). 9 skipped; 0 failing.
+0l. **Deferred test rewrites still needed:** `test/csv-ingest-*.test.ts` (9 files) + `test/export-items.test.ts` + `test/langtext-contract.test.ts` + `test/list-items-for-export-order.test.ts` + `test/save-item-quality.test.ts` + `test/item-category-roundtrip.test.ts` + `test/item-persistence-reference-behavior.test.ts` — all use SQLite `db.exec`/`persistItem` directly and need full Postgres mock rewrites. Many frontend component tests still deferred (React + complex deps).
+0m. **Known test coverage gaps (from doc/test comparison):**
+  - `restart-review-metadata.test.ts` covers 3 of 4 restart truth-table cases from `review-flow.md`; case 3 (`review` provided + `replaceReviewMetadata=true`) is not tested.
+  - `item-flow-pricing.test.ts` threshold test uses values below both gates simultaneously — cannot verify the documented `confidence >= 0.6 AND evidenceCount >= 2` thresholds independently from the test alone.
+  - Categorizer `__locked` field behavior (`item-flow.md`: "Locked fields are preserved and not overwritten") is asserted nowhere in the test suite; only appears as fixture setup data.
+  - `backend/actions/agentic-delete.ts` has no test coverage.
+  - Follow-up `__searchQueries` not hard-blocked by `skipSearch` is a documented known gap in `item-flow.md` but no test pins the current inconsistent behavior to catch if it changes.
 
 0f. ✅ **Quality contracts missing in production build.** `scripts/build.js` now copies `contracts/` → `dist/contracts/` so the backend registry can find general and subcategory quality contracts at runtime.
 0g. ✅ **Attachments binding modal shown without purpose.** Modal now only appears when at least one writable external dir (ALT_DOC_DIRS) is available; without external dirs, files upload directly with no modal.
