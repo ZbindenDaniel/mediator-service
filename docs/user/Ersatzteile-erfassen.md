@@ -1,23 +1,30 @@
 # Ersatzteile erfassen (Zerlegen)
 
-Diese Anleitung beschreibt, wie Sie Bauteile aus einem defekten Gerät im System erfassen und verwalten.
+## Wie funktioniert das bei uns?
+
+Manchmal landen Geräte bei uns, die sich nicht direkt als Ganzes verkaufen lassen — zu defekt, zu alt, oder es fehlen wichtige Teile. Statt sie einfach wegzuwerfen, zerlegen wir sie und verwerten die einzelnen Bauteile (RAM, SSD, Akku, Lüfter usw.) separat weiter.
+
+Das System nennt das **Zerlegen**. Dabei musst du das Gerät nicht sofort physisch auseinanderbauen. Du kannst erst einmal im System festhalten, welche Teile vorhanden sind — und sie dann nach und nach erfassen und entnehmen, wenn es passt.
+
+Das Gerät bleibt dabei im System erhalten. Es bekommt den Status **Ersatzteil** und zeigt an, welche Teile noch drin sind und welche bereits entnommen wurden. So hat man immer den Überblick.
 
 ---
 
-## 1. Was ist die Zerlegen-Funktion?
+## Wann lohnt sich das Zerlegen?
 
-Wenn ein Gerät zu defekt ist, um als Ganzes verkauft zu werden, können einzelne Bauteile (RAM, SSD, Akku, Lüfter usw.) entnommen und separat weiterverwendet oder verkauft werden.
+- Das Gerät ist nicht mehr funktionstüchtig oder zu stark beschädigt für einen Direktverkauf.
+- Einzelne Bauteile (z. B. ein RAM-Riegel, eine SSD) sind gut erhalten und haben eigenständigen Wert.
+- Du willst das Gerät als Teilespender für Reparaturen nutzen.
 
-Mit der **Zerlegen-Funktion** können Sie:
-- festhalten, welche Bauteile in einem Gerät vorhanden sind,
-- Bauteile als eigene Artikel im System erfassen (katalogisieren),
-- Bauteile physisch entnehmen und einem Lagerplatz zuweisen.
+Geräte, die sich noch verkaufen lassen — auch mit kleinen Mängeln — müssen nicht zerlegt werden. Die Qualitätsbewertung hilft dir dabei einzuschätzen, was sinnvoller ist.
 
 ---
 
-## 2. Qualitätsprüfung: Bauteile erfassen
+## Schritt-für-Schritt: Bauteile erfassen und entnehmen
 
-Beim Ausfüllen der **Qualitätsprüfung** eines Laptops, PCs oder Druckers erscheinen automatisch Fragen zu den Bauteilen des Geräts:
+### 1. Qualitätsprüfung: Bauteile dokumentieren
+
+Beim Ausfüllen der **Qualitätsprüfung** eines Laptops, PCs oder Druckers erscheinen automatisch Fragen zu den Bauteilen:
 
 - Ist ein Lüfter vorhanden?
 - Akkuzustand?
@@ -25,65 +32,84 @@ Beim Ausfüllen der **Qualitätsprüfung** eines Laptops, PCs oder Druckers ersc
 - Wie viel Speicher (SSD/HDD)?
 - usw.
 
-Beantworten Sie diese Fragen so genau wie möglich. Die Antworten werden auf dem **Instanz-Tab** des Artikels als Spezifikationen gespeichert (z. B. "RAM: 16 GB") und steuern, welche Slots im Zerlegen-Bereich angezeigt werden.
+Beantworte diese Fragen so genau wie möglich. Die Antworten bestimmen, welche Slots im Zerlegen-Bereich erscheinen. Du musst das Gerät dafür noch nicht öffnen — Angaben aus dem Aufkleber oder dem BIOS reichen oft.
 
 ---
 
-## 3. Zubehör-Tab → Zerlegen-Bereich
+### 2. Zubehör-Tab → Zerlegen-Bereich öffnen
 
-Öffnen Sie einen Artikel und wechseln Sie auf den Tab **Zubehör**. Falls für diesen Gerätetyp eine Zerlegen-Vorlage existiert, erscheint unten auf der Seite der Abschnitt **Zerlegen**.
+Öffne den Artikel und wechsle auf den Tab **Zubehör**. Falls für diesen Gerätetyp eine Zerlegen-Vorlage vorhanden ist, erscheint unten der Abschnitt **Zerlegen**.
 
-Jede Zeile steht für ein mögliches Bauteil. Das Symbol links zeigt den aktuellen Status:
+Jede Zeile steht für ein mögliches Bauteil. Das Symbol links zeigt den aktuellen Stand:
 
-| Symbol | Status | Bedeutung |
-|---|---|---|
-| ◎ | **Unbekannt / vorhanden** | Bauteil wurde noch nicht katalogisiert |
-| ✕ | **Nicht vorhanden** | Qualitätsprüfung hat dieses Bauteil als fehlend markiert |
-| ◉ | **Katalogisiert** | Bauteil ist erfasst und noch im Gerät |
-| ○ | **Entnommen** | Bauteil wurde entnommen und befindet sich in einem Behälter |
-
----
-
-## 4. Bauteil katalogisieren (Hinzufügen)
-
-Wenn ein Bauteil den Status ◎ (unbekannt) hat, können Sie es katalogisieren:
-
-1. Klicken Sie auf **Hinzufügen** in der entsprechenden Zeile.
-2. Es öffnet sich ein Popup mit passenden Artikel-Vorschlägen (basierend auf Gerätehersteller und Bauteiltyp).
-3. Wählen Sie den passenden Artikel aus — ein Klick auf **Ist es das?** genügt.
-4. Falls kein Vorschlag passt, klicken Sie auf **Anderen suchen** und suchen Sie manuell.
-5. Nach der Bestätigung wechselt der Slot zu ◉ (Katalogisiert) — das Bauteil ist jetzt als eigener Artikel im System erfasst und noch im Gerät.
+| Symbol | Bedeutung |
+|--------|-----------|
+| ◎ | Bauteil noch nicht erfasst (unbekannt / vorhanden) |
+| ✕ | Bei der Qualitätsprüfung als fehlend markiert |
+| ◉ | Erfasst — noch im Gerät |
+| ○ | Entnommen — befindet sich in einem Behälter |
 
 ---
 
-## 5. Bauteil entnehmen (Entnehmen)
+### 3. Bauteil katalogisieren (Hinzufügen)
 
-Wenn Sie ein Bauteil physisch aus dem Gerät nehmen und einlagern möchten:
+Wenn ein Bauteil den Status ◎ hat, kannst du es erfassen:
 
-1. Klicken Sie auf **Entnehmen** in der Zeile des katalogisierten Bauteils (◉).
-2. Geben Sie die **Behälter-ID** des Zielorts ein (z. B. `B-042`).
-3. Bestätigen Sie mit **Entnehmen**.
+1. Klick auf **Hinzufügen** in der entsprechenden Zeile.
+2. Ein Popup öffnet sich mit passenden Artikel-Vorschlägen (basierend auf Gerätehersteller und Bauteiltyp).
+3. Den passenden Artikel auswählen — ein Klick auf **Ist es das?** genügt.
+4. Falls kein Vorschlag passt, klick auf **Anderen suchen** und such manuell.
+5. Nach der Bestätigung wechselt der Slot zu ◉ — das Bauteil ist jetzt als eigenständiger Artikel im System erfasst, liegt aber noch im Gerät.
 
-Nach der Entnahme:
-- Der Slot wechselt zu ○ (Entnommen) mit Angabe des Lagerorts.
-- Das Bauteil ist jetzt als eigenständiger Artikel suchbar und kann separat etikettiert und verkauft werden.
-- Die Qualitätsbewertung des Quellgeräts wird automatisch auf **Ersatzteil** gesetzt.
+> Auch wenn die Qualitätsprüfung ein Teil als „nicht vorhanden" markiert hat (✕), kannst du es nachträglich hinzufügen — z. B. wenn RAM später nachgerüstet wird. Der **Hinzufügen**-Knopf ist auch dann sichtbar.
 
 ---
 
-## 6. Bauteil-Link entfernen
+### 4. Bauteil entnehmen (physisch ausbauen)
 
-Falls Sie einen Bauteil-Link rückgängig machen möchten (z. B. weil Sie den falschen Artikel ausgewählt haben):
+Wenn du ein Bauteil aus dem Gerät nimmst, gibt es zwei Szenarien:
 
-- Klicken Sie auf **Link entfernen** (nur sichtbar, solange das Bauteil noch nicht entnommen wurde).
+**Einlagern (Normalfall):** Das Bauteil wird in einem Behälter aufbewahrt und bleibt im Lager.
+1. Klick auf **Entnehmen** in der Zeile des katalogisierten Bauteils (◉).
+2. Gib die **Behälter-ID** des Zielorts ein (z. B. `B-042`).
+3. Bestätige mit **Entnehmen**.
+4. Der Slot wechselt zu ○ mit Angabe des Lagerorts. Das Bauteil ist jetzt als eigenständiger Artikel suchbar.
+
+**Direkt verkaufen:** Das Bauteil geht sofort raus — kein Lagerplatz nötig.
+> Diese Option ist in Planung. Aktuell: Bauteil wie oben entnehmen, dann den Artikel manuell auf Menge 0 setzen, um anzuzeigen, dass er nicht mehr verfügbar ist.
+
+In beiden Fällen wird die Qualitätsbewertung des Quellgeräts automatisch auf **Ersatzteil** gesetzt.
+
+---
+
+### 5. Bauteil-Link entfernen (Rückgängig machen)
+
+Falls du den falschen Artikel ausgewählt hast, solange das Bauteil noch **nicht entnommen** wurde:
+
+- Klick auf **Link entfernen**.
 - Der erstellte Artikel und der Link werden gelöscht.
 
 > **Achtung:** Nach der Entnahme (Status ○) kann der Link nicht mehr entfernt werden. Das Bauteil muss dann wie ein normaler Artikel behandelt werden.
 
+**Szenario: Falsche Referenz, aber korrekte Instanz-Daten?** Wenn der Artikel-Link falsch ist, die Instanzdaten (Seriennummer, Spezifikationen) aber stimmen, ist aktuell kein einfaches Umhängen möglich. Dieses Szenario wird in einem separaten Task dokumentiert und adressiert.
+
 ---
 
-## 7. Hinweise
+## Was passiert mit dem Quellgerät?
 
-- **Qualitätsbewertung des Quellgeräts:** Sobald das erste Bauteil entnommen wird, wird die Qualitätsstufe des Geräts automatisch auf *Ersatzteil* gesetzt. Das signalisiert, dass das Gerät nicht mehr vollständig ist.
-- **Suche:** Katalogisierte und entnommene Bauteile sind im System als normale Artikel suchbar. Der Lagerort ist im Feld "Standort" angegeben.
-- **Nicht vorhanden (✕):** Das Bauteil wurde bei der Qualitätsprüfung als fehlend markiert. Sie können es aber jederzeit nachträglich hinzufügen (z. B. wenn RAM nachgerüstet wird) — der "Hinzufügen"-Knopf ist auch in diesem Status sichtbar.
+Das Quellgerät bleibt im System und bekommt den Status **Ersatzteil**. Es ist weiterhin suchbar und in der Artikelliste sichtbar — es wird nicht gelöscht. Im Tab **Zubehör** siehst du jederzeit, welche Teile noch im Gerät sind und welche bereits entnommen wurden.
+
+So kannst du das Gerät auch als Teilespender für Reparaturen nutzen, ohne den Überblick zu verlieren.
+
+---
+
+## Beispiel: Laptop zerlegen
+
+1. Gerät kommt rein: Laptop, defektes Display, sonst in Ordnung.
+2. **Qualitätsprüfung ausfüllen:** RAM 16 GB, SSD 512 GB, kein Akku vorhanden.
+3. **Tab Zubehör öffnen:** Im Zerlegen-Bereich erscheinen Slots für RAM, SSD und Akku.
+4. **RAM katalogisieren:** Klick auf **Hinzufügen** beim RAM-Slot → Vorschlag bestätigen → Status wechselt zu ◉.
+5. **SSD katalogisieren:** Gleich vorgehen.
+6. **Akku:** Steht auf ✕ (nicht vorhanden) — Slot bleibt leer.
+7. **RAM entnehmen:** RAM ausgebaut, Klick auf **Entnehmen** → Behälter-ID `B-042` eingeben → bestätigen → Status wechselt zu ○.
+8. Das Quellgerät zeigt jetzt Status **Ersatzteil**. Die SSD ist noch drin (◉), der RAM ist in B-042 (○).
