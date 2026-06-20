@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getUser, setUser as persistUser } from '../lib/user';
 import { useDialog } from './dialog';
-import { GoArchive, GoListUnordered, GoPlus, GoLog, GoSearch, GoGift, GoHash, GoTools } from 'react-icons/go';
+import { GoArchive, GoListUnordered, GoPlus, GoLog, GoSearch, GoGift, GoHash, GoTools, GoQuestion } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 import type { Item } from '../../../models';
@@ -197,6 +197,9 @@ export default function Header() {
             </Link>
             <Link to="/admin" aria-label="Administration" title="Administration" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoTools aria-hidden="true" />
+            </Link>
+            <Link to="/hilfe" aria-label="Hilfe" title="Hilfe" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+              <GoQuestion aria-hidden="true" />
             </Link>
             <QrScanButton callback="NavigateToEntity" className="header-nav__icon-btn" label="QR-Code scannen" />
           </div>

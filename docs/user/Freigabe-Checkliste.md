@@ -1,6 +1,6 @@
 # Freigabe-Checkliste
 
-Verwenden Sie diese Checkliste, um vor einer neuen Softwareversion sicherzustellen, dass alle wichtigen Funktionen korrekt arbeiten. Haken Sie jeden Punkt ab, sobald er erfolgreich geprüft wurde.
+Mit dieser Checkliste prüfst du vor einer neuen Softwareversion, ob alle wichtigen Funktionen korrekt arbeiten. Hak jeden Punkt ab, sobald er erfolgreich geprüft wurde.
 
 ---
 
@@ -14,11 +14,11 @@ Verwenden Sie diese Checkliste, um vor einer neuen Softwareversion sicherzustell
 
 ## 1. Artikel erfassen
 
-- [ ] Öffnen Sie die Anwendung und klicken Sie oben links auf das **+**-Symbol.
-- [ ] Füllen Sie die Pflichtfelder aus: Artikelnummer, Kategorie, Unterkategorie und Einheit (Stück oder Menge).
-- [ ] Geben Sie optional Maße (Länge, Breite, Höhe) und Gewicht ein.
-- [ ] Klicken Sie auf **Weiter** und schließen Sie die Qualitätsprüfung ab.
-- [ ] Klicken Sie auf **Speichern**.
+- [ ] Öffne die App und klick oben links auf das **+**-Symbol.
+- [ ] Füll die Pflichtfelder aus: Artikelnummer, Kategorie, Unterkategorie und Einheit (Stück oder Menge).
+- [ ] Gib optional Maße (Länge, Breite, Höhe) und Gewicht ein.
+- [ ] Klick auf **Weiter** und schließe die Qualitätsprüfung ab.
+- [ ] Klick auf **Speichern**.
 
 **Erwartetes Ergebnis:** Der neue Artikel erscheint in der Artikelliste mit der eingegebenen Artikelnummer.
 
@@ -26,11 +26,11 @@ Verwenden Sie diese Checkliste, um vor einer neuen Softwareversion sicherzustell
 
 ## 2. Qualitätsprüfung durchführen
 
-- [ ] Öffnen Sie einen neu erfassten Artikel über die Artikelliste.
-- [ ] Wechseln Sie zum Tab **Vorrat**.
-- [ ] Klicken Sie auf **Qualität bewerten** (sofern noch keine Bewertung vorliegt).
-- [ ] Beantworten Sie alle Fragen im Qualitätsfragebogen (z. B. Tastaturzustand, RAM, Akku bei Laptops).
-- [ ] Bestätigen Sie die Bewertung.
+- [ ] Öffne einen neu erfassten Artikel über die Artikelliste.
+- [ ] Wechsle zum Tab **Vorrat**.
+- [ ] Klick auf **Qualität bewerten** (sofern noch keine Bewertung vorliegt).
+- [ ] Beantworte alle Fragen im Qualitätsfragebogen (z. B. Tastaturzustand, RAM, Akku bei Laptops).
+- [ ] Bestätige die Bewertung.
 
 **Erwartetes Ergebnis:** Im Tab **Vorrat** ist eine Qualitätsnote (1–5) gespeichert. Im Tab **Referenz** sind die ermittelten Spezifikationsfelder (z. B. RAM, SSD) sichtbar.
 
@@ -38,24 +38,24 @@ Verwenden Sie diese Checkliste, um vor einer neuen Softwareversion sicherzustell
 
 ## 3. Spezifikationsfelder prüfen
 
-- [ ] Öffnen Sie einen Artikel, dessen Unterkategorie einen Spezifikationsvertrag hat (z. B. Laptop).
-- [ ] Wechseln Sie zum Tab **Referenz**.
-- [ ] Blättern Sie zur Tabelle **Spezifikationen** (Langtext-Felder).
+- [ ] Öffne einen Artikel, dessen Unterkategorie einen Spezifikationsvertrag hat (z. B. Laptop).
+- [ ] Wechsle zum Tab **Referenz**.
+- [ ] Blätter zur Tabelle **Spezifikationen** (Langtext-Felder).
 
-**Erwartetes Ergebnis:** Die für diese Unterkategorie vorgeschriebenen Felder (z. B. „RAM", „Festplatte", „Betriebssystem") sind sichtbar — auch wenn sie noch leer sind. Leere Felder weisen darauf hin, dass sie noch befüllt werden müssen.
+**Erwartetes Ergebnis:** Die für diese Unterkategorie vorgeschriebenen Felder (z. B. „RAM", „Festplatte", „Betriebssystem") sind sichtbar — auch wenn sie noch leer sind. Leere Felder zeigen an, dass sie noch befüllt werden müssen.
 
 ---
 
 ## 4. KI-Anreicherung starten und prüfen
 
-- [ ] Öffnen Sie einen Artikel mit unvollständigen Spezifikationen.
-- [ ] Wechseln Sie zum Tab **KI**.
-- [ ] Klicken Sie auf **KI-Anreicherung starten**.
-- [ ] Warten Sie, bis der Lauf die Phasen Extraktion → Kategorisierung → Preisermittlung durchläuft.
-- [ ] Sobald der Status **Überprüfung erforderlich** erscheint, klicken Sie auf **Review durchführen**.
-- [ ] Prüfen Sie die vorgeschlagenen Spezifikationsfelder: Bestätigen Sie korrekte Angaben, entfernen Sie falsche.
-- [ ] Bestätigen Sie den vorgeschlagenen Preis oder geben Sie einen korrekten Preis ein.
-- [ ] Klicken Sie auf **Abschließen**.
+- [ ] Öffne einen Artikel mit unvollständigen Spezifikationen.
+- [ ] Wechsle zum Tab **KI**.
+- [ ] Klick auf **KI-Anreicherung starten**.
+- [ ] Warte, bis der Lauf die Phasen Extraktion → Kategorisierung → Preisermittlung durchläuft.
+- [ ] Sobald **Überprüfung erforderlich** erscheint, klick auf **Review durchführen**.
+- [ ] Prüfe die vorgeschlagenen Spezifikationsfelder: Bestätige korrekte Angaben, entferne falsche.
+- [ ] Bestätige den vorgeschlagenen Preis oder gib einen korrekten Preis ein.
+- [ ] Klick auf **Abschließen**.
 
 **Erwartetes Ergebnis:** Der Artikel ist als **Freigegeben** markiert. Im Tab **Referenz** sind Spezifikationen und Preis befüllt.
 
@@ -63,21 +63,21 @@ Verwenden Sie diese Checkliste, um vor einer neuen Softwareversion sicherzustell
 
 ## 5. ERP-Synchronisation
 
-- [ ] Wählen Sie in der Artikelliste einen oder mehrere freigegebene Artikel aus (Checkbox links).
-- [ ] Klicken Sie in der Aktionsleiste auf **ERP-Sync**.
-- [ ] Bestätigen Sie den Dialog.
+- [ ] Wähle in der Artikelliste einen oder mehrere freigegebene Artikel aus (Checkbox links).
+- [ ] Klick in der Aktionsleiste auf **ERP-Sync**.
+- [ ] Bestätige den Dialog.
 
-**Erwartetes Ergebnis:** Eine Erfolgsmeldung erscheint. Es werden keine Fehlermeldungen angezeigt. Die Artikel wurden ins ERP-System übertragen.
+**Erwartetes Ergebnis:** Eine Erfolgsmeldung erscheint. Keine Fehlermeldungen. Die Artikel wurden ins ERP-System übertragen.
 
 ---
 
 ## 6. Artikel umlagern
 
-- [ ] Öffnen Sie einen Artikel mit einem bekannten Lagerort.
-- [ ] Wechseln Sie zum Tab **Vorrat**.
-- [ ] Klicken Sie auf **Umlagern**.
-- [ ] Wählen Sie einen anderen Behälter als Ziel (entweder per QR-Scan oder per Eingabe der Behälter-ID).
-- [ ] Bestätigen Sie die Umlagerung.
+- [ ] Öffne einen Artikel mit einem bekannten Lagerort.
+- [ ] Wechsle zum Tab **Vorrat**.
+- [ ] Klick auf **Umlagern**.
+- [ ] Wähle einen anderen Behälter als Ziel (per QR-Scan oder Behälter-ID eingeben).
+- [ ] Bestätige die Umlagerung.
 
 **Erwartetes Ergebnis:** Im Tab **Vorrat** und in der Artikelliste erscheint der neue Lagerort. Der alte Lagerort ist nicht mehr angezeigt.
 
@@ -85,10 +85,10 @@ Verwenden Sie diese Checkliste, um vor einer neuen Softwareversion sicherzustell
 
 ## 7. Behälter umlagern
 
-- [ ] Öffnen Sie die Behälterliste und wählen Sie einen Behälter aus.
-- [ ] Klicken Sie auf **Umlagern**.
-- [ ] Wählen Sie ein anderes Regal als Ziel.
-- [ ] Bestätigen Sie die Umlagerung.
+- [ ] Öffne die Behälterliste und wähle einen Behälter aus.
+- [ ] Klick auf **Umlagern**.
+- [ ] Wähle ein anderes Regal als Ziel.
+- [ ] Bestätige die Umlagerung.
 
 **Erwartetes Ergebnis:** In der Behälterdetailansicht steht der neue Regalstandort. In der Artikelliste zeigt die Spalte **Standort** für alle Artikel in diesem Behälter den neuen Standort.
 
@@ -98,17 +98,17 @@ Verwenden Sie diese Checkliste, um vor einer neuen Softwareversion sicherzustell
 
 ### 8a. Direkter Scan
 
-- [ ] Öffnen Sie die Anwendung auf einem Mobilgerät.
-- [ ] Tippen Sie auf das **Scan**-Symbol in der Navigation.
-- [ ] Scannen Sie das QR-Etikett eines Artikels oder Behälters.
+- [ ] Öffne die App auf einem Mobilgerät.
+- [ ] Tipp auf das **Scan**-Symbol in der Navigation.
+- [ ] Scanne das QR-Etikett eines Artikels oder Behälters.
 
 **Erwartetes Ergebnis:** Die Detailansicht des gescannten Artikels oder Behälters öffnet sich sofort.
 
 ### 8b. Artikel suchen (Finden-Funktion)
 
-- [ ] Öffnen Sie einen Artikel und wechseln Sie zum Tab **Vorrat**.
-- [ ] Tippen Sie auf **Finden**.
-- [ ] Scannen Sie mehrere QR-Codes, bis der gesuchte Artikel gefunden wird.
+- [ ] Öffne einen Artikel und wechsle zum Tab **Vorrat**.
+- [ ] Tipp auf **Finden**.
+- [ ] Scanne mehrere QR-Codes, bis der gesuchte Artikel gefunden wird.
 
 **Erwartetes Ergebnis:** Beim Scan des richtigen Artikels erscheint ein akustisches Signal und das Gerät vibriert. Die Kamera schließt sich automatisch.
 
@@ -118,16 +118,16 @@ Verwenden Sie diese Checkliste, um vor einer neuen Softwareversion sicherzustell
 
 ### 9a. Artikeletikett
 
-- [ ] Öffnen Sie einen Artikel und wechseln Sie zum Tab **Vorrat**.
-- [ ] Klicken Sie auf **Etikett drucken**.
-- [ ] Bestätigen Sie den Druckdialog.
+- [ ] Öffne einen Artikel und wechsle zum Tab **Vorrat**.
+- [ ] Klick auf **Etikett drucken**.
+- [ ] Bestätige den Druckdialog.
 
 **Erwartetes Ergebnis:** Das Artikeletikett (29×90 mm) mit QR-Code und Artikelnummer wird gedruckt. Kein Fehler erscheint.
 
 ### 9b. Behälteretikett
 
-- [ ] Öffnen Sie einen Behälter.
-- [ ] Klicken Sie auf **Etikett drucken**.
+- [ ] Öffne einen Behälter.
+- [ ] Klick auf **Etikett drucken**.
 
 **Erwartetes Ergebnis:** Das Behälteretikett (62×100 mm) wird gedruckt.
 
@@ -135,11 +135,11 @@ Verwenden Sie diese Checkliste, um vor einer neuen Softwareversion sicherzustell
 
 ## 10. CSV-Export
 
-- [ ] Öffnen Sie die Artikelliste.
-- [ ] Wählen Sie mehrere Artikel aus.
-- [ ] Klicken Sie auf **Exportieren** in der Aktionsleiste.
-- [ ] Wählen Sie das Format **ERP / Automatisch**.
-- [ ] Laden Sie die Datei herunter.
+- [ ] Öffne die Artikelliste.
+- [ ] Wähle mehrere Artikel aus.
+- [ ] Klick auf **Exportieren** in der Aktionsleiste.
+- [ ] Wähle das Format **ERP / Automatisch**.
+- [ ] Lade die Datei herunter.
 
 **Erwartetes Ergebnis:** Die heruntergeladene CSV-Datei lässt sich öffnen und enthält die erwarteten Spalten (Artikelnummer, Beschreibung, Preis, Lagerort, u. a.).
 
@@ -147,15 +147,15 @@ Verwenden Sie diese Checkliste, um vor einer neuen Softwareversion sicherzustell
 
 ## 11. Suche und Filter
 
-- [ ] Geben Sie in der Suchleiste oben eine bekannte Artikelnummer ein und drücken Sie Enter.
+- [ ] Gib in der Suchleiste oben eine bekannte Artikelnummer ein und drück Enter.
 
 **Erwartetes Ergebnis:** Der Artikel erscheint sofort in den Ergebnissen.
 
-- [ ] Gehen Sie zur Artikelliste und geben Sie im Feld **Behälter** eine bekannte Behälter-ID ein (z. B. `B-001`).
+- [ ] Geh zur Artikelliste und gib im Feld **Behälter** eine bekannte Behälter-ID ein (z. B. `B-001`).
 
 **Erwartetes Ergebnis:** Nur Artikel in diesem Behälter werden angezeigt.
 
-- [ ] Setzen Sie den Shop-Filter auf **im Shop**.
+- [ ] Setze den Shop-Filter auf **im Shop**.
 
 **Erwartetes Ergebnis:** Nur Artikel, die als Shopartikel freigegeben sind, werden angezeigt.
 
@@ -163,7 +163,7 @@ Verwenden Sie diese Checkliste, um vor einer neuen Softwareversion sicherzustell
 
 ## Auffälligkeiten / Fehler
 
-Notieren Sie hier alle beobachteten Probleme:
+Notiere hier alle beobachteten Probleme:
 
 ```
 1. _______________________________________________________________

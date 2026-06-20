@@ -28,10 +28,11 @@ import { normalizeQuality } from '../../../models/quality';
 import QualityReviewStep from './QualityReviewStep';
 import type { QualityReviewResult } from './QualityReviewStep';
 import QualityBadge from './QualityBadge';
+import ArtikelNummerLookupStep from './ArtikelNummerLookupStep';
 
 // TODO(agentic-trigger-skip-ui): Suppress alerts for already-queued agentic runs.
 
-type CreationStep = 'basicInfo' | 'qualityReview' | 'matchSelection' | 'agenticPhotos' | 'manualEdit';
+type CreationStep = 'artikelLookup' | 'basicInfo' | 'qualityReview' | 'matchSelection' | 'agenticPhotos' | 'manualEdit';
 
 export interface AgenticHealthProxyOptions {
   fetchImpl?: typeof fetch;
@@ -609,7 +610,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
   const location = useLocation();
   const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({}));
   const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
-  const [creationStep, setCreationStep] = useState<CreationStep>('basicInfo');
+  const [creationStep, setCreationStep] = useState<CreationStep>('artikelLookup');
+  const [selectedRef, setSelectedRef] = useState<SimilarItem | null>(null);
   const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({}));
   const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({}));
   const [creating, setCreating] = useState(false);
@@ -1461,7 +1463,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
           // Re-seed BoxID from URL param so the next item stays associated with the same box.
           const boxReset: Partial<ItemFormData> = preselectedBoxId ? { BoxID: preselectedBoxId } : {};
           setQualitySkippedForMultiple(false);
-          setCreationStep('basicInfo');
+          setSelectedRef(null);
+          setCreationStep('artikelLookup');
           setDraft(() => ({ ...boxReset }));
           setBasicInfo(() => ({ ...boxReset }));
           setManualDraft(() => ({ ...boxReset }));
@@ -1532,14 +1535,32 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
     }
   };
 
+  const handleArtikelLookupSelect = (ref: SimilarItem) => {
+    setSelectedRef(ref);
+    setCreationStep('qualityReview');
+  };
+
+  const handleArtikelLookupSkip = () => {
+    setSelectedRef(null);
+    setCreationStep('basicInfo');
+  };
+
   const handleQualityReviewComplete = (result: QualityReviewResult) => {
     setQualityReviewResult(result);
-    setCreationStep('matchSelection');
+    if (selectedRef) {
+      handleMatchSelection(selectedRef);
+    } else {
+      setCreationStep('matchSelection');
+    }
   };
 
   const handleQualityReviewSkip = () => {
     setQualityReviewResult(null);
-    setCreationStep('matchSelection');
+    if (selectedRef) {
+      handleMatchSelection(selectedRef);
+    } else {
+      setCreationStep('matchSelection');
+    }
   };
 
   const handleMatchSelection = async (item: SimilarItem) => {
@@ -1741,6 +1762,16 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
     </div>
   ) : null;
 
+  if (creationStep === 'artikelLookup') {
+    return (
+      <ArtikelNummerLookupStep
+        onSelect={handleArtikelLookupSelect}
+        onSkip={handleArtikelLookupSkip}
+        layout={layout}
+      />
+    );
+  }
+
   if (creationStep === 'basicInfo') {
     const ocrSection = (
       <div style={{ marginBottom: '1rem' }}>
@@ -1801,7 +1832,13 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
         <QualityReviewStep
           onComplete={handleQualityReviewComplete}
           onSkip={handleQualityReviewSkip}
-          subCategory={typeof basicInfo.Unterkategorien_A === 'number' ? basicInfo.Unterkategorien_A : undefined}
+          subCategory={
+            typeof selectedRef?.Unterkategorien_A === 'number'
+              ? selectedRef.Unterkategorien_A
+              : typeof basicInfo.Unterkategorien_A === 'number'
+              ? basicInfo.Unterkategorien_A
+              : undefined
+          }
           layout={layout}
         />
       </>
