@@ -3214,6 +3214,58 @@ button:focus {
     margin: 0;
 }
 
+.placement-scan__checklist-area {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.placement-scan__checklist-summary {
+    padding: 8px 16px;
+    font-size: 0.8rem;
+    color: var(--text-muted, #666);
+    flex-shrink: 0;
+}
+
+.placement-scan__checklist-miss {
+    color: #b45309;
+}
+
+.placement-scan__checklist {
+    padding: 0 8px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.placement-scan__checklist-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: var(--radius, 6px);
+    background: var(--bg-card, #f9f9f9);
+    font-size: 0.875rem;
+    gap: 8px;
+}
+
+.placement-scan__checklist-row--found {
+    opacity: 0.5;
+}
+
+.placement-scan__checklist-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.placement-scan__checklist-desc {
+    color: var(--text-muted, #666);
+    font-weight: normal;
+}
+
 /* Hilfe page */
 .list-container.hilfe {
     border-color: $overview-color;

@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+838. ✅ PlacementScanView: add inventory checklist (expected items loaded from box, matched/missed tracking)
+   - **Why:** Einscannen was a pure placement tool — it relocated items but gave no feedback on what was expected in the box or what hadn't been scanned yet. On mount, the view now fetches `GET /api/boxes/:targetId` (already returns items[]/containedBoxes[]) and builds a checklist. Each scan that confirms an item (already here or moved here) marks it as "gefunden". Remaining entries stay "ausstehend". Counter shows X von Y gescannt. No backend changes — pure frontend addition to PlacementScanView.tsx + CSS.
+   - **Deferred:** Quantity input for Menge items (just presence-based in v1). Persisting checklist state across page reloads (ephemeral React state only; refreshing resets it).
 837. ✅ Add Inventur user guide doc: document Einscannen placement flow as the primary inventory tool
    - **Why:** No user guide page existed for the inventory concept. The implemented `PlacementScanView` ("Einscannen" button in BoxDetail, mobile-only) is the core tool: scans items into a box, silently confirms items already assigned there, and prompts "Hierher verschieben?" for items recorded elsewhere. Guide also covers shelf inventory (Einscannen + "Behälter einlagern"), manual list inspection for physically missing items, and Menge count checks.
    - **Deferred:** Missing-item detection (items recorded in box but physically absent) is not yet implemented — that's the planned `InventoryCheckView` from todo 19b. The guide notes this gap explicitly.

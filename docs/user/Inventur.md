@@ -12,11 +12,10 @@ Die schnellste Methode: Behälter öffnen, auf **Einscannen** tippen und alle Ar
 2. Auf **Einscannen** tippen (Schaltfläche in der Aktionsleiste, nur auf dem Handy sichtbar).
 3. Die Kamera öffnet sich automatisch — scanne die QR-Codes aller Artikel im Behälter.
 4. Für jeden Scan passiert folgendes:
-   - **Artikel ist schon hier eingetragen** → kurze Bestätigung, nächster Scan.
-   - **Artikel ist woanders eingetragen** → «Hierher verschieben?»-Dialog erscheint. Mit **Verschieben** den Lagerort korrigieren, mit **Überspringen** den nächsten Artikel scannen.
-5. Wenn du alle Artikel gescannt hast: **Fertig** tippen.
-
-> **Hinweis:** Das Einscannen merkt nur, wenn ein gescannter Artikel falsch zugeordnet ist. Artikel, die laut System hier sein sollten, aber physisch fehlen, werden nicht automatisch erkannt — die musst du durch Sichtkontrolle der Artikelliste finden.
+   - **Artikel ist schon hier eingetragen** → wird in der Checkliste als **gefunden** markiert, nächster Scan.
+   - **Artikel ist woanders eingetragen** → «Hierher verschieben?»-Dialog erscheint. Mit **Verschieben** den Lagerort korrigieren (Artikel wird als gefunden markiert), mit **Überspringen** weitermachen ohne Änderung.
+5. Die Checkliste zeigt jederzeit, wie viele Artikel bereits gescannt sind und wie viele noch **ausstehend** sind.
+6. Wenn du alle Artikel gescannt hast: **Fertig** tippen. Die Checkliste bleibt sichtbar — ausstehende Einträge sind die Lücken.
 
 ---
 
@@ -24,7 +23,7 @@ Die schnellste Methode: Behälter öffnen, auf **Einscannen** tippen und alle Ar
 
 ### Artikel im Regal scannen
 
-Genauso wie beim Behälter: Regal öffnen → **Einscannen** → alle Artikel scannen. Artikel, die falsch zugeordnet sind, werden angezeigt.
+Genauso wie beim Behälter: Regal öffnen → **Einscannen** → alle Artikel scannen. Die Checkliste zeigt alle Artikel, die dem Regal direkt zugeordnet sind.
 
 ### Behälter auf ein Regal einlagern
 
@@ -32,18 +31,19 @@ Wenn Behälter ohne Regalzuordnung vorhanden sind oder du Behälter von einem Re
 
 1. Zielregal öffnen.
 2. Auf **Behälter einlagern** tippen (nur auf Regalen sichtbar).
-3. QR-Codes der Behälter scannen.
-4. Behälter, die schon diesem Regal zugeordnet sind: stille Bestätigung. Behälter von woanders: «Hierher verschieben?»-Dialog.
+3. QR-Codes der Behälter scannen — die Checkliste zeigt alle Behälter, die bereits diesem Regal zugeordnet sind.
+4. Behälter, die schon hier eingetragen sind: werden als gefunden markiert. Behälter von woanders: «Hierher verschieben?»-Dialog.
 
 ---
 
-## Sichtkontrolle der Artikelliste
+## Fehlende Artikel nachverfolgen
 
-Für Artikel, die laut System im Behälter sein sollten, aber physisch fehlen:
+Artikel, die nach dem Einscannen noch als **ausstehend** erscheinen, sind entweder physisch nicht im Behälter oder haben kein QR-Etikett. So gehst du vor:
 
-1. Behälter öffnen — die App zeigt alle eingetragenen Artikel.
-2. Liste durchsehen und mit dem Inhalt vergleichen.
-3. Fehlt ein Artikel? Öffne ihn → Tab **Vorrat** → prüfe den Lagerort. Wenn er woanders liegt: **Umlagern** auf den richtigen Ort.
+1. Ausstehende Einträge in der Checkliste durchgehen.
+2. Den Artikel physisch suchen — vielleicht liegt er im falschen Behälter.
+3. Wenn gefunden: QR-Code scannen → **Verschieben** → Lagerort wird korrigiert, Artikel wird als gefunden markiert.
+4. Wenn nicht auffindbar: Artikel in der App öffnen → Tab **Vorrat** → letzten bekannten Lagerort prüfen.
 
 ---
 

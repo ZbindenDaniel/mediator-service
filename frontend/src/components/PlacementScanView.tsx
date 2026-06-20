@@ -10,6 +10,12 @@ type PendingWarning = {
   currentLocation: string;
 };
 
+type ChecklistEntry = {
+  id: string;
+  label: string;
+  description?: string;
+};
+
 export default function PlacementScanView() {
   const { targetId } = useParams<{ targetId: string }>();
   const [searchParams] = useSearchParams();
@@ -22,6 +28,39 @@ export default function PlacementScanView() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   // prevents double-processing the same qrReturn payload on StrictMode double-invoke
   const handledQrRef = useRef<string | null>(null);
+
+  const [checklist, setChecklist] = useState<ChecklistEntry[]>([]);
+  const [foundIds, setFoundIds] = useState<Set<string>>(new Set());
+
+  // load expected items (or boxes) for the target on mount
+  useEffect(() => {
+    if (!targetId) return;
+    fetch(`/api/boxes/${encodeURIComponent(targetId)}`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then((data: {
+        items?: Array<{ ItemUUID: string; Artikel_Nummer?: string | null; Artikelbeschreibung?: string }>;
+        containedBoxes?: Array<{ BoxID: string; Label?: string | null }>;
+      }) => {
+        if (mode === 'items') {
+          setChecklist(
+            (data.items ?? []).map(item => ({
+              id: item.ItemUUID,
+              label: item.Artikel_Nummer ?? item.ItemUUID,
+              description: item.Artikelbeschreibung,
+            }))
+          );
+        } else {
+          setChecklist(
+            (data.containedBoxes ?? []).map(box => ({
+              id: box.BoxID,
+              label: box.BoxID,
+              description: box.Label ?? undefined,
+            }))
+          );
+        }
+      })
+      .catch(() => { /* leave checklist empty; scan loop works without it */ });
+  }, [targetId, mode]);
 
   const navigateToScanner = useCallback(() => {
     if (!targetId) return;
@@ -50,6 +89,7 @@ export default function PlacementScanView() {
         const currentBoxId = data.item?.BoxID ?? null;
         const label = data.item?.Artikel_Nummer ?? qrReturn.id;
         if (currentBoxId === targetId) {
+          setFoundIds(prev => { const next = new Set(prev); next.add(uuid); return next; });
           setProcessing(false);
           navigateToScanner();
           return;
@@ -68,6 +108,7 @@ export default function PlacementScanView() {
         const currentLocationId = data.box?.LocationId ?? null;
         const label = data.box?.BoxID ?? boxId;
         if (currentLocationId === targetId) {
+          setFoundIds(prev => { const next = new Set(prev); next.add(boxId); return next; });
           setProcessing(false);
           navigateToScanner();
           return;
@@ -144,6 +185,7 @@ export default function PlacementScanView() {
       setProcessing(false);
       return;
     }
+    setFoundIds(prev => { const next = new Set(prev); next.add(pendingWarning.entityId); return next; });
     setPendingWarning(null);
     handledQrRef.current = null;
     setProcessing(false);
@@ -159,6 +201,9 @@ export default function PlacementScanView() {
   const title = mode === 'items'
     ? `Artikel einscannen → ${targetId ?? ''}`
     : `Behälter einlagern → ${targetId ?? ''}`;
+
+  const foundCount = checklist.filter(e => foundIds.has(e.id)).length;
+  const missCount = checklist.length - foundCount;
 
   return (
     <div className="placement-scan">
@@ -204,12 +249,42 @@ export default function PlacementScanView() {
         </div>
       )}
 
-      {!pendingWarning && !processing && !statusMessage && (
-        <div className="placement-scan__start">
-          <button type="button" className="btn btn--primary" onClick={navigateToScanner}>
-            ▶ Scannen starten
-          </button>
+      {checklist.length > 0 ? (
+        <div className="placement-scan__checklist-area">
+          <div className="placement-scan__checklist-summary">
+            {foundCount} von {checklist.length} gescannt
+            {missCount > 0 && <span className="placement-scan__checklist-miss"> · {missCount} ausstehend</span>}
+          </div>
+          <div className="placement-scan__checklist">
+            {checklist.map(entry => {
+              const found = foundIds.has(entry.id);
+              return (
+                <div
+                  key={entry.id}
+                  className={`placement-scan__checklist-row${found ? ' placement-scan__checklist-row--found' : ''}`}
+                >
+                  <span className="placement-scan__checklist-label">
+                    <strong>{entry.label}</strong>
+                    {entry.description && (
+                      <span className="placement-scan__checklist-desc"> · {entry.description}</span>
+                    )}
+                  </span>
+                  <span className={`badge ${found ? 'status-success' : 'status-pending'}`}>
+                    {found ? 'gefunden' : 'ausstehend'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
+      ) : (
+        !pendingWarning && !processing && !statusMessage && (
+          <div className="placement-scan__start">
+            <button type="button" className="btn btn--primary" onClick={navigateToScanner}>
+              ▶ Scannen starten
+            </button>
+          </div>
+        )
       )}
     </div>
   );
