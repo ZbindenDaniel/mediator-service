@@ -3266,6 +3266,35 @@ button:focus {
     font-weight: normal;
 }
 
+.placement-scan__missing-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 10;
+    background: var(--bg, #fff);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 16px;
+    overflow-y: auto;
+    gap: 12px;
+}
+
+.placement-scan__missing-list {
+    list-style: disc;
+    padding-left: 20px;
+    font-size: 0.875rem;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.placement-scan__missing-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 16px;
+}
+
 /* Hilfe page */
 .list-container.hilfe {
     border-color: $overview-color;

@@ -132,6 +132,42 @@ const action = defineHttpAction({
           hasCustomLabel: Boolean(normalizedLabel),
           hasNotes: Boolean(normalizedNotes)
         });
+
+        // allow explicit shelf ID (e.g. for canonical locations like Verloren)
+        const requestedShelfId = typeof shelfPayload.shelfId === 'string'
+          ? shelfPayload.shelfId.trim()
+          : '';
+        if (requestedShelfId) {
+          if (!/^S-[A-Za-z0-9]/.test(requestedShelfId)) {
+            return sendJson(res, 400, { error: 'shelfId muss mit S- beginnen' });
+          }
+          const existingShelf = await ctx.getBox(requestedShelfId) as { BoxID?: string } | undefined;
+          if (existingShelf?.BoxID) {
+            return sendJson(res, 409, { error: 'Regal mit dieser ID existiert bereits' });
+          }
+          const shelfNow = new Date().toISOString();
+          await ctx.runUpsertBox({
+            BoxID: requestedShelfId,
+            LocationId: requestedShelfId,
+            Label: resolvedShelfLabel,
+            CreatedAt: shelfNow,
+            Notes: resolvedNotes,
+            PhotoPath: null,
+            PlacedBy: actor,
+            PlacedAt: null,
+            UpdatedAt: shelfNow,
+          });
+          await ctx.logEvent({
+            Actor: actor,
+            EntityType: 'Box',
+            EntityId: requestedShelfId,
+            Event: 'Created',
+            Meta: JSON.stringify({ type: 'shelf', location, floor }),
+          });
+          console.info('[shelf] Created shelf with custom ID', { boxId: requestedShelfId, location, floor, actor });
+          return sendJson(res, 200, { ok: true, id: requestedShelfId });
+        }
+
         const prefix = `S-${location}-${floor}-`;
         const nowDate = new Date();
         const now = nowDate.toISOString();

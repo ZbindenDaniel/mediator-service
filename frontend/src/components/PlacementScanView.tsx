@@ -31,6 +31,8 @@ export default function PlacementScanView() {
 
   const [checklist, setChecklist] = useState<ChecklistEntry[]>([]);
   const [foundIds, setFoundIds] = useState<Set<string>>(new Set());
+  const [missingItems, setMissingItems] = useState<ChecklistEntry[]>([]);
+  const [markingLost, setMarkingLost] = useState(false);
 
   // load expected items (or boxes) for the target on mount
   useEffect(() => {
@@ -198,6 +200,58 @@ export default function PlacementScanView() {
     navigateToScanner();
   };
 
+  const VERLOREN_SHELF_ID = 'S-0000-0404';
+
+  const handleClose = () => {
+    const ausstehend = checklist.filter(e => !foundIds.has(e.id));
+    if (ausstehend.length > 0) {
+      setMissingItems(ausstehend);
+    } else {
+      navigate(-1);
+    }
+  };
+
+  const handleMarkLost = async () => {
+    const actor = await ensureUser();
+    if (!actor) { setMissingItems([]); navigate(-1); return; }
+    setMarkingLost(true);
+
+    // ensure Verloren shelf exists — ignore 409 (already exists)
+    await fetch('/api/boxes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'shelf', location: '0000', floor: '0404',
+        shelfId: VERLOREN_SHELF_ID, label: 'Verloren', actor,
+      }),
+    }).catch(() => {});
+
+    if (mode === 'items') {
+      await Promise.allSettled(
+        missingItems.map(e =>
+          fetch(`/api/items/${encodeURIComponent(e.id)}/move`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ toBoxId: VERLOREN_SHELF_ID, actor }),
+          })
+        )
+      );
+    } else {
+      await Promise.allSettled(
+        missingItems.map(e =>
+          fetch(`/api/boxes/${encodeURIComponent(e.id)}/move`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ LocationId: VERLOREN_SHELF_ID, actor }),
+          })
+        )
+      );
+    }
+
+    setMarkingLost(false);
+    navigate(-1);
+  };
+
   const title = mode === 'items'
     ? `Artikel einscannen → ${targetId ?? ''}`
     : `Behälter einlagern → ${targetId ?? ''}`;
@@ -208,11 +262,11 @@ export default function PlacementScanView() {
   return (
     <div className="placement-scan">
       <div className="placement-scan__header">
-        <button type="button" className="btn btn--ghost" onClick={() => navigate(-1)}>
+        <button type="button" className="btn btn--ghost" onClick={handleClose}>
           Abbrechen
         </button>
         <h2>{title}</h2>
-        <button type="button" className="btn btn--primary" onClick={() => navigate(-1)}>
+        <button type="button" className="btn btn--primary" onClick={handleClose}>
           Fertig
         </button>
       </div>
@@ -285,6 +339,37 @@ export default function PlacementScanView() {
             </button>
           </div>
         )
+      )}
+
+      {missingItems.length > 0 && (
+        <div className="placement-scan__missing-overlay">
+          <h2>{mode === 'items' ? 'Nicht gefundene Artikel' : 'Nicht gefundene Behälter'}</h2>
+          <ul className="placement-scan__missing-list">
+            {missingItems.map(e => (
+              <li key={e.id}>
+                <strong>{e.label}</strong>
+                {e.description && <span className="placement-scan__checklist-desc"> · {e.description}</span>}
+              </li>
+            ))}
+          </ul>
+          <p>
+            Sind {mode === 'items' ? 'diese Artikel' : 'diese Behälter'} ganz sicher nicht hier?
+          </p>
+          <div className="placement-scan__missing-actions">
+            {markingLost ? (
+              <p>Wird verarbeitet…</p>
+            ) : (
+              <>
+                <button type="button" className="btn btn--danger" onClick={() => void handleMarkLost()}>
+                  Als verloren markieren
+                </button>
+                <button type="button" className="btn" onClick={() => navigate(-1)}>
+                  Schliessen ohne Aktion
+                </button>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

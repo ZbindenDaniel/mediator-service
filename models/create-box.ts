@@ -8,6 +8,7 @@ export interface CreateShelfPayload {
   floor: string;
   label?: string;
   notes?: string;
+  shelfId?: string;
 }
 
 export type CreateBoxPayload =

@@ -47,6 +47,17 @@ Artikel, die nach dem Einscannen noch als **ausstehend** erscheinen, sind entwed
 
 ---
 
+## Als verloren markieren
+
+Wenn du **Fertig** oder **Abbrechen** tippst und noch ausstehende Einträge vorhanden sind, erscheint eine Übersicht der nicht gefundenen Artikel (oder Behälter).
+
+- **Als verloren markieren** — alle aufgelisteten Einträge werden ins Regal **Verloren** (S-0000-0404) verschoben. Sie sind damit nicht gelöscht, sondern an einem bekannten Sammelort, von dem aus sie später wieder zugeordnet werden können.
+- **Schliessen ohne Aktion** — die App schliesst, die Einträge bleiben unverändert an ihrem bisherigen Lagerort im System.
+
+Wenn alle Artikel gescannt wurden (keine ausstehenden Einträge), erscheint die Übersicht nicht und die App schliesst direkt.
+
+---
+
 ## Tipps
 
 - **Systematisch vorgehen:** Nimm dir ein Regal vor und arbeite Behälter für Behälter ab — so verlierst du den Überblick nicht.
