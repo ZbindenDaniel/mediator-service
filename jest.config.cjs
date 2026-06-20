@@ -52,7 +52,8 @@ module.exports = {
     '/frontend/src/components/__tests__/DialogProvider.test.tsx',
     '/frontend/src/components/__tests__/BulkItemActionBar.test.tsx',
     '/frontend/src/components/__tests__/BoxDetail.test.tsx',
-    '/backend/actions/__tests__/forward-agentic-trigger.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /backend/actions/__tests__/forward-agentic-trigger.test.ts (rewrote: tests start/restart/decline branches, no SQLite or invokeModel)
     // Rewritten from scratch — removed from ignore list:
     // /backend/agentic/__tests__/think-tag-parsing.test.ts (updated interface, full AgenticTarget)
     // /backend/agentic/__tests__/supervisor-pass-normalization.test.ts (updated interface)
