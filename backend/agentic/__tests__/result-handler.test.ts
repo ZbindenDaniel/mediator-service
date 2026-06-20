@@ -8,6 +8,14 @@ import {
   type AgenticRequestLog
 } from '../../../models';
 
+// withTransaction must be mocked so the handler doesn't attempt a real Postgres connection
+jest.mock('../../db-client', () => ({
+  withTransaction: jest.fn(async (fn: () => Promise<void>) => fn()),
+  query: jest.fn(async () => []),
+  queryOne: jest.fn(async () => null),
+  execute: jest.fn(async () => 0),
+}));
+
 jest.mock('../index', () => {
   const actual = jest.requireActual<typeof import('../index')>('../index');
   return {
@@ -20,64 +28,71 @@ jest.mock('../index', () => {
 const mockAgenticModule = jest.requireMock<typeof import('../index')>('../index');
 const { recordAgenticRequestLogUpdate } = mockAgenticModule;
 
+function makeRequestLog(artikelNummer: string, overrides?: Partial<AgenticRequestLog>): AgenticRequestLog {
+  const nowIso = new Date('2024-01-01T00:00:00.000Z').toISOString();
+  return {
+    UUID: artikelNummer,
+    Search: 'example search',
+    Status: AGENTIC_RUN_STATUS_QUEUED,
+    Error: null,
+    CreatedAt: nowIso,
+    UpdatedAt: nowIso,
+    NotifiedAt: null,
+    LastNotificationError: null,
+    PayloadJson: null,
+    ...overrides
+  };
+}
+
+function makeRun(artikelNummer: string, overrides?: Partial<AgenticRun>): AgenticRun {
+  return {
+    Id: 1,
+    Artikel_Nummer: artikelNummer,
+    SearchQuery: 'example search',
+    Status: AGENTIC_RUN_STATUS_QUEUED,
+    LastModified: '2024-01-01T00:00:00.000Z',
+    ReviewState: 'not_required',
+    ReviewedBy: null,
+    LastReviewDecision: null,
+    LastReviewNotes: null,
+    RetryCount: 0,
+    NextRetryAt: null,
+    LastError: null,
+    LastAttemptAt: null,
+    ...overrides
+  };
+}
+
 // TODO(agentic-review-history-tests): Add cases for close-action payloads once review source marker contract is finalized.
 describe('agentic result handler integration', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  test('handleAgenticResult keeps supervisor approvals pending for user review', () => {
-    const existingReference = {
-      Artikel_Nummer: 'R-100',
-      Artikelbeschreibung: 'Example item',
-      Veröffentlicht_Status: 'no'
-    };
-    const existingRun: AgenticRun = {
-      Id: 1,
-      Artikel_Nummer: 'R-100',
-      SearchQuery: 'example search',
-      Status: AGENTIC_RUN_STATUS_QUEUED,
-      LastModified: '2024-01-01T00:00:00.000Z',
-      ReviewState: 'not_required',
-      ReviewedBy: null,
-      LastReviewDecision: null,
-      LastReviewNotes: null,
-      RetryCount: 0,
-      NextRetryAt: null,
-      LastError: null,
-      LastAttemptAt: null
-    };
-    const nowIso = new Date('2024-01-01T00:00:00.000Z').toISOString();
-    const requestLog: AgenticRequestLog = {
-      UUID: 'R-100',
-      Search: 'example search',
-      Status: AGENTIC_RUN_STATUS_QUEUED,
-      Error: null,
-      CreatedAt: nowIso,
-      UpdatedAt: nowIso,
-      NotifiedAt: null,
-      LastNotificationError: null,
-      PayloadJson: null
+  test('handleAgenticResult keeps supervisor approvals pending for user review', async () => {
+    const { handleAgenticResult } = await import('../result-handler');
+
+    const requestLog = makeRequestLog('R-100');
+    const existingReference = { Artikel_Nummer: 'R-100', Artikelbeschreibung: 'Example item', Veröffentlicht_Status: 'no' };
+    const existingRun = makeRun('R-100');
+
+    const persistItemReference = jest.fn(async () => undefined);
+    const upsertAgenticRun = jest.fn(async () => undefined);
+    const logEvent = jest.fn(async () => undefined);
+    const insertAgenticRunReviewHistoryEntry = jest.fn(async () => undefined);
+
+    const ctx = {
+      getItemReference: jest.fn(async () => existingReference),
+      getAgenticRun: jest.fn(async () => existingRun),
+      persistItemReference,
+      updateAgenticRunStatus: jest.fn(async () => 1),
+      upsertAgenticRun,
+      insertAgenticRunReviewHistoryEntry,
+      logEvent,
+      getAgenticRequestLog: jest.fn(async () => requestLog)
     };
 
-    const references = new Map<string, any>([[existingReference.Artikel_Nummer, existingReference]]);
-    const runs = new Map<string, AgenticRun>([[existingRun.Artikel_Nummer, existingRun]]);
-    const logEvent = jest.fn();
-    const persistItemReference = jest.fn();
-    const insertAgenticRunReviewHistoryEntry = { run: jest.fn() };
-    const updateAgenticRunStatus = {
-      run: jest.fn((update: Record<string, unknown>) => {
-        const merged = { ...runs.get(update.Artikel_Nummer as string), ...update } as AgenticRun;
-        runs.set(update.Artikel_Nummer as string, merged);
-        return { changes: 1 };
-      })
-    };
-
-    const { handleAgenticResult } = jest.requireActual<typeof import('../result-handler')>(
-      '../result-handler'
-    );
-
-    const result = handleAgenticResult(
+    const result = await handleAgenticResult(
       {
         artikelNummer: 'R-100',
         payload: {
@@ -90,27 +105,11 @@ describe('agentic result handler integration', () => {
           needsReview: false
         }
       },
-      {
-        ctx: {
-          db: {
-            transaction: <T extends (...args: any[]) => any>(fn: T) =>
-              (...args: Parameters<T>): ReturnType<T> => fn(...args)
-          },
-          getItemReference: { get: (id: string) => references.get(id) },
-          getAgenticRun: { get: (id: string) => runs.get(id) },
-          persistItemReference,
-          updateAgenticRunStatus,
-          upsertAgenticRun: { run: jest.fn() },
-          insertAgenticRunReviewHistoryEntry,
-          logEvent,
-          getAgenticRequestLog: () => requestLog
-        },
-        logger: console
-      }
+      { ctx, logger: console }
     );
 
     expect(result.status).toBe(AGENTIC_RUN_STATUS_REVIEW);
-    expect(updateAgenticRunStatus.run).toHaveBeenCalledWith(
+    expect(upsertAgenticRun).toHaveBeenCalledWith(
       expect.objectContaining({ Artikel_Nummer: 'R-100', Status: AGENTIC_RUN_STATUS_REVIEW })
     );
     expect(persistItemReference).toHaveBeenCalledWith(
@@ -119,7 +118,7 @@ describe('agentic result handler integration', () => {
     expect(logEvent).toHaveBeenCalledWith(
       expect.objectContaining({ EntityId: 'R-100', Event: 'AgenticResultReceived' })
     );
-    expect(insertAgenticRunReviewHistoryEntry.run).not.toHaveBeenCalled();
+    expect(insertAgenticRunReviewHistoryEntry).not.toHaveBeenCalled();
     expect(recordAgenticRequestLogUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'R-100' }),
       AGENTIC_RUN_STATUS_REVIEW,
@@ -127,48 +126,35 @@ describe('agentic result handler integration', () => {
     );
   });
 
-  test('agent completion updates run state but suppresses review history insert for supervisor notes', () => {
-    const existingReference = {
-      Artikel_Nummer: 'R-101',
-      Artikelbeschreibung: 'Example item',
-      Veröffentlicht_Status: 'no'
-    };
-    const existingRun: AgenticRun = {
+  test('agent completion updates run state but suppresses review history insert for supervisor notes', async () => {
+    const { handleAgenticResult } = await import('../result-handler');
+
+    const requestLog = makeRequestLog('R-101');
+    const existingReference = { Artikel_Nummer: 'R-101', Artikelbeschreibung: 'Example item', Veröffentlicht_Status: 'no' };
+    const existingRun = makeRun('R-101', {
       Id: 101,
-      Artikel_Nummer: 'R-101',
-      SearchQuery: 'example search',
-      Status: AGENTIC_RUN_STATUS_QUEUED,
-      LastModified: '2024-01-01T00:00:00.000Z',
       ReviewState: 'rejected',
       ReviewedBy: 'reviewer-a',
       LastReviewDecision: 'rejected',
-      LastReviewNotes: 'old reviewer notes',
-      RetryCount: 0,
-      NextRetryAt: null,
-      LastError: null,
-      LastAttemptAt: null
-    };
-    const nowIso = new Date('2024-01-01T00:00:00.000Z').toISOString();
-    const requestLog: AgenticRequestLog = {
-      UUID: 'R-101',
-      Search: 'example search',
-      Status: AGENTIC_RUN_STATUS_QUEUED,
-      Error: null,
-      CreatedAt: nowIso,
-      UpdatedAt: nowIso,
-      NotifiedAt: null,
-      LastNotificationError: null,
-      PayloadJson: null
-    };
+      LastReviewNotes: 'old reviewer notes'
+    });
 
-    const references = new Map<string, any>([[existingReference.Artikel_Nummer, existingReference]]);
-    const runs = new Map<string, AgenticRun>([[existingRun.Artikel_Nummer, existingRun]]);
-    const reviewHistory: Array<Record<string, unknown>> = [];
+    const upsertAgenticRun = jest.fn(async () => undefined);
+    const insertAgenticRunReviewHistoryEntry = jest.fn(async () => undefined);
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
 
-    const { handleAgenticResult } = jest.requireActual<typeof import('../result-handler')>('../result-handler');
+    const ctx = {
+      getItemReference: jest.fn(async () => existingReference),
+      getAgenticRun: jest.fn(async () => existingRun),
+      persistItemReference: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => 1),
+      upsertAgenticRun,
+      insertAgenticRunReviewHistoryEntry,
+      logEvent: jest.fn(async () => undefined),
+      getAgenticRequestLog: jest.fn(async () => requestLog)
+    };
 
-    const result = handleAgenticResult(
+    const result = await handleAgenticResult(
       {
         artikelNummer: 'R-101',
         payload: {
@@ -183,41 +169,21 @@ describe('agentic result handler integration', () => {
           actor: 'agentic-service'
         }
       },
-      {
-        ctx: {
-          db: {
-            transaction: <T extends (...args: any[]) => any>(fn: T) =>
-              (...args: Parameters<T>): ReturnType<T> => fn(...args)
-          },
-          getItemReference: { get: (id: string) => references.get(id) },
-          getAgenticRun: { get: (id: string) => runs.get(id) },
-          persistItemReference: jest.fn(),
-          updateAgenticRunStatus: {
-            run: jest.fn((update: Record<string, unknown>) => {
-              const merged = { ...runs.get(update.Artikel_Nummer as string), ...update } as AgenticRun;
-              runs.set(update.Artikel_Nummer as string, merged);
-              return { changes: 1 };
-            })
-          },
-          upsertAgenticRun: { run: jest.fn() },
-          insertAgenticRunReviewHistoryEntry: { run: jest.fn((entry: Record<string, unknown>) => reviewHistory.push(entry)) },
-          logEvent: jest.fn(),
-          getAgenticRequestLog: () => requestLog
-        },
-        logger
-      }
+      { ctx, logger }
     );
 
     expect(result.status).toBe(AGENTIC_RUN_STATUS_REVIEW);
-    expect(runs.get('R-101')).toEqual(
+    // supervisor approval → status flipped to REVIEW; pending-transition clears prior review metadata
+    expect(upsertAgenticRun).toHaveBeenCalledWith(
       expect.objectContaining({
+        Artikel_Nummer: 'R-101',
         Status: AGENTIC_RUN_STATUS_REVIEW,
         LastReviewDecision: null,
         LastReviewNotes: null,
         ReviewedBy: null
       })
     );
-    expect(reviewHistory).toHaveLength(0);
+    expect(insertAgenticRunReviewHistoryEntry).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalledWith(
       'Agentic result suppressed review history metadata from non-human source',
       expect.objectContaining({
@@ -228,62 +194,30 @@ describe('agentic result handler integration', () => {
     );
   });
 
-  test('retains multiple review events and keeps latest run state', () => {
+  test('retains multiple review events and keeps latest run state', async () => {
+    const { handleAgenticResult } = await import('../result-handler');
+
+    const requestLog = makeRequestLog('R-200', { Search: 'search' });
     const existingReference = { Artikel_Nummer: 'R-200', Artikelbeschreibung: 'Item', Veröffentlicht_Status: 'no' };
-    const existingRun: AgenticRun = {
-      Id: 2,
-      Artikel_Nummer: 'R-200',
-      SearchQuery: 'search',
-      Status: AGENTIC_RUN_STATUS_QUEUED,
-      LastModified: '2024-01-01T00:00:00.000Z',
-      ReviewState: 'not_required',
-      ReviewedBy: null,
-      LastReviewDecision: null,
-      LastReviewNotes: null,
-      RetryCount: 0,
-      NextRetryAt: null,
-      LastError: null,
-      LastAttemptAt: null
-    };
-    const nowIso = new Date('2024-01-01T00:00:00.000Z').toISOString();
-    const requestLog: AgenticRequestLog = {
-      UUID: 'R-200',
-      Search: 'search',
-      Status: AGENTIC_RUN_STATUS_QUEUED,
-      Error: null,
-      CreatedAt: nowIso,
-      UpdatedAt: nowIso,
-      NotifiedAt: null,
-      LastNotificationError: null,
-      PayloadJson: null
-    };
-
-    const references = new Map<string, any>([[existingReference.Artikel_Nummer, existingReference]]);
-    const runs = new Map<string, AgenticRun>([[existingRun.Artikel_Nummer, existingRun]]);
+    const existingRun = makeRun('R-200', { Id: 2, SearchQuery: 'search' });
     const reviewHistory: Array<Record<string, unknown>> = [];
-    const updateAgenticRunStatus = {
-      run: jest.fn((update: Record<string, unknown>) => {
-        const merged = { ...runs.get(update.Artikel_Nummer as string), ...update } as AgenticRun;
-        runs.set(update.Artikel_Nummer as string, merged);
-        return { changes: 1 };
-      })
+    const upsertAgenticRun = jest.fn(async () => undefined);
+    const insertAgenticRunReviewHistoryEntry = jest.fn(async (entry: Record<string, unknown>) => {
+      reviewHistory.push(entry);
+    });
+
+    const ctx = {
+      getItemReference: jest.fn(async () => existingReference),
+      getAgenticRun: jest.fn(async () => existingRun),
+      persistItemReference: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => 1),
+      upsertAgenticRun,
+      insertAgenticRunReviewHistoryEntry,
+      logEvent: jest.fn(async () => undefined),
+      getAgenticRequestLog: jest.fn(async () => requestLog)
     };
 
-    const { handleAgenticResult } = jest.requireActual<typeof import('../result-handler')>('../result-handler');
-
-    const baseCtx = {
-      db: { transaction: <T extends (...args: any[]) => any>(fn: T) => (...args: Parameters<T>): ReturnType<T> => fn(...args) },
-      getItemReference: { get: (id: string) => references.get(id) },
-      getAgenticRun: { get: (id: string) => runs.get(id) },
-      persistItemReference: jest.fn(),
-      updateAgenticRunStatus,
-      upsertAgenticRun: { run: jest.fn() },
-      insertAgenticRunReviewHistoryEntry: { run: jest.fn((entry: Record<string, unknown>) => reviewHistory.push(entry)) },
-      logEvent: jest.fn(),
-      getAgenticRequestLog: () => requestLog
-    };
-
-    handleAgenticResult(
+    await handleAgenticResult(
       {
         artikelNummer: 'R-200',
         payload: {
@@ -297,10 +231,10 @@ describe('agentic result handler integration', () => {
           needsReview: true
         }
       },
-      { ctx: baseCtx, logger: console }
+      { ctx, logger: console }
     );
 
-    handleAgenticResult(
+    await handleAgenticResult(
       {
         artikelNummer: 'R-200',
         payload: {
@@ -314,14 +248,15 @@ describe('agentic result handler integration', () => {
           needsReview: false
         }
       },
-      { ctx: baseCtx, logger: console }
+      { ctx, logger: console }
     );
 
     expect(reviewHistory).toHaveLength(2);
     expect(reviewHistory[0]).toEqual(expect.objectContaining({ Status: AGENTIC_RUN_STATUS_REJECTED }));
     expect(reviewHistory[1]).toEqual(expect.objectContaining({ Status: AGENTIC_RUN_STATUS_APPROVED }));
-    expect(runs.get('R-200')).toEqual(
+    expect(upsertAgenticRun).toHaveBeenLastCalledWith(
       expect.objectContaining({
+        Artikel_Nummer: 'R-200',
         Status: AGENTIC_RUN_STATUS_APPROVED,
         LastReviewDecision: 'approved',
         LastReviewNotes: 'looks good now',
@@ -330,43 +265,27 @@ describe('agentic result handler integration', () => {
     );
   });
 
-  test('normalizes structured review booleans for history metadata and logs signal counts', () => {
-    const existingReference = { Artikel_Nummer: 'R-300', Artikelbeschreibung: 'Item', Veröffentlicht_Status: 'no' };
-    const existingRun: AgenticRun = {
-      Id: 300,
-      Artikel_Nummer: 'R-300',
-      SearchQuery: 'search',
-      Status: AGENTIC_RUN_STATUS_QUEUED,
-      LastModified: '2024-01-01T00:00:00.000Z',
-      ReviewState: 'not_required',
-      ReviewedBy: null,
-      LastReviewDecision: null,
-      LastReviewNotes: null,
-      RetryCount: 0,
-      NextRetryAt: null,
-      LastError: null,
-      LastAttemptAt: null
-    };
-    const nowIso = new Date('2024-01-01T00:00:00.000Z').toISOString();
-    const requestLog: AgenticRequestLog = {
-      UUID: 'R-300',
-      Search: 'search',
-      Status: AGENTIC_RUN_STATUS_QUEUED,
-      Error: null,
-      CreatedAt: nowIso,
-      UpdatedAt: nowIso,
-      NotifiedAt: null,
-      LastNotificationError: null,
-      PayloadJson: null
-    };
+  test('normalizes structured review booleans for history metadata and logs signal counts', async () => {
+    const { handleAgenticResult } = await import('../result-handler');
 
-    const references = new Map<string, any>([[existingReference.Artikel_Nummer, existingReference]]);
-    const runs = new Map<string, AgenticRun>([[existingRun.Artikel_Nummer, existingRun]]);
+    const requestLog = makeRequestLog('R-300', { Search: 'search' });
+    const existingReference = { Artikel_Nummer: 'R-300', Artikelbeschreibung: 'Item', Veröffentlicht_Status: 'no' };
+    const existingRun = makeRun('R-300', { Id: 300, SearchQuery: 'search' });
     const reviewHistory: Array<Record<string, unknown>> = [];
     const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
-    const { handleAgenticResult } = jest.requireActual<typeof import('../result-handler')>('../result-handler');
 
-    handleAgenticResult(
+    const ctx = {
+      getItemReference: jest.fn(async () => existingReference),
+      getAgenticRun: jest.fn(async () => existingRun),
+      persistItemReference: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => 1),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      insertAgenticRunReviewHistoryEntry: jest.fn(async (entry: Record<string, unknown>) => { reviewHistory.push(entry); }),
+      logEvent: jest.fn(async () => undefined),
+      getAgenticRequestLog: jest.fn(async () => requestLog)
+    };
+
+    await handleAgenticResult(
       {
         artikelNummer: 'R-300',
         payload: {
@@ -386,26 +305,7 @@ describe('agentic result handler integration', () => {
           }
         }
       },
-      {
-        ctx: {
-          db: { transaction: <T extends (...args: any[]) => any>(fn: T) => (...args: Parameters<T>): ReturnType<T> => fn(...args) },
-          getItemReference: { get: (id: string) => references.get(id) },
-          getAgenticRun: { get: (id: string) => runs.get(id) },
-          persistItemReference: jest.fn(),
-          updateAgenticRunStatus: {
-            run: jest.fn((update: Record<string, unknown>) => {
-              const merged = { ...runs.get(update.Artikel_Nummer as string), ...update } as AgenticRun;
-              runs.set(update.Artikel_Nummer as string, merged);
-              return { changes: 1 };
-            })
-          },
-          upsertAgenticRun: { run: jest.fn() },
-          insertAgenticRunReviewHistoryEntry: { run: jest.fn((entry: Record<string, unknown>) => reviewHistory.push(entry)) },
-          logEvent: jest.fn(),
-          getAgenticRequestLog: () => requestLog
-        },
-        logger
-      }
+      { ctx, logger }
     );
 
     expect(reviewHistory).toHaveLength(1);
@@ -429,37 +329,26 @@ describe('agentic result handler integration', () => {
   });
 
 
-  test('persists normalized search links json on run updates', () => {
+  test('persists normalized search links json on run updates', async () => {
+    const { handleAgenticResult } = await import('../result-handler');
+
+    const requestLog = makeRequestLog('R-400', { Search: 'search' });
     const existingReference = { Artikel_Nummer: 'R-400', Artikelbeschreibung: 'Item', Veröffentlicht_Status: 'no' };
-    const existingRun: AgenticRun = {
-      Id: 400,
-      Artikel_Nummer: 'R-400',
-      SearchQuery: 'search',
-      Status: AGENTIC_RUN_STATUS_QUEUED,
-      LastModified: '2024-01-01T00:00:00.000Z',
-      ReviewState: 'not_required',
-      ReviewedBy: null,
-      LastReviewDecision: null,
-      LastReviewNotes: null,
-      RetryCount: 0,
-      NextRetryAt: null,
-      LastError: null,
-      LastAttemptAt: null
+    const existingRun = makeRun('R-400', { Id: 400, SearchQuery: 'search' });
+    const upsertAgenticRun = jest.fn(async () => undefined);
+
+    const ctx = {
+      getItemReference: jest.fn(async () => existingReference),
+      getAgenticRun: jest.fn(async () => existingRun),
+      persistItemReference: jest.fn(async () => undefined),
+      updateAgenticRunStatus: jest.fn(async () => 1),
+      upsertAgenticRun,
+      insertAgenticRunReviewHistoryEntry: jest.fn(async () => undefined),
+      logEvent: jest.fn(async () => undefined),
+      getAgenticRequestLog: jest.fn(async () => requestLog)
     };
 
-    const references = new Map<string, any>([[existingReference.Artikel_Nummer, existingReference]]);
-    const runs = new Map<string, AgenticRun>([[existingRun.Artikel_Nummer, existingRun]]);
-    const updateAgenticRunStatus = {
-      run: jest.fn((update: Record<string, unknown>) => {
-        const merged = { ...runs.get(update.Artikel_Nummer as string), ...update } as AgenticRun;
-        runs.set(update.Artikel_Nummer as string, merged);
-        return { changes: 1 };
-      })
-    };
-
-    const { handleAgenticResult } = jest.requireActual<typeof import('../result-handler')>('../result-handler');
-
-    handleAgenticResult(
+    await handleAgenticResult(
       {
         artikelNummer: 'R-400',
         payload: {
@@ -479,33 +368,10 @@ describe('agentic result handler integration', () => {
           needsReview: false
         }
       },
-      {
-        ctx: {
-          db: { transaction: <T extends (...args: any[]) => any>(fn: T) => (...args: Parameters<T>): ReturnType<T> => fn(...args) },
-          getItemReference: { get: (id: string) => references.get(id) },
-          getAgenticRun: { get: (id: string) => runs.get(id) },
-          persistItemReference: jest.fn(),
-          updateAgenticRunStatus,
-          upsertAgenticRun: { run: jest.fn() },
-          insertAgenticRunReviewHistoryEntry: { run: jest.fn() },
-          logEvent: jest.fn(),
-          getAgenticRequestLog: () => ({
-            UUID: 'R-400',
-            Search: 'search',
-            Status: AGENTIC_RUN_STATUS_QUEUED,
-            Error: null,
-            CreatedAt: '2024-01-01T00:00:00.000Z',
-            UpdatedAt: '2024-01-01T00:00:00.000Z',
-            NotifiedAt: null,
-            LastNotificationError: null,
-            PayloadJson: null
-          })
-        },
-        logger: console
-      }
+      { ctx, logger: console }
     );
 
-    expect(updateAgenticRunStatus.run).toHaveBeenCalledWith(
+    expect(upsertAgenticRun).toHaveBeenCalledWith(
       expect.objectContaining({
         Artikel_Nummer: 'R-400',
         LastSearchLinksJsonIsSet: 1,

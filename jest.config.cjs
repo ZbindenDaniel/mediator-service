@@ -11,8 +11,8 @@ module.exports = {
     '**/scripts/__tests__/**/*.test.ts'
   ],
   testPathIgnorePatterns: [
-    // Uses old SQLite ctx.db API — needs rewrite after result-handler async migration
-    '/backend/agentic/__tests__/result-handler.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /backend/agentic/__tests__/result-handler.test.ts (converted SQLite ctx.db API to async Postgres shape)
     // Fully commented-out test files (stubs for future work)
     '/test/cancel-agentic-run.test.ts',
     '/test/box-color-tag.test.ts',
