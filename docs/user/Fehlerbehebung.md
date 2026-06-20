@@ -57,7 +57,7 @@ Wenn das Problem länger als 5 Minuten anhält, meld es der Systemadministration
 - Was hast du versucht zu tun (Bild hochladen, ERP-Sync, …)?
 - Gibt es eine Fehlermeldung im System?
 
-> **Hinweis:** Das System speichert Artikeldaten auch dann korrekt, wenn WebDAV nicht verfügbar ist. Nur Bilder und Mediendateien sind betroffen.
+> **Hinweis:** Das System speichert Artikeldaten (Beschreibung, Spezifikationen, Preis, ...) auch dann korrekt, wenn WebDAV nicht verfügbar ist. Bilder und Mediendateien sind betroffen: Uploads schlagen fehl und die Dateien gehen verloren — es gibt keinen lokalen Zwischenspeicher. Falls du ein Bild hochgeladen hast und direkt danach ein WebDAV-Fehler aufgetaucht ist, lade das Bild erneut hoch, sobald WebDAV wieder erreichbar ist.
 
 ---
 
@@ -166,6 +166,8 @@ Keine Panik. Die meisten Aktionen lassen sich korrigieren.
 Für Behälter: Behälter öffnen → **Umlagern** → richtiges Regal wählen.
 
 > Alle Bewegungen werden in der Aktivitätshistorie protokolliert — du kannst jederzeit nachvollziehen, wer was wann verschoben hat.
+
+**Lagerort unklar?** Wenn du dir nicht sicher bist, wo ein Artikel wirklich liegt, kannst du einen Behälter oder ein Regal öffnen und alle enthaltenen Artikel auf einen Blick sehen. So kannst du schnell prüfen, ob etwas fehlt oder am falschen Ort ist — und den Standort direkt korrigieren.
 
 ---
 

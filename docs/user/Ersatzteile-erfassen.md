@@ -67,27 +67,31 @@ Wenn ein Bauteil den Status ◎ hat, kannst du es erfassen:
 
 ### 4. Bauteil entnehmen (physisch ausbauen)
 
-Wenn du ein Bauteil aus dem Gerät nimmst und einlagerst:
+Wenn du ein Bauteil aus dem Gerät nimmst, gibt es zwei Szenarien:
 
+**Einlagern (Normalfall):** Das Bauteil wird in einem Behälter aufbewahrt und bleibt im Lager.
 1. Klick auf **Entnehmen** in der Zeile des katalogisierten Bauteils (◉).
 2. Gib die **Behälter-ID** des Zielorts ein (z. B. `B-042`).
 3. Bestätige mit **Entnehmen**.
+4. Der Slot wechselt zu ○ mit Angabe des Lagerorts. Das Bauteil ist jetzt als eigenständiger Artikel suchbar.
 
-Nach der Entnahme:
-- Der Slot wechselt zu ○ mit Angabe des Lagerorts.
-- Das Bauteil ist jetzt als eigenständiger Artikel suchbar und kann separat etikettiert und verkauft werden.
-- Die Qualitätsbewertung des Quellgeräts wird automatisch auf **Ersatzteil** gesetzt.
+**Direkt verkaufen:** Das Bauteil geht sofort raus — kein Lagerplatz nötig.
+> Diese Option ist in Planung. Aktuell: Bauteil wie oben entnehmen, dann den Artikel manuell auf Menge 0 setzen, um anzuzeigen, dass er nicht mehr verfügbar ist.
+
+In beiden Fällen wird die Qualitätsbewertung des Quellgeräts automatisch auf **Ersatzteil** gesetzt.
 
 ---
 
 ### 5. Bauteil-Link entfernen (Rückgängig machen)
 
-Falls du den falschen Artikel ausgewählt hast:
+Falls du den falschen Artikel ausgewählt hast, solange das Bauteil noch **nicht entnommen** wurde:
 
-- Klick auf **Link entfernen** — nur sichtbar, solange das Bauteil noch nicht entnommen wurde.
+- Klick auf **Link entfernen**.
 - Der erstellte Artikel und der Link werden gelöscht.
 
 > **Achtung:** Nach der Entnahme (Status ○) kann der Link nicht mehr entfernt werden. Das Bauteil muss dann wie ein normaler Artikel behandelt werden.
+
+**Szenario: Falsche Referenz, aber korrekte Instanz-Daten?** Wenn der Artikel-Link falsch ist, die Instanzdaten (Seriennummer, Spezifikationen) aber stimmen, ist aktuell kein einfaches Umhängen möglich. Dieses Szenario wird in einem separaten Task dokumentiert und adressiert.
 
 ---
 

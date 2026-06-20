@@ -19,6 +19,10 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0m. **Ersatzteile Entnehmen: add "direkt verkaufen" path.** Currently Entnehmen always requires a Behälter-ID (storage location). When a spare part is sold immediately, no storage location is needed — instead the quantity should go to 0. UI change: show "Wird der Artikel eingelagert?" prompt in the Entnehmen flow; "Ja" → existing relocate flow; "Nein" → set Qty=0, no location required.
+
+0n. **Ersatzteile: instance reference re-linking.** When a spare part instance is created via Hinzufügen but linked to the wrong item reference (wrong Artikelnummer), there's no way to re-link the instance to the correct reference without deleting it. Implement a "Referenz ändern" option in the Zerlegen slot (visible post-cataloging, before/after removal).
+
 0k. ✅ **Test suite stabilized post-Postgres migration.** 382 tests passing; 9 skipped; 0 failing. ~44 test files deferred in `jest.config.cjs testPathIgnorePatterns` — all SQLite-based tests (csv-ingest-*, export-items, apiRoutes, etc.) and tests using old AgenticServiceDependencies interface need rewrites for Postgres.
 0l. **Deferred test rewrites needed:** `backend/actions/__tests__/save-item.test.ts` (old `{ get: jest.fn() }` ctx mocks), `backend/agentic/__tests__/dispatch-queue-concurrency.test.ts` + invoker-adapter + item-flow-* (old interface), `test/csv-ingest-*.test.ts` + `test/export-items.test.ts` + `test/apiRoutes.test.ts` (SQLite db.exec/db.prepare), `test/frontend-agentic-review-flow.test.ts` (models alias resolution), `frontend/src/components/__tests__/PlacementScanView.test.tsx` (missing lib/logger mock path).
 
