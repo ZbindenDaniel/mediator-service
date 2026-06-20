@@ -50,9 +50,10 @@ module.exports = {
     '/frontend/src/components/__tests__/BulkItemActionBar.test.tsx',
     '/frontend/src/components/__tests__/BoxDetail.test.tsx',
     '/backend/actions/__tests__/forward-agentic-trigger.test.ts',
-    '/backend/agentic/__tests__/think-tag-parsing.test.ts',
-    '/backend/agentic/__tests__/supervisor-pass-normalization.test.ts',
-    '/backend/agentic/__tests__/review-metadata-normalization.test.ts',
+    // Rewritten from scratch — removed from ignore list:
+    // /backend/agentic/__tests__/think-tag-parsing.test.ts (updated interface, full AgenticTarget)
+    // /backend/agentic/__tests__/supervisor-pass-normalization.test.ts (updated interface)
+    // /backend/agentic/__tests__/review-metadata-normalization.test.ts (async deps + withTransaction mock)
     '/backend/agentic/__tests__/item-flow-search.test.ts',
     '/backend/agentic/__tests__/item-flow-dispatch.test.ts',
     '/test/agentic/item-flow.test.ts',

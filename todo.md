@@ -19,8 +19,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
-0k. ✅ **Test suite stabilized post-Postgres migration, now re-hardened.** 442 tests passing; 9 skipped; 0 failing. 7 stale assertions fixed; `save-item.test.ts` rewritten (12 tests); `restart-review-metadata.test.ts` rewritten (3 tests); `dispatch-queue-concurrency.test.ts` rewritten (7 tests); 5 more agentic suites fixed (22 tests). ~36 test files still deferred in `jest.config.cjs testPathIgnorePatterns`.
-0l. **Deferred test rewrites needed:** `test/csv-ingest-*.test.ts` + `test/export-items.test.ts` + `test/apiRoutes.test.ts` (SQLite db.exec/db.prepare), `test/frontend-agentic-review-flow.test.ts` (models alias resolution), `frontend/src/components/__tests__/PlacementScanView.test.tsx` (missing lib/logger mock path).
+0k. ✅ **Test suite stabilized post-Postgres migration, now re-hardened.** 450 tests passing; 9 skipped; 0 failing. 7 stale assertions fixed; `save-item.test.ts` rewritten (12 tests); `restart-review-metadata.test.ts` rewritten (3 tests); `dispatch-queue-concurrency.test.ts` rewritten (7 tests); 5 more agentic suites fixed (22 tests); 3 fully-commented stubs rewritten from scratch (8 tests). ~33 test files still deferred in `jest.config.cjs testPathIgnorePatterns`.
+0l. **Deferred test rewrites needed:** `test/csv-ingest-*.test.ts` + `test/export-items.test.ts` + `test/apiRoutes.test.ts` (SQLite db.exec/db.prepare), `test/frontend-agentic-review-flow.test.ts` (models alias resolution), `frontend/src/components/__tests__/PlacementScanView.test.tsx` (missing lib/logger mock path), `backend/actions/__tests__/forward-agentic-trigger.test.ts` (old dispatcher logic, needs rewrite for new start→restart flow).
 
 0f. ✅ **Quality contracts missing in production build.** `scripts/build.js` now copies `contracts/` → `dist/contracts/` so the backend registry can find general and subcategory quality contracts at runtime.
 0g. ✅ **Attachments binding modal shown without purpose.** Modal now only appears when at least one writable external dir (ALT_DOC_DIRS) is available; without external dirs, files upload directly with no modal.
