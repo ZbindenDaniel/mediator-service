@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+834. ✅ Artikelnummer lookup popup as first step of item creation
+   - **Why:** Operators were forced to fill in the full basicInfo form (description, categories, dimensions) even for items already cataloged in the ERP. The new `artikelLookup` step shows a debounced search input first — if the operator finds the ref and clicks "Übernehmen", the wizard jumps directly to quality review and then creates the instance from the existing reference. The basicInfo form and matchSelection step are skipped entirely for the fast path.
+   - **Deferred:** Auto-lookup by scan (barcode scanner could pre-fill the input); the input requires manual typing for now. The "Weiter erfassen" reset returns to `artikelLookup`, not `basicInfo`.
 833. ✅ Zerlegen: allow Hinzufügen on Empty slots (part may be added after assessment)
    - **Why:** The Empty state (quality said "Nicht vorhanden") blocked the Hinzufügen button entirely. This is wrong — a part can be added later (e.g. RAM installed to make a device functional). One-line fix: `state === 'potential'` → `state === 'potential' || state === 'empty'` in ZubehoerCard. Docs updated to match.
    - **Deferred:** Nothing.
