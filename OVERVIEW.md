@@ -7,9 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
-837. ✅ Add Inventur user guide doc explaining periodic warehouse inventory using existing features
-   - **Why:** No user guide page existed for the inventory concept. Operators needed guidance on when and how to do periodic stock checks. The dedicated inventory feature (InventoryCheckView, LastInventoryDate, etc.) is not yet implemented (todo 19b), so the guide documents the manual workflow using current features: open box/shelf, compare item list against physical stock, scan QR codes, and use Umlagern to fix discrepancies.
-   - **Deferred:** The guide will need updates once the planned inventory feature (todo 19b) ships — dedicated UI, passive trigger, and acoustic feedback are not yet built.
+837. ✅ Add Inventur user guide doc: document Einscannen placement flow as the primary inventory tool
+   - **Why:** No user guide page existed for the inventory concept. The implemented `PlacementScanView` ("Einscannen" button in BoxDetail, mobile-only) is the core tool: scans items into a box, silently confirms items already assigned there, and prompts "Hierher verschieben?" for items recorded elsewhere. Guide also covers shelf inventory (Einscannen + "Behälter einlagern"), manual list inspection for physically missing items, and Menge count checks.
+   - **Deferred:** Missing-item detection (items recorded in box but physically absent) is not yet implemented — that's the planned `InventoryCheckView` from todo 19b. The guide notes this gap explicitly.
 836. ✅ Artikelnummer lookup popup as first step of item creation
    - **Why:** Operators were forced to fill in the full basicInfo form (description, categories, dimensions) even for items already cataloged in the ERP. The new `artikelLookup` step shows a debounced search input first — if the operator finds the ref and clicks "Übernehmen", the wizard jumps directly to quality review and then creates the instance from the existing reference. The basicInfo form and matchSelection step are skipped entirely for the fast path.
    - **Deferred:** Auto-lookup by scan (barcode scanner could pre-fill the input); the input requires manual typing for now. The "Weiter erfassen" reset returns to `artikelLookup`, not `basicInfo`.
