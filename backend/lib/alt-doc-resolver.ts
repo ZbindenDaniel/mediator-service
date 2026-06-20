@@ -7,6 +7,7 @@ export interface AltDocResolutionContext {
   ean: string | null;
   serialNumber: string | null;
   macAddress: string | null;
+  artikelNummer: string | null;
 }
 
 // EAN: digits only (EAN-8, EAN-13, or extended alphanumeric article numbers)
@@ -15,6 +16,8 @@ const EAN_PATTERN = /^[0-9A-Za-z]+$/;
 const SERIAL_PATTERN = /^[a-zA-Z0-9_-]+$/;
 // MAC address: hex digits, colons, hyphens
 const MAC_PATTERN = /^[0-9A-Fa-f:.-]+$/;
+// Artikel_Nummer: alphanumeric, dots, hyphens, underscores (covers numeric, zero-padded, and compound codes)
+const ARTIKEL_PATTERN = /^[a-zA-Z0-9._-]+$/;
 
 export function validateAltDocIdentifierValue(
   value: string,
@@ -25,6 +28,7 @@ export function validateAltDocIdentifierValue(
     case 'ean': return EAN_PATTERN.test(value);
     case 'serialNumber': return SERIAL_PATTERN.test(value);
     case 'macAddress': return MAC_PATTERN.test(value);
+    case 'artikelNummer': return ARTIKEL_PATTERN.test(value);
   }
 }
 
@@ -49,6 +53,7 @@ export function resolveAltDocIdentifier(
     case 'ean': raw = ctx.ean; break;
     case 'serialNumber': raw = ctx.serialNumber; break;
     case 'macAddress': raw = ctx.macAddress; break;
+    case 'artikelNummer': raw = ctx.artikelNummer; break;
   }
   if (!raw) return null;
 

@@ -128,16 +128,19 @@ certificates by EAN barcode).
 
 ### Supported identifiers
 
-| `identifierType` | Database source | Scope | Example use |
+| `identifierType` | Database source | Scope | Typical use |
 |---|---|---|---|
-| `ean` | `item_refs.EAN` | Product-level — shared across all instances of same Artikel_Nummer | Test certificates for a device model |
-| `serialNumber` | `items.SerialNumber` | Per physical unit | Wipe/erasure reports |
-| `macAddress` | `items.MacAddress` | Per physical unit (network devices) | Per-unit configuration exports |
+| `ean` | `item_refs.EAN` | Product-level — shared across all units of same model | Datasheets, EU declarations of conformity |
+| `serialNumber` | `items.SerialNumber` | Per physical unit | Wipe/erasure reports, test results per unit |
+| `macAddress` | `items.MacAddress` | Per physical unit (network devices) | Per-unit config exports, network docs |
+| `artikelNummer` | `items.Artikel_Nummer` | Product-level — internal catalog number | Service manuals, supplier documents |
 
-### Configuration — `ALT_DOC_DIRS`
+### Configuration — `ALT_DOC_DIRS_FILE`
 
-```
-ALT_DOC_DIRS=[
+Set `ALT_DOC_DIRS_FILE=/etc/mediator/alt-doc-dirs.json` in `.env`. The file contains a JSON array:
+
+```json
+[
   {
     "name": "wipe-reports",
     "mountPath": "/mnt/wipe-reports",
@@ -147,9 +150,22 @@ ALT_DOC_DIRS=[
   {
     "name": "test-results",
     "mountPath": "/mnt/test-results",
+    "identifierType": "serialNumber",
+    "docType": "Prüfprotokoll"
+  },
+  {
+    "name": "datasheets",
+    "mountPath": "/mnt/datasheets",
     "identifierType": "ean",
     "normalize": "uppercase",
-    "docType": "Prüfprotokoll"
+    "docType": "Datenblatt"
+  },
+  {
+    "name": "service-manuals",
+    "mountPath": "/mnt/service-manuals",
+    "identifierType": "artikelNummer",
+    "docType": "Servicehandbuch",
+    "writable": true
   }
 ]
 ```
@@ -157,8 +173,8 @@ ALT_DOC_DIRS=[
 | Field | Required | Description |
 |---|---|---|
 | `name` | Yes | Unique key used in API URLs (`/external-docs/<name>/…`) — alphanumeric, hyphens, underscores |
-| `mountPath` | Yes | Absolute filesystem path to the mounted WebDAV root |
-| `identifierType` | Yes | `ean`, `serialNumber`, or `macAddress` |
+| `mountPath` | Yes | Absolute filesystem path to the mounted root |
+| `identifierType` | Yes | `ean`, `serialNumber`, `macAddress`, or `artikelNummer` |
 | `normalize` | No | Optional transform before using value as folder name: `uppercase`, `lowercase`, `strip-colons` |
 | `docType` | No | Human-readable label shown in the UI and API responses (e.g. `Löschprotokoll`) |
 | `writable` | No | `true` to allow uploading new files via the UI (default: `false`). The upload modal shows this dir as a binding option only when `writable: true` and the item has the required identifier. |
