@@ -54,7 +54,7 @@ import {
   loadItemListFilters
 } from '../lib/itemListFiltersStorage';
 import { logger, logError } from '../utils/logger';
-import { mapReviewAnswersToInput, type AgenticReviewInput } from '../lib/agenticReviewMapping';
+import { mapReviewAnswersToInput, buildAgenticReviewSubmissionPayload, type AgenticReviewInput } from '../lib/agenticReviewMapping';
 import { filterAndSortItems } from './ItemListPage';
 
 // TODO(agentic-start-flow): Consolidate agentic start and restart handling into a shared helper once UI confirms the UX.
@@ -160,26 +160,6 @@ function buildLangtextReviewPreviewFields(itemValue: unknown, itemId: string): R
   }
 }
 
-
-function buildAgenticReviewSubmissionPayload(
-  actor: string,
-  reviewInput: AgenticReviewInput
-): Record<string, unknown> {
-  return {
-    actor,
-    action: 'review',
-    information_present: reviewInput.information_present,
-    bad_format: reviewInput.bad_format,
-    wrong_information: reviewInput.wrong_information,
-    wrong_physical_dimensions: reviewInput.wrong_physical_dimensions,
-    missing_spec: reviewInput.missing_spec,
-    unneeded_spec: reviewInput.unneeded_spec,
-    notes: reviewInput.notes,
-    review_price: reviewInput.review_price,
-    shop_article: reviewInput.shop_article,
-    reviewedBy: actor
-  };
-}
 
 function formatReviewPreviewValue(value: unknown, maxLength = REVIEW_PREVIEW_MAX_TEXT_LENGTH): string {
   if (value === null || value === undefined) {
