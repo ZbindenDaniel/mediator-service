@@ -1,3 +1,10 @@
+// item-flow-extraction.ts calls getItemReference from ../../db directly at line 923;
+// without this mock the try/catch there fires before the info log is emitted.
+jest.mock('../../db', () => ({
+  getItemReference: jest.fn(async () => null),
+  listRecentAgenticRunReviewHistoryBySubcategory: jest.fn(async () => []),
+}));
+
 import type { ChatModel } from '../flow/item-flow-extraction';
 import type { AgenticTarget } from '../flow/item-flow-schemas';
 import { runExtractionAttempts } from '../flow/item-flow-extraction';

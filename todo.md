@@ -19,12 +19,16 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0k. ✅ **Test suite re-hardened: 637 tests passing.** Added coverage for `cancellation.ts`, `utils/json.ts`, `flow/prompts.ts`, `lib/itemGrouping.ts`, `result-handler.ts`, `forward-agentic-trigger.ts`, `models/quality.ts`. Fixed inverted `deriveAiPriorityFromAssessment` (high quality was mapped to low priority). 9 skipped; 0 failing.
+0l. **Deferred test rewrites still needed:** `test/csv-ingest-*.test.ts` (9 files) + `test/export-items.test.ts` + `test/langtext-contract.test.ts` + `test/list-items-for-export-order.test.ts` + `test/save-item-quality.test.ts` + `test/item-category-roundtrip.test.ts` + `test/item-persistence-reference-behavior.test.ts` — all use SQLite `db.exec`/`persistItem` directly and need full Postgres mock rewrites. Many frontend component tests still deferred (React + complex deps).
 0m. **Ersatzteile Entnehmen: add "direkt verkaufen" path.** Currently Entnehmen always requires a Behälter-ID (storage location). When a spare part is sold immediately, no storage location is needed — instead the quantity should go to 0. UI change: show "Wird der Artikel eingelagert?" prompt in the Entnehmen flow; "Ja" → existing relocate flow; "Nein" → set Qty=0, no location required.
-
 0n. **Ersatzteile: instance reference re-linking.** When a spare part instance is created via Hinzufügen but linked to the wrong item reference (wrong Artikelnummer), there's no way to re-link the instance to the correct reference without deleting it. Implement a "Referenz ändern" option in the Zerlegen slot (visible post-cataloging, before/after removal).
-
-0k. ✅ **Test suite stabilized post-Postgres migration.** 382 tests passing; 9 skipped; 0 failing. ~44 test files deferred in `jest.config.cjs testPathIgnorePatterns` — all SQLite-based tests (csv-ingest-*, export-items, apiRoutes, etc.) and tests using old AgenticServiceDependencies interface need rewrites for Postgres.
-0l. **Deferred test rewrites needed:** `backend/actions/__tests__/save-item.test.ts` (old `{ get: jest.fn() }` ctx mocks), `backend/agentic/__tests__/dispatch-queue-concurrency.test.ts` + invoker-adapter + item-flow-* (old interface), `test/csv-ingest-*.test.ts` + `test/export-items.test.ts` + `test/apiRoutes.test.ts` (SQLite db.exec/db.prepare), `test/frontend-agentic-review-flow.test.ts` (models alias resolution), `frontend/src/components/__tests__/PlacementScanView.test.tsx` (missing lib/logger mock path).
+0p. **Known test coverage gaps (from doc/test comparison):**
+  - `restart-review-metadata.test.ts` covers 3 of 4 restart truth-table cases from `review-flow.md`; case 3 (`review` provided + `replaceReviewMetadata=true`) is not tested.
+  - `item-flow-pricing.test.ts` threshold test uses values below both gates simultaneously — cannot verify the documented `confidence >= 0.6 AND evidenceCount >= 2` thresholds independently from the test alone.
+  - Categorizer `__locked` field behavior (`item-flow.md`: "Locked fields are preserved and not overwritten") is asserted nowhere in the test suite; only appears as fixture setup data.
+  - `backend/actions/agentic-delete.ts` has no test coverage.
+  - Follow-up `__searchQueries` not hard-blocked by `skipSearch` is a documented known gap in `item-flow.md` but no test pins the current inconsistent behavior to catch if it changes.
 
 0f. ✅ **Quality contracts missing in production build.** `scripts/build.js` now copies `contracts/` → `dist/contracts/` so the backend registry can find general and subcategory quality contracts at runtime.
 0g. ✅ **Attachments binding modal shown without purpose.** Modal now only appears when at least one writable external dir (ALT_DOC_DIRS) is available; without external dirs, files upload directly with no modal.

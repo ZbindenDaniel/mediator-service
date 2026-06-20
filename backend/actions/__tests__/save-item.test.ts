@@ -1,3 +1,20 @@
+// save-item imports generateShopwareCorrelationId and listRecentAgenticRunReviewHistoryBySubcategory
+// from '../db' (better-sqlite3-backed); mock the entire module to prevent native module loading
+jest.mock('../../db', () => ({
+  generateShopwareCorrelationId: jest.fn(() => 'mock-correlation-id'),
+  listRecentAgenticRunReviewHistoryBySubcategory: jest.fn(async () => []),
+}));
+
+jest.mock('../../db-client', () => ({
+  withTransaction: jest.fn(async (fn: (client: any) => Promise<any>) => {
+    const client = { query: jest.fn(async () => ({ rows: [] })) };
+    return fn(client);
+  }),
+  query: jest.fn(async () => []),
+  queryOne: jest.fn(async () => null),
+  execute: jest.fn(async () => 0),
+}));
+
 import fs from 'fs';
 import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
@@ -16,12 +33,7 @@ function createMockResponse() {
       body = payload ? JSON.parse(payload) : undefined;
     })
   } as any;
-
-  return {
-    res: res as ServerResponse,
-    getStatus: () => statusCode,
-    getBody: () => body
-  };
+  return { res: res as ServerResponse, getStatus: () => statusCode, getBody: () => body };
 }
 
 function createRequest(url: string): IncomingMessage {
@@ -46,6 +58,8 @@ describe('save-item action', () => {
 
   beforeAll(() => {
     sandbox = createFsSandbox('save-item-action-');
+    // importFresh re-requires save-item with the sandbox cwd so MEDIA_UPLOAD_STAGING_DIR
+    // points inside the temp directory rather than the real dist/backend/media path
     const mod = sandbox.importFresh<typeof import('../save-item')>('../save-item', __dirname);
     action = mod.default;
     collectMediaAssets = mod.collectMediaAssets;
@@ -57,29 +71,26 @@ describe('save-item action', () => {
 
   it('matches save item routes', () => {
     expect(action.matches('/api/items/ITEM-1', 'GET')).toBe(true);
+    expect(action.matches('/api/items/ITEM-1', 'PUT')).toBe(true);
+    expect(action.matches('/api/items', 'GET')).toBe(false);
+    expect(action.matches('/api/items/ITEM-1/move', 'GET')).toBe(false);
   });
 
-  it('returns item detail payloads for GET requests', async () => {
+  it('returns item detail payload for GET by UUID', async () => {
     const ctx = {
-      getItem: {
-        get: jest.fn(() => ({
-          ItemUUID: 'ITEM-1',
-          Artikel_Nummer: 'ART-1',
-          BoxID: 'BOX-1',
-          Einheit: ItemEinheit.Stk,
-          Quality: 1,
-          Grafikname: ''
-        }))
-      },
-      getBox: {
-        get: jest.fn(() => ({ BoxID: 'BOX-1', Label: 'Box 1' }))
-      },
-      listEventsForItem: {
-        all: jest.fn(() => [])
-      },
-      getItemReference: {
-        get: jest.fn(() => ({ Artikel_Nummer: 'ART-1' }))
-      }
+      getItem: jest.fn(async () => ({
+        ItemUUID: 'ITEM-1',
+        Artikel_Nummer: 'ART-1',
+        BoxID: 'BOX-1',
+        Einheit: ItemEinheit.Stk,
+        Quality: 1,
+        Grafikname: ''
+      })),
+      getBox: jest.fn(async () => ({ BoxID: 'BOX-1', Label: 'Box 1' })),
+      listEventsForItem: jest.fn(async () => []),
+      getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'ART-1' })),
+      getAgenticRun: jest.fn(async () => null),
+      findByMaterial: jest.fn(async () => [])
     };
 
     const req = createRequest('/api/items/ITEM-1');
@@ -87,43 +98,32 @@ describe('save-item action', () => {
 
     await action.handle(req, res, ctx);
 
-    const body = getBody();
     expect(getStatus()).toBe(200);
+    const body = getBody();
     expect(body.item).toEqual(expect.objectContaining({ ItemUUID: 'ITEM-1', Artikel_Nummer: 'ART-1' }));
     expect(body.reference).toEqual(expect.objectContaining({ Artikel_Nummer: 'ART-1' }));
     expect(Array.isArray(body.media)).toBe(true);
+    expect(Array.isArray(body.events)).toBe(true);
   });
 
-  it('returns representative instance-backed detail for Artikelnummer lookups with instances', async () => {
+  it('returns instance-backed detail for Artikel_Nummer lookups with instances', async () => {
     const ctx = {
-      getItem: {
-        get: jest.fn(() => null)
-      },
-      findByMaterial: {
-        all: jest.fn(() => [
-          {
-            ItemUUID: 'ITEM-2',
-            Artikel_Nummer: 'ART-2',
-            BoxID: 'BOX-2',
-            Location: 'A-01',
-            Einheit: ItemEinheit.Stk,
-            Quality: 2,
-            UpdatedAt: new Date('2024-01-01T00:00:00.000Z')
-          }
-        ])
-      },
-      getItemReference: {
-        get: jest.fn(() => ({ Artikel_Nummer: 'ART-2', Kurzbeschreibung: 'Reference text' }))
-      },
-      getBox: {
-        get: jest.fn(() => ({ BoxID: 'BOX-2', Label: 'Box 2' }))
-      },
-      listEventsForItem: {
-        all: jest.fn(() => [])
-      },
-      getAgenticRun: {
-        get: jest.fn(() => null)
-      }
+      getItem: jest.fn(async () => null),
+      findByMaterial: jest.fn(async () => [
+        {
+          ItemUUID: 'ITEM-2',
+          Artikel_Nummer: 'ART-2',
+          BoxID: 'BOX-2',
+          Location: 'A-01',
+          Einheit: ItemEinheit.Stk,
+          Quality: 2,
+          UpdatedAt: new Date('2024-01-01T00:00:00.000Z')
+        }
+      ]),
+      getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'ART-2', Kurzbeschreibung: 'Reference text' })),
+      getBox: jest.fn(async () => ({ BoxID: 'BOX-2', Label: 'Box 2' })),
+      listEventsForItem: jest.fn(async () => []),
+      getAgenticRun: jest.fn(async () => null)
     };
 
     const req = createRequest('/api/items/ART-2');
@@ -131,32 +131,22 @@ describe('save-item action', () => {
 
     await action.handle(req, res, ctx);
 
-    const body = getBody();
     expect(getStatus()).toBe(200);
+    const body = getBody();
     expect(body.item).toEqual(expect.objectContaining({ ItemUUID: 'ITEM-2', Artikel_Nummer: 'ART-2' }));
     expect(body.reference).toEqual(expect.objectContaining({ Artikel_Nummer: 'ART-2' }));
     expect(Array.isArray(body.instances)).toBe(true);
     expect(body.instances.length).toBe(1);
-    expect(ctx.listEventsForItem.all).toHaveBeenCalledWith('ITEM-2');
+    expect(ctx.listEventsForItem).toHaveBeenCalledWith('ITEM-2');
   });
 
-  it('returns reference-backed detail and empty instances for Artikelnummer lookups without instances', async () => {
+  it('returns reference-backed detail and empty instances for Artikel_Nummer lookups without instances', async () => {
     const ctx = {
-      getItem: {
-        get: jest.fn(() => null)
-      },
-      findByMaterial: {
-        all: jest.fn(() => [])
-      },
-      getItemReference: {
-        get: jest.fn(() => ({ Artikel_Nummer: 'ART-3', Kurzbeschreibung: 'Reference only' }))
-      },
-      getBox: {
-        get: jest.fn(() => null)
-      },
-      listEventsForItem: {
-        all: jest.fn(() => [])
-      }
+      getItem: jest.fn(async () => null),
+      findByMaterial: jest.fn(async () => []),
+      getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'ART-3', Kurzbeschreibung: 'Reference only' })),
+      getBox: jest.fn(async () => null),
+      listEventsForItem: jest.fn(async () => [])
     };
 
     const req = createRequest('/api/items/ART-3');
@@ -164,8 +154,8 @@ describe('save-item action', () => {
 
     await action.handle(req, res, ctx);
 
-    const body = getBody();
     expect(getStatus()).toBe(200);
+    const body = getBody();
     expect(body.item).toEqual(
       expect.objectContaining({
         ItemUUID: 'ART-3',
@@ -180,10 +170,26 @@ describe('save-item action', () => {
     expect(body.events).toEqual([]);
   });
 
+  it('returns 404 when identifier is unknown', async () => {
+    const ctx = {
+      getItem: jest.fn(async () => null),
+      findByMaterial: jest.fn(async () => []),
+      getItemReference: jest.fn(async () => null),
+      getBox: jest.fn(async () => null),
+      listEventsForItem: jest.fn(async () => [])
+    };
+
+    const req = createRequest('/api/items/UNKNOWN-ID');
+    const { res, getStatus, getBody } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(404);
+    expect(getBody()).toEqual({ error: 'Not found' });
+  });
 
   it('normalizes bare Grafikname values to explicit /media paths', () => {
     const assets = collectMediaAssets('ITEM-EXPLICIT-1', 'ART-EXPLICIT/ART-EXPLICIT-1.jpg', 'ART-EXPLICIT');
-
     expect(assets).toEqual(expect.arrayContaining(['/media/ART-EXPLICIT/ART-EXPLICIT-1.jpg']));
   });
 
@@ -197,7 +203,6 @@ describe('save-item action', () => {
     expect(assets[0]).toBe('/media/ART-10/ART-10-1.jpg');
   });
 
-
   it('collects media assets from sandboxed media directory', () => {
     const folder = path.join(sandbox.distMediaDir, 'ART-1');
     const filename = 'ART-1-1.jpg';
@@ -209,46 +214,34 @@ describe('save-item action', () => {
     expect(assets).toContain('/media/ART-1/ART-1-1.jpg');
   });
 
-
-
-  it('keeps fallback primary media stable after removing the previous primary asset', async () => {
+  it('picks fallback primary media after removing the previous primary asset', async () => {
     const folder = path.join(sandbox.distMediaDir, 'ART-9');
     fs.mkdirSync(folder, { recursive: true });
     fs.writeFileSync(path.join(folder, 'ART-9-1.jpg'), 'one');
     fs.writeFileSync(path.join(folder, 'ART-9-2.jpg'), 'two');
 
-    const persistItemReference = jest.fn();
+    const persistItemReference = jest.fn(async () => undefined);
     const ctx = {
-      getItem: {
-        get: jest.fn(() => ({
-          ItemUUID: 'ITEM-9',
-          Artikel_Nummer: 'ART-9',
-          BoxID: null,
-          Location: null,
-          Grafikname: '/media/ART-9/ART-9-1.jpg',
-          Einheit: ItemEinheit.Stk
-        }))
-      },
-      getItemReference: {
-        get: jest.fn(() => ({
-          Artikel_Nummer: 'ART-9',
-          Grafikname: '/media/ART-9/ART-9-1.jpg',
-          ImageNames: '/media/ART-9/ART-9-1.jpg|/media/ART-9/ART-9-2.jpg',
-          Artikelbeschreibung: 'Reference text'
-        }))
-      },
-      db: {
-        transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
-      },
+      getItem: jest.fn(async () => ({
+        ItemUUID: 'ITEM-9',
+        Artikel_Nummer: 'ART-9',
+        BoxID: null,
+        Location: null,
+        Grafikname: '/media/ART-9/ART-9-1.jpg',
+        Einheit: ItemEinheit.Stk
+      })),
+      getItemReference: jest.fn(async () => ({
+        Artikel_Nummer: 'ART-9',
+        Grafikname: '/media/ART-9/ART-9-1.jpg',
+        ImageNames: '/media/ART-9/ART-9-1.jpg|/media/ART-9/ART-9-2.jpg',
+        Artikelbeschreibung: 'Reference text'
+      })),
       persistItemReference,
-      logEvent: jest.fn(),
+      logEvent: jest.fn(async () => undefined),
       enqueueShopwareSyncJob: jest.fn()
     };
 
-    const req = createPutRequest('/api/items/ITEM-9', {
-      actor: 'Tester',
-      picture1: null
-    });
+    const req = createPutRequest('/api/items/ITEM-9', { actor: 'Tester', picture1: null });
     const { res, getStatus, getBody } = createMockResponse();
 
     await action.handle(req, res, ctx);
@@ -264,33 +257,24 @@ describe('save-item action', () => {
     );
   });
 
-
-
   it('persists path-like Grafikname payload values as basename-only filenames', async () => {
-    const persistItemReference = jest.fn();
+    const persistItemReference = jest.fn(async () => undefined);
     const ctx = {
-      getItem: {
-        get: jest.fn(() => ({
-          ItemUUID: 'ITEM-UNSAFE',
-          Artikel_Nummer: 'ART-UNSAFE',
-          BoxID: null,
-          Location: null,
-          Grafikname: 'ART-UNSAFE-1.jpg',
-          Einheit: ItemEinheit.Stk
-        }))
-      },
-      getItemReference: {
-        get: jest.fn(() => ({
-          Artikel_Nummer: 'ART-UNSAFE',
-          Grafikname: 'ART-UNSAFE-1.jpg',
-          Artikelbeschreibung: 'Reference text'
-        }))
-      },
-      db: {
-        transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
-      },
+      getItem: jest.fn(async () => ({
+        ItemUUID: 'ITEM-UNSAFE',
+        Artikel_Nummer: 'ART-UNSAFE',
+        BoxID: null,
+        Location: null,
+        Grafikname: 'ART-UNSAFE-1.jpg',
+        Einheit: ItemEinheit.Stk
+      })),
+      getItemReference: jest.fn(async () => ({
+        Artikel_Nummer: 'ART-UNSAFE',
+        Grafikname: 'ART-UNSAFE-1.jpg',
+        Artikelbeschreibung: 'Reference text'
+      })),
       persistItemReference,
-      logEvent: jest.fn(),
+      logEvent: jest.fn(async () => undefined),
       enqueueShopwareSyncJob: jest.fn()
     };
 
@@ -311,32 +295,24 @@ describe('save-item action', () => {
     );
   });
 
-
   it('does not mutate legacy persisted Grafikname paths unless explicitly replaced', async () => {
-    const persistItemReference = jest.fn();
+    const persistItemReference = jest.fn(async () => undefined);
     const ctx = {
-      getItem: {
-        get: jest.fn(() => ({
-          ItemUUID: 'ITEM-LEGACY',
-          Artikel_Nummer: 'ART-LEGACY',
-          BoxID: null,
-          Location: null,
-          Grafikname: '/media/ART-LEGACY/ART-LEGACY-1.jpg',
-          Einheit: ItemEinheit.Stk
-        }))
-      },
-      getItemReference: {
-        get: jest.fn(() => ({
-          Artikel_Nummer: 'ART-LEGACY',
-          Grafikname: '/media/ART-LEGACY/ART-LEGACY-1.jpg',
-          Artikelbeschreibung: 'Reference text'
-        }))
-      },
-      db: {
-        transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
-      },
+      getItem: jest.fn(async () => ({
+        ItemUUID: 'ITEM-LEGACY',
+        Artikel_Nummer: 'ART-LEGACY',
+        BoxID: null,
+        Location: null,
+        Grafikname: '/media/ART-LEGACY/ART-LEGACY-1.jpg',
+        Einheit: ItemEinheit.Stk
+      })),
+      getItemReference: jest.fn(async () => ({
+        Artikel_Nummer: 'ART-LEGACY',
+        Grafikname: '/media/ART-LEGACY/ART-LEGACY-1.jpg',
+        Artikelbeschreibung: 'Reference text'
+      })),
       persistItemReference,
-      logEvent: jest.fn(),
+      logEvent: jest.fn(async () => undefined),
       enqueueShopwareSyncJob: jest.fn()
     };
 
@@ -358,45 +334,34 @@ describe('save-item action', () => {
     );
   });
 
-
   it('does not prune media directory after removing the final file asset', async () => {
     const folder = path.join(sandbox.distMediaDir, 'ART-10');
     const asset = 'ART-10-1.jpg';
     fs.mkdirSync(folder, { recursive: true });
     fs.writeFileSync(path.join(folder, asset), 'fixture');
 
-    const persistItemReference = jest.fn();
+    const persistItemReference = jest.fn(async () => undefined);
     const ctx = {
-      getItem: {
-        get: jest.fn(() => ({
-          ItemUUID: 'ITEM-10',
-          Artikel_Nummer: 'ART-10',
-          BoxID: null,
-          Location: null,
-          Grafikname: '/media/ART-10/ART-10-1.jpg',
-          Einheit: ItemEinheit.Stk
-        }))
-      },
-      getItemReference: {
-        get: jest.fn(() => ({
-          Artikel_Nummer: 'ART-10',
-          Grafikname: '/media/ART-10/ART-10-1.jpg',
-          ImageNames: '/media/ART-10/ART-10-1.jpg',
-          Artikelbeschreibung: 'Reference text'
-        }))
-      },
-      db: {
-        transaction: jest.fn((fn: (...args: any[]) => any) => (...args: any[]) => fn(...args))
-      },
+      getItem: jest.fn(async () => ({
+        ItemUUID: 'ITEM-10',
+        Artikel_Nummer: 'ART-10',
+        BoxID: null,
+        Location: null,
+        Grafikname: '/media/ART-10/ART-10-1.jpg',
+        Einheit: ItemEinheit.Stk
+      })),
+      getItemReference: jest.fn(async () => ({
+        Artikel_Nummer: 'ART-10',
+        Grafikname: '/media/ART-10/ART-10-1.jpg',
+        ImageNames: '/media/ART-10/ART-10-1.jpg',
+        Artikelbeschreibung: 'Reference text'
+      })),
       persistItemReference,
-      logEvent: jest.fn(),
+      logEvent: jest.fn(async () => undefined),
       enqueueShopwareSyncJob: jest.fn()
     };
 
-    const req = createPutRequest('/api/items/ITEM-10', {
-      actor: 'Tester',
-      picture1: null
-    });
+    const req = createPutRequest('/api/items/ITEM-10', { actor: 'Tester', picture1: null });
     const { res, getStatus, getBody } = createMockResponse();
 
     await action.handle(req, res, ctx);
@@ -405,33 +370,5 @@ describe('save-item action', () => {
     expect(getBody()).toEqual({ ok: true, media: [] });
     expect(fs.existsSync(path.join(folder, asset))).toBe(false);
     expect(fs.existsSync(folder)).toBe(true);
-  });
-
-  it('returns 404 when identifier is unknown', async () => {
-    const ctx = {
-      getItem: {
-        get: jest.fn(() => null)
-      },
-      findByMaterial: {
-        all: jest.fn(() => [])
-      },
-      getItemReference: {
-        get: jest.fn(() => null)
-      },
-      getBox: {
-        get: jest.fn(() => null)
-      },
-      listEventsForItem: {
-        all: jest.fn(() => [])
-      }
-    };
-
-    const req = createRequest('/api/items/UNKNOWN-ID');
-    const { res, getStatus, getBody } = createMockResponse();
-
-    await action.handle(req, res, ctx);
-
-    expect(getStatus()).toBe(404);
-    expect(getBody()).toEqual({ error: 'Not found' });
   });
 });

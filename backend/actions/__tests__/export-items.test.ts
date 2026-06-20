@@ -383,7 +383,7 @@ describe('export-items Langtext quality enrichment', () => {
 
   for (const [mode, snippet] of [
     ['backup', 'Qualität'],
-    ['erp', '**Qualität** Gut']
+    ['erp', 'Qualität</th><td>Gut</td>']
   ] as const) {
     test(`adds normalized quality label to Langtext payload for ${mode} export mode`, () => {
       const dataLine = serializeForMode(mode);

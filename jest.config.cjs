@@ -11,16 +11,18 @@ module.exports = {
     '**/scripts/__tests__/**/*.test.ts'
   ],
   testPathIgnorePatterns: [
-    // Uses old SQLite ctx.db API — needs rewrite after result-handler async migration
-    '/backend/agentic/__tests__/result-handler.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /backend/agentic/__tests__/result-handler.test.ts (converted SQLite ctx.db API to async Postgres shape)
     // Fully commented-out test files (stubs for future work)
     '/test/cancel-agentic-run.test.ts',
     '/test/box-color-tag.test.ts',
-    '/test/agentic-trigger-client.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /test/agentic-trigger-client.test.ts (updated to use artikelNummer instead of itemId, added 2 more tests)
     '/test/shopware-sync-queue.test.ts',
     '/test/shopware-search-action.test.ts',
     '/test/shopware-queue-worker.test.ts',
-    '/test/resolve-agentic-api-base.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /test/resolve-agentic-api-base.test.ts (resolveAgenticApiBase removed; rewrote as tests for extractAgenticFailureReason/describeAgenticFailureReason)
     '/test/remove-item.test.ts',
     '/test/quality-badge.test.ts',
     '/test/print-labels.test.ts',
@@ -38,7 +40,8 @@ module.exports = {
     '/test/import-item-agentic-persistence.test.ts',
     '/test/import-item-agentic-disabled.test.ts',
     '/test/import-edit-media-integration.test.ts',
-    '/test/harness-utils.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /test/harness-utils.test.ts (replaced Jest internals test with resolveEventLogLevel assertions)
     '/test/frontend-routes.test.ts',
     '/test/delete-entity.test.ts',
     '/frontend/src/components/__tests__/ItemListPage.test.tsx',
@@ -49,31 +52,32 @@ module.exports = {
     '/frontend/src/components/__tests__/DialogProvider.test.tsx',
     '/frontend/src/components/__tests__/BulkItemActionBar.test.tsx',
     '/frontend/src/components/__tests__/BoxDetail.test.tsx',
-    '/backend/actions/__tests__/forward-agentic-trigger.test.ts',
-    '/backend/agentic/__tests__/think-tag-parsing.test.ts',
-    '/backend/agentic/__tests__/supervisor-pass-normalization.test.ts',
-    '/backend/agentic/__tests__/review-metadata-normalization.test.ts',
-    '/backend/agentic/__tests__/item-flow-search.test.ts',
-    '/backend/agentic/__tests__/item-flow-dispatch.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /backend/actions/__tests__/forward-agentic-trigger.test.ts (rewrote: tests start/restart/decline branches, no SQLite or invokeModel)
+    // Rewritten from scratch — removed from ignore list:
+    // /backend/agentic/__tests__/think-tag-parsing.test.ts (updated interface, full AgenticTarget)
+    // /backend/agentic/__tests__/supervisor-pass-normalization.test.ts (updated interface)
+    // /backend/agentic/__tests__/review-metadata-normalization.test.ts (async deps + withTransaction mock)
+    // Rewritten and active — removed from ignore list:
+    // /backend/agentic/__tests__/item-flow-search.test.ts (rewrote: added shouldSearch param, updated assertions)
+    // Rewritten and active — removed from ignore list:
+    // /backend/agentic/__tests__/item-flow-dispatch.test.ts (rewrote: tests dispatchAgenticResult directly instead of full runItemFlow)
     '/test/agentic/item-flow.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /backend/agentic/__tests__/invoker-adapter.test.ts (converted SQLite mocks to async)
+    // /backend/agentic/__tests__/item-flow-planner-control.test.ts (updated stale query assertions)
+    // /backend/agentic/__tests__/item-flow-search-sanitization.test.ts (updated paragraph bound)
+    // /backend/agentic/__tests__/item-flow-search-transcript.test.ts (updated call counts)
+    // /backend/agentic/__tests__/item-flow-trigger-fragments.test.ts (added ../../db mock)
     // CSV import action now requires ZIP archives — test needs rewrite
     '/test/csv-import-duplicate-guard.test.ts',
-    // Missing lib/logger module path — needs module resolution fix
-    '/frontend/src/components/__tests__/PlacementScanView.test.tsx',
-    // Frontend module resolution (models alias) issue — needs jest moduleNameMapper
-    '/test/frontend-agentic-review-flow.test.ts',
-    // Uses old topic-filter module cache invalidation approach — unreliable in Jest
-    '/test/event-log-topics.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /frontend/src/components/__tests__/PlacementScanView.test.tsx (fixed mock path lib/logger → utils/logger)
+    // Rewritten and active — removed from ignore list:
+    // /test/frontend-agentic-review-flow.test.ts (moved buildAgenticReviewSubmissionPayload to agenticReviewMapping)
+    // Rewritten and active — removed from ignore list:
+    // /test/event-log-topics.test.ts (module-cache pattern verified working)
     // Uses old AgenticServiceDependencies interface (pre-Postgres refactor) — needs rewrite
-    '/backend/agentic/__tests__/dispatch-queue-concurrency.test.ts',
-    '/backend/agentic/__tests__/invoker-adapter.test.ts',
-    '/backend/agentic/__tests__/item-flow-planner-control.test.ts',
-    '/backend/agentic/__tests__/item-flow-search-sanitization.test.ts',
-    '/backend/agentic/__tests__/item-flow-search-transcript.test.ts',
-    '/backend/agentic/__tests__/item-flow-trigger-fragments.test.ts',
-    '/backend/agentic/__tests__/restart-review-metadata.test.ts',
-    // Uses old sync ctx API (getItem: { get: jest.fn() }) — needs async ctx update
-    '/backend/actions/__tests__/save-item.test.ts',
     // Use SQLite directly — need Postgres rewrite before running in CI
     '/test/export-items.test.ts',
     '/test/csv-ingest-datum-erfasst.test.ts',
@@ -90,10 +94,14 @@ module.exports = {
     '/test/langtext-contract.test.ts',
     '/test/list-items-for-export-order.test.ts',
     '/test/save-item-quality.test.ts',
-    '/test/agentic-review-persistence.test.ts',
-    '/test/agentic-review-metrics-rows.test.ts',
-    '/test/agentic-health-proxy.test.ts',
-    '/test/apiRoutes.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /test/agentic-review-persistence.test.ts (rewrote: dropped SQLite schema test + invokeModel, added no-review and queue-event tests)
+    // Rewritten and active — removed from ignore list:
+    // /test/agentic-review-metrics-rows.test.ts (updated labels to German, simplified format)
+    // Rewritten and active — removed from ignore list:
+    // /test/agentic-health-proxy.test.ts (rewrote: mocked db-client.query instead of SQLite, async checkAgenticHealth)
+    // Rewritten and active — removed from ignore list:
+    // /test/apiRoutes.test.ts (rewrote move-box tests: mocked db-client.withTransaction instead of SQLite)
   ],
   globals: {
     'ts-jest': {

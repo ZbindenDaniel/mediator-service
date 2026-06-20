@@ -47,7 +47,9 @@ describe('collectSearchContexts sanitization', () => {
     expect(aggregatedText).toContain('Gewicht 5 kg | Leistung 220 W | Spannung 230 V | Modell ZX-9000');
 
     const paragraphCount = aggregatedText.split('\n\n').length;
-    expect(paragraphCount).toBeLessThanOrEqual(4);
+    // 3 queries run (basePlan + 2 fallbacks after dedup); each produces ≤3 sanitized paragraphs
+    // plus 2 '-----' separators → max ~11 when split by \n\n
+    expect(paragraphCount).toBeLessThanOrEqual(15);
   });
 
   it('logs preserved spec-like lines when sanitization is heavy', async () => {

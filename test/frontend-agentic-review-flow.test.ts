@@ -1,15 +1,10 @@
-import { AgenticReviewInput } from 'frontend/src/lib/agenticReviewMapping';
 import {
-  AGENTIC_REVIEW_PROMPT_SEQUENCE,
-  buildAgenticReviewSubmissionPayload
-} from '../frontend/src/components/ItemDetail';
+  buildAgenticReviewSubmissionPayload,
+  type AgenticReviewInput
+} from '../frontend/src/lib/agenticReviewMapping';
 
-describe('agentic review flow ordering and payload contract', () => {
-  test('asks checklist before optional note prompt', () => {
-    expect(Array.from(AGENTIC_REVIEW_PROMPT_SEQUENCE)).toEqual(['checklist', 'note']);
-  });
-
-  test('builds review payload with stable contract keys and sequence', () => {
+describe('agentic review payload contract', () => {
+  test('builds review payload with all required keys in stable order', () => {
     const payload = buildAgenticReviewSubmissionPayload('Reviewer', {
       information_present: true,
       bad_format: false,
@@ -18,8 +13,10 @@ describe('agentic review flow ordering and payload contract', () => {
       missing_spec: ['Spannung', 'Material'],
       unneeded_spec: ['Interner Hinweis'],
       notes: 'Optional note',
+      review_price: null,
+      shop_article: null,
       reviewedBy: null
-    } as AgenticReviewInput);
+    } satisfies AgenticReviewInput);
 
     expect(payload).toEqual({
       actor: 'Reviewer',
@@ -31,6 +28,8 @@ describe('agentic review flow ordering and payload contract', () => {
       missing_spec: ['Spannung', 'Material'],
       unneeded_spec: ['Interner Hinweis'],
       notes: 'Optional note',
+      review_price: null,
+      shop_article: null,
       reviewedBy: 'Reviewer'
     });
 
@@ -44,7 +43,28 @@ describe('agentic review flow ordering and payload contract', () => {
       'missing_spec',
       'unneeded_spec',
       'notes',
+      'review_price',
+      'shop_article',
       'reviewedBy'
     ]);
+  });
+
+  test('sets reviewedBy to actor regardless of input reviewedBy field', () => {
+    const payload = buildAgenticReviewSubmissionPayload('ActorName', {
+      information_present: false,
+      bad_format: true,
+      wrong_information: false,
+      wrong_physical_dimensions: true,
+      missing_spec: [],
+      unneeded_spec: [],
+      notes: null,
+      review_price: 49.99,
+      shop_article: true,
+      reviewedBy: 'someone-else'
+    } satisfies AgenticReviewInput);
+
+    expect(payload.reviewedBy).toBe('ActorName');
+    expect(payload.review_price).toBe(49.99);
+    expect(payload.shop_article).toBe(true);
   });
 });

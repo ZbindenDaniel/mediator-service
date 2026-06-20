@@ -18,7 +18,7 @@ function isPathInsideRoot(root: string, candidate: string): boolean {
 
 export function createFsSandbox(prefix = 'media-fs-sandbox-'): FsSandbox {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-  const distMediaDir = path.join(tempRoot, 'dist', 'media');
+  const distMediaDir = path.join(tempRoot, 'dist', 'backend', 'media');
 
   const originalCwd = process.cwd();
   const originalMediaStorageMode = process.env.MEDIA_STORAGE_MODE;

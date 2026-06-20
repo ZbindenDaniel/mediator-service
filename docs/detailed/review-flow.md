@@ -91,9 +91,9 @@ A distinct review type that runs as the first wizard step when creating a new it
 
 ### `ai-prio` (transient, never persisted)
 Derived from the quality value and forwarded as `priority` in the `POST /api/agentic/run` trigger payload:
-- value 1–2 → `'high'`
+- value 4–5 → `'high'`
 - value 3 → `'normal'`
-- value 4–5 → `'low'`
+- value 1–2 → `'low'`
 
 ### Persistence
 - `quality_assessments` table (see `backend/db.ts` for DDL).

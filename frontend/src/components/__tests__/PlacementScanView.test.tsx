@@ -13,7 +13,7 @@ jest.mock('react-router-dom', () => ({
 
 // ../../lib/* because the test file is at __tests__/ one level below components/
 jest.mock('../../lib/user', () => ({ ensureUser: jest.fn(async () => 'tester') }));
-jest.mock('../../lib/logger', () => ({ logError: jest.fn() }));
+jest.mock('../../utils/logger', () => ({ logError: jest.fn() }));
 
 import PlacementScanView from '../PlacementScanView';
 import { useParams, useSearchParams, useLocation } from 'react-router-dom';

@@ -30,10 +30,9 @@ function loadTopicsModule(raw: string | undefined) {
   } else {
     process.env.EVENT_LOG_TOPICS = raw;
   }
-
-  const modulePath = require.resolve('../frontend/src/utils/eventLogTopics');
-  delete require.cache[modulePath];
-  return require(modulePath) as typeof import('../frontend/src/utils/eventLogTopics');
+  // jest.resetModules clears Jest's own module registry (unlike delete require.cache which doesn't with ts-jest)
+  jest.resetModules();
+  return require('../frontend/src/utils/eventLogTopics') as typeof import('../frontend/src/utils/eventLogTopics');
 }
 
 afterEach(() => {
@@ -42,7 +41,7 @@ afterEach(() => {
   } else {
     process.env.EVENT_LOG_TOPICS = ORIGINAL_EVENT_LOG_TOPICS;
   }
-  delete require.cache[require.resolve('../frontend/src/utils/eventLogTopics')];
+  jest.resetModules();
 });
 
 test('filterVisibleEvents allows all topics when unset', () => {
