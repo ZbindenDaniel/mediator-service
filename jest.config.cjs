@@ -16,11 +16,13 @@ module.exports = {
     // Fully commented-out test files (stubs for future work)
     '/test/cancel-agentic-run.test.ts',
     '/test/box-color-tag.test.ts',
-    '/test/agentic-trigger-client.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /test/agentic-trigger-client.test.ts (updated to use artikelNummer instead of itemId, added 2 more tests)
     '/test/shopware-sync-queue.test.ts',
     '/test/shopware-search-action.test.ts',
     '/test/shopware-queue-worker.test.ts',
-    '/test/resolve-agentic-api-base.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /test/resolve-agentic-api-base.test.ts (resolveAgenticApiBase removed; rewrote as tests for extractAgenticFailureReason/describeAgenticFailureReason)
     '/test/remove-item.test.ts',
     '/test/quality-badge.test.ts',
     '/test/print-labels.test.ts',
@@ -38,7 +40,8 @@ module.exports = {
     '/test/import-item-agentic-persistence.test.ts',
     '/test/import-item-agentic-disabled.test.ts',
     '/test/import-edit-media-integration.test.ts',
-    '/test/harness-utils.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /test/harness-utils.test.ts (replaced Jest internals test with resolveEventLogLevel assertions)
     '/test/frontend-routes.test.ts',
     '/test/delete-entity.test.ts',
     '/frontend/src/components/__tests__/ItemListPage.test.tsx',
