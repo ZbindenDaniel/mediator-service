@@ -7,9 +7,15 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
-834. ✅ Artikelnummer lookup popup as first step of item creation
+836. ✅ Artikelnummer lookup popup as first step of item creation
    - **Why:** Operators were forced to fill in the full basicInfo form (description, categories, dimensions) even for items already cataloged in the ERP. The new `artikelLookup` step shows a debounced search input first — if the operator finds the ref and clicks "Übernehmen", the wizard jumps directly to quality review and then creates the instance from the existing reference. The basicInfo form and matchSelection step are skipped entirely for the fast path.
    - **Deferred:** Auto-lookup by scan (barcode scanner could pre-fill the input); the input requires manual typing for now. The "Weiter erfassen" reset returns to `artikelLookup`, not `basicInfo`.
+835. ✅ User help pages: second-pass doc refinements based on detailed feedback
+   - **Why:** Detailed per-line corrections: Erste-Schritte rewritten with correct tab order (Vorrat first), removed unnecessary browser hint, fixed UI text ("Review erforderlich"), added "Massenware (RAM, Netzteile, Kabel)", ERP section note to involve admin, "Dein Alltag" replaced with two distinct process flows (unknown item vs. known Artikelnummer). CO2-Berechnung: ADEME dataset linked, simplified label-based scoring explained. Drucker-Einrichtung: rewritten driver discovery flow (Admin → Neue Queue → Scannen, then PPD search by model number). Ersatzteile: Entnehmen now documents two scenarios (einlagern vs. direkt verkaufen — direkt verkaufen noted as planned); "Link entfernen" adds note about instance re-linking gap. Fehlerbehebung: WebDAV section clarified that image uploads are lost on failure (no local staging); 7a extended with inventory scanning hint. HilfePage.tsx: `inlineMarkdown` extended to render `[text](url)` as clickable links.
+   - **Deferred:** Ersatzteile "direkt verkaufen" path (Qty=0 on Entnehmen) and instance reference re-linking both logged as new Priority 1 items in todo.md.
+834. ✅ Reactivate user help pages + informal language rewrite + doc extensions
+   - **Why:** Help pages were deactivated by removing the question-mark nav icon from Header.tsx. Restored the GoQuestion link. Rewrote all 6 German user docs (`docs/user/`) in informal "du" language for a friendlier tone. Extended Erste-Schritte (tabs explanation, daily workflow section, username-change tip), Fehlerbehebung (3 new sections: veraltete Daten, Seite lädt nicht, KI hängt; extended ERP-export recovery), and Ersatzteile-erfassen (reframed with conceptual intro explaining the Zerlegen philosophy, step-by-step laptop example, clarification of what happens to the source device).
+   - **Deferred:** Nothing.
 833. ✅ Zerlegen: allow Hinzufügen on Empty slots (part may be added after assessment)
    - **Why:** The Empty state (quality said "Nicht vorhanden") blocked the Hinzufügen button entirely. This is wrong — a part can be added later (e.g. RAM installed to make a device functional). One-line fix: `state === 'potential'` → `state === 'potential' || state === 'empty'` in ZubehoerCard. Docs updated to match.
    - **Deferred:** Nothing.

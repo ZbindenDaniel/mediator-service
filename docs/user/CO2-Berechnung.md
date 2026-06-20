@@ -6,7 +6,7 @@ Gebrauchte IT-Geräte zu kaufen statt neue zu produzieren spart erheblich CO₂.
 
 ## Warum spart Secondhand-IT CO₂?
 
-Über 70–80 % des CO₂-Fußabdrucks eines Geräts (Laptop, PC, Server usw.) entsteht bei der **Herstellung** – nicht im Betrieb. Wenn ein funktionsfähiges Gerät weiterverwendet wird, muss kein neues produziert werden. Damit entfällt der größte Teil des Lebenszyklus-CO₂.
+Über 70–80 % des CO₂-Fußabdrucks eines Geräts (Laptop, PC, Server usw.) entsteht bei der **Herstellung** — nicht im Betrieb. Wenn ein funktionsfähiges Gerät weiterverwendet wird, muss kein neues produziert werden. Damit entfällt der größte Teil des Lebenszyklus-CO₂.
 
 ---
 
@@ -46,11 +46,11 @@ Das Gerätealter ergibt sich aus dem Erfassungsdatum. Fehlt dieses, wird ein Sta
 
 **Laptop, 3 Jahre alt, Qualität 3:**
 
-- E_neu = 180 kg CO₂e (ADEME-Median für Laptops)  
-- R = 0,85  
-- Gesamtlebensdauer = 8 Jahre, typische Nutzungsdauer neu = 5 Jahre  
-- Verbleibend = 8 − 3 = 5 Jahre → L = 5/5 = 1,0  
-- O_aufarbeit = 10 kg (Qualität 3 → mittel)  
+- E_neu = 180 kg CO₂e ([ADEME 2022](https://data.europa.eu/data/datasets/5db1a0f46f444104866d1b43?locale=en)-Median für Laptops)
+- R = 0,85
+- Gesamtlebensdauer = 8 Jahre, typische Nutzungsdauer neu = 5 Jahre
+- Verbleibend = 8 − 3 = 5 Jahre → L = 5/5 = 1,0
+- O_aufarbeit = 10 kg (Qualität 3 → mittel)
 
 **CO₂_gespart = 180 × 0,85 × 1,0 − 10 = 143 kg CO₂e**
 
@@ -68,6 +68,18 @@ Für Kabel, Verbrauchsmaterialien, Kleinzubehör und nicht zugeordnete Artikel w
 
 ---
 
+## Was das System aktuell anzeigt
+
+Im System siehst du pro Artikel kein genaues CO₂-Gewicht, sondern eine vereinfachte Einstufung: **Irrelevant**, **Niedrig**, **Mittel** oder **Hoch**. Die Einstufung basiert auf einer verkürzten Formel:
+
+```
+Punkte = E_neu × (Qualität / 5)
+```
+
+Wobei `Qualität` die Qualitätsstufe 1–5 aus der Bewertung ist. Je besser die Qualität des Geräts, desto höher das eingeschätzte CO₂-Einsparpotenzial. Die genaue Rechnung (ADEME-Formel mit Lebensdauer, Aufarbeitungsaufwand usw.) steckt im Hintergrund; die Einstufung soll vor allem eine schnelle Orientierung geben — kein zertifizierter Nachweis.
+
+---
+
 ## Wichtiger Hinweis
 
-Die Werte sind **Schätzungen** auf Basis von Gerätekategorie-Medianen (ADEME 2022, Herstellerdaten). Die tatsächliche Einsparung kann ±20–50 % abweichen, je nach Modell, Betriebsland und Nutzungsweise. Die Zahlen dienen zur **internen Orientierung** und sind kein zertifizierter CO₂-Nachweis.
+Die Werte sind **Schätzungen** auf Basis von Gerätekategorie-Medianen ([ADEME 2022](https://data.europa.eu/data/datasets/5db1a0f46f444104866d1b43?locale=en), Herstellerdaten). Die tatsächliche Einsparung kann ±20–50 % abweichen, je nach Modell, Betriebsland und Nutzungsweise. Die Zahlen dienen zur **internen Orientierung** und sind kein zertifizierter CO₂-Nachweis.

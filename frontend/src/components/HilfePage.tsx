@@ -60,13 +60,17 @@ function renderMarkdown(md: string): React.ReactNode[] {
 }
 
 function inlineMarkdown(text: string): React.ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
   return parts.map((part, idx) => {
     if (part.startsWith('**') && part.endsWith('**')) {
       return <strong key={idx}>{part.slice(2, -2)}</strong>;
     }
     if (part.startsWith('`') && part.endsWith('`')) {
       return <code key={idx}>{part.slice(1, -1)}</code>;
+    }
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch) {
+      return <a key={idx} href={linkMatch[2]} target='_blank' rel='noopener noreferrer'>{linkMatch[1]}</a>;
     }
     return part.replace(/&nbsp;/g, ' ');
   });
