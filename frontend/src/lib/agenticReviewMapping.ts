@@ -21,6 +21,26 @@ export interface AgenticReviewInput {
   reviewedBy: string | null;
 }
 
+export function buildAgenticReviewSubmissionPayload(
+  actor: string,
+  reviewInput: AgenticReviewInput
+): Record<string, unknown> {
+  return {
+    actor,
+    action: 'review',
+    information_present: reviewInput.information_present,
+    bad_format: reviewInput.bad_format,
+    wrong_information: reviewInput.wrong_information,
+    wrong_physical_dimensions: reviewInput.wrong_physical_dimensions,
+    missing_spec: reviewInput.missing_spec,
+    unneeded_spec: reviewInput.unneeded_spec,
+    notes: reviewInput.notes,
+    review_price: reviewInput.review_price,
+    shop_article: reviewInput.shop_article,
+    reviewedBy: actor
+  };
+}
+
 export function parseMissingSpecInput(value: string | null): string[] {
   if (!value) {
     return [];

@@ -104,21 +104,19 @@ describe('AgenticModelInvoker request payload merging', () => {
         Artikelbeschreibung: 'User Description'
       }
     };
-    const getAgenticRequestLog = jest.fn(() => ({ PayloadJson: JSON.stringify(requestPayload) }));
-    const getItem = {
-      get: jest.fn(() => ({
-        ItemUUID: 'I-123-0001',
-        Artikelbeschreibung: '',
-        Verkaufspreis: 125,
-        Kurzbeschreibung: 'Base Short',
-        Langtext: { short: 'Base Long', extra: 5 },
-        Hersteller: 'Base Maker',
-        Länge_mm: null,
-        Breite_mm: null,
-        Höhe_mm: null,
-        Gewicht_kg: null
-      }))
-    };
+    const getAgenticRequestLog = jest.fn(async () => ({ PayloadJson: JSON.stringify(requestPayload) }));
+    const getItem = jest.fn(async () => ({
+      ItemUUID: 'I-123-0001',
+      Artikelbeschreibung: '',
+      Verkaufspreis: 125,
+      Kurzbeschreibung: 'Base Short',
+      Langtext: { short: 'Base Long', extra: 5 },
+      Hersteller: 'Base Maker',
+      Länge_mm: null,
+      Breite_mm: null,
+      Höhe_mm: null,
+      Gewicht_kg: null
+    }));
 
     jest.doMock('../tools/tavily-client', () => ({
       TavilySearchClient: jest.fn().mockImplementation(() => ({ search: jest.fn() }))
@@ -131,17 +129,16 @@ describe('AgenticModelInvoker request payload merging', () => {
       runItemFlow
     }));
     jest.doMock('../../db', () => ({
-      db: { transaction: (fn: unknown) => fn, prepare: jest.fn(() => ({ all: jest.fn(() => []) })) } as unknown,
       getItem,
-      getAgenticRun: jest.fn(),
-      updateAgenticRunStatus: { run: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      persistItemWithinTransaction: jest.fn(),
-      logEvent: jest.fn(),
+      getAgenticRun: jest.fn(async () => null),
+      updateAgenticRunStatus: jest.fn(async () => 1),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      persistItemWithinTransaction: jest.fn(async () => undefined),
+      logEvent: jest.fn(async () => undefined),
       getAgenticRequestLog,
-      saveAgenticRequestPayload: jest.fn(),
-      markAgenticRequestNotificationSuccess: jest.fn(),
-      markAgenticRequestNotificationFailure: jest.fn()
+      saveAgenticRequestPayload: jest.fn(async () => undefined),
+      markAgenticRequestNotificationSuccess: jest.fn(async () => undefined),
+      markAgenticRequestNotificationFailure: jest.fn(async () => undefined)
     }));
     jest.doMock(
       '@langchain/ollama',
@@ -189,21 +186,19 @@ describe('AgenticModelInvoker request payload merging', () => {
         Langtext: { short: 'User Long', details: 7, nullish: null }
       }
     };
-    const getAgenticRequestLog = jest.fn(() => ({ PayloadJson: JSON.stringify(requestPayload) }));
-    const getItem = {
-      get: jest.fn(() => ({
-        ItemUUID: 'I-456-0001',
-        Artikelbeschreibung: 'Base Description',
-        Verkaufspreis: 220,
-        Kurzbeschreibung: 'Base Short',
-        Langtext: { base: 'long' },
-        Hersteller: 'Base Maker',
-        Länge_mm: null,
-        Breite_mm: null,
-        Höhe_mm: null,
-        Gewicht_kg: null
-      }))
-    };
+    const getAgenticRequestLog = jest.fn(async () => ({ PayloadJson: JSON.stringify(requestPayload) }));
+    const getItem = jest.fn(async () => ({
+      ItemUUID: 'I-456-0001',
+      Artikelbeschreibung: 'Base Description',
+      Verkaufspreis: 220,
+      Kurzbeschreibung: 'Base Short',
+      Langtext: { base: 'long' },
+      Hersteller: 'Base Maker',
+      Länge_mm: null,
+      Breite_mm: null,
+      Höhe_mm: null,
+      Gewicht_kg: null
+    }));
 
     jest.doMock('../tools/tavily-client', () => ({
       TavilySearchClient: jest.fn().mockImplementation(() => ({ search: jest.fn() }))
@@ -216,17 +211,16 @@ describe('AgenticModelInvoker request payload merging', () => {
       runItemFlow
     }));
     jest.doMock('../../db', () => ({
-      db: { transaction: (fn: unknown) => fn, prepare: jest.fn(() => ({ all: jest.fn(() => []) })) } as unknown,
       getItem,
-      getAgenticRun: jest.fn(),
-      updateAgenticRunStatus: { run: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      persistItemWithinTransaction: jest.fn(),
-      logEvent: jest.fn(),
+      getAgenticRun: jest.fn(async () => null),
+      updateAgenticRunStatus: jest.fn(async () => 1),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      persistItemWithinTransaction: jest.fn(async () => undefined),
+      logEvent: jest.fn(async () => undefined),
       getAgenticRequestLog,
-      saveAgenticRequestPayload: jest.fn(),
-      markAgenticRequestNotificationSuccess: jest.fn(),
-      markAgenticRequestNotificationFailure: jest.fn()
+      saveAgenticRequestPayload: jest.fn(async () => undefined),
+      markAgenticRequestNotificationSuccess: jest.fn(async () => undefined),
+      markAgenticRequestNotificationFailure: jest.fn(async () => undefined)
     }));
     jest.doMock(
       '@langchain/ollama',
@@ -265,20 +259,18 @@ describe('AgenticModelInvoker request payload merging', () => {
 
   it('composes review notes with missing and unneeded spec directives', async () => {
     const runItemFlow = jest.fn().mockResolvedValue({ status: 'completed', summary: 'ok' });
-    const getItem = {
-      get: jest.fn(() => ({
-        ItemUUID: 'I-789-0001',
-        Artikelbeschreibung: 'Base Description',
-        Verkaufspreis: 220,
-        Kurzbeschreibung: 'Base Short',
-        Langtext: { base: 'long' },
-        Hersteller: 'Base Maker',
-        Länge_mm: null,
-        Breite_mm: null,
-        Höhe_mm: null,
-        Gewicht_kg: null
-      }))
-    };
+    const getItem = jest.fn(async () => ({
+      ItemUUID: 'I-789-0001',
+      Artikelbeschreibung: 'Base Description',
+      Verkaufspreis: 220,
+      Kurzbeschreibung: 'Base Short',
+      Langtext: { base: 'long' },
+      Hersteller: 'Base Maker',
+      Länge_mm: null,
+      Breite_mm: null,
+      Höhe_mm: null,
+      Gewicht_kg: null
+    }));
 
     jest.doMock('../tools/tavily-client', () => ({
       TavilySearchClient: jest.fn().mockImplementation(() => ({ search: jest.fn() }))
@@ -291,17 +283,16 @@ describe('AgenticModelInvoker request payload merging', () => {
       runItemFlow
     }));
     jest.doMock('../../db', () => ({
-      db: { transaction: (fn: unknown) => fn, prepare: jest.fn(() => ({ all: jest.fn(() => []) })) } as unknown,
       getItem,
-      getAgenticRun: jest.fn(),
-      updateAgenticRunStatus: { run: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      persistItemWithinTransaction: jest.fn(),
-      logEvent: jest.fn(),
-      getAgenticRequestLog: jest.fn(),
-      saveAgenticRequestPayload: jest.fn(),
-      markAgenticRequestNotificationSuccess: jest.fn(),
-      markAgenticRequestNotificationFailure: jest.fn()
+      getAgenticRun: jest.fn(async () => null),
+      updateAgenticRunStatus: jest.fn(async () => 1),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      persistItemWithinTransaction: jest.fn(async () => undefined),
+      logEvent: jest.fn(async () => undefined),
+      getAgenticRequestLog: jest.fn(async () => null),
+      saveAgenticRequestPayload: jest.fn(async () => undefined),
+      markAgenticRequestNotificationSuccess: jest.fn(async () => undefined),
+      markAgenticRequestNotificationFailure: jest.fn(async () => undefined)
     }));
     jest.doMock(
       '@langchain/ollama',
@@ -366,18 +357,16 @@ describe('AgenticModelInvoker item target lookup', () => {
 
   it('uses item_refs for Artikel_Nummer input when no instances exist', async () => {
     const runItemFlow = jest.fn().mockResolvedValue({ status: 'completed', summary: 'ok' });
-    const getItem = { get: jest.fn(() => undefined) };
-    const getItemReference = {
-      get: jest.fn(() => ({
-        Artikel_Nummer: 'MAT-1000',
-        Artikelbeschreibung: 'Reference Description',
-        Verkaufspreis: 15.5,
-        Kurzbeschreibung: 'Reference Short',
-        Langtext: { spec: 'value' },
-        Hersteller: 'Reference Maker'
-      }))
-    };
-    const findByMaterial = { all: jest.fn(() => []) };
+    const getItem = jest.fn(async () => undefined);
+    const getItemReference = jest.fn(async () => ({
+      Artikel_Nummer: 'MAT-1000',
+      Artikelbeschreibung: 'Reference Description',
+      Verkaufspreis: 15.5,
+      Kurzbeschreibung: 'Reference Short',
+      Langtext: { spec: 'value' },
+      Hersteller: 'Reference Maker'
+    }));
+    const findByMaterial = jest.fn(async () => []);
 
     jest.doMock('../tools/tavily-client', () => ({
       TavilySearchClient: jest.fn().mockImplementation(() => ({ search: jest.fn() }))
@@ -388,18 +377,17 @@ describe('AgenticModelInvoker item target lookup', () => {
     }));
     jest.doMock('../flow/item-flow', () => ({ runItemFlow }));
     jest.doMock('../../db', () => ({
-      db: { transaction: (fn: unknown) => fn, prepare: jest.fn(() => ({ all: jest.fn(() => []) })) } as unknown,
       getItem,
       getItemReference,
       findByMaterial,
-      getAgenticRun: jest.fn(),
-      updateAgenticRunStatus: { run: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      logEvent: jest.fn(),
-      getAgenticRequestLog: jest.fn(),
-      saveAgenticRequestPayload: jest.fn(),
-      markAgenticRequestNotificationSuccess: jest.fn(),
-      markAgenticRequestNotificationFailure: jest.fn()
+      getAgenticRun: jest.fn(async () => null),
+      updateAgenticRunStatus: jest.fn(async () => 1),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      logEvent: jest.fn(async () => undefined),
+      getAgenticRequestLog: jest.fn(async () => null),
+      saveAgenticRequestPayload: jest.fn(async () => undefined),
+      markAgenticRequestNotificationSuccess: jest.fn(async () => undefined),
+      markAgenticRequestNotificationFailure: jest.fn(async () => undefined)
     }));
     jest.doMock(
       '@langchain/ollama',
@@ -426,9 +414,9 @@ describe('AgenticModelInvoker item target lookup', () => {
       });
 
       expect(result).toEqual({ ok: true, message: 'ok' });
-      expect(getItem.get).not.toHaveBeenCalled();
-      expect(getItemReference.get).toHaveBeenCalledWith('MAT-1000');
-      expect(findByMaterial.all).not.toHaveBeenCalled();
+      expect(getItem).not.toHaveBeenCalled();
+      expect(getItemReference).toHaveBeenCalledWith('MAT-1000');
+      expect(findByMaterial).not.toHaveBeenCalled();
       const [payload] = runItemFlow.mock.calls[0];
       expect(payload.target.Artikel_Nummer).toBe('MAT-1000');
       expect(payload.target.Artikelbeschreibung).toBe('Reference Description');
@@ -437,8 +425,8 @@ describe('AgenticModelInvoker item target lookup', () => {
 
   it('returns item not found for missing Artikel_Nummer in item_refs and fallback rows', async () => {
     const runItemFlow = jest.fn().mockResolvedValue({ status: 'completed', summary: 'ok' });
-    const getItemReference = { get: jest.fn(() => undefined) };
-    const findByMaterial = { all: jest.fn(() => []) };
+    const getItemReference = jest.fn(async () => undefined);
+    const findByMaterial = jest.fn(async () => []);
 
     jest.doMock('../tools/tavily-client', () => ({
       TavilySearchClient: jest.fn().mockImplementation(() => ({ search: jest.fn() }))
@@ -449,18 +437,17 @@ describe('AgenticModelInvoker item target lookup', () => {
     }));
     jest.doMock('../flow/item-flow', () => ({ runItemFlow }));
     jest.doMock('../../db', () => ({
-      db: { transaction: (fn: unknown) => fn, prepare: jest.fn(() => ({ all: jest.fn(() => []) })) } as unknown,
-      getItem: { get: jest.fn(() => undefined) },
+      getItem: jest.fn(async () => undefined),
       getItemReference,
       findByMaterial,
-      getAgenticRun: jest.fn(),
-      updateAgenticRunStatus: { run: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      logEvent: jest.fn(),
-      getAgenticRequestLog: jest.fn(),
-      saveAgenticRequestPayload: jest.fn(),
-      markAgenticRequestNotificationSuccess: jest.fn(),
-      markAgenticRequestNotificationFailure: jest.fn()
+      getAgenticRun: jest.fn(async () => null),
+      updateAgenticRunStatus: jest.fn(async () => 1),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      logEvent: jest.fn(async () => undefined),
+      getAgenticRequestLog: jest.fn(async () => null),
+      saveAgenticRequestPayload: jest.fn(async () => undefined),
+      markAgenticRequestNotificationSuccess: jest.fn(async () => undefined),
+      markAgenticRequestNotificationFailure: jest.fn(async () => undefined)
     }));
     jest.doMock(
       '@langchain/ollama',
@@ -488,26 +475,24 @@ describe('AgenticModelInvoker item target lookup', () => {
 
       expect(result.ok).toBe(false);
       expect(result.message).toContain('not found');
-      expect(getItemReference.get).toHaveBeenCalledWith('MAT-MISSING');
-      expect(findByMaterial.all).toHaveBeenCalledWith('MAT-MISSING');
+      expect(getItemReference).toHaveBeenCalledWith('MAT-MISSING');
+      expect(findByMaterial).toHaveBeenCalledWith('MAT-MISSING');
       expect(runItemFlow).not.toHaveBeenCalled();
     });
   });
 
   it('keeps instance id lookup behaviour unchanged for true instance ids', async () => {
     const runItemFlow = jest.fn().mockResolvedValue({ status: 'completed', summary: 'ok' });
-    const getItem = {
-      get: jest.fn(() => ({
-        ItemUUID: 'I-MAT2000-0001',
-        Artikel_Nummer: 'MAT2000',
-        Artikelbeschreibung: 'Instance Description',
-        Verkaufspreis: 99,
-        Kurzbeschreibung: 'Instance Short',
-        Langtext: { specs: 'instance' },
-        Hersteller: 'Instance Maker'
-      }))
-    };
-    const getItemReference = { get: jest.fn(() => undefined) };
+    const getItem = jest.fn(async () => ({
+      ItemUUID: 'I-MAT2000-0001',
+      Artikel_Nummer: 'MAT2000',
+      Artikelbeschreibung: 'Instance Description',
+      Verkaufspreis: 99,
+      Kurzbeschreibung: 'Instance Short',
+      Langtext: { specs: 'instance' },
+      Hersteller: 'Instance Maker'
+    }));
+    const getItemReference = jest.fn(async () => undefined);
 
     jest.doMock('../tools/tavily-client', () => ({
       TavilySearchClient: jest.fn().mockImplementation(() => ({ search: jest.fn() }))
@@ -518,18 +503,17 @@ describe('AgenticModelInvoker item target lookup', () => {
     }));
     jest.doMock('../flow/item-flow', () => ({ runItemFlow }));
     jest.doMock('../../db', () => ({
-      db: { transaction: (fn: unknown) => fn, prepare: jest.fn(() => ({ all: jest.fn(() => []) })) } as unknown,
       getItem,
       getItemReference,
-      findByMaterial: { all: jest.fn(() => []) },
-      getAgenticRun: jest.fn(),
-      updateAgenticRunStatus: { run: jest.fn() },
-      upsertAgenticRun: { run: jest.fn() },
-      logEvent: jest.fn(),
-      getAgenticRequestLog: jest.fn(),
-      saveAgenticRequestPayload: jest.fn(),
-      markAgenticRequestNotificationSuccess: jest.fn(),
-      markAgenticRequestNotificationFailure: jest.fn()
+      findByMaterial: jest.fn(async () => []),
+      getAgenticRun: jest.fn(async () => null),
+      updateAgenticRunStatus: jest.fn(async () => 1),
+      upsertAgenticRun: jest.fn(async () => undefined),
+      logEvent: jest.fn(async () => undefined),
+      getAgenticRequestLog: jest.fn(async () => null),
+      saveAgenticRequestPayload: jest.fn(async () => undefined),
+      markAgenticRequestNotificationSuccess: jest.fn(async () => undefined),
+      markAgenticRequestNotificationFailure: jest.fn(async () => undefined)
     }));
     jest.doMock(
       '@langchain/ollama',
@@ -556,8 +540,8 @@ describe('AgenticModelInvoker item target lookup', () => {
       });
 
       expect(result).toEqual({ ok: true, message: 'ok' });
-      expect(getItem.get).toHaveBeenCalledWith('I-MAT2000-0001');
-      expect(getItemReference.get).not.toHaveBeenCalled();
+      expect(getItem).toHaveBeenCalledWith('I-MAT2000-0001');
+      expect(getItemReference).not.toHaveBeenCalled();
       const [payload] = runItemFlow.mock.calls[0];
       expect(payload.target.Artikel_Nummer).toBe('MAT2000');
     });

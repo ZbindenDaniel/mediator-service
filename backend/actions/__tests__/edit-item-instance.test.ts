@@ -220,7 +220,7 @@ describe('edit-item-instance action', () => {
 
       expect(mockExecute).toHaveBeenCalled();
       const sql: string = mockExecute.mock.calls[0][0];
-      expect(sql).toContain('UpdatedAt=');
+      expect(sql).toContain('"UpdatedAt"');
     });
   });
 });

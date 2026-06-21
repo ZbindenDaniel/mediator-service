@@ -1,147 +1,103 @@
-// import { jest } from '@jest/globals';
-// import type { AgenticResultPayload } from '../result-handler';
-// import type { ChatModel } from '../flow/item-flow-extraction';
-// import type { ShopwareMatchOptions, ShopwareMatchResult } from '../flow/item-flow-shopware';
-// import type { SearchInvoker } from '../flow/item-flow-search';
-// import type { SearchResult } from '../tools/tavily-client';
+import { dispatchAgenticResult } from '../flow/result-dispatch';
+import type { AgenticResultPayload } from '../result-handler';
 
-// const createMockLlm = (): ChatModel => {
-//   const invoke: ChatModel['invoke'] = jest.fn().mockResolvedValue({ content: null });
-//   return { invoke };
-// };
+function buildPayload(overrides: Partial<AgenticResultPayload> = {}): AgenticResultPayload {
+  return {
+    artikelNummer: 'item-123',
+    Artikel_Nummer: 'item-123',
+    status: 'completed',
+    error: null,
+    needsReview: false,
+    summary: 'ok',
+    reviewDecision: null,
+    reviewNotes: null,
+    reviewedBy: null,
+    actor: 'agent',
+    item: { Artikel_Nummer: 'item-123' },
+    ...overrides
+  };
+}
 
-// const createSearchInvokerMock = () => {
-//   const searchInvoker: jest.MockedFunction<SearchInvoker> = jest.fn(async () => ({
-//     text: 'mock search results',
-//     sources: [] as SearchResult['sources']
-//   }));
-//   return searchInvoker;
-// };
+describe('dispatchAgenticResult', () => {
+  test('calls applyAgenticResult with the payload and marks notification success', async () => {
+    const applyAgenticResult = jest.fn(async () => undefined);
+    const saveRequestPayload = jest.fn(async () => undefined);
+    const markNotificationSuccess = jest.fn(async () => undefined);
+    const markNotificationFailure = jest.fn(async () => undefined);
+    const payload = buildPayload();
 
-// const buildShopwareMatch = (overrides: Partial<ShopwareMatchResult> = {}): ShopwareMatchResult => ({
-//   finalData: {
-//     itemUUid: 'item-123',
-//     Artikelbeschreibung: 'Example item',
-//     Verkaufspreis: null,
-//     Kurzbeschreibung: 'Kurzbeschreibung',
-//     Langtext: 'Langtext',
-//     Hersteller: 'Hersteller',
-//     Länge_mm: null,
-//     Breite_mm: null,
-//     Höhe_mm: null,
-//     Gewicht_kg: null,
-//     ...(overrides.finalData ?? {})
-//   },
-//   sources: overrides.sources ?? [],
-//   summary: overrides.summary ?? 'Shopware match',
-//   reviewNotes: overrides.reviewNotes ?? 'Shopware review notes',
-//   reviewedBy: overrides.reviewedBy ?? 'shopware-agent'
-// });
+    await dispatchAgenticResult({
+      artikelNummer: 'item-123',
+      payload,
+      saveRequestPayload,
+      applyAgenticResult,
+      markNotificationSuccess,
+      markNotificationFailure
+    });
 
-// describe('runItemFlow result dispatch', () => {
-//   beforeEach(() => {
-//     jest.resetModules();
-//   });
+    expect(saveRequestPayload).toHaveBeenCalledWith('item-123', payload);
+    expect(applyAgenticResult).toHaveBeenCalledWith(payload);
+    expect(markNotificationSuccess).toHaveBeenCalledWith('item-123');
+    expect(markNotificationFailure).not.toHaveBeenCalled();
+  });
 
-//   test('dispatches agentic result via the provided handler', async () => {
-//     const runs = new Map<string, string>([['item-123', 'queued']]);
-//     const applyAgenticResult: jest.MockedFunction<(payload: AgenticResultPayload) => void> = jest.fn((payload) => {
-//       runs.set(payload.itemId, payload.status);
-//     });
-//     const markNotificationSuccess: jest.MockedFunction<(itemId: string) => void> = jest.fn();
-//     const markNotificationFailure: jest.MockedFunction<(itemId: string, reason: string) => void> = jest.fn();
-//     const saveRequestPayload: jest.MockedFunction<(itemId: string, payload: unknown) => void> = jest.fn();
-//     const searchInvoker = createSearchInvokerMock();
-//     const llm = createMockLlm();
+  test('throws RESULT_HANDLER_MISSING when applyAgenticResult is not provided', async () => {
+    const saveRequestPayload = jest.fn(async () => undefined);
+    const markNotificationSuccess = jest.fn(async () => undefined);
+    const markNotificationFailure = jest.fn(async () => undefined);
 
-//     await (jest as any).isolateModulesAsync(async () => {
-//       jest.doMock('../config', () => ({
-//         agentActorId: 'test-agent'
-//       }));
-//       const resolveShopwareMatch: jest.MockedFunction<
-//         (options: ShopwareMatchOptions) => Promise<ShopwareMatchResult | null>
-//       > = jest.fn(async () => buildShopwareMatch());
-//       jest.doMock('../flow/item-flow-shopware', () => ({ resolveShopwareMatch }));
+    await expect(
+      dispatchAgenticResult({
+        artikelNummer: 'item-missing-handler',
+        payload: buildPayload({ artikelNummer: 'item-missing-handler' }),
+        saveRequestPayload,
+        markNotificationSuccess,
+        markNotificationFailure
+      })
+    ).rejects.toThrow('Agentic result handler unavailable');
 
-//       const { runItemFlow } = await import('../flow/item-flow');
+    expect(markNotificationFailure).toHaveBeenCalledWith('item-missing-handler', 'Agentic result handler unavailable');
+  });
 
-//       const payload = await runItemFlow(
-//         {
-//           target: { itemUUid: 'item-123', Artikelbeschreibung: 'Example item' },
-//           id: 'item-123',
-//           search: 'Example item'
-//         },
-//         {
-//           llm,
-//           logger: console,
-//           searchInvoker,
-//           applyAgenticResult: (result) => applyAgenticResult(result),
-//           saveRequestPayload,
-//           markNotificationSuccess,
-//           markNotificationFailure
-//         }
-//       );
+  test('calls markNotificationFailure and re-throws when applyAgenticResult throws', async () => {
+    const error = new Error('upstream error');
+    const applyAgenticResult = jest.fn(async () => { throw error; });
+    const saveRequestPayload = jest.fn(async () => undefined);
+    const markNotificationSuccess = jest.fn(async () => undefined);
+    const markNotificationFailure = jest.fn(async () => undefined);
 
-//       expect(payload.status).toBe('completed');
-//       expect(applyAgenticResult).toHaveBeenCalledWith(expect.objectContaining({ itemId: 'item-123' }));
-//       expect(runs.get('item-123')).toBe('completed');
-//       expect(saveRequestPayload).toHaveBeenCalledWith('item-123', expect.any(Object));
-//       expect(markNotificationSuccess).toHaveBeenCalledWith('item-123');
-//       expect(markNotificationFailure).not.toHaveBeenCalled();
-//     });
-//   });
+    await expect(
+      dispatchAgenticResult({
+        artikelNummer: 'item-err',
+        payload: buildPayload({ artikelNummer: 'item-err' }),
+        saveRequestPayload,
+        applyAgenticResult,
+        markNotificationSuccess,
+        markNotificationFailure
+      })
+    ).rejects.toThrow('upstream error');
 
-//   test('records notification failure when handler rejects', async () => {
-//     const applyAgenticResult: jest.MockedFunction<
-//       (payload: AgenticResultPayload) => Promise<void>
-//     > = jest.fn(async () => {
-//       throw new Error('dispatch failed');
-//     });
-//     const markNotificationSuccess: jest.MockedFunction<(itemId: string) => void> = jest.fn();
-//     const markNotificationFailure: jest.MockedFunction<(itemId: string, reason: string) => void> = jest.fn();
-//     const saveRequestPayload: jest.MockedFunction<(itemId: string, payload: unknown) => void> = jest.fn();
-//     const searchInvoker = createSearchInvokerMock();
-//     const llm = createMockLlm();
+    expect(markNotificationSuccess).not.toHaveBeenCalled();
+    expect(markNotificationFailure).toHaveBeenCalledWith('item-err', 'upstream error');
+  });
 
-//     await (jest as any).isolateModulesAsync(async () => {
-//       jest.doMock('../config', () => ({
-//         agentActorId: 'test-agent'
-//       }));
-//       const resolveShopwareMatch: jest.MockedFunction<
-//         (options: ShopwareMatchOptions) => Promise<ShopwareMatchResult | null>
-//       > = jest.fn(async () =>
-//         buildShopwareMatch({
-//           finalData: {
-//             itemUUid: 'item-xyz',
-//             Artikelbeschreibung: 'Example item'
-//           }
-//         })
-//       );
-//       jest.doMock('../flow/item-flow-shopware', () => ({ resolveShopwareMatch }));
+  test('does not swallow saveRequestPayload errors', async () => {
+    const saveRequestPayload = jest.fn(async () => { throw new Error('save failed'); });
+    const applyAgenticResult = jest.fn(async () => undefined);
+    const markNotificationSuccess = jest.fn(async () => undefined);
+    const markNotificationFailure = jest.fn(async () => undefined);
 
-//       const { runItemFlow } = await import('../flow/item-flow');
+    await expect(
+      dispatchAgenticResult({
+        artikelNummer: 'item-save-err',
+        payload: buildPayload({ artikelNummer: 'item-save-err' }),
+        saveRequestPayload,
+        applyAgenticResult,
+        markNotificationSuccess,
+        markNotificationFailure
+      })
+    ).rejects.toThrow('save failed');
 
-//       await expect(
-//         runItemFlow(
-//           {
-//             target: { itemUUid: 'item-xyz', Artikelbeschreibung: 'Example item' },
-//             id: 'item-xyz',
-//             search: 'Example item'
-//           },
-//           {
-//             llm,
-//             logger: console,
-//             searchInvoker,
-//             applyAgenticResult,
-//             saveRequestPayload,
-//             markNotificationSuccess,
-//             markNotificationFailure
-//           }
-//         )
-//       ).rejects.toThrow('dispatch failed');
-
-//       expect(markNotificationSuccess).not.toHaveBeenCalled();
-//       expect(markNotificationFailure).toHaveBeenCalledWith('item-xyz', 'dispatch failed');
-//     });
-//   });
-// });
+    expect(applyAgenticResult).not.toHaveBeenCalled();
+  });
+});

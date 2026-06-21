@@ -26,10 +26,11 @@ describe('agentic review metric rows', () => {
       null
     );
 
-    // assert.equal(rows[0][0], 'Review-Metriken (Stichprobe)');
-    assert.equal(rows[0][1], '4/10');
-    assert.ok(rows.some(([k, v]) => k === 'Bad Format' && String(v).includes('50.0% (2/4; Fenster 10)')));
-    // assert.ok(rows.some(([k, v]) => k === 'Trigger aktiv' && String(v).includes('bad_format_trigger')));
+    assert.ok(rows.some(([k, v]) => k === 'Schlecht formatiert' && String(v) === '2/4'));
+    assert.ok(rows.some(([k, v]) => k === 'Falsche Information' && String(v) === '1/4'));
+    assert.ok(rows.some(([k, v]) => k === 'Info unvollständig' && String(v) === '3/4'));
+    assert.ok(rows.some(([k]) => k === 'Top fehlende Spezifikationen'));
+    assert.ok(rows.some(([k]) => k === 'Metrik-Hinweis'));
   });
 
   test('builds empty fallback rows when signal is unavailable', () => {

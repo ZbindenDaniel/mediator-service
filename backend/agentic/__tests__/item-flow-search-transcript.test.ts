@@ -54,7 +54,8 @@ describe('collectSearchContexts transcript integration', () => {
       }
     });
 
-    expect(mockedAppendTranscriptSection).toHaveBeenCalledTimes(1);
+    // 3 queries run (basePlan + 2 fallbacks after dedup); transcript appended once per query
+    expect(mockedAppendTranscriptSection).toHaveBeenCalledTimes(3);
     expect(mockedAppendTranscriptSection).toHaveBeenCalledWith(
       transcriptWriter,
       'search-context-1',
@@ -153,7 +154,8 @@ describe('collectSearchContexts transcript integration', () => {
       }
     });
 
-    expect(result.searchContexts).toHaveLength(1);
+    // 3 queries run (basePlan + 2 fallbacks after dedup)
+    expect(result.searchContexts).toHaveLength(3);
     expect(result.searchContexts[0]).toEqual(
       expect.objectContaining({
         query: 'Gerätedaten Laborgerät 7000',

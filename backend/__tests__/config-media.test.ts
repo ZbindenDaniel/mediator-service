@@ -101,11 +101,11 @@ describe('media configuration resolution', () => {
     const media = loadMedia();
 
     expect(media.resolveFetchMediaPaths('000123', 'A.jpg')).toEqual([
-      `${process.cwd()}/dist/media/000123/A.jpg`,
+      `${process.cwd()}/dist/backend/media/000123/A.jpg`,
       '/mnt/webdav/shopbilder/000123/A.jpg'
     ]);
-    expect(media.resolveUploadMediaPath('000123', 'A.jpg')).toBe(`${process.cwd()}/dist/media/000123/A.jpg`);
-    expect(media.resolveSyncSourceMediaPath('000123', 'A.jpg')).toBe(`${process.cwd()}/dist/media/000123/A.jpg`);
+    expect(media.resolveUploadMediaPath('000123', 'A.jpg')).toBe(`${process.cwd()}/dist/backend/media/000123/A.jpg`);
+    expect(media.resolveSyncSourceMediaPath('000123', 'A.jpg')).toBe(`${process.cwd()}/dist/backend/media/000123/A.jpg`);
     expect(media.resolveSyncTargetMediaPath('000123', 'A.jpg')).toBe('/mnt/webdav/shopbilder-import/000123/A.jpg');
   });
 

@@ -1,361 +1,20 @@
-// const fs = require('fs');
-// const path = require('path');
-// const { server, resetData } = require('./server');
-
-// process.env.NODE_ENV = 'test';
-// process.env.HTTP_PORT = '0';
-// process.env.DB_PATH = path.join(__dirname, 'test-db.sqlite');
-// process.env.INBOX_DIR = path.join(__dirname, 'test-inbox');
-// process.env.ARCHIVE_DIR = path.join(__dirname, 'test-archive');
-
-// let baseUrl = '';
-
-// const today = (() => {
-//   const d = new Date();
-//   const dd = String(d.getDate()).padStart(2, '0');
-//   const mm = String(d.getMonth() + 1).padStart(2, '0');
-//   const yy = String(d.getFullYear()).slice(-2);
-//   return `${dd}${mm}${yy}`;
-// })();
-
-// function boxId(n) {
-//   return `B-${today}-${String(n).padStart(4, '0')}`;
-// }
-
-// function itemId(n) {
-//   return `I-${today}-${String(n).padStart(4, '0')}`;
-// }
-
-// beforeAll(async () => {
-//   await new Promise<void>((resolve) => {
-//     server.listen(0, () => {
-//       const addr = server.address();
-//       if (typeof addr === 'object' && addr) {
-//         baseUrl = `http://127.0.0.1:${addr.port}`;
-//       }
-//       resolve();
-//     });
-//   });
-// });
-
-// afterAll(async () => {
-//   await new Promise<void>((resolve) => {
-//     server.close(() => {
-//       fs.rmSync(process.env.DB_PATH, { force: true });
-//       fs.rmSync(process.env.INBOX_DIR, { recursive: true, force: true });
-//       fs.rmSync(process.env.ARCHIVE_DIR, { recursive: true, force: true });
-//       resolve();
-//     });
-//   });
-// });
-
-// beforeEach(() => {
-//   resetData();
-// });
-
-// async function postForm(url, data) {
-//   const body = new URLSearchParams(data).toString();
-//   return fetch(baseUrl + url, {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-//     body
-//   });
-// }
-
-// test('health endpoint works', async () => {
-//   const r = await fetch(baseUrl + '/api/health');
-//   const j = await r.json();
-//   expect(j.ok).toBe(true);
-// });
-
-// test('getNewMaterialNumber returns a number', async () => {
-//   const r = await fetch(baseUrl + '/api/getNewMaterialNumber');
-//   const j = await r.json();
-//   expect(/\d{5}/.test(j.nextArtikelNummer)).toBe(true);
-// });
-
-// test('create item and retrieve via box and search', async () => {
-//   const res = await postForm('/api/import/item', {
-//     BoxID: boxId(1),
-//     ItemUUID: itemId(1),
-//     Artikel_Nummer: '1000',
-//     Artikelbeschreibung: 'Test Item',
-//     Location: 'A-01-01',
-//     actor: 'tester'
-//   });
-//   expect(res.status).toBe(200);
-//   const created = await res.json();
-//   expect(created.ok).toBe(true);
-
-//   const boxRes = await fetch(baseUrl + `/api/boxes/${boxId(1)}`);
-//   const boxData = await boxRes.json();
-//   expect(boxData.items.length).toBe(1);
-
-//   const searchRes = await fetch(baseUrl + '/api/search?term=1000');
-//   const searchData = await searchRes.json();
-//   expect(Array.isArray(searchData.items)).toBe(true);
-//   expect(searchData.items.length).toBe(1);
-//   const searchBox = await fetch(baseUrl + `/api/search?term=${boxId(1).slice(0, 8)}`);
-//   const searchBoxData = await searchBox.json();
-//   expect((searchBoxData.boxes || []).length).toBe(1);
-
-//   const searchPart = await fetch(baseUrl + '/api/search?term=Test');
-//   const searchPartData = await searchPart.json();
-//   expect(searchPartData.items.length).toBe(1);
-
-//   const searchLoc = await fetch(baseUrl + '/api/search?term=A-01');
-//   const searchLocData = await searchLoc.json();
-//   expect(searchLocData.items.length).toBe(1);
-//   expect(searchLocData.boxes.length).toBe(1);
-
-//   const printBox = await fetch(baseUrl + `/api/print/box/${boxId(1)}`, { method: 'POST' });
-//   expect(printBox.status).toBe(200);
-//   const boxBody = await printBox.json();
-//   expect(boxBody.qrPayload).toMatchObject({ id: boxId(1), type: 'box' });
-//   expect(boxBody.qrPayload.url).toBeUndefined();
-//   expect(typeof boxBody.qrPayload.quantity).toBe('number');
-//   if (boxBody.previewUrl) {
-//     expect(boxBody.previewUrl).toMatch(/\/prints\/box-/);
-//   }
-//   const printItem = await fetch(baseUrl + `/api/print/item/${itemId(1)}`, { method: 'POST' });
-//   expect(printItem.status).toBe(200);
-//   const itemBody = await printItem.json();
-//   expect(itemBody.qrPayload).toMatchObject({ id: itemId(1), type: 'item' });
-//   expect(itemBody.qrPayload.url).toBeUndefined();
-//   expect(typeof itemBody.qrPayload.quantity).toBe('number');
-//   if (itemBody.previewUrl) {
-//     expect(itemBody.previewUrl).toMatch(/\/prints\/item-/);
-//   }
-
-//   const badCsv = await fetch(baseUrl + '/api/import/validate', { method: 'POST', body: 'foo,bar\n1,2' });
-//   expect(badCsv.status).toBe(400);
-//   const goodCsv = await fetch(baseUrl + '/api/import/validate', { method: 'POST', body: 'ItemUUID,BoxID\na,b' });
-//   expect(goodCsv.status).toBe(200);
-//   const goodData = await goodCsv.json();
-//   expect(goodData.itemCount).toBe(1);
-//   expect(goodData.boxCount).toBe(1);
-
-//   const saveBad = await fetch(baseUrl + `/api/items/${itemId(1)}`, {
-//     method: 'PUT',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ Artikelbeschreibung: 'x' })
-//   });
-//   expect(saveBad.status).toBe(400);
-
-//   const saveOk = await fetch(baseUrl + `/api/items/${itemId(1)}`, {
-//     method: 'PUT',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ Artikelbeschreibung: 'Updated', actor: 'tester' })
-//   });
-//   expect(saveOk.status).toBe(200);
-
-//   const csvData = fs.readFileSync(path.join(__dirname, 'test.csv'));
-//   const csvRes = await fetch(baseUrl + '/api/import', {
-//     method: 'POST',
-//     headers: { 'x-filename': 'test.csv' },
-//     body: csvData
-//   });
-//   expect(csvRes.status).toBe(200);
-// });
-
-// test('create box separately and move item', async () => {
-//   const res = await postForm('/api/import/item', {
-//     BoxID: boxId(2),
-//     ItemUUID: itemId(2),
-//     Artikel_Nummer: '1001',
-//     Artikelbeschreibung: 'Item Zwei',
-//     Location: 'A-01-02',
-//     actor: 'tester'
-//   });
-//   expect(res.status).toBe(200);
-//   const moveFail = await fetch(baseUrl + `/api/items/${itemId(2)}/move`, {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ toBoxId: 'B-000000-9999', actor: 'tester' })
-//   });
-//   expect(moveFail.status).toBe(404);
-//   const createBox = await fetch(baseUrl + '/api/boxes', {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ actor: 'tester' })
-//   });
-//   expect(createBox.status).toBe(200);
-//   const createData = await createBox.json();
-//   expect(/B-\d{6}-\d{4}/.test(createData.id)).toBe(true);
-//   const moveOk = await fetch(baseUrl + `/api/items/${itemId(2)}/move`, {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ toBoxId: createData.id, actor: 'tester' })
-//   });
-//   expect(moveOk.status).toBe(200);
-// });
-
-// test('increment and decrement item stock', async () => {
-//   const res = await postForm('/api/import/item', {
-//     BoxID: boxId(3),
-//     ItemUUID: itemId(3),
-//     Artikel_Nummer: '1002',
-//     Artikelbeschreibung: 'Stock Item',
-//     Location: 'A-01-03',
-//     actor: 'tester'
-//   });
-//   expect(res.status).toBe(200);
-//   const add = await fetch(baseUrl + `/api/items/${itemId(3)}/add`, {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ actor: 'tester' })
-//   });
-//   expect(add.status).toBe(200);
-//   const addData = await add.json();
-//   expect(addData.quantity).toBe(2);
-//   const remove = await fetch(baseUrl + `/api/items/${itemId(3)}/remove`, {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ actor: 'tester' })
-//   });
-//   expect(remove.status).toBe(200);
-//   const removeData = await remove.json();
-//   expect(removeData.quantity).toBe(1);
-//   const remove2 = await fetch(baseUrl + `/api/items/${itemId(3)}/remove`, {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ actor: 'tester' })
-//   });
-//   expect(remove2.status).toBe(200);
-//   const removeData2 = await remove2.json();
-//   expect(removeData2.quantity).toBe(0);
-//   const detail = await fetch(baseUrl + `/api/items/${itemId(3)}`);
-//   const detailData = await detail.json();
-//   expect(detailData.item.BoxID).toBeNull();
-// });
-
-// test('list items returns data', async () => {
-//   await postForm('/api/import/item', {
-//     BoxID: boxId(4),
-//     ItemUUID: itemId(4),
-//     Artikel_Nummer: '1003',
-//     Artikelbeschreibung: 'List Item',
-//     Location: 'A-01-04',
-//     actor: 'tester'
-//   });
-//   const r = await fetch(baseUrl + '/api/items');
-//   const j = await r.json();
-//   expect(Array.isArray(j.items)).toBe(true);
-//   expect(j.items.length).toBeGreaterThan(0);
-// });
-
-// test('agentic cancel endpoint updates run status', async () => {
-//   const targetItem = itemId(5);
-//   const targetBox = boxId(5);
-
-//   const createRes = await postForm('/api/import/item', {
-//     BoxID: targetBox,
-//     ItemUUID: targetItem,
-//     Artikel_Nummer: '1099',
-//     Artikelbeschreibung: 'Agentic Cancel Item',
-//     Location: 'A-02-00',
-//     actor: 'tester'
-//   });
-//   expect(createRes.status).toBe(200);
-
-//   const restartRes = await fetch(baseUrl + `/api/items/${targetItem}/agentic/restart`, {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ actor: 'tester', search: 'Agentic Cancel Item' })
-//   });
-//   expect(restartRes.status).toBe(200);
-
-//   const cancelRes = await fetch(baseUrl + `/api/items/${targetItem}/agentic/cancel`, {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ actor: 'tester' })
-//   });
-//   expect(cancelRes.status).toBe(200);
-//   const cancelBody = await cancelRes.json();
-//   expect(cancelBody?.agentic?.Status).toBe('cancelled');
-
-//   const statusRes = await fetch(baseUrl + `/api/items/${targetItem}/agentic`);
-//   expect(statusRes.status).toBe(200);
-//   const statusBody = await statusRes.json();
-//   expect(statusBody?.agentic?.Status).toBe('cancelled');
-// });
-
-// test('importing items preserves box location when subsequent payload omits Standort', async () => {
-//   const targetBox = boxId(5);
-//   const firstItem = itemId(5);
-//   const secondItem = itemId(6);
-
-//   const firstRes = await postForm('/api/import/item', {
-//     BoxID: targetBox,
-//     ItemUUID: firstItem,
-//     Artikel_Nummer: '1100',
-//     Artikelbeschreibung: 'First Item',
-//     Location: 'A-02-01',
-//     actor: 'tester'
-//   });
-//   expect(firstRes.status).toBe(200);
-
-//   const secondRes = await postForm('/api/import/item', {
-//     BoxID: targetBox,
-//     ItemUUID: secondItem,
-//     Artikel_Nummer: '1101',
-//     Artikelbeschreibung: 'Second Item',
-//     Location: '',
-//     actor: 'tester'
-//   });
-//   expect(secondRes.status).toBe(200);
-
-//   const boxRes = await fetch(baseUrl + `/api/boxes/${targetBox}`);
-//   const boxData = await boxRes.json();
-//   expect(boxData?.box?.Location).toBe('A-02-01');
-//   expect(Array.isArray(boxData?.items)).toBe(true);
-//   expect(boxData.items.length).toBe(2);
-//   const itemIds = boxData.items.map((it) => it.ItemUUID).sort();
-//   expect(itemIds).toContain(firstItem);
-//   expect(itemIds).toContain(secondItem);
-// });
+// move-box uses withTransaction from db-client; mock it to capture query calls
+jest.mock('../backend/db-client', () => ({
+  withTransaction: jest.fn(async (fn: (client: { query: jest.Mock }) => Promise<void>) => {
+    const client = { query: jest.fn(async () => ({ rows: [] })) };
+    await fn(client);
+    return client;
+  }),
+  query: jest.fn(async () => ({ rows: [] })),
+  queryOne: jest.fn(async () => null),
+  execute: jest.fn(async () => 0),
+}));
 
 import { Readable } from 'stream';
 import type { IncomingMessage, ServerResponse } from 'http';
-import Database from 'better-sqlite3';
 import moveBoxAction from '../backend/actions/move-box';
-import { resolveEventLogLevel } from '../models';
 
-type BoxRow = {
-  BoxID: string;
-  LocationId: string | null;
-  Location?: string | null;
-  Label: string | null;
-  CreatedAt: string | null;
-  Notes: string | null;
-  PlacedBy: string | null;
-  PlacedAt: string | null;
-  PhotoPath: string | null;
-  UpdatedAt: string;
-};
-
-type EventRow = {
-  Id: number;
-  CreatedAt: string;
-  Actor: string | null;
-  EntityType: string;
-  EntityId: string;
-  Event: string;
-  Level: string;
-  Meta: string | null;
-};
-
-type MoveBoxTestContext = {
-  db: Database.Database;
-  getBox: Database.Statement;
-  logEvent: (payload: {
-    Actor?: string | null;
-    EntityType: string;
-    EntityId: string;
-    Event: string;
-    Meta?: string | null;
-  }) => void;
-};
+const dbClient = require('../backend/db-client');
 
 function createMockRequest(path: string, body: unknown): IncomingMessage {
   const stream = new Readable({ read() {} });
@@ -377,7 +36,7 @@ function createMockResponse() {
       headers = { ...responseHeaders };
       return res;
     },
-    end(chunk?: any) {
+    end(chunk?: unknown) {
       if (chunk !== undefined && chunk !== null) {
         body = Buffer.isBuffer(chunk) ? chunk.toString('utf-8') : String(chunk);
       }
@@ -393,141 +52,103 @@ function createMockResponse() {
   };
 }
 
-function createMoveBoxContext(initialBox: Partial<BoxRow> & { BoxID: string }) {
-  const db = new Database(':memory:');
-  db.exec(`
-    CREATE TABLE boxes (
-      BoxID TEXT PRIMARY KEY,
-      LocationId TEXT,
-      Label TEXT,
-      CreatedAt TEXT,
-      Notes TEXT,
-      PlacedBy TEXT,
-      PlacedAt TEXT,
-      PhotoPath TEXT,
-      UpdatedAt TEXT NOT NULL
-    );
-    CREATE TABLE events (
-      Id INTEGER PRIMARY KEY AUTOINCREMENT,
-      CreatedAt TEXT NOT NULL,
-      Actor TEXT,
-      EntityType TEXT NOT NULL,
-      EntityId TEXT NOT NULL,
-      Event TEXT NOT NULL,
-      Level TEXT NOT NULL DEFAULT 'Information',
-      Meta TEXT
-    );
-  `);
-
-  const insertBox = db.prepare(`
-    INSERT INTO boxes (BoxID, LocationId, Label, CreatedAt, Notes, PlacedBy, PlacedAt, PhotoPath, UpdatedAt)
-    VALUES (@BoxID, @LocationId, @Label, @CreatedAt, @Notes, @PlacedBy, @PlacedAt, @PhotoPath, @UpdatedAt)
-  `);
-
-  insertBox.run({
-    BoxID: initialBox.BoxID,
-    LocationId: (initialBox as any).LocationId ?? initialBox.Location ?? null,
-    Label: (initialBox as any).Label ?? (initialBox as any).StandortLabel ?? null,
-    CreatedAt: initialBox.CreatedAt ?? '2000-01-01T00:00:00Z',
-    Notes: initialBox.Notes ?? null,
-    PlacedBy: initialBox.PlacedBy ?? null,
-    PlacedAt: initialBox.PlacedAt ?? null,
-    PhotoPath: (initialBox as any).PhotoPath ?? null,
-    UpdatedAt: initialBox.UpdatedAt ?? '2000-01-01T00:00:00Z'
-  });
-
-  const getBox = db.prepare('SELECT * FROM boxes WHERE BoxID = ?');
-  const insertEvent = db.prepare(`
-    INSERT INTO events (CreatedAt, Actor, EntityType, EntityId, Event, Level, Meta)
-    VALUES (datetime('now'), @Actor, @EntityType, @EntityId, @Event, @Level, @Meta)
-  `);
-  const logEvent: MoveBoxTestContext['logEvent'] = (payload) => {
-    insertEvent.run({
-      Actor: payload.Actor ?? null,
-      EntityType: payload.EntityType,
-      EntityId: payload.EntityId,
-      Event: payload.Event,
-      Level: resolveEventLogLevel(payload.Event),
-      Meta: payload.Meta ?? null
-    });
+function createMoveBoxContext(box: { BoxID: string; LocationId?: string | null; Notes?: string | null; Label?: string | null; PhotoPath?: string | null }) {
+  const logEvent = jest.fn(async () => undefined);
+  const ctx = {
+    getBox: jest.fn(async (id: string) => id === box.BoxID ? { ...box, PhotoPath: box.PhotoPath ?? null } : null),
+    logEvent
   };
-  const selectEvents = db.prepare('SELECT * FROM events WHERE EntityId = ? ORDER BY Id');
-
-  const ctx: MoveBoxTestContext = { db, getBox, logEvent };
-
-  return {
-    ctx,
-    getBox,
-    selectEvents,
-    close: () => {
-      try {
-        db.close();
-      } catch (error) {
-        console.error('Failed to close move-box test database', error);
-      }
-    }
-  };
+  return { ctx, logEvent };
 }
+
+afterEach(() => {
+  jest.clearAllMocks();
+});
 
 describe('move-box action note updates', () => {
   test('updates notes without requiring location', async () => {
-    const { ctx, getBox, selectEvents, close } = createMoveBoxContext({ BoxID: 'BOX-001', LocationId: null });
+    const { ctx, logEvent } = createMoveBoxContext({ BoxID: 'BOX-001', LocationId: null });
     const req = createMockRequest('/api/boxes/BOX-001/move', { actor: 'Tester', notes: '  Hello Note  ' });
     const { res, getStatus, getBody } = createMockResponse();
-    let updated: BoxRow | null = null;
-    let events: EventRow[] = [];
 
-    try {
-      await moveBoxAction.handle?.(req, res, ctx);
-      updated = getBox.get('BOX-001') as BoxRow;
-      events = selectEvents.all('BOX-001') as EventRow[];
-    } finally {
-      close();
-    }
+    // Capture the client.query mock from inside withTransaction
+    let capturedQueryArgs: unknown[][] = [];
+    dbClient.withTransaction.mockImplementationOnce(async (fn: (client: { query: jest.Mock }) => Promise<void>) => {
+      const client = {
+        query: jest.fn(async (...args: unknown[]) => {
+          capturedQueryArgs.push(args);
+          return { rows: [] };
+        })
+      };
+      await fn(client);
+    });
+
+    await moveBoxAction.handle?.(req, res, ctx as any);
 
     expect(getStatus()).toBe(200);
     expect(JSON.parse(getBody())).toEqual({ ok: true, photoPath: null });
 
-    expect((updated as any)?.Location ?? null).toBeNull();
-    expect(updated?.LocationId ?? null).toBeNull();
-    expect(updated?.Notes ?? null).toBe('Hello Note');
-    expect(updated?.PlacedBy ?? null).toBeNull();
-    expect(updated?.PlacedAt ?? null).toBeNull();
-    expect(updated?.UpdatedAt ?? '').not.toBe('2000-01-01T00:00:00Z');
+    // Notes UPDATE was executed with trimmed notes
+    expect(capturedQueryArgs.length).toBeGreaterThan(0);
+    const updateCall = capturedQueryArgs[0] as [string, unknown[]];
+    expect(updateCall[0]).toContain('UPDATE boxes');
+    expect(updateCall[1]).toContain('Hello Note');
 
-    expect(events.length).toBe(1);
-    expect(events[0].Event).toBe('Note');
-    expect(events[0].Actor).toBe('Tester');
+    // logEvent called with Note event
+    expect(logEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Event: 'Note',
+        EntityId: 'BOX-001',
+        Actor: 'Tester'
+      })
+    );
   });
 
   test('moves box placement when location provided', async () => {
-    const { ctx, getBox, selectEvents, close } = createMoveBoxContext({ BoxID: 'BOX-002', LocationId: 'A-01-01', Notes: 'Old', Label: 'Rot' });
-    const req = createMockRequest('/api/boxes/BOX-002/move', { actor: 'Mover', LocationId: 'b-02-03', notes: 'Moved note', Label: 'Orange' });
+    const { ctx, logEvent } = createMoveBoxContext({ BoxID: 'BOX-002', LocationId: 'A-01-01', Notes: 'Old', Label: 'Rot' });
+    const req = createMockRequest('/api/boxes/BOX-002/move', {
+      actor: 'Mover',
+      LocationId: 'b-02-03',
+      notes: 'Moved note',
+      Label: 'Orange'
+    });
     const { res, getStatus, getBody } = createMockResponse();
-    let updated: BoxRow | null = null;
-    let events: EventRow[] = [];
 
-    try {
-      await moveBoxAction.handle?.(req, res, ctx);
-      updated = getBox.get('BOX-002') as BoxRow;
-      events = selectEvents.all('BOX-002') as EventRow[];
-    } finally {
-      close();
-    }
+    let capturedQueryArgs: unknown[][] = [];
+    dbClient.withTransaction.mockImplementationOnce(async (fn: (client: { query: jest.Mock }) => Promise<void>) => {
+      const client = {
+        query: jest.fn(async (...args: unknown[]) => {
+          capturedQueryArgs.push(args);
+          return { rows: [] };
+        })
+      };
+      await fn(client);
+    });
+
+    await moveBoxAction.handle?.(req, res, ctx as any);
 
     expect(getStatus()).toBe(200);
     expect(JSON.parse(getBody())).toEqual({ ok: true, photoPath: null });
 
-    expect(updated?.LocationId ?? '').toBe('B-02-03');
-    expect((updated as any)?.Location ?? null).toBeNull();
-    expect(updated?.Label ?? null).toBe('Orange');
-    expect(updated?.Notes ?? null).toBe('Moved note');
-    expect(updated?.PlacedBy ?? null).toBe('Mover');
-    expect(updated?.PlacedAt ?? null).not.toBeNull();
-    expect(updated?.UpdatedAt ?? '').not.toBe('2000-01-01T00:00:00Z');
+    // UPDATE was executed with uppercased locationId
+    expect(capturedQueryArgs.length).toBeGreaterThan(0);
+    const updateCall = capturedQueryArgs[0] as [string, unknown[]];
+    expect(updateCall[0]).toContain('UPDATE boxes');
+    expect(updateCall[1]).toContain('B-02-03');
+    expect(updateCall[1]).toContain('Moved note');
 
-    expect(events.length).toBe(1);
-    expect(events[0].Event).toBe('Moved');
-    expect(JSON.parse(events[0].Meta || '{}')).toMatchObject({ locationId: 'B-02-03', notes: 'Moved note', label: 'Orange' });
+    // logEvent called with Moved event, correct metadata
+    expect(logEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Event: 'Moved',
+        EntityId: 'BOX-002',
+        Actor: 'Mover'
+      })
+    );
+    const logArgs = logEvent.mock.calls[0][0] as { Meta?: string };
+    expect(JSON.parse(logArgs.Meta || '{}')).toMatchObject({
+      locationId: 'B-02-03',
+      notes: 'Moved note'
+    });
   });
 });

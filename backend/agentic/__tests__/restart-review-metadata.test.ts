@@ -1,3 +1,14 @@
+// restartAgenticRun calls withTransaction from db-client; mock the module to avoid DATABASE_URL
+jest.mock('../../db-client', () => ({
+  withTransaction: jest.fn(async (fn: (client: any) => Promise<any>) => {
+    const client = { query: jest.fn(async () => ({ rows: [] })) };
+    return fn(client);
+  }),
+  query: jest.fn(async () => []),
+  queryOne: jest.fn(async () => null),
+  execute: jest.fn(async () => 0),
+}));
+
 import {
   AGENTIC_RUN_STATUS_REVIEW,
   type AgenticRun,
@@ -14,33 +25,30 @@ function createDeps(existingRun: AgenticRun | null = null) {
 
   const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
 
-  const updateAgenticRunStatus = {
-    run: jest.fn((payload: any) => {
-      const previous = runStore.get(payload.Artikel_Nummer);
-      if (!previous) {
-        return { changes: 0 };
-      }
-      runStore.set(payload.Artikel_Nummer, {
-        ...previous,
-        SearchQuery: payload.SearchQuery,
-        Status: payload.Status,
-        LastModified: payload.LastModified,
-        ReviewState: payload.ReviewState,
-        ReviewedBy: payload.ReviewedBy,
-        LastReviewDecision: payload.LastReviewDecision,
-        LastReviewNotes: payload.LastReviewNotes
-      });
-      return { changes: 1 };
-    })
-  };
+  const updateAgenticRunStatus = jest.fn(async (payload: any) => {
+    const previous = runStore.get(payload.Artikel_Nummer);
+    if (!previous) {
+      return 0;
+    }
+    runStore.set(payload.Artikel_Nummer, {
+      ...previous,
+      SearchQuery: payload.SearchQuery,
+      Status: payload.Status,
+      LastModified: payload.LastModified,
+      ReviewState: payload.ReviewState,
+      ReviewedBy: payload.ReviewedBy,
+      LastReviewDecision: payload.LastReviewDecision,
+      LastReviewNotes: payload.LastReviewNotes
+    });
+    return 1;
+  });
 
   const deps = {
-    db: { transaction: (fn: () => void) => fn } as any,
-    getAgenticRun: { get: jest.fn((itemId: string) => runStore.get(itemId)) } as any,
-    getItemReference: { get: jest.fn(() => ({ Artikel_Nummer: 'R-1' })) } as any,
-    upsertAgenticRun: { run: jest.fn() } as any,
-    updateAgenticRunStatus: updateAgenticRunStatus as any,
-    logEvent: jest.fn(),
+    getAgenticRun: jest.fn(async (itemId: string) => runStore.get(itemId) ?? null),
+    getItemReference: jest.fn(async () => ({ Artikel_Nummer: 'R-1' })),
+    upsertAgenticRun: jest.fn(async () => undefined),
+    updateAgenticRunStatus,
+    logEvent: jest.fn(async () => undefined),
     logger,
     now: () => new Date('2024-01-01T00:00:00.000Z')
   };
