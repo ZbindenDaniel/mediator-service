@@ -47,7 +47,8 @@ const action = defineHttpAction({
       itemUUID: itemRow.ItemUUID,
       ean: itemRow.EAN ?? null,
       serialNumber: itemRow.SerialNumber ?? null,
-      macAddress: itemRow.MacAddress ?? null
+      macAddress: itemRow.MacAddress ?? null,
+      artikelNummer: itemRow.Artikel_Nummer ?? null
     };
 
     const resolved = resolveAltDocDirPath(ctx2, dirConfig);

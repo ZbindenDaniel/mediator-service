@@ -30,8 +30,8 @@ const action = defineHttpAction({
       return sendJson(res, 200, { docs: [] });
     }
 
-    const itemRow = await queryOne<{ ItemUUID: string; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
-      'SELECT i."ItemUUID", i."SerialNumber", i."MacAddress", r."EAN" FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer" WHERE i."ItemUUID" = $1',
+    const itemRow = await queryOne<{ ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
+      'SELECT i."ItemUUID", i."Artikel_Nummer", i."SerialNumber", i."MacAddress", r."EAN" FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer" WHERE i."ItemUUID" = $1',
       [itemUUID]
     );
 
@@ -41,7 +41,8 @@ const action = defineHttpAction({
       itemUUID: itemRow.ItemUUID,
       ean: itemRow.EAN ?? null,
       serialNumber: itemRow.SerialNumber ?? null,
-      macAddress: itemRow.MacAddress ?? null
+      macAddress: itemRow.MacAddress ?? null,
+      artikelNummer: itemRow.Artikel_Nummer ?? null
     };
 
     const docs: ExternalDocSummary[] = ALT_DOC_DIRS.map((dirConfig) => {
@@ -52,6 +53,7 @@ const action = defineHttpAction({
           name: dirConfig.name,
           docType: dirConfig.docType ?? null,
           identifierType: dirConfig.identifierType,
+          identifierValue: null,
           available: false,
           reason: 'identifier_not_set',
           fileCount: 0,
@@ -69,6 +71,7 @@ const action = defineHttpAction({
           name: dirConfig.name,
           docType: dirConfig.docType ?? null,
           identifierType: dirConfig.identifierType,
+          identifierValue: resolved.identifierValue,
           available: false,
           reason: 'directory_unavailable',
           fileCount: 0,
@@ -82,6 +85,7 @@ const action = defineHttpAction({
         name: dirConfig.name,
         docType: dirConfig.docType ?? null,
         identifierType: dirConfig.identifierType,
+        identifierValue: resolved.identifierValue,
         available: true,
         fileCount: fileNames.length,
         files: fileNames.map((fileName) => ({

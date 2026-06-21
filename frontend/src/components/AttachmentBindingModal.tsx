@@ -5,6 +5,7 @@ export interface BindingOption {
   type: string;
   label: string;
   value: string;
+  identifierType: string;
   endpoint: { kind: 'instance' } | { kind: 'external'; dirName: string };
 }
 
@@ -13,6 +14,16 @@ interface Props {
   options: BindingOption[];
   onConfirm: (binding: BindingOption) => void;
   onCancel: () => void;
+}
+
+function identifierTypeLabel(type: string): string {
+  switch (type) {
+    case 'artikelNummer': return 'Artikel-Nr.';
+    case 'serialNumber': return 'SN';
+    case 'macAddress': return 'MAC';
+    case 'ean': return 'EAN';
+    default: return type;
+  }
 }
 
 export default function AttachmentBindingModal({ file, options, onConfirm, onCancel }: Props) {
@@ -59,9 +70,9 @@ export default function AttachmentBindingModal({ file, options, onConfirm, onCan
                 key={opt.type}
                 style={{
                   display: 'flex',
-                  alignItems: 'baseline',
+                  alignItems: 'flex-start',
                   gap: '8px',
-                  marginBottom: '10px',
+                  marginBottom: '12px',
                   cursor: 'pointer'
                 }}
               >
@@ -71,12 +82,15 @@ export default function AttachmentBindingModal({ file, options, onConfirm, onCan
                   value={opt.type}
                   checked={selected === opt.type}
                   onChange={() => setSelected(opt.type)}
+                  style={{ marginTop: '3px' }}
                 />
                 <span>
-                  {opt.label}
-                  <span className="muted" style={{ marginLeft: '6px', fontSize: '0.85em' }}>
-                    {opt.value}
-                  </span>
+                  <span>{opt.label}</span>
+                  {opt.identifierType !== 'instance' && (
+                    <span className="muted" style={{ display: 'block', fontSize: '0.82em', marginTop: '1px' }}>
+                      {identifierTypeLabel(opt.identifierType)}: {opt.value}
+                    </span>
+                  )}
                 </span>
               </label>
             ))}

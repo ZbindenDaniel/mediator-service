@@ -15,9 +15,12 @@ interface AttachmentsCardProps extends AttachmentIdentifiers {
   onChanged: (next: any[]) => void;
 }
 
-type UnifiedRow =
+type ExternalFileRow = { fileName: string; url: string; deletable: boolean };
+
+type RowGroup =
   | { kind: 'instance'; att: any }
-  | { kind: 'external'; dirName: string; docType: string | null; deletable: boolean; fileName: string; url: string };
+  | { kind: 'external-header'; dirName: string; docType: string | null; identifierType: string; identifierValue: string | null }
+  | { kind: 'external-file'; dirName: string; deletable: boolean; fileName: string; url: string };
 
 // Matches labels written on upload: "type:value"
 const BINDING_RE = /^(instance|artikel|serialNumber|macAddress|ean):(.+)$/;
@@ -48,36 +51,53 @@ function identValueForType(type: string, ids: AttachmentIdentifiers): string | n
   }
 }
 
+function identifierTypeLabel(type: string): string {
+  switch (type) {
+    case 'artikelNummer': return 'Artikel-Nr.';
+    case 'serialNumber': return 'SN';
+    case 'macAddress': return 'MAC';
+    case 'ean': return 'EAN';
+    default: return type;
+  }
+}
+
 function buildBindingOptions(itemUUID: string, ids: AttachmentIdentifiers, externalDocs: ExternalDocSummary[]): BindingOption[] {
   const options: BindingOption[] = [
-    { type: 'instance', label: 'Diese Instanz', value: itemUUID, endpoint: { kind: 'instance' } }
+    { type: 'instance', label: 'Diese Instanz', value: itemUUID, identifierType: 'instance', endpoint: { kind: 'instance' } }
   ];
   if (ids.artikelNummer) {
-    options.push({ type: 'artikel', label: 'Artikel (Produktebene)', value: ids.artikelNummer, endpoint: { kind: 'instance' } });
+    options.push({ type: 'artikel', label: 'Artikel (Produktebene)', value: ids.artikelNummer, identifierType: 'artikelNummer', endpoint: { kind: 'instance' } });
   }
   for (const dir of externalDocs) {
     if (!dir.available || !dir.writable) continue;
-    const identValue = identValueForType(dir.identifierType, ids);
+    const identValue = dir.identifierValue || identValueForType(dir.identifierType, ids);
     if (!identValue) continue;
     options.push({
       type: `external:${dir.name}`,
       label: dir.docType || dir.name,
       value: identValue,
+      identifierType: dir.identifierType,
       endpoint: { kind: 'external', dirName: dir.name }
     });
   }
   return options;
 }
 
-function buildRows(attachments: any[], externalDocs: ExternalDocSummary[]): UnifiedRow[] {
-  const rows: UnifiedRow[] = attachments.map(att => ({ kind: 'instance', att }));
+function buildRows(attachments: any[], externalDocs: ExternalDocSummary[]): RowGroup[] {
+  const rows: RowGroup[] = attachments.map(att => ({ kind: 'instance', att }));
   for (const dir of externalDocs) {
     if (!dir.available) continue;
+    rows.push({
+      kind: 'external-header',
+      dirName: dir.name,
+      docType: dir.docType,
+      identifierType: dir.identifierType,
+      identifierValue: dir.identifierValue ?? null
+    });
     for (const file of dir.files) {
       rows.push({
-        kind: 'external',
+        kind: 'external-file',
         dirName: dir.name,
-        docType: dir.docType,
         deletable: dir.deletable,
         fileName: file.fileName,
         url: file.url
@@ -208,6 +228,9 @@ export default function AttachmentsCard({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
+  const instanceCount = attachments.length;
+  const externalCount = externalDocs.reduce((n, d) => n + (d.available ? d.fileCount : 0), 0);
+  const totalCount = instanceCount + externalCount;
   const rows = buildRows(attachments, externalDocs);
 
   return (
@@ -221,7 +244,7 @@ export default function AttachmentsCard({
         />
       )}
       <div className="card">
-        <h3>Anhänge ({rows.length})</h3>
+        <h3>Anhänge ({totalCount})</h3>
         {rows.length > 0 && (
           <table className="details">
             <tbody>
@@ -255,17 +278,29 @@ export default function AttachmentsCard({
                     </tr>
                   );
                 }
+                if (row.kind === 'external-header') {
+                  return (
+                    <tr key={`eh-${row.dirName}`} style={{ borderTop: idx > 0 ? '1px solid var(--border, #ddd)' : undefined }}>
+                      <td colSpan={5} className="muted" style={{ fontSize: '0.82em', paddingTop: '8px', paddingBottom: '2px' }}>
+                        <strong>{row.docType || row.dirName}</strong>
+                        {row.identifierValue && (
+                          <span style={{ marginLeft: '8px' }}>
+                            {identifierTypeLabel(row.identifierType)}: {row.identifierValue}
+                          </span>
+                        )}
+                      </td>
+                      <td />
+                    </tr>
+                  );
+                }
                 return (
-                  <tr key={`e-${idx}`}>
-                    <td>
+                  <tr key={`ef-${row.dirName}-${idx}`}>
+                    <td style={{ paddingLeft: '16px' }}>
                       <a href={row.url} target="_blank" rel="noopener noreferrer">
                         {row.fileName}
                       </a>
                     </td>
-                    <td className="muted" style={{ fontSize: '0.85em' }}>
-                      {row.docType || row.dirName}
-                    </td>
-                    <td className="muted" colSpan={3} />
+                    <td className="muted" colSpan={4} />
                     <td>
                       {row.deletable && (
                         <button
