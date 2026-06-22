@@ -37,7 +37,7 @@ const action = defineHttpAction({
     if (!dirConfig) return sendJson(res, 404, { error: 'directory not found' });
 
     // SN:/MAC: prefix bypasses DB lookup so Phase 2 can upload before item creation
-    let ctx2: { itemUUID: string; ean: string | null; serialNumber: string | null; macAddress: string | null };
+    let ctx2: { itemUUID: string; ean: string | null; serialNumber: string | null; macAddress: string | null; artikelNummer: string | null };
     let resolvedArtikelNummer: string | null = null;
     if (itemUUID.startsWith('SN:') || itemUUID.startsWith('MAC:')) {
       const isSN = itemUUID.startsWith('SN:');
@@ -47,6 +47,7 @@ const action = defineHttpAction({
         ean: null,
         serialNumber: isSN ? identifierValue : null,
         macAddress: isSN ? null : identifierValue,
+        artikelNummer: null,
       };
     } else {
       const itemRow = await queryOne<{ ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
@@ -60,6 +61,7 @@ const action = defineHttpAction({
         ean: itemRow.EAN ?? null,
         serialNumber: itemRow.SerialNumber ?? null,
         macAddress: itemRow.MacAddress ?? null,
+        artikelNummer: itemRow.Artikel_Nummer ?? null,
       };
     }
 

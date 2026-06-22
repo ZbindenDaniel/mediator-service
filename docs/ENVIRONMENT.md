@@ -37,42 +37,75 @@ This document enumerates all environment variables consumed by the mediator serv
 | `MEDIA_DIR` | Deprecated | Legacy variable; ignored by runtime (local storage is fixed to `dist/media`). |
 | `MEDIA_DIR_OVERRIDE` | Deprecated | Legacy variable; ignored by runtime (local storage is fixed to `dist/media`). |
 | `MEDIA_ROOT_DIR` | (unset) | Absolute mounted media root directory used to derive fixed paths: `<root>/shopbilder` (WebDAV) and `<root>/shopbilder-import` (ERP mirror). URLs are rejected. |
-| `ALT_DOC_DIRS` | (unset) | JSON array of alternative document directory configurations. Each entry links a WebDAV mount to a per-item identifier for retrieving documents (wipe reports, test results, certificates). See [Alternative document directories](#alternative-document-directories) below. |
+| `ALT_DOC_DIRS_FILE` | (unset) | Absolute path to a JSON file containing alternative document directory configurations. Each entry links a filesystem/WebDAV mount to a per-item identifier for retrieving documents (wipe reports, test results, certificates, datasheets). See [Alternative document directories](#alternative-document-directories) below. |
 | `INTAKE_TOKEN` | (unset) | Shared secret for the device intake station API. Sent as `X-Intake-Token` header by intake scripts. When unset, intake endpoints accept all requests (development mode). |
 
 Example mounted media root path: `/mnt` (Linux) or `/Volumes` (macOS). The service derives WebDAV at `<root>/shopbilder` and ERP mirror at `<root>/shopbilder-import`. `davs://` URLs are not accepted; only local filesystem mount paths are supported.
 
 ## Alternative document directories
 
-`ALT_DOC_DIRS` enables retrieving files from additional WebDAV directories organized by an identifier other than Artikel_Nummer. Each directory configuration specifies which item field to use as the subdirectory name.
+`ALT_DOC_DIRS_FILE` points to a JSON file that configures additional document mounts. Each entry links a filesystem path (local or mounted WebDAV/NFS/SMB) to a per-item identifier so the service can locate documents without knowing the storage topology.
+
+### Configuration file format
+
+The file must contain a JSON array. Example `/etc/mediator/alt-doc-dirs.json`:
+
+```json
+[
+  {
+    "name": "wipe-reports",
+    "mountPath": "/mnt/wipe-reports",
+    "identifierType": "serialNumber",
+    "docType": "Löschprotokoll"
+  },
+  {
+    "name": "test-results",
+    "mountPath": "/mnt/test-results",
+    "identifierType": "serialNumber",
+    "docType": "Prüfprotokoll"
+  },
+  {
+    "name": "datasheets",
+    "mountPath": "/mnt/datasheets",
+    "identifierType": "ean",
+    "normalize": "uppercase",
+    "docType": "Datenblatt"
+  },
+  {
+    "name": "service-manuals",
+    "mountPath": "/mnt/service-manuals",
+    "identifierType": "artikelNummer",
+    "docType": "Servicehandbuch",
+    "writable": true
+  }
+]
+```
+
+Reference it from `.env`:
+```
+ALT_DOC_DIRS_FILE=/etc/mediator/alt-doc-dirs.json
+```
 
 ### Entry schema
 
 | Field | Required | Description |
 | --- | --- | --- |
 | `name` | Yes | Unique alphanumeric key (hyphens and underscores allowed). Used in API URLs: `/external-docs/<name>/…` |
-| `mountPath` | Yes | Absolute filesystem path to the mounted WebDAV root (must not be a URL). |
-| `identifierType` | Yes | `ean` (product-level), `serialNumber` (per-unit), or `macAddress` (per-unit). |
+| `mountPath` | Yes | Absolute filesystem path to the mounted root (must not be a URL). |
+| `identifierType` | Yes | `ean`, `serialNumber`, `macAddress`, or `artikelNummer` — see scope table below. |
 | `normalize` | No | Optional transformation applied to the identifier before use as a path segment: `uppercase`, `lowercase`, or `strip-colons`. |
-| `docType` | No | Human-readable label shown in the API response and upload modal (e.g. `Löschprotokoll`, `Prüfprotokoll`). |
+| `docType` | No | Human-readable label shown in the UI and API (e.g. `Löschprotokoll`, `Datenblatt`). |
 | `writable` | No | `true` to allow uploading new files via the UI (default: `false`). |
 | `deletable` | No | `true` to allow deleting individual files via the UI (default: `false`). Both flags are independent — a dir can be append-only (`writable: true, deletable: false`). |
 
 ### Identifier scope
 
-- `ean` — resolves from `item_refs.EAN`. All instances of the same product share one EAN directory. Use for product-level documents (e.g. test certificates for a model).
-- `serialNumber` — resolves from `items.SerialNumber`. Per physical unit. Use for per-unit documents (e.g. wipe reports).
-- `macAddress` — resolves from `items.MacAddress`. Per physical unit. Use for per-unit network device documents.
-
-### Example
-
-```
-ALT_DOC_DIRS=[
-  {"name":"wipe-reports","mountPath":"/mnt/wipe-reports","identifierType":"serialNumber","docType":"Löschprotokoll"},
-  {"name":"test-results","mountPath":"/mnt/test-results","identifierType":"ean","normalize":"uppercase","docType":"Prüfprotokoll"},
-  {"name":"intake-scans","mountPath":"/mnt/intake-scans","identifierType":"serialNumber","docType":"Intake-Scan","writable":true}
-]
-```
+| `identifierType` | Source field | Scope | Typical use |
+| --- | --- | --- | --- |
+| `ean` | `item_refs.EAN` | Product-level — shared across all units of a model | Datasheets, EU declarations, model-level certifications |
+| `serialNumber` | `items.SerialNumber` | Per physical unit | Wipe/erasure reports, test results per unit |
+| `macAddress` | `items.MacAddress` | Per physical unit (network devices) | Per-unit config exports, network registration docs |
+| `artikelNummer` | `items.Artikel_Nummer` | Product-level — internal catalog number | Service manuals, supplier documents, repair guides |
 
 ### API endpoints
 
@@ -83,7 +116,7 @@ ALT_DOC_DIRS=[
 
 ### Security
 
-Identifier values are validated against allowlist regexes (EAN: alphanumeric; serial: alphanumeric + `-_`; MAC: hex + `:-`) and then checked with `resolvePathWithinRoot` to prevent path traversal.
+Identifier values are validated against allowlist regexes (EAN: alphanumeric; serial: alphanumeric + `-_`; MAC: hex + `:-`; artikelNummer: alphanumeric + `._-`) and then checked with `resolvePathWithinRoot` to prevent path traversal.
 
 ## Printing
 

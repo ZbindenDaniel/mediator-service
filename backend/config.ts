@@ -630,8 +630,9 @@ export interface AltDocDirectoryConfig {
    * Which item field provides the subdirectory key.
    * Use 'ean' for product-level docs (shared across all instances of a product).
    * Use 'serialNumber' or 'macAddress' for per-unit docs.
+   * Use 'artikelNummer' for internal catalog docs shared across all units of a product.
    */
-  identifierType: 'ean' | 'serialNumber' | 'macAddress';
+  identifierType: 'ean' | 'serialNumber' | 'macAddress' | 'artikelNummer';
   /** Optional transformation applied to the identifier value before use as a path segment */
   normalize?: 'uppercase' | 'lowercase' | 'strip-colons' | null;
   /** Human-readable document category label (e.g. "Löschprotokoll", "Prüfprotokoll") */
@@ -643,11 +644,11 @@ export interface AltDocDirectoryConfig {
 }
 
 const ALT_DOC_DIR_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
-const ALT_DOC_IDENTIFIER_TYPES = new Set<string>(['ean', 'serialNumber', 'macAddress']);
+const ALT_DOC_IDENTIFIER_TYPES = new Set<string>(['ean', 'serialNumber', 'macAddress', 'artikelNummer']);
 const ALT_DOC_NORMALIZE_VALUES = new Set<string>(['uppercase', 'lowercase', 'strip-colons']);
 
-function parseAltDocDirsConfig(raw: string | undefined): AltDocDirectoryConfig[] {
-  if (typeof raw !== 'string' || !raw.trim()) {
+function parseAltDocDirsConfig(raw: string, source: string): AltDocDirectoryConfig[] {
+  if (!raw.trim()) {
     return [];
   }
 
@@ -655,12 +656,12 @@ function parseAltDocDirsConfig(raw: string | undefined): AltDocDirectoryConfig[]
   try {
     parsed = JSON.parse(raw.trim());
   } catch {
-    console.warn('[config] ALT_DOC_DIRS is not valid JSON — ignored. Expected a JSON array of directory configs.');
+    console.warn(`[config] ${source} is not valid JSON — ignored. Expected a JSON array of directory configs.`);
     return [];
   }
 
   if (!Array.isArray(parsed)) {
-    console.warn('[config] ALT_DOC_DIRS must be a JSON array — ignored.');
+    console.warn(`[config] ${source} must be a JSON array — ignored.`);
     return [];
   }
 
@@ -668,22 +669,22 @@ function parseAltDocDirsConfig(raw: string | undefined): AltDocDirectoryConfig[]
   for (let i = 0; i < parsed.length; i++) {
     const entry = parsed[i] as Record<string, unknown>;
     if (!entry || typeof entry !== 'object') {
-      console.warn(`[config] ALT_DOC_DIRS entry at index ${i} is not an object — skipped.`);
+      console.warn(`[config] ${source} entry at index ${i} is not an object — skipped.`);
       continue;
     }
     const name = typeof entry.name === 'string' ? entry.name.trim() : '';
     if (!name || !ALT_DOC_DIR_NAME_PATTERN.test(name)) {
-      console.warn(`[config] ALT_DOC_DIRS entry at index ${i} has invalid or missing "name" (alphanumeric, hyphens, underscores only) — skipped.`);
+      console.warn(`[config] ${source} entry at index ${i} has invalid or missing "name" (alphanumeric, hyphens, underscores only) — skipped.`);
       continue;
     }
     const mountPath = typeof entry.mountPath === 'string' ? entry.mountPath.trim() : '';
     if (!mountPath || !path.isAbsolute(mountPath) || /^[a-z]+:\/\//i.test(mountPath)) {
-      console.warn(`[config] ALT_DOC_DIRS entry "${name}" has invalid "mountPath" (must be an absolute filesystem path, not a URL) — skipped.`);
+      console.warn(`[config] ${source} entry "${name}" has invalid "mountPath" (must be an absolute filesystem path, not a URL) — skipped.`);
       continue;
     }
     const identifierType = typeof entry.identifierType === 'string' ? entry.identifierType.trim() : '';
     if (!ALT_DOC_IDENTIFIER_TYPES.has(identifierType)) {
-      console.warn(`[config] ALT_DOC_DIRS entry "${name}" has invalid "identifierType" "${identifierType}" (must be one of: ean, serialNumber, macAddress) — skipped.`);
+      console.warn(`[config] ${source} entry "${name}" has invalid "identifierType" "${identifierType}" (must be one of: ean, serialNumber, macAddress, artikelNummer) — skipped.`);
       continue;
     }
     const normalizeRaw = typeof entry.normalize === 'string' ? entry.normalize.trim() : null;
@@ -691,7 +692,7 @@ function parseAltDocDirsConfig(raw: string | undefined): AltDocDirectoryConfig[]
       ? (normalizeRaw as AltDocDirectoryConfig['normalize'])
       : null;
     if (normalizeRaw && !normalize) {
-      console.warn(`[config] ALT_DOC_DIRS entry "${name}" has unrecognized "normalize" value "${normalizeRaw}" — treating as null.`);
+      console.warn(`[config] ${source} entry "${name}" has unrecognized "normalize" value "${normalizeRaw}" — treating as null.`);
     }
     const docType = typeof entry.docType === 'string' ? entry.docType.trim() || null : null;
     const writable = entry.writable === true;
@@ -702,9 +703,20 @@ function parseAltDocDirsConfig(raw: string | undefined): AltDocDirectoryConfig[]
   return results;
 }
 
-export const ALT_DOC_DIRS: readonly AltDocDirectoryConfig[] = Object.freeze(
-  parseAltDocDirsConfig(process.env.ALT_DOC_DIRS)
-);
+function loadAltDocDirs(): AltDocDirectoryConfig[] {
+  const filePath = (process.env.ALT_DOC_DIRS_FILE || '').trim();
+  if (!filePath) return [];
+  let raw: string;
+  try {
+    raw = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    console.warn(`[config] ALT_DOC_DIRS_FILE "${filePath}" could not be read — no alternative document directories loaded.`, error);
+    return [];
+  }
+  return parseAltDocDirsConfig(raw, filePath);
+}
+
+export const ALT_DOC_DIRS: readonly AltDocDirectoryConfig[] = Object.freeze(loadAltDocDirs());
 
 if (ALT_DOC_DIRS.length > 0) {
   console.info('[config] Alternative document directory configuration loaded.', {

@@ -111,10 +111,10 @@ POST /api/items/SN:PF1ABCDE/external-docs/intake-scans
 X-Filename: memtest.txt
 ```
 
-Files land at `{mountPath}/{serial}/{filename}`. The item does not need to exist yet. Configure `intake-scans` in `ALT_DOC_DIRS`:
+Files land at `{mountPath}/{serial}/{filename}`. The item does not need to exist yet. Add an `intake-scans` entry to your `ALT_DOC_DIRS_FILE` JSON config:
 
 ```json
-{ "name": "intake-scans", "mountPath": "/mnt/intake-scans", "identifierType": "serialNumber", "writable": true }
+{ "name": "intake-scans", "mountPath": "/mnt/intake-scans", "identifierType": "serialNumber", "docType": "Intake-Scan", "writable": true }
 ```
 
 ## Authentication
