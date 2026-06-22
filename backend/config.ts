@@ -162,6 +162,7 @@ if (!PRINTER_QUEUE_MARKETING) {
 }
 export const LP_COMMAND = (process.env.LP_COMMAND || 'lp').trim() || 'lp';
 export const ADMIN_SECRET = (process.env.ADMIN_SECRET || '').trim();
+export const INTAKE_TOKEN = (process.env.INTAKE_TOKEN || '').trim();
 export const LPSTAT_COMMAND = (process.env.LPSTAT_COMMAND || 'lpstat').trim() || 'lpstat';
 // CUPS_HOST: optional explicit TCP override (e.g. cups:631). Leave unset in Docker compose —
 // CUPS_SERVER env var points cups binaries at the Unix socket instead (CUPS 2.4 dropped

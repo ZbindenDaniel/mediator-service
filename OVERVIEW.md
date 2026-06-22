@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+844. ✅ Device Intake Station API — 4 endpoints + Phase 2 file upload support
+   - **Why:** Alpine Linux netboot image on donated devices needs a minimal API to catalog items without a full UI. State machine routes each device boot to the correct step (select_ref → quality → phase2) based on DB state, so already-completed steps are skipped automatically. Phase 2 test results upload via the existing external-docs endpoint with SN:/MAC: prefix to bypass the DB lookup before item creation.
+   - **Deferred:** scan.txt augmentation of agentic extraction prompt (reading Phase 2 scan results before the agentic run starts); operator notification on completion; InstanceSpecs sync across ref-sharing instances. These are v2 concerns that don't block the core flow.
 843. ✅ Artikelnummer lookup popup as first step of item creation
    - **Why:** Operators were forced to fill in the full basicInfo form (description, categories, dimensions) even for items already cataloged in the ERP. The new `artikelLookup` step shows a debounced search input first — if the operator finds the ref and clicks "Übernehmen", the wizard jumps directly to quality review and then creates the instance from the existing reference. The basicInfo form and matchSelection step are skipped entirely for the fast path.
    - **Deferred:** Auto-lookup by scan (barcode scanner could pre-fill the input); the input requires manual typing for now. The "Weiter erfassen" reset returns to `artikelLookup`, not `basicInfo`.
