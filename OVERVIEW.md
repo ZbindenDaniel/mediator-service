@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+845. ✅ Device Intake Station API — 4 endpoints + Phase 2 file upload support
+   - **Why:** Alpine Linux netboot image on donated devices needs a minimal API to catalog items without a full UI. State machine routes each device boot to the correct step (select_ref → quality → phase2) based on DB state, so already-completed steps are skipped automatically. Phase 2 test results upload via the existing external-docs endpoint with SN:/MAC: prefix to bypass the DB lookup before item creation.
+   - **Deferred:** scan.txt augmentation of agentic extraction prompt (reading Phase 2 scan results before the agentic run starts); operator notification on completion; InstanceSpecs sync across ref-sharing instances. These are v2 concerns that don't block the core flow.
 844. ✅ ALT_DOC_DIRS_FILE config, artikelNummer identifier, and grouped UI for external docs
    - **Why:** Config file (ALT_DOC_DIRS_FILE) replaces the inline JSON env var — easier to read, comment, and diff. Added `artikelNummer` as a fourth identifier type (alongside ean, serialNumber, macAddress), sourced from `items.Artikel_Nummer`, for service manuals and catalog-level supplier docs. UI binding modal now shows two-line options (label + `SN: value`, `EAN: value`, etc.) so operators see exactly where a file will be filed. File list groups external docs under a section header per directory showing the identifier type and value, replacing the flat mixed list. `identifierValue` added to ExternalDocSummary so the resolved identifier is available to the frontend.
    - **Deferred:** Image/photo support in external-docs serving (still PDF/TXT/CSV/XML/JSON only). Automatic cleanup on item delete (by design — no cascade).

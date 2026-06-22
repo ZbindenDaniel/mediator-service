@@ -38,6 +38,7 @@ This document enumerates all environment variables consumed by the mediator serv
 | `MEDIA_DIR_OVERRIDE` | Deprecated | Legacy variable; ignored by runtime (local storage is fixed to `dist/media`). |
 | `MEDIA_ROOT_DIR` | (unset) | Absolute mounted media root directory used to derive fixed paths: `<root>/shopbilder` (WebDAV) and `<root>/shopbilder-import` (ERP mirror). URLs are rejected. |
 | `ALT_DOC_DIRS_FILE` | (unset) | Absolute path to a JSON file containing alternative document directory configurations. Each entry links a filesystem/WebDAV mount to a per-item identifier for retrieving documents (wipe reports, test results, certificates, datasheets). See [Alternative document directories](#alternative-document-directories) below. |
+| `INTAKE_TOKEN` | (unset) | Shared secret for the device intake station API. Sent as `X-Intake-Token` header by intake scripts. When unset, intake endpoints accept all requests (development mode). |
 
 Example mounted media root path: `/mnt` (Linux) or `/Volumes` (macOS). The service derives WebDAV at `<root>/shopbilder` and ERP mirror at `<root>/shopbilder-import`. `davs://` URLs are not accepted; only local filesystem mount paths are supported.
 

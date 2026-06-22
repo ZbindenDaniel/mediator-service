@@ -36,26 +36,40 @@ const action = defineHttpAction({
     const dirConfig = ALT_DOC_DIRS.find(d => d.name === dirName);
     if (!dirConfig) return sendJson(res, 404, { error: 'directory not found' });
 
-    const itemRow = await queryOne<{ ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
-      'SELECT i."ItemUUID", i."Artikel_Nummer", i."SerialNumber", i."MacAddress", r."EAN" FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer" WHERE i."ItemUUID" = $1',
-      [itemUUID]
-    );
-
-    if (!itemRow) return sendJson(res, 404, { error: 'item not found' });
-
-    const ctx2 = {
-      itemUUID: itemRow.ItemUUID,
-      ean: itemRow.EAN ?? null,
-      serialNumber: itemRow.SerialNumber ?? null,
-      macAddress: itemRow.MacAddress ?? null,
-      artikelNummer: itemRow.Artikel_Nummer ?? null
-    };
+    // SN:/MAC: prefix bypasses DB lookup so Phase 2 can upload before item creation
+    let ctx2: { itemUUID: string; ean: string | null; serialNumber: string | null; macAddress: string | null; artikelNummer: string | null };
+    let resolvedArtikelNummer: string | null = null;
+    if (itemUUID.startsWith('SN:') || itemUUID.startsWith('MAC:')) {
+      const isSN = itemUUID.startsWith('SN:');
+      const identifierValue = itemUUID.slice(isSN ? 3 : 4);
+      ctx2 = {
+        itemUUID,
+        ean: null,
+        serialNumber: isSN ? identifierValue : null,
+        macAddress: isSN ? null : identifierValue,
+        artikelNummer: null,
+      };
+    } else {
+      const itemRow = await queryOne<{ ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
+        'SELECT i."ItemUUID", i."Artikel_Nummer", i."SerialNumber", i."MacAddress", r."EAN" FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer" WHERE i."ItemUUID" = $1',
+        [itemUUID]
+      );
+      if (!itemRow) return sendJson(res, 404, { error: 'item not found' });
+      resolvedArtikelNummer = itemRow.Artikel_Nummer ?? null;
+      ctx2 = {
+        itemUUID: itemRow.ItemUUID,
+        ean: itemRow.EAN ?? null,
+        serialNumber: itemRow.SerialNumber ?? null,
+        macAddress: itemRow.MacAddress ?? null,
+        artikelNummer: itemRow.Artikel_Nummer ?? null,
+      };
+    }
 
     const resolved = resolveAltDocDirPath(ctx2, dirConfig);
     if (!resolved) return sendJson(res, 422, { error: 'identifier_not_set' });
 
     const identifier = {
-      artikelNummer: itemRow.Artikel_Nummer ?? null,
+      artikelNummer: resolvedArtikelNummer,
       itemUUID,
       altIdentifierType: dirConfig.identifierType,
       altIdentifierValue: resolved.identifierValue
