@@ -156,36 +156,39 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline =
   }
 
   const labelDialog = isLabelDialogOpen ? (
-        <div className="dialog-overlay" role="presentation" onClick={() => handleLabelDialogClose('overlay')}>
-          <div
-            className="dialog-content"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="label-choice-title"
-            ref={labelDialogRef}
-            tabIndex={-1}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <h4 id="label-choice-title" className="dialog-title">Label drucken</h4>
-            <p className="dialog-message">Bitte wähle den Labeltyp.</p>
-            <div className="dialog-buttons">
-              <button type="button" className="btn" onClick={() => handleLabelSelection('item')}>Gross</button>
-              <button type="button" className="btn" onClick={() => handleLabelSelection('smallitem')}>Klein</button>
-              <button type="button" className="btn" onClick={() => handleLabelSelection('marketingsheet')}>A4 Produktblatt</button>
-            </div>
-          </div>
+    <div className="dialog-overlay" role="presentation" onClick={() => handleLabelDialogClose('overlay')}>
+      <div
+        className="dialog-content"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="label-choice-title"
+        ref={labelDialogRef}
+        tabIndex={-1}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h4 id="label-choice-title" className="dialog-title">Label drucken</h4>
+        <p className="dialog-message">Bitte wähle den Labeltyp.</p>
+        <div className="dialog-buttons">
+          <button type="button" className="btn" onClick={() => handleLabelSelection('item')}>Gross</button>
+          <button type="button" className="btn" onClick={() => handleLabelSelection('smallitem')}>Klein</button>
+          <button type="button" className="btn" onClick={() => handleLabelSelection('marketingsheet')}>A4 Produktblatt</button>
         </div>
+      </div>
+    </div>
   ) : null;
 
   const pdfLink = preview ? (
-    <a
-      href={preview}
-      target="_blank"
-      rel="noopener"
-      className={printSent === false ? 'btn btn--primary print-label-pdf-link' : 'mono print-label-pdf-link'}
-    >
-      {printSent === false ? 'Label als PDF öffnen' : 'PDF'}
-    </a>
+    <button>
+
+      <a
+        href={preview}
+        target="_blank"
+        rel="noopener"
+        className={printSent === false ? 'btn btn--primary print-label-pdf-link' : 'mono print-label-pdf-link'}
+      >
+        {printSent === false ? 'Label als PDF öffnen' : 'PDF'}
+      </a>
+    </button>
   ) : null;
 
   if (inline) {
@@ -201,10 +204,10 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline =
   return (
     <div className="card">
       <div className="card-header">
-        <h3 style={{ width: '70%', margin: 'auto', marginTop: '8px'}}>
-        <button id='printlabelbutton' type="button" className="btn" onClick={handleClick}>
-          Label drucken
-        </button>
+        <h3 style={{ width: '70%', margin: 'auto', marginTop: '8px' }}>
+          <button id='printlabelbutton' type="button" className="btn" onClick={handleClick}>
+            Label drucken
+          </button>
         </h3>
       </div>
       {status && (

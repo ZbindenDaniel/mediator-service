@@ -551,9 +551,9 @@ if (agenticServiceEnabled) {
   const dispatchQueuedRuns = () => {
     // dispatchQueuedAgenticRuns is async; fire-and-forget with local error handling
     void dispatchQueuedAgenticRuns(agenticQueueDependencies, { limit: agenticQueueDispatchLimit }).then((summary) => {
-      if (summary.scheduled || summary.skipped || summary.failed) {
-        console.info('[agentic-service] Queued agentic run dispatch summary', summary);
-      }
+      // if (summary.scheduled || summary.skipped || summary.failed) {
+      //   console.info('[agentic-service] Queued agentic run dispatch summary', summary);
+      // }
     }).catch((err: unknown) => {
       console.error('[agentic-service] Failed to dispatch queued agentic runs', err);
     });

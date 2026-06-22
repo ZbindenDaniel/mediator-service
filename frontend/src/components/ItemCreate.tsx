@@ -1784,15 +1784,25 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
               Foto aufnehmen
             </button>
           )}
-          <label style={{ cursor: 'pointer' }}>
+            <button
+            type="button"
+            onClick={() => document.querySelector<HTMLInputElement>('input[type="file"]')?.click()}
+            >
             Datei wählen
+            </button>
             <input
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={handleOcrFileChange}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleOcrFileChange}
+            ref={(input) => {
+              if (input) {
+              document.querySelectorAll('input[type="file"]').forEach((el, idx) => {
+                if (el === input) return;
+              });
+              }
+            }}
             />
-          </label>
           {ocrPhoto && (
             <>
               <img

@@ -992,130 +992,132 @@ export default function BoxDetail({ boxId }: Props) {
             )}
 
             {effectiveTab === 'items' && (
-            <div className="card">
-              <div className="tab-actions">
-                <button type="button" className="btn" onClick={() => navigate(`/items/new?box=${encodeURIComponent(boxId)}`)}>Neu</button>
-                <button type="button" className="btn" onClick={() => setShowAdd(true)}>Hinzufügen</button>
-                <Link
-                  to={itemsListRoute}
-                  onClick={handleNavigateToItems}
-                  className="btn"
-                >Artikelliste</Link>
-              </div>
-              <div className="item-list-wrapper">
-                <table className="item-list">
-                  <thead>
-                    <tr className="item-list-header">
-                      <th className="col-number">A-Nr</th>
-                      <th className="col-desc">Artikel</th>
-                      <th className="col-stock optional-column">Anzahl</th>
-                      <th className="col-quality optional-column">Qualität</th>
-                      <th className="col-subcategory optional-column">Unterkategorie A</th>
-                      <th className="col-location optional-column">Standort</th>
-                      <th className="col-actions">Aktionen</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groupedItems.length ? (
-                      groupedItems.map((group) => {
-                        const representative = group.representative;
-                        const representativeId = group.summary.representativeItemId;
-                        const subcategoryValue = group.summary.Category
-                          ?? (typeof representative?.Unterkategorien_A === 'number'
-                            ? String(representative.Unterkategorien_A)
-                            : (typeof representative?.Unterkategorien_A === 'string'
-                              ? representative.Unterkategorien_A
-                              : null));
-                        const qualityValue = typeof group.summary.Quality === 'number'
-                          ? group.summary.Quality
-                          : (typeof representative?.Quality === 'number' ? representative.Quality : null);
-                        const removalMessage = representativeId ? removalStatus[representativeId] : null;
-                        const itemNumber = group.summary.Artikel_Nummer || representative?.Artikel_Nummer;
-                        const itemNumberLabel = itemNumber ?? 'Artikel';
-                        const rowLabel = representativeId ? `Artikel ${itemNumberLabel} öffnen` : undefined;
+              <div className="card">
+                <div className="tab-actions">
+                  <button type="button" className="btn" onClick={() => navigate(`/items/new?box=${encodeURIComponent(boxId)}`)}>Neu</button>
+                  <button type="button" className="btn" onClick={() => setShowAdd(true)}>Hinzufügen</button>
+                  <button>
+                    <Link
+                      to={itemsListRoute}
+                      onClick={handleNavigateToItems}
+                      className="btn"
+                    >Artikelliste</Link>
+                  </button>
+                </div>
+                <div className="item-list-wrapper">
+                  <table className="item-list">
+                    <thead>
+                      <tr className="item-list-header">
+                        <th className="col-number">A-Nr</th>
+                        <th className="col-desc">Artikel</th>
+                        <th className="col-stock optional-column">Anzahl</th>
+                        <th className="col-quality optional-column">Qualität</th>
+                        <th className="col-subcategory optional-column">Unterkategorie A</th>
+                        <th className="col-location optional-column">Standort</th>
+                        <th className="col-actions">Aktionen</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupedItems.length ? (
+                        groupedItems.map((group) => {
+                          const representative = group.representative;
+                          const representativeId = group.summary.representativeItemId;
+                          const subcategoryValue = group.summary.Category
+                            ?? (typeof representative?.Unterkategorien_A === 'number'
+                              ? String(representative.Unterkategorien_A)
+                              : (typeof representative?.Unterkategorien_A === 'string'
+                                ? representative.Unterkategorien_A
+                                : null));
+                          const qualityValue = typeof group.summary.Quality === 'number'
+                            ? group.summary.Quality
+                            : (typeof representative?.Quality === 'number' ? representative.Quality : null);
+                          const removalMessage = representativeId ? removalStatus[representativeId] : null;
+                          const itemNumber = group.summary.Artikel_Nummer || representative?.Artikel_Nummer;
+                          const itemNumberLabel = itemNumber ?? 'Artikel';
+                          const rowLabel = representativeId ? `Artikel ${itemNumberLabel} öffnen` : undefined;
 
-                            return (
-                              <tr
-                                key={group.key}
-                                tabIndex={representativeId ? 0 : -1}
-                                role={representativeId ? 'link' : undefined}
-                                aria-label={rowLabel}
-                                onClick={representativeId ? () => handleRowNavigate(representativeId, 'click') : undefined}
-                                onKeyDown={representativeId ? (event) => {
-                                  if (event.key === 'Enter' || event.key === ' ') {
-                                    event.preventDefault();
-                                    handleRowNavigate(representativeId, 'keyboard');
-                                  }
-                                } : undefined}
-                              >
-                                <td className="col-number">
-                                  {itemNumber ?? '—'}
-                                </td>
-                                <td className="col-desc">
-                                  {representative?.Artikelbeschreibung ?? '—'}
-                                </td>
-                                <td className="col-stock optional-column">
-                                  {resolveDisplayCount(group)}
-                                </td>
-                                <td className="col-quality optional-column">
-                                  <QualityBadge compact value={qualityValue} />
-                                </td>
-                                <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
-                                <td className="col-location optional-column">
-                                  {representative ? <LocationTag item={representative} itemId={representativeId ?? undefined} /> : '—'}
-                                </td>
-                                <td className="col-actions">
-                                  {representativeId ? (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className="btn"
-                                        onClick={(event) => {
-                                          event.stopPropagation();
-                                          removeItem(representativeId);
-                                        }}
-                                        aria-label={`Artikel ${itemNumberLabel} entnehmen`}
-                                      >
-                                        Entnehmen
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <span className="muted">Keine Aktion verfügbar</span>
-                                  )}
-                                  {removalMessage ? (
-                                    <div className="muted">{removalMessage}</div>
-                                  ) : null}
-                                </td>
-                              </tr>
-                            );
-                          })
-                        ) : (
-                          <tr>
-                            <td className="muted" colSpan={8}>Keine Artikel in diesem Behälter.</td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-            </div>
+                          return (
+                            <tr
+                              key={group.key}
+                              tabIndex={representativeId ? 0 : -1}
+                              role={representativeId ? 'link' : undefined}
+                              aria-label={rowLabel}
+                              onClick={representativeId ? () => handleRowNavigate(representativeId, 'click') : undefined}
+                              onKeyDown={representativeId ? (event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  handleRowNavigate(representativeId, 'keyboard');
+                                }
+                              } : undefined}
+                            >
+                              <td className="col-number">
+                                {itemNumber ?? '—'}
+                              </td>
+                              <td className="col-desc">
+                                {representative?.Artikelbeschreibung ?? '—'}
+                              </td>
+                              <td className="col-stock optional-column">
+                                {resolveDisplayCount(group)}
+                              </td>
+                              <td className="col-quality optional-column">
+                                <QualityBadge compact value={qualityValue} />
+                              </td>
+                              <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
+                              <td className="col-location optional-column">
+                                {representative ? <LocationTag item={representative} itemId={representativeId ?? undefined} /> : '—'}
+                              </td>
+                              <td className="col-actions">
+                                {representativeId ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className="btn"
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        removeItem(representativeId);
+                                      }}
+                                      aria-label={`Artikel ${itemNumberLabel} entnehmen`}
+                                    >
+                                      Entnehmen
+                                    </button>
+                                  </>
+                                ) : (
+                                  <span className="muted">Keine Aktion verfügbar</span>
+                                )}
+                                {removalMessage ? (
+                                  <div className="muted">{removalMessage}</div>
+                                ) : null}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td className="muted" colSpan={8}>Keine Artikel in diesem Behälter.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             )}
 
             {effectiveTab === 'events' && (
-            <div className="card">
-              <h3>Aktivitäten</h3>
-              {displayedEvents.length === 0 ? (
-                <p className="muted">Keine Aktivitäten.</p>
-              ) : (
-                <ul className="events">
-                  {displayedEvents.map((ev) => (
-                    <li key={ev.Id}>
-                      <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
-                      {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+              <div className="card">
+                <h3>Aktivitäten</h3>
+                {displayedEvents.length === 0 ? (
+                  <p className="muted">Keine Aktivitäten.</p>
+                ) : (
+                  <ul className="events">
+                    {displayedEvents.map((ev) => (
+                      <li key={ev.Id}>
+                        <span className="muted">[{formatDateTime(ev.CreatedAt)}]</span>{' '}
+                        {resolveActorName(ev.Actor)}{': ' + eventLabel(ev.Event)}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             )}
 
             {effectiveTab === 'stubs' && isShelf && (
