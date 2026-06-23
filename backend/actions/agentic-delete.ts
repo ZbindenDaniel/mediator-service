@@ -45,10 +45,6 @@ const action = defineHttpAction({
     if (route?.legacyRoute) {
       console.warn('[agentic-delete] Legacy /api/items route used for delete', { itemId, path: req.url });
     }
-    if (itemId.startsWith('I-')) {
-      console.warn('[agentic-delete] Rejecting ItemUUID for agentic delete', { itemId, legacyRoute: route?.legacyRoute });
-      return sendJson(res, 400, { error: 'ItemUUID not supported for agentic delete' });
-    }
 
     let rawBody = '';
     try {

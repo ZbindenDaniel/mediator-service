@@ -359,6 +359,9 @@ button {
     border-bottom: 1px solid var(--border, #e1e4e8);
 }
 
+/* Hidden on desktop; mobile media query below shows it */
+.mobile-back-btn { display: none; }
+
 @media (max-width: 900px) {
 
     /* Clip off-screen panel during slide */
