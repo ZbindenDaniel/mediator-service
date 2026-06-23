@@ -359,8 +359,25 @@ button {
     border-bottom: 1px solid var(--border, #e1e4e8);
 }
 
-/* Hidden on desktop; mobile media query below shows it */
-.mobile-back-btn { display: none; }
+@media (min-width: 901px) {
+    .app-shell--mobile-list .app-shell__right {
+        display: none;
+    }
+    .app-shell--mobile-list .panel-main {
+        flex: 0 0 100%;
+    }
+    .mobile-back-btn {
+        display: block;
+        width: auto;
+        padding: 6px 14px;
+        background: var(--bg, #f6f8fa);
+        border: 1px solid var(--line, #d0d0d0);
+        border-radius: 4px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        margin: 8px 0 0 8px;
+    }
+}
 
 @media (max-width: 900px) {
 
