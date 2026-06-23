@@ -59,7 +59,7 @@ async function findItemByIdentifier(serial: string | null, mac: string | null) {
   return null;
 }
 
-async function findRefCandidates(vendor: string | null, model: string | null): Promise<IntakeRefCandidate[]> {
+async function findRefCandidates(vendor: string | null | undefined, model: string | null | undefined): Promise<IntakeRefCandidate[]> {
   if (!vendor && !model) return [];
   const term = `%${[vendor, model].filter(Boolean).join(' ')}%`;
   const rows = await query<{

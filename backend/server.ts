@@ -859,8 +859,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         res.writeHead(404); return res.end('Not found');
       }
 
-      const itemRow = await queryOne<{ ItemUUID: string; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
-        'SELECT i."ItemUUID", i."SerialNumber", i."MacAddress", r."EAN" FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer" WHERE i."ItemUUID" = $1',
+      const itemRow = await queryOne<{ ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null; MacAddress: string | null; EAN: string | null }>(
+        'SELECT i."ItemUUID", i."Artikel_Nummer", i."SerialNumber", i."MacAddress", r."EAN" FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer" WHERE i."ItemUUID" = $1',
         [itemUUID]
       ) ?? undefined;
 
@@ -872,7 +872,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         itemUUID: itemRow.ItemUUID,
         ean: itemRow.EAN ?? null,
         serialNumber: itemRow.SerialNumber ?? null,
-        macAddress: itemRow.MacAddress ?? null
+        macAddress: itemRow.MacAddress ?? null,
+        artikelNummer: itemRow.Artikel_Nummer ?? null
       };
 
       const resolved = resolveAltDocDirPath(resolveCtx, dirConfig);

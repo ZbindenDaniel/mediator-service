@@ -30,8 +30,8 @@ export function preFillQualityQuestions(
       type: q.type as IntakeQuestion['type'],
       question: q.question,
     };
-    if (q.values) result.values = q.values;
-    if ((q as any).suggestions) result.suggestions = (q as any).suggestions;
+    if ('values' in q && q.values) result.values = q.values;
+    if ('suggestions' in q && q.suggestions) result.suggestions = q.suggestions;
     if (q.specField) result.specField = q.specField;
     if (defaultValue !== undefined) result.defaultValue = defaultValue;
     if (q.showIf) result.showIf = q.showIf;

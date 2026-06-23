@@ -969,18 +969,20 @@ const action = defineHttpAction({
             itemUUID: itemId,
             ean: typeof item.EAN === 'string' ? item.EAN : null,
             serialNumber: typeof item.SerialNumber === 'string' ? item.SerialNumber : null,
-            macAddress: typeof item.MacAddress === 'string' ? item.MacAddress : null
+            macAddress: typeof item.MacAddress === 'string' ? item.MacAddress : null,
+            artikelNummer: typeof item.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : null
           };
           externalDocs = ALT_DOC_DIRS.map((dirConfig) => {
             const resolved = resolveAltDocDirPath(resolveCtx, dirConfig);
             if (!resolved) {
-              return { name: dirConfig.name, docType: dirConfig.docType ?? null, identifierType: dirConfig.identifierType, available: false, reason: 'identifier_not_set', fileCount: 0, files: [], writable: false, deletable: false };
+              return { name: dirConfig.name, docType: dirConfig.docType ?? null, identifierType: dirConfig.identifierType, identifierValue: null, available: false, reason: 'identifier_not_set', fileCount: 0, files: [], writable: false, deletable: false };
             }
             const fileNames = listFilesInAltDocDirectory(dirConfig.mountPath, resolved.identifierValue);
             return {
               name: dirConfig.name,
               docType: dirConfig.docType ?? null,
               identifierType: dirConfig.identifierType,
+              identifierValue: resolved.identifierValue,
               available: true,
               fileCount: fileNames.length,
               files: fileNames.map((fileName) => ({ fileName, url: buildExternalDocUrl(dirConfig.name, itemId, fileName) })),

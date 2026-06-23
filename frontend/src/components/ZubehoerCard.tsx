@@ -249,7 +249,7 @@ export default function ZubehoerCard({
                     <td className="muted">{ref.availableCount ?? 0} auf Lager</td>
                     {artikelNummer && (
                       <td>
-                        <button type="button" className="sml-btn btn" onClick={() => handleRemoveCompatRef(ref.Artikel_Nummer)} title="Kompatibilität entfernen">✕</button>
+                        <button type="button" className="btn" onClick={() => handleRemoveCompatRef(ref.Artikel_Nummer)} title="Kompatibilität entfernen">✕</button>
                       </td>
                     )}
                   </tr>
@@ -282,7 +282,7 @@ export default function ZubehoerCard({
                     <td className="muted">{ref.RelationType}</td>
                     {artikelNummer && (
                       <td>
-                        <button type="button" className="sml-btn btn" onClick={() => handleRemoveParentRef(ref.Artikel_Nummer)} title="Zugehörigkeit entfernen">✕</button>
+                        <button type="button" className="sbtn" onClick={() => handleRemoveParentRef(ref.Artikel_Nummer)} title="Zugehörigkeit entfernen">✕</button>
                       </td>
                     )}
                   </tr>
@@ -352,12 +352,12 @@ export default function ZubehoerCard({
                           <span className="muted"> · Nicht vorhanden (laut Qualitätsprüfung)</span>
                         )}
                       </td>
-                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <td>
                         {(state === 'potential' || state === 'empty') && (
-                          <div style={{ position: 'relative', display: 'inline-block' }}>
+                          <div>
                             <button
                               type="button"
-                              className="btn sml-btn"
+                              className="btn"
                               onClick={() => setOpenPopupSlot(openPopupSlot === part.key ? null : part.key)}
                             >
                               Hinzufügen
@@ -381,7 +381,7 @@ export default function ZubehoerCard({
                         {state === 'cataloged' && (
                           <button
                             type="button"
-                            className="btn sml-btn"
+                            className="btn"
                             onClick={() => {
                               setRemoveSlotKey(isRemoveOpen ? null : part.key);
                               setRemoveBoxInput('');
@@ -394,7 +394,7 @@ export default function ZubehoerCard({
                         {state === 'cataloged' && sparePart && (
                           <button
                             type="button"
-                            className="btn sml-btn"
+                            className="btn"
                             style={{ marginLeft: '4px' }}
                             title="Verknüpfung aufheben und Instanz löschen"
                             onClick={async () => {
@@ -457,7 +457,7 @@ export default function ZubehoerCard({
                               disabled={removePending}
                               autoFocus
                             />
-                            <button type="submit" className="btn btn--primary sml-btn" disabled={removePending || !removeBoxInput.trim()}>
+                            <button type="submit" className="btn btn--primary" disabled={removePending || !removeBoxInput.trim()}>
                               {removePending ? '…' : 'Entnehmen'}
                             </button>
                             {removeError && <span style={{ color: 'var(--color-error, #d73a49)' }}>{removeError}</span>}
