@@ -82,6 +82,7 @@
       "label": "SSD / HDD",
       "targetSubcategory": 901,
       "multipleAllowed": true,
+      "noLink": true,
       "question": {
         "id": "storage_gb",
         "type": "select",

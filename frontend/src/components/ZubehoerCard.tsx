@@ -269,21 +269,38 @@ export default function ZubehoerCard({
     } catch { /* noop */ }
   }
 
+  /** Clears a quality answer locally and on the backend (empty string clears the key). */
+  async function handleClearAnswer(questionId: string) {
+    const actor = await ensureUser();
+    if (!actor) return;
+    const next = { ...qualityResponses };
+    delete next[questionId];
+    // Optimistically clear locally; POST the cleaned set to persist
+    onQualityResponseChanged?.(next);
+    try {
+      await fetch(`/api/items/${encodeURIComponent(itemUUID)}/quality-review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers: next, reviewed_by: actor, subCategory: subCategory ?? undefined })
+      });
+    } catch { /* noop — local state already updated */ }
+  }
+
   /** Renders a compact inline widget for answering a quality question. */
   function renderInlineQuestion(q: QualityQuestion, currentAnswer: string | undefined) {
     const pending = answerPending === q.id;
     if (q.type === 'boolean') {
       return (
-        <span style={{ display: 'inline-flex', gap: '4px', marginLeft: '8px' }}>
+        <span className="quality-review-step__toggle-group" style={{ marginLeft: '8px' }}>
           <button
             type="button"
-            className={`sml-btn btn${currentAnswer === 'true' ? ' btn--primary' : ''}`}
+            className={`quality-review-step__toggle${currentAnswer === 'true' ? ' quality-review-step__toggle--active' : ''}`}
             disabled={pending}
             onClick={() => handleSlotAnswer(q.id, 'true')}
           >Ja</button>
           <button
             type="button"
-            className={`sml-btn btn${currentAnswer === 'false' ? ' btn--primary' : ''}`}
+            className={`quality-review-step__toggle${currentAnswer === 'false' ? ' quality-review-step__toggle--active' : ''}`}
             disabled={pending}
             onClick={() => handleSlotAnswer(q.id, 'false')}
           >Nein</button>
@@ -327,7 +344,8 @@ export default function ZubehoerCard({
                   (r: any) => r.RelationType === 'Ersatzteil' && r.SubCategory === part.targetSubcategory
                 ) ?? null;
 
-                const canErfassen = state === 'unknown' || state === 'present' || state === 'empty';
+                // noLink parts (e.g. storage) only show spec answers, no item linking
+                const canErfassen = !part.noLink && (state === 'unknown' || state === 'present' || state === 'empty' || state === 'removed');
 
                 return (
                   <React.Fragment key={part.key}>
@@ -361,18 +379,35 @@ export default function ZubehoerCard({
                         {specResult && !sparePart && (
                           <span className="muted" style={{ marginLeft: '6px' }}>{specResult.label}</span>
                         )}
-                        {/* Empty note */}
+                        {/* Empty state: show label + ✎ reset button */}
                         {state === 'empty' && (
-                          <span className="muted"> · Nicht vorhanden</span>
+                          <>
+                            <span className="muted"> · Nicht vorhanden</span>
+                            {q && (
+                              <button
+                                type="button"
+                                className="sml-btn btn"
+                                style={{ marginLeft: '6px', fontSize: '0.72em', padding: '1px 5px' }}
+                                title="Antwort zurücksetzen"
+                                onClick={() => handleClearAnswer(q.id)}
+                              >✎</button>
+                            )}
+                          </>
                         )}
-                        {/* Inline quality question for unknown/unanswered parts */}
-                        {q && (state === 'unknown' || (state === 'present' && !specResult)) && (
+                        {/* Inline quality question for unknown/unanswered parts and removed (re-catalog) */}
+                        {q && (state === 'unknown' || state === 'removed' || (state === 'present' && !specResult)) && (
                           renderInlineQuestion(q, currentAnswer)
                         )}
-                        {/* Show edit toggle for answered select (spec) questions */}
+                        {/* Show editable select for answered spec questions */}
                         {q && q.type === 'select' && state === 'present' && specResult && (
                           <span style={{ marginLeft: '6px' }}>
                             {renderInlineQuestion(q, currentAnswer)}
+                          </span>
+                        )}
+                        {/* Secondary specQuestion widget (e.g. drive_type for storage) */}
+                        {part.specQuestion && (state === 'present' || state === 'unknown' || state === 'removed') && (
+                          <span style={{ marginLeft: '4px' }}>
+                            {renderInlineQuestion(part.specQuestion, qualityResponses[part.specQuestion.id])}
                           </span>
                         )}
                       </td>

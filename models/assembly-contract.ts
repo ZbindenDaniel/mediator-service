@@ -5,6 +5,8 @@ export interface AssemblyPart {
   label: string;
   targetSubcategory: number;
   multipleAllowed?: boolean;
+  /** When true, this slot has no item link — spec answer is sufficient (e.g. storage). */
+  noLink?: boolean;
   /** Primary question — presence (boolean) or spec (select). Used for quality scoring. */
   question?: QualityQuestion;
   /** Secondary spec question, e.g. drive_type alongside storage_gb. Not used for quality scoring. */

@@ -112,7 +112,7 @@ const action = defineHttpAction({
 
       await withTransaction(async (client) => {
         await client.query(
-          `INSERT INTO item_refs ("Artikel_Nummer","Artikelbeschreibung","Hersteller","SubCategory","CreatedAt","UpdatedAt")
+          `INSERT INTO item_refs ("Artikel_Nummer","Artikelbeschreibung","Hersteller","Unterkategorien_A","CreatedAt","UpdatedAt")
            VALUES ($1,$2,$3,$4,$5,$5)`,
           [next, artikelbeschreibung, hersteller || null, subCategory, now]
         );
