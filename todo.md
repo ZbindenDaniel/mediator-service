@@ -27,6 +27,14 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0t. ✅ **Agentic delete silent failure + "← Liste" button on desktop fixed** (see OVERVIEW 848).
+
+0s. ✅ **Lagerort link, duplicate fetch, price/image columns fixed** (see OVERVIEW 847).
+
+0q. ✅ **7 UI/UX bugs fixed** (quality save on kandidat path, accessories popup portal, description carry-forward, help pages in Docker, stats enrichment label, QA toggle CSS, quality GET await).
+
+0r. **Ersatzteile: "Hinzufügen" popup needs a close-on-backdrop-click escape for accessibility** — the new portal dialog closes on backdrop click already; verify with screen reader that `aria-modal` and focus-trap work correctly.
+
 0k. ✅ **Test suite re-hardened: 637 tests passing.** Added coverage for `cancellation.ts`, `utils/json.ts`, `flow/prompts.ts`, `lib/itemGrouping.ts`, `result-handler.ts`, `forward-agentic-trigger.ts`, `models/quality.ts`. Fixed inverted `deriveAiPriorityFromAssessment` (high quality was mapped to low priority). 9 skipped; 0 failing.
 0l. **Deferred test rewrites still needed:** `test/csv-ingest-*.test.ts` (9 files) + `test/export-items.test.ts` + `test/langtext-contract.test.ts` + `test/list-items-for-export-order.test.ts` + `test/save-item-quality.test.ts` + `test/item-category-roundtrip.test.ts` + `test/item-persistence-reference-behavior.test.ts` — all use SQLite `db.exec`/`persistItem` directly and need full Postgres mock rewrites. Many frontend component tests still deferred (React + complex deps).
 0m. **Ersatzteile Entnehmen: add "direkt verkaufen" path.** Currently Entnehmen always requires a Behälter-ID (storage location). When a spare part is sold immediately, no storage location is needed — instead the quantity should go to 0. UI change: show "Wird der Artikel eingelagert?" prompt in the Entnehmen flow; "Ja" → existing relocate flow; "Nein" → set Qty=0, no location required.

@@ -3,7 +3,7 @@ import type { SimilarItem } from './forms/useSimilarItems';
 
 interface Props {
   onSelect: (ref: SimilarItem) => void;
-  onSkip: () => void;
+  onSkip: (query?: string) => void;
   layout?: 'page' | 'embedded';
 }
 
@@ -126,7 +126,7 @@ export default function ArtikelNummerLookupStep({ onSelect, onSkip, layout = 'pa
         className="item-create__step-actions"
         style={{ borderTop: '1px solid var(--line, #e0e0e0)', paddingTop: '1rem', marginTop: '1rem' }}
       >
-        <button type="button" className="btn btn--secondary" onClick={onSkip}>
+        <button type="button" className="btn btn--secondary" onClick={() => onSkip(query.trim() || undefined)}>
           Ohne Artikelnummer weiter →
         </button>
       </div>

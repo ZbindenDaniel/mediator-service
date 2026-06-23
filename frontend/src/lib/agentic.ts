@@ -331,11 +331,6 @@ export async function persistAgenticRunDeletion({
     logger.warn?.(message, { artikelNummer });
     return { ok: false, status: 400, agentic: null, message, reason: 'missing-artikel-nummer' };
   }
-  if (trimmedArtikelNummer.startsWith('I-') || !/^\d+$/.test(trimmedArtikelNummer)) {
-    const message = `KI-Löschung übersprungen (${context}): ungültige Artikel_Nummer`;
-    logger.warn?.(message, { artikelNummer: trimmedArtikelNummer });
-    return { ok: false, status: 400, agentic: null, message, reason: 'missing-artikel-nummer' };
-  }
 
   const sanitizedActor = actor && actor.trim() ? actor.trim() : 'system';
   const sanitizedReason = reason && reason.trim() ? reason.trim() : null;

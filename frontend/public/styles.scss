@@ -359,6 +359,26 @@ button {
     border-bottom: 1px solid var(--border, #e1e4e8);
 }
 
+@media (min-width: 901px) {
+    .app-shell--mobile-list .app-shell__right {
+        display: none;
+    }
+    .app-shell--mobile-list .panel-main {
+        flex: 0 0 100%;
+    }
+    .mobile-back-btn {
+        display: block;
+        width: auto;
+        padding: 6px 14px;
+        background: var(--bg, #f6f8fa);
+        border: 1px solid var(--line, #d0d0d0);
+        border-radius: 4px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        margin: 8px 0 0 8px;
+    }
+}
+
 @media (max-width: 900px) {
 
     /* Clip off-screen panel during slide */
@@ -2393,6 +2413,20 @@ button:focus {
     min-width: 90px;
 }
 
+.col-price,
+.col-image {
+    text-align: center;
+    width: 2.5rem;
+    min-width: 2.5rem;
+}
+
+.col-desc {
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 @media (min-width: 960px) {
     .item-list .optional-column {
         display: table-cell;
@@ -3081,6 +3115,43 @@ button:focus {
     font-size: 9px;
     height: auto;
     min-width: unset;
+}
+
+.quality-review-step__toggle-group {
+    display: flex;
+    gap: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--line, #d0d0d0);
+    width: fit-content;
+}
+
+.quality-review-step__toggle {
+    padding: 0.3rem 1rem;
+    background: var(--bg, #fff);
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--fg, #222);
+    transition: background 0.15s, color 0.15s;
+
+    &:not(:last-child) {
+        border-right: 1px solid var(--line, #d0d0d0);
+    }
+
+    &:hover {
+        background: #f0f0f0;
+    }
+
+    &--active {
+        background: var(--accent, #3b82f6);
+        color: #fff;
+        font-weight: 600;
+
+        &:hover {
+            background: #2563eb;
+        }
+    }
 }
 
 .quality-missing-hint {

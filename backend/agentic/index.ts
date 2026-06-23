@@ -327,11 +327,6 @@ function resolveAgenticArtikelNummer(
     return { artikelNummer: null, reason: 'missing-item-id', sourceItemId: '' };
   }
 
-  if (trimmed.startsWith('I-')) {
-    logger.warn?.('[agentic-service] Agentic run expects Artikel_Nummer, received ItemUUID', { itemId: trimmed });
-    return { artikelNummer: null, reason: 'invalid-item-id', sourceItemId: trimmed };
-  }
-
   return { artikelNummer: trimmed, reason: null, sourceItemId: trimmed };
 }
 

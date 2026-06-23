@@ -1035,7 +1035,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
 
   async function submitNewItem(
     data: Partial<ItemFormData>,
-    context: string
+    context: string,
+    qualityResultOverride?: QualityReviewResult | null
   ) {
     if (creating) {
       console.warn('Item creation already running. Ignoring duplicate submit.', { context });
@@ -1186,7 +1187,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
         console.info('Skipping client-side agentic trigger because backend already dispatched.', { context });
       }
 
-      if (qualityReviewResult) {
+      const effectiveQualityResult = qualityResultOverride !== undefined ? qualityResultOverride : qualityReviewResult;
+      if (effectiveQualityResult) {
         const itemUUIDs = responseItems.length > 0
           ? responseItems.map((i) => (typeof i?.ItemUUID === 'string' ? i.ItemUUID.trim() : '')).filter(Boolean)
           : createdItem?.ItemUUID ? [createdItem.ItemUUID] : [];
@@ -1199,9 +1201,9 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    answers: qualityReviewResult.contractAnswers,
-                    subCategory: qualityReviewResult.subCategory,
-                    notes: qualityReviewResult.assessment.notes,
+                    answers: effectiveQualityResult.contractAnswers,
+                    subCategory: effectiveQualityResult.subCategory,
+                    notes: effectiveQualityResult.assessment.notes,
                     reviewed_by: reviewedBy,
                   })
                 }).then((r) => {
@@ -1255,7 +1257,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
           artikelNummer,
           artikelbeschreibung: searchText,
           ...(ocrPhoto ? { imageData: ocrPhoto } : {}),
-          ...(qualityReviewResult?.aiPriority ? { priority: qualityReviewResult.aiPriority } : {})
+          ...(effectiveQualityResult?.aiPriority ? { priority: effectiveQualityResult.aiPriority } : {})
         };
 
         try {
@@ -1412,10 +1414,10 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
               <div>{successMessage}</div>
               <div>Artikelnummer: {artikelNummer || 'Unbekannt'}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                {qualityReviewResult ? (
+                {effectiveQualityResult ? (
                   <>
                     <span>Qualität:</span>
-                    <QualityBadge value={qualityReviewResult.assessment.value} />
+                    <QualityBadge value={effectiveQualityResult.assessment.value} />
                   </>
                 ) : qualitySkippedForMultiple ? (
                   <span className="muted">Qualität bitte bei jedem Exemplar einzeln bewerten.</span>
@@ -1540,15 +1542,20 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
     setCreationStep('qualityReview');
   };
 
-  const handleArtikelLookupSkip = () => {
+  const handleArtikelLookupSkip = (query?: string) => {
     setSelectedRef(null);
+    // Pre-fill basicInfo with whatever the user typed in the lookup so they don't have to retype it
+    if (query) {
+      setBasicInfo((prev) => ({ ...prev, Artikelbeschreibung: prev.Artikelbeschreibung ?? query }));
+    }
     setCreationStep('basicInfo');
   };
 
   const handleQualityReviewComplete = (result: QualityReviewResult) => {
     setQualityReviewResult(result);
     if (selectedRef) {
-      handleMatchSelection(selectedRef);
+      // Pass result directly — qualityReviewResult state update is async and would be stale inside handleMatchSelection
+      void handleMatchSelection(selectedRef, result);
     } else {
       setCreationStep('matchSelection');
     }
@@ -1563,7 +1570,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
     }
   };
 
-  const handleMatchSelection = async (item: SimilarItem) => {
+  const handleMatchSelection = async (item: SimilarItem, qualityResultOverride?: QualityReviewResult | null) => {
     if (creating) {
       console.warn('Skipping match selection submit; creation already running.');
       return;
@@ -1658,7 +1665,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
       if (ocrPhoto && !clone.picture1) {
         clone.picture1 = ocrPhoto;
       }
-      await submitNewItem(clone, 'match-selection');
+      await submitNewItem(clone, 'match-selection', qualityResultOverride);
     } catch (err) {
       console.error('Failed to create item from duplicate selection', err);
     }
@@ -1766,7 +1773,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
     return (
       <ArtikelNummerLookupStep
         onSelect={handleArtikelLookupSelect}
-        onSkip={handleArtikelLookupSkip}
+        onSkip={(q) => handleArtikelLookupSkip(q)}
         layout={layout}
       />
     );
