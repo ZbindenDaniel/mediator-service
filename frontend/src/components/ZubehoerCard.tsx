@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import RefSearchInput, { type RefSuggestion } from './RefSearchInput';
 import ZubehoerBadge from './ZubehoerBadge';
 import SparepartSlotPopup from './SparepartSlotPopup';
+import RelocateItemCard from './RelocateItemCard';
 import { usePanelContext } from '../context/PanelContext';
 import type { AssemblyContract, AssemblyPart } from '../../../models/assembly-contract';
 import type { QualityQuestion } from '../../../models/quality-contract';
@@ -117,9 +118,6 @@ export default function ZubehoerCard({
 
   const [openPopupSlot, setOpenPopupSlot] = React.useState<string | null>(null);
   const [removeSlotKey, setRemoveSlotKey] = React.useState<string | null>(null);
-  const [removeBoxInput, setRemoveBoxInput] = React.useState('');
-  const [removePending, setRemovePending] = React.useState(false);
-  const [removeError, setRemoveError] = React.useState<string | null>(null);
 
   const [localCompatRefs, setLocalCompatRefs] = React.useState<any[]>(compatibleAccessoryRefs);
   const [localParentRefs, setLocalParentRefs] = React.useState<any[]>(compatibleParentRefs);
@@ -269,13 +267,12 @@ export default function ZubehoerCard({
     } catch { /* noop */ }
   }
 
-  /** Clears a quality answer locally and on the backend (empty string clears the key). */
+  /** Clears a quality answer locally and on the backend. Called when toggling off an active boolean answer. */
   async function handleClearAnswer(questionId: string) {
     const actor = await ensureUser();
     if (!actor) return;
     const next = { ...qualityResponses };
     delete next[questionId];
-    // Optimistically clear locally; POST the cleaned set to persist
     onQualityResponseChanged?.(next);
     try {
       await fetch(`/api/items/${encodeURIComponent(itemUUID)}/quality-review`, {
@@ -290,19 +287,21 @@ export default function ZubehoerCard({
   function renderInlineQuestion(q: QualityQuestion, currentAnswer: string | undefined) {
     const pending = answerPending === q.id;
     if (q.type === 'boolean') {
+      const isYes = currentAnswer === 'true';
+      const isNo = currentAnswer === 'false';
       return (
-        <span className="quality-review-step__toggle-group" style={{ marginLeft: '8px' }}>
+        <span style={{ display: 'inline-flex', marginLeft: '8px', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--line, #ddd)' }}>
           <button
             type="button"
-            className={`quality-review-step__toggle${currentAnswer === 'true' ? ' quality-review-step__toggle--active' : ''}`}
             disabled={pending}
-            onClick={() => handleSlotAnswer(q.id, 'true')}
+            style={{ padding: '2px 10px', fontSize: '0.82em', border: 'none', cursor: 'pointer', background: isYes ? 'var(--head, #bce0a3)' : 'var(--bg, #fff)', fontWeight: isYes ? 600 : undefined }}
+            onClick={() => isYes ? handleClearAnswer(q.id) : handleSlotAnswer(q.id, 'true')}
           >Ja</button>
           <button
             type="button"
-            className={`quality-review-step__toggle${currentAnswer === 'false' ? ' quality-review-step__toggle--active' : ''}`}
             disabled={pending}
-            onClick={() => handleSlotAnswer(q.id, 'false')}
+            style={{ padding: '2px 10px', fontSize: '0.82em', border: 'none', borderLeft: '1px solid var(--line, #ddd)', cursor: 'pointer', background: isNo ? 'var(--color-orange, #f0a030)' : 'var(--bg, #fff)', fontWeight: isNo ? 600 : undefined }}
+            onClick={() => isNo ? handleClearAnswer(q.id) : handleSlotAnswer(q.id, 'false')}
           >Nein</button>
         </span>
       );
@@ -334,7 +333,7 @@ export default function ZubehoerCard({
             <tbody>
               {assemblyContract.parts.map((part) => {
                 const { state, sparePart } = deriveSlotState(part, spareParts, qualityResponses);
-                const isRemoveOpen = removeSlotKey === part.key;
+
                 const q = getPartQuestion(part);
                 const currentAnswer = q ? qualityResponses[q.id] : undefined;
                 const specResult = deriveSpecForSlot(part, qualityResponses);
@@ -379,20 +378,9 @@ export default function ZubehoerCard({
                         {specResult && !sparePart && (
                           <span className="muted" style={{ marginLeft: '6px' }}>{specResult.label}</span>
                         )}
-                        {/* Empty state: show label + ✎ reset button */}
+                        {/* Empty state: show label; toggle-off via the Nein button clears the answer */}
                         {state === 'empty' && (
-                          <>
-                            <span className="muted"> · Nicht vorhanden</span>
-                            {q && (
-                              <button
-                                type="button"
-                                className="sml-btn btn"
-                                style={{ marginLeft: '6px', fontSize: '0.72em', padding: '1px 5px' }}
-                                title="Antwort zurücksetzen"
-                                onClick={() => handleClearAnswer(q.id)}
-                              >✎</button>
-                            )}
-                          </>
+                          <span className="muted"> · Nicht vorhanden</span>
                         )}
                         {/* Inline quality question for unknown/unanswered parts and removed (re-catalog) */}
                         {q && (state === 'unknown' || state === 'removed' || (state === 'present' && !specResult)) && (
@@ -443,13 +431,9 @@ export default function ZubehoerCard({
                               type="button"
                               className="btn"
                               style={{ fontSize: '0.85em' }}
-                              onClick={() => {
-                                setRemoveSlotKey(isRemoveOpen ? null : part.key);
-                                setRemoveBoxInput('');
-                                setRemoveError(null);
-                              }}
+                              onClick={() => setRemoveSlotKey(part.key)}
                             >
-                              {isRemoveOpen ? 'Abbrechen' : 'Entnehmen'}
+                              Entnehmen
                             </button>
                             {sparePart && (
                               <button
@@ -484,77 +468,8 @@ export default function ZubehoerCard({
                             + weiteres
                           </button>
                         )}
-                        {openPopupSlot === part.key + '_extra' && (
-                          <SparepartSlotPopup
-                            deviceItemUUID={itemUUID}
-                            deviceLabel={deviceLabel || itemUUID}
-                            deviceHersteller={deviceHersteller}
-                            slotKey={part.key}
-                            slotLabel={part.label}
-                            targetSubcategory={part.targetSubcategory}
-                            instanceSpecs={specResult?.specs ?? null}
-                            onComplete={() => {
-                              setOpenPopupSlot(null);
-                              onSparepartChanged?.();
-                            }}
-                            onClose={() => setOpenPopupSlot(null)}
-                          />
-                        )}
                       </td>
                     </tr>
-                    {/* Entnehmen form row */}
-                    {isRemoveOpen && sparePart && (
-                      <tr>
-                        <td />
-                        <td colSpan={2}>
-                          <form
-                            onSubmit={async (e) => {
-                              e.preventDefault();
-                              const actor = await ensureUser();
-                              if (!actor) return;
-                              const toBoxId = removeBoxInput.trim();
-                              if (!toBoxId) return;
-                              setRemovePending(true);
-                              setRemoveError(null);
-                              try {
-                                const res = await fetch(`/api/items/${encodeURIComponent(sparePart.ItemUUID)}/remove-from-device`, {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ toBoxId, actor })
-                                });
-                                if (res.ok) {
-                                  setRemoveSlotKey(null);
-                                  setRemoveBoxInput('');
-                                  onSparepartChanged?.();
-                                } else {
-                                  const err = await res.json().catch(() => ({}));
-                                  setRemoveError((err as any).error || 'Fehler beim Entnehmen');
-                                }
-                              } catch {
-                                setRemoveError('Netzwerkfehler');
-                              } finally {
-                                setRemovePending(false);
-                              }
-                            }}
-                            style={{ display: 'flex', gap: '6px', alignItems: 'center', paddingBottom: '0.25rem' }}
-                          >
-                            <input
-                              type="text"
-                              placeholder="Ziel-Box-ID"
-                              value={removeBoxInput}
-                              onChange={(e) => setRemoveBoxInput(e.target.value)}
-                              style={{ flex: 1, minWidth: '140px' }}
-                              disabled={removePending}
-                              autoFocus
-                            />
-                            <button type="submit" className="btn btn--primary" disabled={removePending || !removeBoxInput.trim()}>
-                              {removePending ? '…' : 'Entnehmen'}
-                            </button>
-                            {removeError && <span style={{ color: 'var(--color-error, #d73a49)' }}>{removeError}</span>}
-                          </form>
-                        </td>
-                      </tr>
-                    )}
                   </React.Fragment>
                 );
               })}
@@ -702,8 +617,37 @@ export default function ZubehoerCard({
         </div>
       </details>
 
+      {removeSlotKey !== null && assemblyContract && (() => {
+        const part = assemblyContract.parts.find((p) => p.key === removeSlotKey);
+        const linked = spareParts.filter(sp => sp.slotKey === part?.key);
+        const activePart = linked.find(sp => !sp.BoxID) ?? null;
+        if (!part || !activePart) return null;
+        return ReactDOM.createPortal(
+          <div className="dialog-overlay" role="presentation" onClick={() => setRemoveSlotKey(null)}>
+            <div
+              className="dialog-content"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${part.label} entnehmen`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <strong>{part.label} entnehmen</strong>
+                <button type="button" className="sml-btn btn" onClick={() => setRemoveSlotKey(null)} aria-label="Schließen">✕</button>
+              </div>
+              <RelocateItemCard
+                itemId={activePart.ItemUUID}
+                onRelocated={() => { setRemoveSlotKey(null); onSparepartChanged?.(); }}
+              />
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
+
       {openPopupSlot !== null && assemblyContract && (() => {
-        const part = assemblyContract.parts.find((p) => p.key === openPopupSlot);
+        const rawKey = openPopupSlot.replace(/_extra$/, '');
+        const part = assemblyContract.parts.find((p) => p.key === rawKey);
         if (!part) return null;
         const specResult = deriveSpecForSlot(part, qualityResponses);
         return ReactDOM.createPortal(
