@@ -27,9 +27,17 @@
 
 ## Priority 1 — Bugs & Active Work
 
-0q. **Assembly contract: multipleAllowed full UI.** The `multipleAllowed` flag on assembly parts (RAM, storage) is supported in the data model and ZubehoerCard shows a "+ weiteres" button when one is cataloged, but the multi-instance slot list (showing each linked instance separately) is not yet implemented.
-0r. **Specs/201.json: remove duplicate component fields.** `RAM`, `Speicher`, and `Akku` remain in `contracts/specs/201.json` even though assembly answers now drive these. Safe for now but should be cleaned up to avoid confusion in agentic extraction.
-0s. **keyboard_layout specQuestion in keyboard slot.** Architecture supports `specQuestion` wiring for inline answers (e.g., keyboard layout in the keyboard slot), but the frontend ZubehoerCard does not yet render `specQuestion` inline — only the primary `question` is shown.
+0t. ✅ **Agentic delete silent failure + "← Liste" button on desktop fixed** (see OVERVIEW 848).
+
+0s. ✅ **Lagerort link, duplicate fetch, price/image columns fixed** (see OVERVIEW 847).
+
+0q. ✅ **7 UI/UX bugs fixed** (quality save on kandidat path, accessories popup portal, description carry-forward, help pages in Docker, stats enrichment label, QA toggle CSS, quality GET await).
+
+0r. **Ersatzteile: "Hinzufügen" popup needs a close-on-backdrop-click escape for accessibility** — the new portal dialog closes on backdrop click already; verify with screen reader that `aria-modal` and focus-trap work correctly.
+
+0u. **Assembly contract: multipleAllowed full UI.** The `multipleAllowed` flag on assembly parts (RAM, storage) is supported in the data model and ZubehoerCard shows a "+ weiteres" button when one is cataloged, but the multi-instance slot list (showing each linked instance separately) is not yet implemented.
+0v. **Specs/201.json: remove duplicate component fields.** `RAM`, `Speicher`, and `Akku` remain in `contracts/specs/201.json` even though assembly answers now drive these. Safe for now but should be cleaned up to avoid confusion in agentic extraction.
+0w. **keyboard_layout specQuestion in keyboard slot.** Architecture supports `specQuestion` wiring for inline answers (e.g., keyboard layout in the keyboard slot), but the frontend ZubehoerCard does not yet render `specQuestion` inline — only the primary `question` is shown.
 
 0k. ✅ **Test suite re-hardened: 637 tests passing.** Added coverage for `cancellation.ts`, `utils/json.ts`, `flow/prompts.ts`, `lib/itemGrouping.ts`, `result-handler.ts`, `forward-agentic-trigger.ts`, `models/quality.ts`. Fixed inverted `deriveAiPriorityFromAssessment` (high quality was mapped to low priority). 9 skipped; 0 failing.
 0l. **Deferred test rewrites still needed:** `test/csv-ingest-*.test.ts` (9 files) + `test/export-items.test.ts` + `test/langtext-contract.test.ts` + `test/list-items-for-export-order.test.ts` + `test/save-item-quality.test.ts` + `test/item-category-roundtrip.test.ts` + `test/item-persistence-reference-behavior.test.ts` — all use SQLite `db.exec`/`persistItem` directly and need full Postgres mock rewrites. Many frontend component tests still deferred (React + complex deps).

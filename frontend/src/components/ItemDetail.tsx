@@ -365,9 +365,8 @@ export default function ItemDetail({ itemId }: Props) {
     setNeighborSource(neighborContext.source);
     setNeighborIds({ previousId: neighborContext.previousId, nextId: neighborContext.nextId });
 
-    const shouldFetchNeighbors = neighborContext.source !== 'query'
-      || !neighborContext.previousId
-      || !neighborContext.nextId;
+    // Skip fetch when neighbors come from the live filtered list — null prev/next at boundaries is final.
+    const shouldFetchNeighbors = neighborContext.source !== 'query';
 
     if (!shouldFetchNeighbors) {
       return undefined;

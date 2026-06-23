@@ -30,7 +30,7 @@ const action = defineHttpAction({
       if (!item) return sendJson(res, 404, { error: 'item not found' });
 
       if (req.method === 'GET') {
-        const result = getItemQualityResponses(itemUUID);
+        const result = await getItemQualityResponses(itemUUID);
         return sendJson(res, 200, result);
       }
 

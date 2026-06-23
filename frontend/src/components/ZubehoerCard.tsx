@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 import RefSearchInput, { type RefSuggestion } from './RefSearchInput';
 import ZubehoerBadge from './ZubehoerBadge';
 import SparepartSlotPopup from './SparepartSlotPopup';
@@ -398,22 +399,6 @@ export default function ZubehoerCard({
                             >
                               Erfassen{specResult ? `: ${specResult.label}` : ''}
                             </button>
-                            {openPopupSlot === part.key && (
-                              <SparepartSlotPopup
-                                deviceItemUUID={itemUUID}
-                                deviceLabel={deviceLabel || itemUUID}
-                                deviceHersteller={deviceHersteller}
-                                slotKey={part.key}
-                                slotLabel={part.label}
-                                targetSubcategory={part.targetSubcategory}
-                                instanceSpecs={specResult?.specs ?? null}
-                                onComplete={() => {
-                                  setOpenPopupSlot(null);
-                                  onSparepartChanged?.();
-                                }}
-                                onClose={() => setOpenPopupSlot(null)}
-                              />
-                            )}
                           </div>
                         )}
                         {/* Entnehmen + Lösen for cataloged */}
@@ -682,6 +667,38 @@ export default function ZubehoerCard({
         </div>
       </details>
 
+      {openPopupSlot !== null && assemblyContract && (() => {
+        const part = assemblyContract.parts.find((p) => p.key === openPopupSlot);
+        if (!part) return null;
+        const specResult = deriveSpecForSlot(part, qualityResponses);
+        return ReactDOM.createPortal(
+          <div className="dialog-overlay" role="presentation" onClick={() => setOpenPopupSlot(null)}>
+            <div
+              className="dialog-content"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${part.label} katalogisieren`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SparepartSlotPopup
+                deviceItemUUID={itemUUID}
+                deviceLabel={deviceLabel || itemUUID}
+                deviceHersteller={deviceHersteller}
+                slotKey={part.key}
+                slotLabel={part.label}
+                targetSubcategory={part.targetSubcategory}
+                instanceSpecs={specResult?.specs ?? null}
+                onComplete={() => {
+                  setOpenPopupSlot(null);
+                  onSparepartChanged?.();
+                }}
+                onClose={() => setOpenPopupSlot(null)}
+              />
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
     </div>
   );
 }

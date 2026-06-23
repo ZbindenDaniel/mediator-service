@@ -68,6 +68,8 @@ COPY package.json ./
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/frontend/public ./dist/frontend/public
 COPY --from=builder /app/backend/scripts ./backend/scripts
+# docs/user is served via /api/user-docs — must be present in the runtime image
+COPY --from=builder /app/docs ./docs
 
 RUN chmod +x /app/backend/scripts/erp-sync.sh
 
