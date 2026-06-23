@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join, resolve } from 'path';
 import type { QualityContract, QualityQuestion, QualityCheckResponse } from '../../models/quality-contract';
-import type { DisassemblyContract } from '../../models/disassembly-contract';
+import type { AssemblyContract } from '../../models/assembly-contract';
 import { QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX, QUALITY_LABELS } from '../../models/quality';
 import type { QualityTag } from '../../models/quality';
 
@@ -85,13 +85,26 @@ export function deriveSpecsFromAnswers(
   return specs;
 }
 
-/** Converts disassembly contract part questions into a synthetic QualityContract for scoring/spec derivation. */
-export function disassemblyToQualityContract(dc: DisassemblyContract): QualityContract {
+/** Converts assembly contract part questions into a synthetic QualityContract for scoring/spec derivation. */
+export function assemblyToQualityContract(ac: AssemblyContract): QualityContract {
   return {
-    version: dc.version,
-    subCategory: dc.subCategory,
-    questions: dc.parts.flatMap(p => p.qualityQuestion ? [p.qualityQuestion] : [])
+    version: ac.version,
+    subCategory: ac.subCategory,
+    // Include both primary question and secondary specQuestion so all specs are derived
+    questions: ac.parts.flatMap(p => {
+      const q = p.question ?? p.qualityQuestion; // support both field names
+      const sq = p.specQuestion;
+      return [
+        ...(q ? [q] : []),
+        ...(sq ? [sq] : [])
+      ];
+    })
   };
+}
+
+/** @deprecated use assemblyToQualityContract */
+export function disassemblyToQualityContract(ac: AssemblyContract): QualityContract {
+  return assemblyToQualityContract(ac);
 }
 
 export function buildQualityCheckResponse(

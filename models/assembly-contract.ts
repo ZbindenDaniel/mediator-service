@@ -1,0 +1,24 @@
+import type { QualityQuestion } from './quality-contract';
+
+export interface AssemblyPart {
+  key: string;
+  label: string;
+  targetSubcategory: number;
+  multipleAllowed?: boolean;
+  /** Primary question — presence (boolean) or spec (select). Used for quality scoring. */
+  question?: QualityQuestion;
+  /** Secondary spec question, e.g. drive_type alongside storage_gb. Not used for quality scoring. */
+  specQuestion?: QualityQuestion;
+  /** @deprecated use question */
+  qualityQuestion?: QualityQuestion;
+}
+
+export interface AssemblyContract {
+  version: number;
+  subCategory: number;
+  parts: AssemblyPart[];
+}
+
+// Backward-compatibility aliases for code not yet migrated
+export type DisassemblyContractPart = AssemblyPart;
+export type DisassemblyContract = AssemblyContract;

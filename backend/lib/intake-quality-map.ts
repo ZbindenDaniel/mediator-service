@@ -1,9 +1,15 @@
 import type { IntakeScanPayload, IntakeQuestion } from '../../models/intake';
 import type { QualityQuestion } from '../../models/quality-contract';
 
-// Maps scan payload fields to quality question defaultValues.
-// Only populate defaults for questions whose specField matches a reliable scan field.
+// Maps scan payload fields to quality/assembly question defaultValues.
 type ScanMapper = (scan: IntakeScanPayload) => string | null;
+
+/** Rounds a value to the nearest option in a sorted array of numbers. */
+function roundToNearest(value: number, options: number[]): number {
+  return options.reduce((prev, curr) =>
+    Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev
+  );
+}
 
 const FIELD_MAPPERS: Record<string, ScanMapper> = {
   drive_type: (scan) => {
@@ -15,6 +21,27 @@ const FIELD_MAPPERS: Record<string, ScanMapper> = {
     if (t.includes('hdd')) return 'HDD';
     if (t.includes('emmc')) return 'eMMC';
     return null;
+  },
+
+  ram_gb: (scan) => {
+    if (!scan.ramMb || scan.ramMb <= 0) return null;
+    const gb = scan.ramMb / 1024;
+    const nearest = roundToNearest(gb, [2, 4, 8, 16, 32, 64, 128]);
+    return String(nearest);
+  },
+
+  storage_gb: (scan) => {
+    const disk = scan.disks?.[0];
+    if (!disk?.sizeGb || disk.sizeGb <= 0) return null;
+    const nearest = roundToNearest(disk.sizeGb, [128, 256, 512, 1000, 2000]);
+    return String(nearest);
+  },
+
+  battery_condition: (scan) => {
+    if (scan.batteryPercent == null) return null;
+    if (scan.batteryPercent >= 80) return 'Gut (>80%)';
+    if (scan.batteryPercent >= 50) return 'Mittel (50–80%)';
+    return 'Schwach (<50%)';
   }
 };
 

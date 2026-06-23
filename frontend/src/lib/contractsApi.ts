@@ -1,12 +1,11 @@
 import type { QualityContract } from '../../../models/quality-contract';
 import type { SpecContract } from '../../../models/spec-contract';
-import type { DisassemblyContract } from '../../../models/disassembly-contract';
+import type { AssemblyContract } from '../../../models/assembly-contract';
 
 // Module-level caches — keyed by subcategory code or 'general'.
-// Cleared by page reload; restart-safe since data comes from API which reads from disk.
 const qualityCache = new Map<string, QualityContract>();
 const specCache = new Map<number, SpecContract>();
-const disassemblyCache = new Map<number, DisassemblyContract>();
+const assemblyCache = new Map<number, AssemblyContract>();
 
 export async function fetchQualityContract(key: string | number): Promise<QualityContract | null> {
   const cacheKey = String(key);
@@ -22,17 +21,22 @@ export async function fetchQualityContract(key: string | number): Promise<Qualit
   }
 }
 
-export async function fetchDisassemblyContract(subCategory: number): Promise<DisassemblyContract | null> {
-  if (disassemblyCache.has(subCategory)) return disassemblyCache.get(subCategory)!;
+export async function fetchAssemblyContract(subCategory: number): Promise<AssemblyContract | null> {
+  if (assemblyCache.has(subCategory)) return assemblyCache.get(subCategory)!;
   try {
-    const res = await fetch(`/api/contracts/disassembly/${subCategory}`);
+    const res = await fetch(`/api/contracts/assembly/${subCategory}`);
     if (!res.ok) return null;
-    const contract = await res.json() as DisassemblyContract;
-    disassemblyCache.set(subCategory, contract);
+    const contract = await res.json() as AssemblyContract;
+    assemblyCache.set(subCategory, contract);
     return contract;
   } catch {
     return null;
   }
+}
+
+/** @deprecated use fetchAssemblyContract */
+export async function fetchDisassemblyContract(subCategory: number): Promise<AssemblyContract | null> {
+  return fetchAssemblyContract(subCategory);
 }
 
 export async function fetchSpecContract(subcategory: number): Promise<SpecContract | null> {

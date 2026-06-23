@@ -141,6 +141,7 @@ const action = defineHttpAction({
           SELECT irr."Id", irr."ChildArtikel_Nummer" AS "Artikel_Nummer",
                  irr."RelationType", irr."Notes", irr."CreatedAt",
                  r."Artikelbeschreibung", r."Kurzbeschreibung",
+                 r."SubCategory", r."Hersteller",
                  COALESCE((
                    SELECT SUM(COALESCE(i2."Auf_Lager", 1)) FROM items i2
                    WHERE i2."Artikel_Nummer" = irr."ChildArtikel_Nummer"

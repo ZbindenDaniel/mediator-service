@@ -1,14 +1,2 @@
-import type { QualityQuestion } from './quality-contract';
-
-export interface DisassemblyContractPart {
-  key: string;
-  label: string;
-  targetSubcategory: number;
-  qualityQuestion?: QualityQuestion;
-}
-
-export interface DisassemblyContract {
-  version: number;
-  subCategory: number;
-  parts: DisassemblyContractPart[];
-}
+// Backward-compatibility re-export — use assembly-contract.ts for new code
+export type { AssemblyPart as DisassemblyContractPart, AssemblyContract as DisassemblyContract } from './assembly-contract';

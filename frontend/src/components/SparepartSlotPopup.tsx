@@ -8,6 +8,8 @@ interface Props {
   deviceHersteller?: string | null;
   slotKey: string;
   slotLabel: string;
+  targetSubcategory: number;
+  instanceSpecs?: Record<string, string> | null;
   onComplete: (newItemUUID: string) => void;
   onClose: () => void;
 }
@@ -18,6 +20,8 @@ export default function SparepartSlotPopup({
   deviceHersteller,
   slotKey,
   slotLabel,
+  targetSubcategory,
+  instanceSpecs,
   onComplete,
   onClose,
 }: Props) {
@@ -25,6 +29,10 @@ export default function SparepartSlotPopup({
   const [loading, setLoading] = useState(true);
   const [confirmingIndex, setConfirmingIndex] = useState<number | null>(null);
   const [showSearch, setShowSearch] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createDesc, setCreateDesc] = useState(`${deviceHersteller ? deviceHersteller + ' ' : ''}${slotLabel}`);
+  const [createHersteller, setCreateHersteller] = useState(deviceHersteller ?? '');
+  const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -73,6 +81,39 @@ export default function SparepartSlotPopup({
       setError('Netzwerkfehler');
     } finally {
       setConfirmingIndex(null);
+    }
+  }
+
+  async function handleCreate() {
+    const actor = getUser();
+    if (!actor) { setError('Bitte zuerst Benutzernamen setzen.'); return; }
+    if (!createDesc.trim()) { setError('Beschreibung ist erforderlich.'); return; }
+    setCreating(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/items/${encodeURIComponent(deviceItemUUID)}/spare-parts/new-ref`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artikelbeschreibung: createDesc.trim(),
+          hersteller: createHersteller.trim() || null,
+          subCategory: targetSubcategory,
+          actor,
+          slotKey,
+          instanceSpecs: instanceSpecs ?? undefined
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onComplete(data.itemUUID);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setError((err as any).error || 'Fehler beim Anlegen');
+      }
+    } catch {
+      setError('Netzwerkfehler');
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -130,10 +171,53 @@ export default function SparepartSlotPopup({
           />
         </div>
       ) : (
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
           <button type="button" className="btn btn--secondary" style={{ fontSize: '0.85em' }} onClick={() => setShowSearch(true)}>
             Anderen suchen
           </button>
+          {!showCreate && (
+            <button type="button" className="btn btn--secondary" style={{ fontSize: '0.85em' }} onClick={() => setShowCreate(true)}>
+              Neu anlegen
+            </button>
+          )}
+        </div>
+      )}
+
+      {showCreate && (
+        <div style={{ marginTop: '0.75rem', borderTop: '1px solid var(--color-border, #e0e0e0)', paddingTop: '0.75rem' }}>
+          <strong style={{ fontSize: '0.9em' }}>Neuen Artikeltyp anlegen</strong>
+          <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+            <input
+              type="text"
+              className="input"
+              placeholder="Beschreibung"
+              value={createDesc}
+              onChange={e => setCreateDesc(e.target.value)}
+              style={{ fontSize: '0.9em' }}
+            />
+            <input
+              type="text"
+              className="input"
+              placeholder="Hersteller (optional)"
+              value={createHersteller}
+              onChange={e => setCreateHersteller(e.target.value)}
+              style={{ fontSize: '0.9em' }}
+            />
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn--primary"
+                style={{ fontSize: '0.85em' }}
+                disabled={creating || !createDesc.trim()}
+                onClick={handleCreate}
+              >
+                {creating ? '…' : 'Anlegen & katalogisieren'}
+              </button>
+              <button type="button" className="btn btn--secondary" style={{ fontSize: '0.85em' }} onClick={() => setShowCreate(false)}>
+                Abbrechen
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

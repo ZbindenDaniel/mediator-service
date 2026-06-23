@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "subCategory": 102,
+  "parts": [
+    {
+      "key": "ram",
+      "label": "Arbeitsspeicher",
+      "targetSubcategory": 603,
+      "multipleAllowed": true,
+      "question": {
+        "id": "ram_gb",
+        "type": "select",
+        "question": "Wie viel RAM ist verbaut?",
+        "values": ["2", "4", "8", "16", "32", "64", "128"],
+        "specField": "RAM",
+        "specValue": "%v GB"
+      }
+    },
+    {
+      "key": "storage",
+      "label": "SSD / HDD",
+      "targetSubcategory": 901,
+      "multipleAllowed": true,
+      "question": {
+        "id": "storage_gb",
+        "type": "select",
+        "question": "Speicher (SSD/HDD)?",
+        "values": ["128", "256", "512", "1000", "2000"],
+        "specField": "Speicher",
+        "specValue": "%v GB"
+      },
+      "specQuestion": {
+        "id": "drive_type",
+        "type": "select",
+        "question": "Speichertyp?",
+        "values": ["SSD", "NVMe SSD", "HDD", "SSD + HDD", "eMMC"],
+        "specField": "Speichertyp",
+        "specValue": "%v"
+      }
+    },
+    {
+      "key": "cpu",
+      "label": "Prozessor (CPU)",
+      "targetSubcategory": 602,
+      "question": {
+        "id": "has_cpu",
+        "type": "boolean",
+        "question": "CPU vorhanden?",
+        "qualityImpact": { "false": 1 }
+      }
+    },
+    {
+      "key": "mainboard",
+      "label": "Mainboard",
+      "targetSubcategory": 601,
+      "question": {
+        "id": "has_mainboard",
+        "type": "boolean",
+        "question": "Mainboard vorhanden?",
+        "qualityImpact": { "false": 1 }
+      }
+    },
+    {
+      "key": "gpu",
+      "label": "Grafikkarte (GPU)",
+      "targetSubcategory": 604,
+      "question": {
+        "id": "has_gpu",
+        "type": "boolean",
+        "question": "Grafikkarte vorhanden?"
+      }
+    }
+  ]
+}
