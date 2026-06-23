@@ -110,7 +110,6 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
   const failedRuns = safeNumber(agentic?.stateCounts?.['failed' as AgenticRunStatus]);
   const decidedRuns = approvedRuns + rejectedRuns + failedRuns;
   const hitRate = decidedRuns > 0 ? Math.round((approvedRuns / decidedRuns) * 100) : null;
-  const enrichmentRate = counts && counts.items > 0 ? Math.round((enrichedItems / counts.items) * 100) : null;
 
   return (
     <div className={classes}>
@@ -146,8 +145,8 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
               {hitRate !== null && (
                 <div>KI-Trefferquote: <b>{hitRate}%</b></div>
               )}
-              {enrichmentRate !== null && (
-                <div>Angereichert: <b>{enrichmentRate}%</b></div>
+              {enrichedItems > 0 && (
+                <div>Angereichert: <b>{enrichedItems} Artikeltypen</b></div>
               )}
               {typeof totalWeightKg === 'number' && totalWeightKg > 0 && (
                 <div>Gesamt-Gewicht: <b>{formatWeight(totalWeightKg)}</b></div>

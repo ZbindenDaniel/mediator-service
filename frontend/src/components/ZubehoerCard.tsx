@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 import RefSearchInput, { type RefSuggestion } from './RefSearchInput';
 import ZubehoerBadge from './ZubehoerBadge';
 import SparepartSlotPopup from './SparepartSlotPopup';
@@ -362,20 +363,6 @@ export default function ZubehoerCard({
                             >
                               Hinzufügen
                             </button>
-                            {openPopupSlot === part.key && (
-                              <SparepartSlotPopup
-                                deviceItemUUID={itemUUID}
-                                deviceLabel={deviceLabel || itemUUID}
-                                deviceHersteller={deviceHersteller}
-                                slotKey={part.key}
-                                slotLabel={part.label}
-                                onComplete={() => {
-                                  setOpenPopupSlot(null);
-                                  onSparepartChanged?.();
-                                }}
-                                onClose={() => setOpenPopupSlot(null)}
-                              />
-                            )}
                           </div>
                         )}
                         {state === 'cataloged' && (
@@ -472,6 +459,36 @@ export default function ZubehoerCard({
           </table>
         </>
       )}
+
+      {openPopupSlot !== null && disassemblyContract && (() => {
+        const part = disassemblyContract.parts.find((p) => p.key === openPopupSlot);
+        if (!part) return null;
+        return ReactDOM.createPortal(
+          <div className="dialog-overlay" role="presentation" onClick={() => setOpenPopupSlot(null)}>
+            <div
+              className="dialog-content"
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${part.label} hinzufügen`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SparepartSlotPopup
+                deviceItemUUID={itemUUID}
+                deviceLabel={deviceLabel || itemUUID}
+                deviceHersteller={deviceHersteller}
+                slotKey={part.key}
+                slotLabel={part.label}
+                onComplete={() => {
+                  setOpenPopupSlot(null);
+                  onSparepartChanged?.();
+                }}
+                onClose={() => setOpenPopupSlot(null)}
+              />
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
     </div>
   );
 }

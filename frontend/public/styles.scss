@@ -3083,6 +3083,43 @@ button:focus {
     min-width: unset;
 }
 
+.quality-review-step__toggle-group {
+    display: flex;
+    gap: 0;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--line, #d0d0d0);
+    width: fit-content;
+}
+
+.quality-review-step__toggle {
+    padding: 0.3rem 1rem;
+    background: var(--bg, #fff);
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: var(--fg, #222);
+    transition: background 0.15s, color 0.15s;
+
+    &:not(:last-child) {
+        border-right: 1px solid var(--line, #d0d0d0);
+    }
+
+    &:hover {
+        background: #f0f0f0;
+    }
+
+    &--active {
+        background: var(--accent, #3b82f6);
+        color: #fff;
+        font-weight: 600;
+
+        &:hover {
+            background: #2563eb;
+        }
+    }
+}
+
 .quality-missing-hint {
     display: flex;
     align-items: center;
