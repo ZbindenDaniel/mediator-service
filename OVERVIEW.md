@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+852. ✅ Accessories tab: popup transparency, toggle UX, Entnehmen modal, DB crash fix
+   - **Why:** (1) `item_refs` INSERT had `CreatedAt`/`UpdatedAt` columns that don't exist — dropped them. (2) `SparepartSlotPopup` rendered a `.card` with `position:absolute` inside the portal's `.dialog-content`, causing transparent/broken appearance — removed the wrapper, search now uses slot label only, rows are clickable (no per-row confirm button), `RefSearchInput` always visible. (3) Portal `_extra` key lookup stripped suffix before `find()` so extra-instance popup works through the portal instead of inline. (4) Entnehmen inline table row form replaced with `RelocateItemCard` in a portal modal. (5) Ja/Nein toggle uses mint green (Ja active) / orange (Nein active); clicking the active state clears the answer — no separate release button.
+   - **Deferred:** Nothing.
 851. ✅ Accessories tab bug-fix round 2
    - **Why:** (1) `new-ref` INSERT used `"SubCategory"` which doesn't exist on `item_refs`; fixed to `"Unterkategorien_A"`. (2) `noLink: true` added to `AssemblyPart` and set on storage slots — SSD/HDD spec answers are sufficient without an item link; hides Erfassen button for storage. (3) "Nicht vorhanden" state now shows ✎ reset button that clears the answer and re-renders the question widget. (4) `canErfassen` now includes `removed` state — extracting a part no longer locks out re-cataloging. (5) Boolean Ja/Nein buttons in ZubehoerCard inline widget now use `quality-review-step__toggle-group` + `--active` CSS classes (same as QualityReviewStep) for proper toggle switch appearance. (6) `specQuestion` (e.g. drive_type) now renders inline for `present`/`unknown`/`removed` states.
    - **Deferred:** Nothing new.
