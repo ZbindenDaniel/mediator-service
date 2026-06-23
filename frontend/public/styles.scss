@@ -2393,6 +2393,20 @@ button:focus {
     min-width: 90px;
 }
 
+.col-price,
+.col-image {
+    text-align: center;
+    width: 2.5rem;
+    min-width: 2.5rem;
+}
+
+.col-desc {
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 @media (min-width: 960px) {
     .item-list .optional-column {
         display: table-cell;

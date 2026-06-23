@@ -866,8 +866,17 @@ export default function ItemListPage() {
   }, [clearSelection]);
 
   const handleItemSelect = useCallback((id: string) => {
+    const index = filtered.findIndex((g) => g.summary.representativeItemId === id);
+    const prevId = index > 0 ? (filtered[index - 1].summary.representativeItemId ?? null) : null;
+    const nextId = index >= 0 && index < filtered.length - 1 ? (filtered[index + 1].summary.representativeItemId ?? null) : null;
+    setSearchParams((p) => {
+      const n = new URLSearchParams(p);
+      if (prevId) { n.set('prev', prevId); } else { n.delete('prev'); }
+      if (nextId) { n.set('next', nextId); } else { n.delete('next'); }
+      return n;
+    }, { replace: true });
     setEntity('item', id);
-  }, [setEntity]);
+  }, [setEntity, setSearchParams, filtered]);
 
   const selectedItems = useMemo(() => {
     const selectedLookup = new Set(selectedIds);

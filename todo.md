@@ -27,6 +27,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0s. ✅ **Lagerort link, duplicate fetch, price/image columns fixed** (see OVERVIEW 847).
+
 0q. ✅ **7 UI/UX bugs fixed** (quality save on kandidat path, accessories popup portal, description carry-forward, help pages in Docker, stats enrichment label, QA toggle CSS, quality GET await).
 
 0r. **Ersatzteile: "Hinzufügen" popup needs a close-on-backdrop-click escape for accessibility** — the new portal dialog closes on backdrop click already; verify with screen reader that `aria-modal` and focus-trap work correctly.

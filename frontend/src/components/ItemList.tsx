@@ -150,6 +150,8 @@ export default function ItemList({
             </th>
             <th className="col-mark" aria-label="Markierung" />
             <th className="col-number">A-Nr</th>
+            <th className="col-price optional-column" aria-label="Preis gesetzt">CHF</th>
+            <th className="col-image optional-column" aria-label="Bild vorhanden">Bild</th>
             <th className="col-desc">Artikel</th>
             <th className="col-box">Behälter</th>
             <th className="col-location">Lagerort</th>
@@ -275,6 +277,7 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
             const shopartikelValue = representative?.Shopartikel ?? null;
             const publishedStatusValue = representative?.Veröffentlicht_Status ?? null;
             const zubehoerMode = (representative as any)?.ZubehoerMode ?? null;
+            const parentItemUUID = (representative as any)?.ParentItemUUID ?? null;
 
             return (
               <tr
@@ -343,6 +346,8 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                   )}
                 </td>
                 <td className="col-number">{group.summary.Artikel_Nummer?.trim() || representative?.Artikel_Nummer?.trim() || '—'}</td>
+                <td className="col-price optional-column">{(typeof representative?.Verkaufspreis === 'number' && representative.Verkaufspreis > 0) ? '✓' : '—'}</td>
+                <td className="col-image optional-column">{(representative?.ImageNames || representative?.Grafikname) ? '✓' : '—'}</td>
                 <td className="col-desc">{representative?.Artikelbeschreibung ?? '—'}</td>
                 <td className="col-box">
                   {boxId ? (
@@ -358,7 +363,15 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                   )}
                 </td>
                 <td className="col-location">
-                  {shelfId ? (
+                  {parentItemUUID ? (
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={(e) => { e.stopPropagation(); setEntity('item', parentItemUUID); }}
+                    >
+                      <LocationTag item={locationItem} itemId={representativeItemId} />
+                    </button>
+                  ) : shelfId ? (
                     <button
                       type="button"
                       className="link-btn"

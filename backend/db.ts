@@ -764,7 +764,8 @@ SELECT
     WHEN i."Artikel_Nummer" IS NOT NULL
       AND EXISTS (SELECT 1 FROM item_ref_relations irr WHERE irr."ChildArtikel_Nummer" = i."Artikel_Nummer") THEN 'available'
     ELSE NULL
-  END AS "ZubehoerMode"${extras}
+  END AS "ZubehoerMode",
+  (SELECT ir2."ParentItemUUID" FROM item_relations ir2 WHERE ir2."ChildItemUUID" = i."ItemUUID" LIMIT 1) AS "ParentItemUUID"${extras}
 `;
 }
 
