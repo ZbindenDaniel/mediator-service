@@ -6,12 +6,17 @@ chmod 777 /run/cups
 
 cupsd -f &
 CUPS_PID=$!
-trap 'kill $CUPS_PID 2>/dev/null; exit' SIGTERM SIGINT
 
 for i in $(seq 1 30); do
     [ -S /run/cups/cups.sock ] && break
     sleep 0.5
 done
+
+if [ ! -S /run/cups/cups.sock ]; then
+    echo "[cups] ERROR: cupsd failed to create socket after 15s" >&2
+    kill $CUPS_PID 2>/dev/null
+    exit 1
+fi
 
 refresh_discovery() {
     lpinfo -v > /run/cups/devices.txt 2>/dev/null || :
@@ -32,5 +37,8 @@ while sleep 2; do
         counter=0
     fi
 done &
+DISCOVERY_PID=$!
+
+trap 'kill $CUPS_PID $DISCOVERY_PID 2>/dev/null; exit' SIGTERM SIGINT
 
 wait $CUPS_PID
