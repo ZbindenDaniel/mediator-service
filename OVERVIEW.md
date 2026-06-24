@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+851. ✅ Harden Docker pipeline: entrypoint fail-fast, clean shutdown, log rotation
+   - **Why:** (1) CUPS entrypoint looped silently if the socket never appeared, then started background discovery against a dead daemon — added fail-fast exit after 15s. (2) Background discovery loop was orphaned on SIGTERM — now tracked via DISCOVERY_PID and killed in the trap. (3) All containers had no log size limit — added 10 MB × 3 file cap in both compose files to prevent disk fill on long-running hosts.
+   - **Deferred:** chmod 777 on /run/cups left unchanged — both containers (cups=root, mediator=www-data) share the volume and need broad write access; tightening requires aligning UIDs/GIDs across images which is a larger change.
 850. ✅ Fix OCI runtime exec failure when installing Brother QL driver .debs in Docker
    - **Why:** Brother LPR `.deb` postinst scripts call `systemctl restart cups` after installation. Docker build containers have no systemd, so `dpkg -i` failed with "exec: systemctl: executable file not found". Fixed by stubbing `/usr/local/sbin/systemctl` with a no-op before `dpkg -i` in `cups/Dockerfile`.
    - **Deferred:** Nothing.
