@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+850. ✅ Fix OCI runtime exec failure when installing Brother QL driver .debs in Docker
+   - **Why:** Brother LPR `.deb` postinst scripts call `systemctl restart cups` after installation. Docker build containers have no systemd, so `dpkg -i` failed with "exec: systemctl: executable file not found". Fixed by stubbing `/usr/local/sbin/systemctl` with a no-op before `dpkg -i` in `cups/Dockerfile`.
+   - **Deferred:** Nothing.
 849. ✅ Restore "← Liste" full-width list view on desktop
    - **Why:** The button was always intentional on desktop. The previous commit wrongly hid it with `display: none`. Added `@media (min-width: 901px)` rules: `.app-shell--mobile-list .app-shell__right { display: none }` and `.panel-main { flex: 0 0 100% }` so clicking "← Liste" actually collapses the detail panel and expands the list. Button styled for desktop with compact border/padding.
    - **Deferred:** Nothing.
