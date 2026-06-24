@@ -55,13 +55,15 @@ async function findOrCreateRef(
   const maxArtikel = await getMaxArtikelNummer();
   const nextArtikelNummer = String((maxArtikel ? parseInt(maxArtikel, 10) : 0) + 1);
 
+  const artikelbeschreibung = [newRef.Hersteller, newRef.Kurzbeschreibung].filter(Boolean).join(' ');
   await persistItemReference({
     Artikel_Nummer: nextArtikelNummer,
+    Artikelbeschreibung: artikelbeschreibung,
     Hersteller: newRef.Hersteller,
     Kurzbeschreibung: newRef.Kurzbeschreibung,
     Hauptkategorien_A: newRef.Hauptkategorien_A,
     Unterkategorien_A: newRef.Unterkategorien_A,
-    Suchbegriff: [newRef.Hersteller, newRef.Kurzbeschreibung].filter(Boolean).join(' '),
+    Suchbegriff: artikelbeschreibung,
   });
 
   return {
