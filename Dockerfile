@@ -73,8 +73,7 @@ COPY --from=builder /app/docs ./docs
 
 RUN chmod +x /app/backend/scripts/erp-sync.sh
 
-# Ensure required directories exist AND fix ownership
-# TODO(media-storage): Revisit directory creation if media paths move outside /app.
+# Ensure required directories exist with correct ownership for new volume mounts
 RUN mkdir -p \
         dist/backend/data \
         /app/dist/backend/media \
