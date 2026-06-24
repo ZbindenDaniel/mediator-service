@@ -82,8 +82,10 @@ RUN mkdir -p \
         dist/frontend/public \
         /var/lib/mediator/inbox \
         /var/lib/mediator/archive \
+        /mnt/mediator-scans \
     && chown -R 33:33 /app \
-    && chown -R 33:33 /var/lib/mediator
+    && chown -R 33:33 /var/lib/mediator \
+    && chown 33:33 /mnt/mediator-scans
 
 # Switch to non-root user (www-data)
 USER 33:33
