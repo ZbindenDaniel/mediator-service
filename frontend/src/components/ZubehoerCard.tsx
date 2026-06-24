@@ -349,16 +349,16 @@ export default function ZubehoerCard({
                 return (
                   <React.Fragment key={part.key}>
                     <tr>
-                      <td style={{ width: '28px' }}>
+                      <td style={{ width: '28px', verticalAlign: 'middle' }}>
                         {state === 'cataloged' && <span title="Im Gerät (katalogisiert)" style={{ color: 'var(--color-orange, #f0a030)' }}>◉</span>}
                         {state === 'removed' && <span title="Entnommen" style={{ color: 'var(--color-muted, #888)' }}>○</span>}
                         {state === 'present' && <span title="Vorhanden (noch nicht katalogisiert)" style={{ color: 'var(--color-green, #4caf50)' }}>◎</span>}
                         {state === 'unknown' && <span title="Unbekannt" style={{ color: 'var(--color-muted, #ccc)' }}>⬜</span>}
                         {state === 'empty' && <span title="Nicht vorhanden" style={{ color: 'var(--color-error, #d73a49)' }}>✕</span>}
                       </td>
-                      <td>
+                      {/* Label + linked item name */}
+                      <td style={{ verticalAlign: 'middle' }}>
                         <strong>{part.label}</strong>
-                        {/* Linked item name */}
                         {sparePart && (
                           <>
                             {' '}
@@ -374,32 +374,27 @@ export default function ZubehoerCard({
                             )}
                           </>
                         )}
-                        {/* Spec label from quality */}
                         {specResult && !sparePart && (
                           <span className="muted" style={{ marginLeft: '6px' }}>{specResult.label}</span>
                         )}
-                        {/* Empty state: show label; toggle-off via the Nein button clears the answer */}
-                        {state === 'empty' && (
-                          <span className="muted"> · Nicht vorhanden</span>
-                        )}
-                        {/* Inline quality question for unknown/unanswered parts and removed (re-catalog) */}
-                        {q && (state === 'unknown' || state === 'removed' || (state === 'present' && !specResult)) && (
+                      </td>
+                      {/* Inputs column: toggle / select widgets */}
+                      <td style={{ verticalAlign: 'middle' }}>
+                        {/* Boolean toggle — always shown so state can always be changed */}
+                        {q && q.type === 'boolean' && renderInlineQuestion(q, currentAnswer)}
+                        {/* Select widget for non-boolean questions */}
+                        {q && q.type !== 'boolean' && (state === 'unknown' || state === 'present' || state === 'removed') && (
                           renderInlineQuestion(q, currentAnswer)
                         )}
-                        {/* Show editable select for answered spec questions */}
-                        {q && q.type === 'select' && state === 'present' && specResult && (
-                          <span style={{ marginLeft: '6px' }}>
-                            {renderInlineQuestion(q, currentAnswer)}
-                          </span>
-                        )}
-                        {/* Secondary specQuestion widget (e.g. drive_type for storage) */}
+                        {/* Secondary specQuestion (e.g. drive_type) */}
                         {part.specQuestion && (state === 'present' || state === 'unknown' || state === 'removed') && (
                           <span style={{ marginLeft: '4px' }}>
                             {renderInlineQuestion(part.specQuestion, qualityResponses[part.specQuestion.id])}
                           </span>
                         )}
                       </td>
-                      <td style={{ whiteSpace: 'nowrap' }}>
+                      {/* Actions column */}
+                      <td style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>
                         {/* Erfassen actions */}
                         {canErfassen && knownRef && (
                           <button
