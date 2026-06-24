@@ -23,7 +23,7 @@ interface SparePart {
 type SlotState = 'unknown' | 'present' | 'empty' | 'cataloged' | 'removed';
 
 function getPartQuestion(part: AssemblyPart): QualityQuestion | undefined {
-  return part.question ?? part.qualityQuestion;
+  return part.question;
 }
 
 function deriveSlotState(

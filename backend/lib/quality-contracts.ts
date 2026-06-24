@@ -92,7 +92,7 @@ export function assemblyToQualityContract(ac: AssemblyContract): QualityContract
     subCategory: ac.subCategory,
     // Include both primary question and secondary specQuestion so all specs are derived
     questions: ac.parts.flatMap(p => {
-      const q = p.question ?? p.qualityQuestion; // support both field names
+      const q = p.question; // support both field names
       const sq = p.specQuestion;
       return [
         ...(q ? [q] : []),

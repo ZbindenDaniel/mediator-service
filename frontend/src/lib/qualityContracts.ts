@@ -12,7 +12,7 @@ function assemblyToQualityContract(ac: AssemblyContract): QualityContract {
   return {
     version: ac.version,
     subCategory: ac.subCategory,
-    questions: ac.parts.flatMap(p => p.qualityQuestion ? [p.qualityQuestion] : [])
+    questions: ac.parts.flatMap(p => p.question ? [p.question] : [])
   };
 }
 
