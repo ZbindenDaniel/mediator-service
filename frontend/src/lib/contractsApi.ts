@@ -34,11 +34,6 @@ export async function fetchAssemblyContract(subCategory: number): Promise<Assemb
   }
 }
 
-/** @deprecated use fetchAssemblyContract */
-export async function fetchDisassemblyContract(subCategory: number): Promise<AssemblyContract | null> {
-  return fetchAssemblyContract(subCategory);
-}
-
 export async function fetchSpecContract(subcategory: number): Promise<SpecContract | null> {
   if (specCache.has(subcategory)) return specCache.get(subcategory)!;
   try {

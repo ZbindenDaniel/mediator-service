@@ -83,8 +83,6 @@ interface ZubehoerCardProps {
   compatibleParentRefs: any[];
   onRelationChanged: () => void;
   assemblyContract?: AssemblyContract | null;
-  /** @deprecated use assemblyContract */
-  disassemblyContract?: AssemblyContract | null;
   spareParts?: SparePart[];
   qualityResponses?: Record<string, string>;
   onSparepartChanged?: () => void;
@@ -103,14 +101,13 @@ export default function ZubehoerCard({
   compatibleParentRefs,
   onRelationChanged,
   assemblyContract: assemblyContractProp,
-  disassemblyContract,
   spareParts = [],
   qualityResponses = {},
   onSparepartChanged,
   onQualityResponseChanged
 }: ZubehoerCardProps) {
   const { setEntity } = usePanelContext();
-  const assemblyContract = assemblyContractProp ?? disassemblyContract ?? null;
+  const assemblyContract = assemblyContractProp ?? null;
 
   const [linkInput, setLinkInput] = React.useState('');
   const [linkPending, setLinkPending] = React.useState(false);

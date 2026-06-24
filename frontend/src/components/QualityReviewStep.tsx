@@ -136,9 +136,9 @@ export default function QualityReviewStep({
   initialAnswers,
   disabled,
 }: QualityReviewStepProps) {
-  const [contracts, setContracts] = useState<{ general: QualityContract | null; disassembly: QualityContract | null; subCat: QualityContract | null }>({
+  const [contracts, setContracts] = useState<{ general: QualityContract | null; assembly: QualityContract | null; subCat: QualityContract | null }>({
     general: null,
-    disassembly: null,
+    assembly: null,
     subCat: null,
   });
   const [contractsLoading, setContractsLoading] = useState(true);
@@ -155,8 +155,8 @@ export default function QualityReviewStep({
     return () => { cancelled = true; };
   }, [subCategory]);
 
-  const { general, disassembly, subCat } = contracts;
-  const questions = getAllQuestions(general, subCat, disassembly);
+  const { general, assembly, subCat } = contracts;
+  const questions = getAllQuestions(general, subCat, assembly);
 
   const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers ?? {});
   const [notes, setNotes] = useState('');
@@ -175,7 +175,7 @@ export default function QualityReviewStep({
 
   const activeContracts = [
     ...(general ? [general] : []),
-    ...(disassembly ? [disassembly] : []),
+    ...(assembly ? [assembly] : []),
     ...(subCat ? [subCat] : [])
   ];
   const qualityValue = deriveQualityFromAnswers(activeContracts, answers);
@@ -203,7 +203,7 @@ export default function QualityReviewStep({
   };
 
   const generalQuestions = general?.questions ?? [];
-  const disassemblyQuestions = disassembly?.questions ?? [];
+  const assemblyQuestions = assembly?.questions ?? [];
   const subCatQuestions = subCat?.questions ?? [];
 
   if (contractsLoading) {
@@ -236,14 +236,14 @@ export default function QualityReviewStep({
           ) : null
         )}
 
-        {disassemblyQuestions.length > 0 && (
+        {assemblyQuestions.length > 0 && (
           <>
             <div className="row">
               <p className="muted" style={{ margin: 0 }}>
                 <strong>Komponenten</strong>
               </p>
             </div>
-            {disassemblyQuestions.map((q) =>
+            {assemblyQuestions.map((q) =>
               isQuestionVisible(q, answers) ? (
                 <QuestionRow
                   key={q.id}

@@ -22,5 +22,3 @@ export interface AssemblyContract {
 }
 
 // Backward-compatibility aliases for code not yet migrated
-export type DisassemblyContractPart = AssemblyPart;
-export type DisassemblyContract = AssemblyContract;

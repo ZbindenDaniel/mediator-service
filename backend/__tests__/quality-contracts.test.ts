@@ -1,11 +1,11 @@
 import {
-  disassemblyToQualityContract,
+  assemblyToQualityContract,
   deriveQualityFromAnswers,
   deriveSpecsFromAnswers,
   buildQualityCheckResponse,
 } from '../lib/quality-contracts';
 import type { QualityContract } from '../../models/quality-contract';
-import type { DisassemblyContract } from '../../models/disassembly-contract';
+import type { AssemblyContract } from '../../models/assembly-contract';
 
 const generalContract: QualityContract = {
   version: 1,
@@ -50,7 +50,7 @@ const subCatContract: QualityContract = {
   ],
 };
 
-const disassemblyContract: DisassemblyContract = {
+const assemblyContract: AssemblyContract = {
   version: 1,
   subCategory: 201,
   parts: [
@@ -101,28 +101,28 @@ const disassemblyContract: DisassemblyContract = {
   ],
 };
 
-describe('disassemblyToQualityContract', () => {
+describe('assemblyToQualityContract', () => {
   it('extracts qualityQuestion from parts that have one', () => {
-    const qc = disassemblyToQualityContract(disassemblyContract);
+    const qc = assemblyToQualityContract(assemblyContract);
     expect(qc.questions).toHaveLength(3); // fan, battery, ram — mainboard skipped
     expect(qc.questions.map(q => q.id)).toEqual(['has_fan', 'battery_condition', 'ram_gb']);
   });
 
   it('preserves version and subCategory', () => {
-    const qc = disassemblyToQualityContract(disassemblyContract);
+    const qc = assemblyToQualityContract(assemblyContract);
     expect(qc.version).toBe(1);
     expect(qc.subCategory).toBe(201);
   });
 
   it('returns empty questions array when no parts have qualityQuestion', () => {
-    const dc: DisassemblyContract = {
+    const dc: AssemblyContract = {
       version: 1,
       subCategory: 999,
       parts: [
         { key: 'board', label: 'Board', targetSubcategory: 601 },
       ],
     };
-    const qc = disassemblyToQualityContract(dc);
+    const qc = assemblyToQualityContract(dc);
     expect(qc.questions).toHaveLength(0);
   });
 });
@@ -143,8 +143,8 @@ describe('deriveQualityFromAnswers', () => {
       lieferumfang: 'Vollständig',  // impact: 5
       has_fan: 'false',             // impact: 1 (from disassembly)
     };
-    const disassemblyQc = disassemblyToQualityContract(disassemblyContract);
-    const { value } = deriveQualityFromAnswers([generalContract, disassemblyQc], answers);
+    const assemblyQc = assemblyToQualityContract(assemblyContract);
+    const { value } = deriveQualityFromAnswers([generalContract, assemblyQc], answers);
     expect(value).toBe(1);
   });
 
@@ -173,15 +173,15 @@ describe('deriveQualityFromAnswers', () => {
 describe('deriveSpecsFromAnswers', () => {
   it('renders specValue template with answer', () => {
     const answers = { ram_gb: '16' };
-    const disassemblyQc = disassemblyToQualityContract(disassemblyContract);
-    const specs = deriveSpecsFromAnswers([disassemblyQc], answers);
+    const assemblyQc = assemblyToQualityContract(assemblyContract);
+    const specs = deriveSpecsFromAnswers([assemblyQc], answers);
     expect(specs['RAM']).toBe('16 GB');
   });
 
   it('skips questions with no specField', () => {
     const answers = { has_fan: 'true', lieferumfang: 'Vollständig' };
-    const disassemblyQc = disassemblyToQualityContract(disassemblyContract);
-    const specs = deriveSpecsFromAnswers([generalContract, disassemblyQc], answers);
+    const assemblyQc = assemblyToQualityContract(assemblyContract);
+    const specs = deriveSpecsFromAnswers([generalContract, assemblyQc], answers);
     // has_fan and lieferumfang have no specField
     expect(Object.keys(specs)).not.toContain('has_fan');
     expect(Object.keys(specs)).not.toContain('Lieferumfang');
@@ -211,8 +211,8 @@ describe('deriveSpecsFromAnswers', () => {
       battery_condition: 'Gut (>80%)',
       ram_gb: '8',
     };
-    const disassemblyQc = disassemblyToQualityContract(disassemblyContract);
-    const specs = deriveSpecsFromAnswers([subCatContract, disassemblyQc], answers);
+    const assemblyQc = assemblyToQualityContract(assemblyContract);
+    const specs = deriveSpecsFromAnswers([subCatContract, assemblyQc], answers);
     expect(specs['Tastatur-Layout']).toBe('CH');
     expect(specs['Akku']).toBe('Gut (>80%)');
     expect(specs['RAM']).toBe('8 GB');
@@ -221,17 +221,17 @@ describe('deriveSpecsFromAnswers', () => {
 
 describe('buildQualityCheckResponse', () => {
   it('merges disassembly contract specs into derivedSpecs', () => {
-    const disassemblyQc = disassemblyToQualityContract(disassemblyContract);
+    const assemblyQc = assemblyToQualityContract(assemblyContract);
     const answers = { ram_gb: '16', battery_condition: 'Gut (>80%)' };
-    const result = buildQualityCheckResponse(generalContract, subCatContract, answers, disassemblyQc);
+    const result = buildQualityCheckResponse(generalContract, subCatContract, answers, assemblyQc);
     expect(result.derivedSpecs['RAM']).toBe('16 GB');
     expect(result.derivedSpecs['Akku']).toBe('Gut (>80%)');
   });
 
   it('qualityValue reflects disassembly impact when merged', () => {
-    const disassemblyQc = disassemblyToQualityContract(disassemblyContract);
+    const assemblyQc = assemblyToQualityContract(assemblyContract);
     const answers = { has_fan: 'false' }; // fan missing → quality 1
-    const result = buildQualityCheckResponse(generalContract, subCatContract, answers, disassemblyQc);
+    const result = buildQualityCheckResponse(generalContract, subCatContract, answers, assemblyQc);
     expect(result.qualityValue).toBe(1);
   });
 

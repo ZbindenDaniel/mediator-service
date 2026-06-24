@@ -50,11 +50,6 @@ export function getAssemblyContract(subCategory: number): AssemblyContract | nul
   return contract;
 }
 
-/** @deprecated use getAssemblyContract */
-export function getDisassemblyContract(subCategory: number): AssemblyContract | null {
-  return getAssemblyContract(subCategory);
-}
-
 export function listSpecContractSubcategories(): number[] {
   if (specSubcategoriesCache) return specSubcategoriesCache;
   try {

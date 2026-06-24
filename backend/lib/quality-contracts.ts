@@ -103,7 +103,7 @@ export function assemblyToQualityContract(ac: AssemblyContract): QualityContract
 }
 
 /** @deprecated use assemblyToQualityContract */
-export function disassemblyToQualityContract(ac: AssemblyContract): QualityContract {
+export function assemblyToQualityContract(ac: AssemblyContract): QualityContract {
   return assemblyToQualityContract(ac);
 }
 
@@ -111,11 +111,11 @@ export function buildQualityCheckResponse(
   generalContract: QualityContract,
   subCatContract: QualityContract | null,
   answers: Record<string, string>,
-  disassemblyQualityContract?: QualityContract | null
+  assemblyQualityContract?: QualityContract | null
 ): QualityCheckResponse {
   const contracts = [
     generalContract,
-    ...(disassemblyQualityContract ? [disassemblyQualityContract] : []),
+    ...(assemblyQualityContract ? [assemblyQualityContract] : []),
     ...(subCatContract ? [subCatContract] : [])
   ];
   const { value, tag } = deriveQualityFromAnswers(contracts, answers);
