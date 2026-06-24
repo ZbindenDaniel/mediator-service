@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+852. ✅ Harden nginx headers, dockerignore secrets, restrict Postgres bind address
+   - **Why:** (1) Nginx was missing four standard browser security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy) — no API risk, pure client-side defence-in-depth against MIME sniffing/clickjacking. Camera kept enabled in Permissions-Policy because the app uses it for QR scanning. (2) `.dockerignore` didn't exclude `.env` or `secrets/` — both are present on real hosts and were being sent to the Docker daemon build context even though no COPY touches them. (3) Postgres `ports: 5432:5432` bound to 0.0.0.0 with a weak dev password — changed to `127.0.0.1:5432:5432`; local tools still work, cross-machine access closed.
+   - **Deferred:** Nothing from this round. Remaining audit items (chmod 777 on /run/cups, resource limits, erp-sync credentials, read-only filesystem) tracked in backlog table in the plan file.
 851. ✅ Harden Docker pipeline: entrypoint fail-fast, clean shutdown, log rotation
    - **Why:** (1) CUPS entrypoint looped silently if the socket never appeared, then started background discovery against a dead daemon — added fail-fast exit after 15s. (2) Background discovery loop was orphaned on SIGTERM — now tracked via DISCOVERY_PID and killed in the trap. (3) All containers had no log size limit — added 10 MB × 3 file cap in both compose files to prevent disk fill on long-running hosts.
    - **Deferred:** chmod 777 on /run/cups left unchanged — both containers (cups=root, mediator=www-data) share the volume and need broad write access; tightening requires aligning UIDs/GIDs across images which is a larger change.
