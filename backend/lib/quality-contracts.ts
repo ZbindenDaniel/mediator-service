@@ -102,10 +102,6 @@ export function assemblyToQualityContract(ac: AssemblyContract): QualityContract
   };
 }
 
-/** @deprecated use assemblyToQualityContract */
-export function assemblyToQualityContract(ac: AssemblyContract): QualityContract {
-  return assemblyToQualityContract(ac);
-}
 
 export function buildQualityCheckResponse(
   generalContract: QualityContract,

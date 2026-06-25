@@ -56,6 +56,9 @@ async function findOrCreateRef(
   const nextArtikelNummer = String((maxArtikel ? parseInt(maxArtikel, 10) : 0) + 1);
 
   const artikelbeschreibung = [newRef.Hersteller, newRef.Kurzbeschreibung].filter(Boolean).join(' ');
+  if (!artikelbeschreibung.trim()) {
+    throw new Error('Hersteller and Kurzbeschreibung cannot both be empty');
+  }
   await persistItemReference({
     Artikel_Nummer: nextArtikelNummer,
     Artikelbeschreibung: artikelbeschreibung,

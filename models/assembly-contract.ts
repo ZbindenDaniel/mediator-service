@@ -11,8 +11,6 @@ export interface AssemblyPart {
   question?: QualityQuestion;
   /** Secondary spec question, e.g. drive_type alongside storage_gb. Not used for quality scoring. */
   specQuestion?: QualityQuestion;
-  /** @deprecated use question */
-  qualityQuestion?: QualityQuestion;
 }
 
 export interface AssemblyContract {
@@ -20,5 +18,3 @@ export interface AssemblyContract {
   subCategory: number;
   parts: AssemblyPart[];
 }
-
-// Backward-compatibility aliases for code not yet migrated
