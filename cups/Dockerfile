@@ -20,7 +20,10 @@ RUN dpkg --add-architecture i386 \
 # Download from support.brother.com and place in cups/drivers/ before building.
 COPY drivers/ /tmp/drivers/
 RUN if ls /tmp/drivers/*.deb 1>/dev/null 2>&1; then \
-        dpkg -i /tmp/drivers/*.deb && echo "Brother QL drivers installed"; \
+        printf '#!/bin/sh\nexit 0\n' > /usr/local/sbin/systemctl \
+        && chmod +x /usr/local/sbin/systemctl \
+        && dpkg -i /tmp/drivers/*.deb \
+        && echo "Brother QL drivers installed"; \
     else \
         echo "No .deb packages found in cups/drivers/ — CUPS will run without Brother QL support"; \
     fi \

@@ -401,7 +401,7 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
 }
 
 export default function ItemListPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { setEntity, setMultiSelection, clearSelection, clearMultiSelection } = usePanelContext();
   const setBulkSelection = useSetBulkSelection();
   const [items, setItems] = useState<Item[]>([]);
