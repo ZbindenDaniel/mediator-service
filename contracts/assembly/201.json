@@ -6,7 +6,7 @@
       "key": "fan",
       "label": "Lüfter",
       "targetSubcategory": 202,
-      "qualityQuestion": {
+      "question": {
         "id": "has_fan",
         "type": "boolean",
         "question": "Lüfter vorhanden?",
@@ -17,18 +17,26 @@
       "key": "keyboard",
       "label": "Tastatur",
       "targetSubcategory": 202,
-      "qualityQuestion": {
+      "question": {
         "id": "has_keyboard",
         "type": "boolean",
         "question": "Tastatur vorhanden?",
         "qualityImpact": { "false": 1 }
+      },
+      "specQuestion": {
+        "id": "keyboard_layout",
+        "type": "select",
+        "question": "Tastatur-Layout?",
+        "values": ["CH", "DE", "US", "Anderes"],
+        "specField": "Tastatur-Layout",
+        "specValue": "%v"
       }
     },
     {
       "key": "display",
       "label": "Display",
       "targetSubcategory": 202,
-      "qualityQuestion": {
+      "question": {
         "id": "has_display",
         "type": "boolean",
         "question": "Display vorhanden?",
@@ -39,7 +47,7 @@
       "key": "battery",
       "label": "Akku",
       "targetSubcategory": 206,
-      "qualityQuestion": {
+      "question": {
         "id": "battery_condition",
         "type": "select",
         "question": "Akkuzustand?",
@@ -59,7 +67,8 @@
       "key": "ram",
       "label": "Arbeitsspeicher",
       "targetSubcategory": 603,
-      "qualityQuestion": {
+      "multipleAllowed": true,
+      "question": {
         "id": "ram_gb",
         "type": "select",
         "question": "Wie viel RAM ist verbaut?",
@@ -72,20 +81,30 @@
       "key": "storage",
       "label": "SSD / HDD",
       "targetSubcategory": 901,
-      "qualityQuestion": {
+      "multipleAllowed": true,
+      "noLink": true,
+      "question": {
         "id": "storage_gb",
         "type": "select",
         "question": "Speicher (SSD/HDD)?",
         "values": ["128", "256", "512", "1000", "2000"],
         "specField": "Speicher",
         "specValue": "%v GB"
+      },
+      "specQuestion": {
+        "id": "drive_type",
+        "type": "select",
+        "question": "Speichertyp?",
+        "values": ["SSD", "NVMe SSD", "HDD", "SSD + HDD", "eMMC"],
+        "specField": "Speichertyp",
+        "specValue": "%v"
       }
     },
     {
       "key": "mainboard",
       "label": "Mainboard",
       "targetSubcategory": 601,
-      "qualityQuestion": {
+      "question": {
         "id": "has_mainboard",
         "type": "boolean",
         "question": "Mainboard vorhanden?",

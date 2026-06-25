@@ -6,7 +6,8 @@
       "key": "ram",
       "label": "Arbeitsspeicher",
       "targetSubcategory": 603,
-      "qualityQuestion": {
+      "multipleAllowed": true,
+      "question": {
         "id": "ram_gb",
         "type": "select",
         "question": "Wie viel RAM ist verbaut?",
@@ -19,20 +20,30 @@
       "key": "storage",
       "label": "SSD / HDD",
       "targetSubcategory": 901,
-      "qualityQuestion": {
+      "multipleAllowed": true,
+      "noLink": true,
+      "question": {
         "id": "storage_gb",
         "type": "select",
         "question": "Speicher (SSD/HDD)?",
         "values": ["128", "256", "512", "1000", "2000"],
         "specField": "Speicher",
         "specValue": "%v GB"
+      },
+      "specQuestion": {
+        "id": "drive_type",
+        "type": "select",
+        "question": "Speichertyp?",
+        "values": ["SSD", "NVMe SSD", "HDD", "SSD + HDD", "eMMC"],
+        "specField": "Speichertyp",
+        "specValue": "%v"
       }
     },
     {
       "key": "cpu",
       "label": "Prozessor (CPU)",
       "targetSubcategory": 602,
-      "qualityQuestion": {
+      "question": {
         "id": "has_cpu",
         "type": "boolean",
         "question": "CPU vorhanden?",
@@ -43,7 +54,7 @@
       "key": "mainboard",
       "label": "Mainboard",
       "targetSubcategory": 601,
-      "qualityQuestion": {
+      "question": {
         "id": "has_mainboard",
         "type": "boolean",
         "question": "Mainboard vorhanden?",
@@ -54,7 +65,7 @@
       "key": "gpu",
       "label": "Grafikkarte (GPU)",
       "targetSubcategory": 604,
-      "qualityQuestion": {
+      "question": {
         "id": "has_gpu",
         "type": "boolean",
         "question": "Grafikkarte vorhanden?"

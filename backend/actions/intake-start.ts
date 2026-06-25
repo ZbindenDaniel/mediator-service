@@ -61,7 +61,10 @@ async function findItemByIdentifier(serial: string | null, mac: string | null) {
 
 async function findRefCandidates(vendor: string | null | undefined, model: string | null | undefined): Promise<IntakeRefCandidate[]> {
   if (!vendor && !model) return [];
-  const term = `%${[vendor, model].filter(Boolean).join(' ')}%`;
+  const vendorTerm = vendor ? `%${vendor}%` : null;
+  const modelTerm = model ? `%${model}%` : null;
+  // Search model in Kurzbeschreibung and vendor in Hersteller separately —
+  // combined term would never match since the fields store them independently
   const rows = await query<{
     Artikel_Nummer: string; Hersteller: string | null;
     Kurzbeschreibung: string | null; Hauptkategorien_A: string | null; Unterkategorien_A: string | null;
@@ -69,9 +72,12 @@ async function findRefCandidates(vendor: string | null | undefined, model: strin
     `SELECT r."Artikel_Nummer", r."Hersteller", r."Kurzbeschreibung",
             r."Hauptkategorien_A", r."Unterkategorien_A"
      FROM item_refs r
-     WHERE (r."Kurzbeschreibung" ILIKE $1 OR r."Hersteller" ILIKE $1)
-     ORDER BY r."Artikel_Nummer" DESC LIMIT 3`,
-    [term]
+     WHERE (
+       ($1::text IS NULL OR r."Kurzbeschreibung" ILIKE $1)
+       AND ($2::text IS NULL OR r."Hersteller" ILIKE $2)
+     )
+     ORDER BY r."Artikel_Nummer" DESC LIMIT 10`,
+    [modelTerm, vendorTerm]
   );
   return rows.map(r => ({
     artikelNummer: r.Artikel_Nummer,

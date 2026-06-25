@@ -1,33 +1,33 @@
 import type { QualityContract, QualityQuestion } from '../../../models/quality-contract';
-import type { DisassemblyContract } from '../../../models/disassembly-contract';
-import { fetchQualityContract, fetchDisassemblyContract } from './contractsApi';
+import type { AssemblyContract } from '../../../models/assembly-contract';
+import { fetchQualityContract, fetchAssemblyContract } from './contractsApi';
 
 export function isQuestionVisible(question: QualityQuestion, answers: Record<string, string>): boolean {
   if (!question.showIf) return true;
   return answers[question.showIf.questionId] === question.showIf.value;
 }
 
-/** Converts disassembly contract part questions into a synthetic QualityContract for rendering/scoring. */
-function disassemblyToQualityContract(dc: DisassemblyContract): QualityContract {
+/** Converts assembly contract part questions into a synthetic QualityContract for rendering/scoring. */
+function assemblyToQualityContract(ac: AssemblyContract): QualityContract {
   return {
-    version: dc.version,
-    subCategory: dc.subCategory,
-    questions: dc.parts.flatMap(p => p.qualityQuestion ? [p.qualityQuestion] : [])
+    version: ac.version,
+    subCategory: ac.subCategory,
+    questions: ac.parts.flatMap(p => p.question ? [p.question] : [])
   };
 }
 
 export async function loadContractsAsync(subCategory?: number): Promise<{
   general: QualityContract | null;
-  disassembly: QualityContract | null;
+  assembly: QualityContract | null;
   subCat: QualityContract | null;
 }> {
-  const [general, disassemblyRaw, subCat] = await Promise.all([
+  const [general, assemblyRaw, subCat] = await Promise.all([
     fetchQualityContract('general'),
-    subCategory !== undefined ? fetchDisassemblyContract(subCategory) : Promise.resolve(null),
+    subCategory !== undefined ? fetchAssemblyContract(subCategory) : Promise.resolve(null),
     subCategory !== undefined ? fetchQualityContract(subCategory) : Promise.resolve(null)
   ]);
-  const disassembly = disassemblyRaw ? disassemblyToQualityContract(disassemblyRaw) : null;
-  return { general, disassembly, subCat };
+  const assembly = assemblyRaw ? assemblyToQualityContract(assemblyRaw) : null;
+  return { general, assembly, subCat };
 }
 
 /** Derives quality value (1–5) from answers across all provided contracts. */
@@ -49,15 +49,15 @@ export function deriveQualityFromAnswers(
   return scores.length > 0 ? Math.min(...scores) : 3;
 }
 
-/** Returns all questions from all contracts in order: general → disassembly → subcategory. */
+/** Returns all questions from all contracts in order: general → assembly → subcategory. */
 export function getAllQuestions(
   general: QualityContract | null,
   subCat: QualityContract | null,
-  disassembly?: QualityContract | null
+  assembly?: QualityContract | null
 ): QualityQuestion[] {
   return [
     ...(general?.questions ?? []),
-    ...(disassembly?.questions ?? []),
+    ...(assembly?.questions ?? []),
     ...(subCat?.questions ?? [])
   ];
 }

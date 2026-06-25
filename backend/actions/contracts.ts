@@ -5,7 +5,7 @@ import {
   getQualityContract,
   getSpecContract,
   listSpecContractSubcategories,
-  getDisassemblyContract
+  getAssemblyContract
 } from '../contracts/registry';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -16,7 +16,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 const QUALITY_ROUTE = /^\/api\/contracts\/quality\/(.+)$/;
 const SPECS_SINGLE_ROUTE = /^\/api\/contracts\/specs\/(\d+)$/;
 const SPECS_LIST_ROUTE = /^\/api\/contracts\/specs$/;
-const DISASSEMBLY_ROUTE = /^\/api\/contracts\/disassembly\/(\d+)$/;
+const ASSEMBLY_ROUTE = /^\/api\/contracts\/assembly\/(\d+)$/;
 
 const action = defineHttpAction({
   key: 'contracts',
@@ -28,7 +28,7 @@ const action = defineHttpAction({
       QUALITY_ROUTE.test(path) ||
       SPECS_SINGLE_ROUTE.test(path) ||
       SPECS_LIST_ROUTE.test(path) ||
-      DISASSEMBLY_ROUTE.test(path)
+      ASSEMBLY_ROUTE.test(path)
     );
   },
   async handle(req: IncomingMessage, res: ServerResponse) {
@@ -66,12 +66,12 @@ const action = defineHttpAction({
       return;
     }
 
-    const disassemblyMatch = DISASSEMBLY_ROUTE.exec(pathname);
-    if (disassemblyMatch) {
-      const subCategory = parseInt(disassemblyMatch[1], 10);
-      const contract = getDisassemblyContract(subCategory);
+    const assemblyMatch = ASSEMBLY_ROUTE.exec(pathname);
+    if (assemblyMatch) {
+      const subCategory = parseInt(assemblyMatch[1], 10);
+      const contract = getAssemblyContract(subCategory);
       if (!contract) {
-        sendJson(res, 404, { error: 'Disassembly contract not found', subCategory });
+        sendJson(res, 404, { error: 'Assembly contract not found', subCategory });
         return;
       }
       sendJson(res, 200, contract);

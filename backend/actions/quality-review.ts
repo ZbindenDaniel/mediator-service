@@ -5,9 +5,9 @@ import {
   loadGeneralContract,
   loadSubCategoryContract,
   buildQualityCheckResponse,
-  disassemblyToQualityContract,
+  assemblyToQualityContract,
 } from '../lib/quality-contracts';
-import { getDisassemblyContract } from '../contracts/registry';
+import { getAssemblyContract } from '../contracts/registry';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -61,9 +61,9 @@ const action = defineHttpAction({
       }
 
       const subCatContract = subCategory !== undefined ? loadSubCategoryContract(subCategory) : null;
-      const disassemblyContract = subCategory !== undefined ? getDisassemblyContract(subCategory) : null;
-      const disassemblyQualityContract = disassemblyContract ? disassemblyToQualityContract(disassemblyContract) : null;
-      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, answers, disassemblyQualityContract);
+      const assemblyContract = subCategory !== undefined ? getAssemblyContract(subCategory) : null;
+      const assemblyQualityContract = assemblyContract ? assemblyToQualityContract(assemblyContract) : null;
+      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, answers, assemblyQualityContract);
 
       const assessment = {
         tag: checkResponse.qualityTag as import('../../models/quality').QualityTag,

@@ -6,7 +6,7 @@
       "key": "toner",
       "label": "Toner / Tintenpatrone",
       "targetSubcategory": 302,
-      "qualityQuestion": {
+      "question": {
         "id": "has_toner",
         "type": "boolean",
         "question": "Toner / Tintenpatrone vorhanden?",
@@ -17,7 +17,7 @@
       "key": "drum",
       "label": "Trommeleinheit",
       "targetSubcategory": 302,
-      "qualityQuestion": {
+      "question": {
         "id": "has_drum",
         "type": "boolean",
         "question": "Trommeleinheit vorhanden?"
@@ -27,7 +27,7 @@
       "key": "fuser",
       "label": "Fixiereinheit",
       "targetSubcategory": 302,
-      "qualityQuestion": {
+      "question": {
         "id": "has_fuser",
         "type": "boolean",
         "question": "Fixiereinheit vorhanden?"

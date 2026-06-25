@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
-import { withTransaction } from '../db-client';
+import { withTransaction, query } from '../db-client';
 // TODO(agent): Verify non-bulk removals keep grouping/list views consistent after zeroing stock.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -104,12 +104,41 @@ const action = defineHttpAction({
           throw updateErr;
         }
 
+        // Delete unextracted spare parts (BoxID=null) so sold-as-is device doesn't leave orphaned component entries
+        const unextractedParts = await query(`
+          SELECT ir."ChildItemUUID"
+          FROM item_relations ir
+          JOIN items i ON i."ItemUUID" = ir."ChildItemUUID"
+          WHERE ir."ParentItemUUID" = $1
+            AND ir."RelationType" = 'Zerlegt_aus'
+            AND i."BoxID" IS NULL
+        `, [u]);
+        const removedUUIDs: string[] = [];
+        for (const part of unextractedParts) {
+          await _client.query(
+            `DELETE FROM item_relations WHERE "ChildItemUUID" = $1 AND "RelationType" = 'Zerlegt_aus'`,
+            [part.ChildItemUUID]
+          );
+          await _client.query(`DELETE FROM items WHERE "ItemUUID" = $1`, [part.ChildItemUUID]);
+          removedUUIDs.push(part.ChildItemUUID);
+        }
+        if (removedUUIDs.length > 0) {
+          await ctx.logEvent({
+            Actor: a,
+            EntityType: 'Item',
+            EntityId: u,
+            Event: 'SparepartsRemovedWithDevice',
+            Meta: JSON.stringify({ removedCount: removedUUIDs.length, removedUUIDs })
+          });
+        }
+
         const updated = await ctx.getItem(u);
         console.info('[remove-item] Cleared item instance stock', {
           actor: a,
           itemId: u,
           quantityBefore: currentQty,
-          quantityAfter: updated?.Auf_Lager ?? 0
+          quantityAfter: updated?.Auf_Lager ?? 0,
+          sparepartsRemoved: removedUUIDs.length
         });
 
         await ctx.logEvent({

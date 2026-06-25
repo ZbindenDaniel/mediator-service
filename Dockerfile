@@ -73,8 +73,7 @@ COPY --from=builder /app/docs ./docs
 
 RUN chmod +x /app/backend/scripts/erp-sync.sh
 
-# Ensure required directories exist AND fix ownership
-# TODO(media-storage): Revisit directory creation if media paths move outside /app.
+# Ensure required directories exist with correct ownership for new volume mounts
 RUN mkdir -p \
         dist/backend/data \
         /app/dist/backend/media \
@@ -82,8 +81,10 @@ RUN mkdir -p \
         dist/frontend/public \
         /var/lib/mediator/inbox \
         /var/lib/mediator/archive \
+        /mnt/mediator-scans \
     && chown -R 33:33 /app \
-    && chown -R 33:33 /var/lib/mediator
+    && chown -R 33:33 /var/lib/mediator \
+    && chown 33:33 /mnt/mediator-scans
 
 # Switch to non-root user (www-data)
 USER 33:33

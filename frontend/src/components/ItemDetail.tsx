@@ -2670,6 +2670,23 @@ export default function ItemDetail({ itemId }: Props) {
       catch (error) { console.error('Failed to display remove alert', error); }
       return;
     }
+    // Warn if unextracted spare parts will be cascade-deleted with this instance
+    if (!isBulkItem) {
+      try {
+        const partsRes = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/spare-parts`);
+        if (partsRes.ok) {
+          const partsData = await partsRes.json();
+          const unextracted: any[] = (partsData.spareParts ?? []).filter((p: any) => p.BoxID == null);
+          if (unextracted.length > 0) {
+            const confirmed = await dialogService.confirm({
+              title: 'Katalogisierte Bauteile vorhanden',
+              message: `${unextracted.length} katalogisierte Bauteile (noch nicht entnommen) werden ebenfalls gelöscht. Fortfahren?`
+            }).catch(() => false);
+            if (!confirmed) return;
+          }
+        }
+      } catch { /* proceed silently on network error */ }
+    }
     try {
       const res = await fetch(`/api/items/${encodeURIComponent(item.ItemUUID)}/remove`, {
         method: 'POST',

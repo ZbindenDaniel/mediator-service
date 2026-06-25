@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import ZubehoerCard from '../ZubehoerCard';
 import type { Item } from '../../../../models';
-import type { DisassemblyContract } from '../../../../models/disassembly-contract';
-import { fetchDisassemblyContract } from '../../lib/contractsApi';
+import type { AssemblyContract } from '../../../../models/assembly-contract';
+import { fetchAssemblyContract } from '../../lib/contractsApi';
 
 interface SparePart {
   ItemUUID: string;
@@ -33,13 +33,13 @@ export default function ItemAccessoriesTab({
 }: Props) {
   const subCategory = item.Unterkategorien_A ?? null;
 
-  const [disassemblyContract, setDisassemblyContract] = useState<DisassemblyContract | null>(null);
+  const [assemblyContract, setAssemblyContract] = useState<AssemblyContract | null>(null);
   const [spareParts, setSpareParts] = useState<SparePart[]>([]);
   const [qualityResponses, setQualityResponses] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!subCategory) return;
-    fetchDisassemblyContract(subCategory).then(setDisassemblyContract);
+    fetchAssemblyContract(subCategory).then(setAssemblyContract);
   }, [subCategory]);
 
   const fetchSpareParts = () => {
@@ -63,15 +63,17 @@ export default function ItemAccessoriesTab({
       artikelNummer={item.Artikel_Nummer ?? null}
       deviceLabel={(item.Artikelbeschreibung || item.Kurzbeschreibung || item.Artikel_Nummer) ?? null}
       deviceHersteller={item.Hersteller ?? null}
+      subCategory={subCategory}
       connectedAccessories={connectedAccessories}
       connectedToDevices={connectedToDevices}
       compatibleAccessoryRefs={compatibleAccessoryRefs}
       compatibleParentRefs={compatibleParentRefs}
       onRelationChanged={onRelationChanged}
-      disassemblyContract={disassemblyContract}
+      assemblyContract={assemblyContract}
       spareParts={spareParts}
       qualityResponses={qualityResponses}
       onSparepartChanged={fetchSpareParts}
+      onQualityResponseChanged={setQualityResponses}
     />
   );
 }

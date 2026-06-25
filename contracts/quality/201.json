@@ -1,23 +1,7 @@
 {
-  "version": 4,
+  "version": 5,
   "subCategory": 201,
   "questions": [
-    {
-      "id": "keyboard_layout",
-      "type": "select",
-      "question": "Tastatur-Layout?",
-      "values": ["CH", "DE", "US", "Anderes"],
-      "specField": "Tastatur-Layout",
-      "specValue": "%v"
-    },
-    {
-      "id": "drive_type",
-      "type": "select",
-      "question": "Speichertyp?",
-      "values": ["SSD", "NVMe SSD", "HDD", "SSD + HDD", "eMMC"],
-      "specField": "Speichertyp",
-      "specValue": "%v"
-    },
     {
       "id": "has_os",
       "type": "boolean",
