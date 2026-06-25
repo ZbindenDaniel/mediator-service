@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+853. ✅ Fix CUPS fd limit (ulimits) and www-data lpinfo Forbidden error
+   - **Why:** (1) CUPS crashes on hosts with high/unlimited fd limits — added `ulimits.nofile: 65000/65000` to the cups service in both compose files; CUPS internal calculations assume lower limits and produce an invalid value when the limit is too high, causing EFAULT. (2) www-data (uid 33) in the mediator container gets "Forbidden" from `lpinfo` via the Unix socket — `AuthType None` in cupsd.conf disables credential prompts but CUPS still enforces lpadmin group membership at the socket level; fixed by adding `www-data` to `lpadmin` in `cups/Dockerfile`. USB device passthrough was already handled by docker-compose.usb.yml.
+   - **Deferred:** Nothing.
 852. ✅ Accessories tab: popup transparency, toggle UX, Entnehmen modal, DB crash fix
    - **Why:** (1) `item_refs` INSERT had `CreatedAt`/`UpdatedAt` columns that don't exist — dropped them. (2) `SparepartSlotPopup` rendered a `.card` with `position:absolute` inside the portal's `.dialog-content`, causing transparent/broken appearance — removed the wrapper, search now uses slot label only, rows are clickable (no per-row confirm button), `RefSearchInput` always visible. (3) Portal `_extra` key lookup stripped suffix before `find()` so extra-instance popup works through the portal instead of inline. (4) Entnehmen inline table row form replaced with `RelocateItemCard` in a portal modal. (5) Ja/Nein toggle uses mint green (Ja active) / orange (Nein active); clicking the active state clears the answer — no separate release button.
    - **Deferred:** Nothing.

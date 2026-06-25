@@ -16,6 +16,11 @@ RUN dpkg --add-architecture i386 \
         printer-driver-ptouch \
     && rm -rf /var/lib/apt/lists/*
 
+# www-data (uid 33) is the mediator app's user. AuthType None in cupsd.conf disables
+# credential prompts but CUPS still enforces @SYSTEM (lpadmin) group membership at the
+# Unix socket level — adding www-data here lets lpinfo/lpadmin work without running as root.
+RUN adduser www-data lpadmin
+
 # Optional: proprietary Brother LPR .deb packages for models not covered by ptouch-ql.
 # Download from support.brother.com and place in cups/drivers/ before building.
 COPY drivers/ /tmp/drivers/

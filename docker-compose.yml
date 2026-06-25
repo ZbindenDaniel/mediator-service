@@ -29,6 +29,11 @@ services:
     # USB passthrough: only add this when a USB printer is physically attached to this host.
     # Use: docker compose -f docker-compose.yml -f docker-compose.usb.yml up
     # (see docker-compose.usb.yml for the devices: block)
+    # CUPS uses the fd limit in internal calculations; unlimited/very high limits cause EFAULT.
+    ulimits:
+      nofile:
+        soft: 65000
+        hard: 65000
     volumes:
       - cups-socket:/run/cups
     restart: unless-stopped
