@@ -30,3 +30,14 @@ Use this directory as the single navigation root for deep-dive operational and i
 | [`review-flow.md`](./review-flow.md) | Review lifecycle, quality assessment creation flow |
 | [`nightly-erp-sync.md`](./nightly-erp-sync.md) | Nightly ERP sync scheduler: opt-in model, timing, toggle, troubleshooting |
 | [`co2-impact.md`](./co2-impact.md) | CO₂ recovery potential: formula, label thresholds, contract, display |
+| [`intake.md`](./intake.md) | Device intake station: cataloguing flow, netboot, Phase 1/2 |
+| [`agentic-search-events.md`](./agentic-search-events.md) | Agentic search event inspection and analysis |
+| [`item-detail-layout.md`](./item-detail-layout.md) | Item detail UX hierarchy, persona-based design |
+| [`spare-parts-catalog.md`](./spare-parts-catalog.md) | Spare parts: disassembly contracts, quality integration, Zerlegen UI |
+| [`Shopware integration.md`](./Shopware%20integration.md) | Shopware product discovery, sync queue architecture |
+| [`glossary.md`](./glossary.md) | Canonical terminology: Item/ItemRef/ItemInstance, Box/Shelf/Location |
+| [`traceability-matrix.md`](./traceability-matrix.md) | Doc-to-code mapping: domain → backend actions → frontend components |
+
+## Topic changelogs
+
+Change history is distributed by topic. See [`docs/changelogs/`](../changelogs/README.md) for the full index.

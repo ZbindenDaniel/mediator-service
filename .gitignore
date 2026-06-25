@@ -15,7 +15,7 @@ logs/
 public/styles.css
 public/styles.css.map
 media/
-README.md
+/README.md
 
 
 /.env
