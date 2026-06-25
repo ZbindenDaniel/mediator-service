@@ -4,6 +4,10 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 854. ✅ Panel-detail reference header: item/box label shown next to Liste button
+   - **Why:** Operators had no visible context for which item/box was loaded in the detail panel. Added an always-visible `panel-detail-header` bar above the tabs: "← Liste" button on the left (arrow `←` rotated 180° via CSS transform to point right), and the current item/box reference label in the center (e.g. "Lenovo T14 Gen7 – 019345"). `PanelContext` exposes `panelDetailLabel`/`setPanelDetailLabel`; `ItemDetail` pushes `Artikelbeschreibung – Artikel_Nummer` and `BoxDetail` pushes `Label – BoxID` on load, cleared on unmount. Old `mobile-back-btn` CSS removed.
+   - **Deferred:** Nothing.
+
 ## 849. ✅ Restore "← Liste" full-width list view on desktop
    - **Why:** The button was always intentional on desktop. The previous commit wrongly hid it with `display: none`. Added `@media (min-width: 901px)` rules: `.app-shell--mobile-list .app-shell__right { display: none }` and `.panel-main { flex: 0 0 100% }` so clicking "← Liste" actually collapses the detail panel and expands the list. Button styled for desktop with compact border/padding.
    - **Deferred:** Nothing.

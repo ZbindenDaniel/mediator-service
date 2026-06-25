@@ -4,6 +4,18 @@ Covers: AI enrichment pipeline, search, extraction, categorization, pricing, sup
 
 ---
 
+## 857. ✅ Add 2 more missing agentic event translations (AgenticRunQueued, AgenticRunRequeued)
+   - **Why:** A follow-up scan found these two keys actively logged in `backend/agentic/index.ts` but absent from `models/event-resources.json`, so operators saw raw camelCase strings. Added: `AgenticRunQueued` → "KI-Lauf eingereiht" and `AgenticRunRequeued` → "KI-Lauf erneut eingereiht", both `info`/`agentic`.
+   - **Deferred:** Nothing.
+
+## 856. ✅ Add German translations for 12 missing event types + rich descriptions for 4
+   - **Why:** 12 event types logged by the backend had no entry in `models/event-resources.json` (AccessoryLinked, AccessoryRelationUpdated, AccessoryUnlinked, AgenticRunReset, AttachmentAdded, AttachmentRemoved, InstanceUpdated, RemovedFromDevice, ShopStatusUpdated, SparePartCataloged, SparePartRemoved, SparepartsRemovedWithDevice). Added labels + level/topic for all 12. Also added rich `formatEventDescription()` cases for 4 events with useful Meta payloads: RemovedFromDevice shows parentUuid + toBoxId, SparePartRemoved shows toBoxId, SparepartsRemovedWithDevice shows removedCount, SparePartCataloged shows artikelNummer.
+   - **Deferred:** Nothing.
+
+## 855. ✅ Fix dimension decimal truncation in asNullableInteger; guide model toward integer mm output
+   - **Why:** `asNullableInteger` in `backend/db.ts` returned floats unchanged for numeric inputs (e.g. `362.2`), which PostgreSQL silently truncated to `362` in INTEGER columns — the decimal effectively disappeared. Changed to `Math.round(parseFloat(...))` so decimals are rounded explicitly regardless of input type. Prompt notes in `backend/agentic/flow/prompts.ts` updated to tell the model to output integers for Länge_mm/Breite_mm/Höhe_mm (e.g. "362 not 362.0").
+   - **Deferred:** Nothing.
+
 ## 848. ✅ Fix agentic run delete (silent failure) and remove wrong desktop button hide
    - **Why:** (1) Agentic runs for items without an ERP Artikel_Nummer are keyed by ItemUUID in `agentic_runs`. Three guards (`resolveAgenticArtikelNummer`, `agentic-delete.ts` action handler, `persistAgenticRunDeletion` frontend) all rejected `I-` prefixed IDs, causing the delete to fail. Fixed by removing the I- prefix guards. (2) The `← Liste` button was wrongly hidden on desktop — see entry 849.
    - **Deferred:** Nothing.
