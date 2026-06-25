@@ -34,7 +34,7 @@ function MultiItemDetailPanel() {
 }
 
 export default function Layout({ children }: { children: ReactNode }) {
-  const { entityType, entityId, activeTab, multiSelection, setEntity, clearSelection, mobileShowDetail, setMobileShowDetail, loadRevision } = usePanelContext();
+  const { entityType, entityId, activeTab, multiSelection, setEntity, clearSelection, mobileShowDetail, setMobileShowDetail, loadRevision, panelDetailLabel } = usePanelContext();
   const { pathname } = useLocation();
   const navigate = useNavigate();
 
@@ -70,10 +70,18 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className={`app-shell${mobileShowDetail ? ' app-shell--mobile-detail' : ' app-shell--mobile-list'}`}>
             <div className="panel-main">{children}</div>
             <div className="app-shell__right">
-              {mobileShowDetail && (
-                <button type="button" className="mobile-back-btn" onClick={() => setMobileShowDetail(false)}>
-                  ← Liste
-                </button>
+              {hasEntity && !isCreateMode && (
+                <div className="panel-detail-header">
+                  <button type="button" className="panel-detail-header__back" onClick={() => setMobileShowDetail(false)}>
+                    <span className="panel-detail-header__arrow" aria-hidden="true">←</span>
+                    <span>Liste</span>
+                  </button>
+                  {panelDetailLabel && (
+                    <span className="panel-detail-header__label" title={panelDetailLabel}>
+                      {panelDetailLabel}
+                    </span>
+                  )}
+                </div>
               )}
               {isCreateMode ? (
                 <div className="panel-create">

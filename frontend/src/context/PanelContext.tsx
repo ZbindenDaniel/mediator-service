@@ -58,6 +58,8 @@ export interface PanelContextValue extends PanelState {
   mobileShowDetail: boolean;
   setMobileShowDetail: (show: boolean) => void;
   loadRevision: number;
+  panelDetailLabel: string | null;
+  setPanelDetailLabel: (label: string | null) => void;
 }
 
 const VALID_ENTITY_TYPES: EntityType[] = ['item', 'box', 'transport', 'stub'];
@@ -97,6 +99,7 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
   const location = useLocation();
   const [state, setState] = useState<PanelState>(() => paramsToState(searchParams));
   const [mobileShowDetail, setMobileShowDetail] = useState(false);
+  const [panelDetailLabel, setPanelDetailLabel] = useState<string | null>(null);
   // skip the initial URL write — state was already derived from the URL on mount
   const isMounted = useRef(false);
   // Keep a ref of state for setMainView so it doesn't need state in its dep array.
@@ -190,8 +193,8 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
   }, []);
 
   const value = useMemo<PanelContextValue>(
-    () => ({ ...state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection, clearMultiSelection, mainView, setMainView, mobileShowDetail, setMobileShowDetail }),
-    [state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection, clearMultiSelection, mainView, setMainView, mobileShowDetail]
+    () => ({ ...state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection, clearMultiSelection, mainView, setMainView, mobileShowDetail, setMobileShowDetail, panelDetailLabel, setPanelDetailLabel }),
+    [state, setEntity, setCreateMode, setTab, setMultiSelection, clearSelection, clearMultiSelection, mainView, setMainView, mobileShowDetail, panelDetailLabel]
   );
 
   return <PanelContext.Provider value={value}>{children}</PanelContext.Provider>;

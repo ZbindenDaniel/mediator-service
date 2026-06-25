@@ -309,7 +309,7 @@ export default function ItemDetail({ itemId }: Props) {
     itemId: null,
     active: false
   });
-  const { setEntity, activeTab, setMobileShowDetail } = usePanelContext();
+  const { setEntity, activeTab, setMobileShowDetail, setPanelDetailLabel } = usePanelContext();
   const { isMarked } = useUserMarks();
 
   // Only set the entity — don't switch the main view. The detail panel shows the box
@@ -1096,6 +1096,9 @@ export default function ItemDetail({ itemId }: Props) {
       if (res.ok) {
         const data = (await res.json()) as ItemDetailResponse;
         setItem(data.item);
+        const desc = data.item?.Artikelbeschreibung?.trim();
+        const nr = data.item?.Artikel_Nummer?.trim();
+        setPanelDetailLabel(desc && nr ? `${desc} – ${nr}` : desc || nr || null);
         setEvents(Array.isArray(data.events) ? filterVisibleEvents(data.events) : []);
         setAgentic(data.agentic ?? null);
         try {
@@ -1492,6 +1495,7 @@ export default function ItemDetail({ itemId }: Props) {
 
   useEffect(() => {
     void load({ showSpinner: true });
+    return () => setPanelDetailLabel(null);
   }, [load]);
 
   // Derived agentic state — computed before early returns so the hooks below can reference them
