@@ -2,12 +2,26 @@
 
 This file is read automatically by Claude Code at session start. All instructions here are **mandatory**.
 
-## Read these before any implementation work
+## Before any implementation work
 
+### 1. Orient with the hub
 1. [`OVERVIEW.md`](OVERVIEW.md) — current focus and the last 10 recent changes (the system map links deeper)
 2. [`todo.md`](todo.md) — open bugs, feature queue, and confirmed decisions
 
-Do not skip this step. Understanding active context prevents conflicting changes.
+### 2. Traverse to the domain — don't load the whole codebase
+
+Read only what you need. For each area you'll touch:
+1. **Folder README** (`<folder>/README.md`) — purpose, contents, relations, scope, rules, decisions
+2. **Topic changelog** (`docs/changelogs/<topic>.md`) — what changed, why, what was deferred
+3. **Detailed runbook** (`docs/detailed/<topic>.md`) — deep reference if needed
+
+This traversal is how you build domain context cheaply. Don't read whole files speculatively; navigate from the hub → folder README → changelog → code.
+
+### 3. Respect the existing model
+
+- Follow the patterns you find. Don't introduce new abstractions, naming conventions, or architectural layers without an explicit reason.
+- If you must deviate, document the decision in the folder README's `## Decisions` section **and** in the topic changelog's `**Why:**` field.
+- When a concept is renamed or restructured, update every README that references it.
 
 ## Mandatory: document every completed task
 
