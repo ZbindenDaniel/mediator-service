@@ -67,6 +67,45 @@ export function formatEventDescription(event: EventLog): React.ReactNode {
       }
       break;
     }
+
+    case 'RemovedFromDevice': {
+      const parentUuid = str(meta.parentUuid);
+      const toBoxId = str(meta.toBoxId);
+      if (parentUuid || toBoxId) {
+        return (
+          <>
+            Vom Gerät entfernt
+            {parentUuid ? <> (Gerät <code>{parentUuid}</code>)</> : null}
+            {toBoxId ? <> → <code>{toBoxId}</code></> : null}
+          </>
+        );
+      }
+      break;
+    }
+
+    case 'SparePartRemoved': {
+      const toBoxId = str(meta.toBoxId);
+      if (toBoxId) {
+        return <>Ersatzteil entnommen → <code>{toBoxId}</code></>;
+      }
+      break;
+    }
+
+    case 'SparepartsRemovedWithDevice': {
+      const removedCount = num(meta.removedCount);
+      if (removedCount !== null) {
+        return <>Ersatzteile mit Gerät entfernt ({removedCount} {removedCount === 1 ? 'Teil' : 'Teile'})</>;
+      }
+      break;
+    }
+
+    case 'SparePartCataloged': {
+      const artikelNummer = str(meta.artikelNummer);
+      if (artikelNummer) {
+        return <>Ersatzteil katalogisiert (<code>{artikelNummer}</code>)</>;
+      }
+      break;
+    }
   }
 
   return eventLabel(event.Event);

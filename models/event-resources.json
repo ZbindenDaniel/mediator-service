@@ -20,5 +20,19 @@
   { "key": "AgenticResultFailed", "label": "Ki-Ergebnis fehlgeschlagen", "level": "error", "topic": "agentic" },
   { "key": "AgenticReviewSubmitted", "label": "Ki-Review eingereicht", "level": "info", "topic": "agentic" },
   { "key": "AgenticReviewApproved", "label": "Ki-Ergebnis freigegeben", "level": "info", "topic": "agentic" },
-  { "key": "AgenticReviewRejected", "label": "Ki-Ergebnis abgelehnt", "level": "important", "topic": "agentic" }
+  { "key": "AgenticReviewRejected", "label": "Ki-Ergebnis abgelehnt", "level": "important", "topic": "agentic" },
+  { "key": "AgenticRunReset", "label": "KI-Lauf zurückgesetzt", "level": "info", "topic": "agentic" },
+  { "key": "AgenticRunQueued", "label": "KI-Lauf eingereiht", "level": "info", "topic": "agentic" },
+  { "key": "AgenticRunRequeued", "label": "KI-Lauf erneut eingereiht", "level": "info", "topic": "agentic" },
+  { "key": "AccessoryLinked", "label": "Zubehör verknüpft", "level": "info", "topic": "logistics" },
+  { "key": "AccessoryRelationUpdated", "label": "Zubehör-Beziehung aktualisiert", "level": "info", "topic": "logistics" },
+  { "key": "AccessoryUnlinked", "label": "Zubehör-Link entfernt", "level": "important", "topic": "logistics" },
+  { "key": "AttachmentAdded", "label": "Datei angehängt", "level": "info", "topic": "data" },
+  { "key": "AttachmentRemoved", "label": "Datei entfernt", "level": "info", "topic": "data" },
+  { "key": "InstanceUpdated", "label": "Instanz aktualisiert", "level": "info", "topic": "data" },
+  { "key": "RemovedFromDevice", "label": "Vom Gerät entfernt", "level": "important", "topic": "logistics" },
+  { "key": "ShopStatusUpdated", "label": "Shop-Status aktualisiert", "level": "info", "topic": "export" },
+  { "key": "SparePartCataloged", "label": "Ersatzteil katalogisiert", "level": "info", "topic": "logistics" },
+  { "key": "SparePartRemoved", "label": "Ersatzteil entnommen", "level": "important", "topic": "logistics" },
+  { "key": "SparepartsRemovedWithDevice", "label": "Ersatzteile mit Gerät entfernt", "level": "important", "topic": "logistics" }
 ]

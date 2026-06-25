@@ -141,7 +141,7 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box?.BoxID, box?.LocationId]);
   const shouldLinkLocation = Boolean(normalizedLocationId);
-  const { activeTab, setEntity, setMainView } = usePanelContext();
+  const { activeTab, setEntity, setMainView, setPanelDetailLabel } = usePanelContext();
   const handleRowNavigate = useCallback((itemId: string | null | undefined, source: 'click' | 'keyboard') => {
     if (!itemId) {
       logger.warn('Attempted to navigate from box detail row without item id', { boxId, source });
@@ -391,6 +391,7 @@ export default function BoxDetail({ boxId }: Props) {
         setBox(data.box);
         setNote(data.box?.Notes || '');
         setLabel(typeof data.box?.Label === 'string' ? data.box.Label : '');
+        setPanelDetailLabel(typeof data.box?.Label === 'string' && data.box.Label.trim() ? `${data.box.Label.trim()} – ${boxId}` : boxId);
         setNoteFeedback(null);
         setShelfFeedback(null);
         const nextPhotoPath = typeof data.box?.PhotoPath === 'string' ? data.box.PhotoPath.trim() : '';
@@ -496,6 +497,7 @@ export default function BoxDetail({ boxId }: Props) {
 
   useEffect(() => {
     void load({ showSpinner: true });
+    return () => setPanelDetailLabel(null);
   }, [boxId]);
 
   useEffect(() => {

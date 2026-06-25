@@ -461,7 +461,8 @@ function asNullableTrimmedString(value: unknown): string | null {
 
 function asNullableInteger(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null;
-  const num = typeof value === 'number' ? value : parseInt(String(value), 10);
+  // Floats from agentic model output (e.g. 362.2) must be rounded, not truncated by PostgreSQL.
+  const num = typeof value === 'number' ? Math.round(value) : Math.round(parseFloat(String(value).replace(',', '.')));
   return Number.isFinite(num) ? num : null;
 }
 

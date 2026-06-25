@@ -37,13 +37,13 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+857. ✅ Add 2 more missing agentic event translations (AgenticRunQueued, AgenticRunRequeued) → [agentic]
+856. ✅ Add German translations for 12 missing event types + rich descriptions for 4 → [agentic]
+855. ✅ Fix dimension decimal truncation in asNullableInteger; guide model toward integer mm output → [agentic]
+854. ✅ Panel-detail reference header: item/box label shown next to Liste button → [ui]
 854. ✅ Documentation restructure: filesystem-aligned READMEs + topic changelogs → [docs-infra]
 853. ✅ Component relocation marks parent incomplete; better Artikelbeschreibung suggestions → [item-lifecycle]
 853. ✅ Fix CUPS fd limit (ulimits) and www-data lpinfo Forbidden error → [printing]
 852. ✅ Accessories tab: popup transparency, toggle UX, Entnehmen modal, DB crash fix → [item-lifecycle]
 852. ✅ Harden nginx headers, dockerignore secrets, restrict Postgres bind address → [docs-infra]
 851. ✅ Accessories tab bug-fix round 2 → [item-lifecycle]
-851. ✅ Harden Docker pipeline: entrypoint fail-fast, clean shutdown, log rotation → [docs-infra]
-850. ✅ Assembly contract, unified component UX, Zerlegen tab restructure → [item-lifecycle]
-850. ✅ Fix OCI runtime exec failure when installing Brother QL driver .debs → [printing]
-849. ✅ Restore "← Liste" full-width list view on desktop → [ui]

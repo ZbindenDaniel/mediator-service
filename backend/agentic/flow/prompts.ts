@@ -85,9 +85,9 @@ export const SCHEMA_COLUMN_NOTES: Record<string, Record<string, ColumnNote>> = {
       note: 'Spezifikationen (Langtext): RichText in dem verschiedene Attribute zum Artikel als JSON formatiert vorliegen'
     },
     Hersteller: { note: 'Manufacturer label', aliases: ['brand'] },
-    Länge_mm: { note: 'Length in millimeters', aliases: ['dimensions'] },
-    Breite_mm: { note: 'Width in millimeters', aliases: ['dimensions'] },
-    Höhe_mm: { note: 'Height in millimeters', aliases: ['dimensions'] },
+    Länge_mm: { note: 'Length in millimeters, integer (e.g. 362 not 36.2 or 362.0)', aliases: ['dimensions'] },
+    Breite_mm: { note: 'Width in millimeters, integer (e.g. 254 not 25.4 or 254.0)', aliases: ['dimensions'] },
+    Höhe_mm: { note: 'Height in millimeters, integer (e.g. 20 not 2.0 or 20.0)', aliases: ['dimensions'] },
     Gewicht_kg: { note: 'Weight in kilograms' },
     Hauptkategorien_A: { note: 'Grobkategorien' },
     Unterkategorien_A: { note: 'Unterkategorien' },
