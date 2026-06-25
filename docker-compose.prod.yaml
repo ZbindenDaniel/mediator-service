@@ -11,6 +11,11 @@ services:
     volumes:
       - mediator-postgres:/var/lib/postgresql/data
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U mediator"]
       interval: 5s
@@ -28,6 +33,11 @@ services:
     volumes:
       - cups-socket:/run/cups
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
       test: ["CMD-SHELL", "lpstat -r 2>/dev/null | grep -q 'running'"]
       interval: 5s
@@ -60,6 +70,11 @@ services:
       - /mnt:/app/dist/backend/webDav
       - cups-socket:/run/cups
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.erfassung.rule=Host(`erfassung.${VM_IP}.nip.io`)"
