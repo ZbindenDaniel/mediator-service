@@ -7,6 +7,8 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+853. ✅ Component relocation now marks parent device incomplete; better Artikelbeschreibung suggestions
+   - **Why:** (1) `move-item.ts` now checks if the relocated item was an `erfasst` (BoxID=NULL) component (`Zerlegt_aus` relation) before moving. If so, it inserts a quality assessment marking the parent as Ersatzteil (value=1, is_complete=false) and logs `SparePartRemoved` — mirroring `remove-from-device.ts`. This covers the "Entnehmen" path (which calls plain `/move` via `RelocateItemCard`) and any other relocation that bypasses the strict `remove-from-device` endpoint. (2) `SparepartSlotPopup` "Neu anlegen" description now pre-fills as `{deviceLabel} {specValues} {slotLabel}` (e.g. "Lenovo T14 CH Tastatur") instead of just `{deviceHersteller} {slotLabel}`.
 853. ✅ Fix CUPS fd limit (ulimits) and www-data lpinfo Forbidden error
    - **Why:** (1) CUPS crashes on hosts with high/unlimited fd limits — added `ulimits.nofile: 65000/65000` to the cups service in both compose files; CUPS internal calculations assume lower limits and produce an invalid value when the limit is too high, causing EFAULT. (2) www-data (uid 33) in the mediator container gets "Forbidden" from `lpinfo` via the Unix socket — `AuthType None` in cupsd.conf disables credential prompts but CUPS still enforces lpadmin group membership at the socket level; fixed by adding `www-data` to `lpadmin` in `cups/Dockerfile`. USB device passthrough was already handled by docker-compose.usb.yml.
    - **Deferred:** Nothing.
