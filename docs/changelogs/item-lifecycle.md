@@ -1,0 +1,176 @@
+# Changelog: Item Lifecycle
+
+Covers: item creation, editing, quality assessment, specs, accessories, spare parts, item list, item detail.
+
+---
+
+## 853. ✅ Component relocation now marks parent device incomplete; better Artikelbeschreibung suggestions
+   - **Why:** (1) `move-item.ts` now checks if the relocated item was an `erfasst` (BoxID=NULL) component (`Zerlegt_aus` relation) before moving. If so, it inserts a quality assessment marking the parent as Ersatzteil (value=1, is_complete=false) and logs `SparePartRemoved` — mirroring `remove-from-device.ts`. This covers the "Entnehmen" path (which calls plain `/move` via `RelocateItemCard`) and any other relocation that bypasses the strict `remove-from-device` endpoint. (2) `SparepartSlotPopup` "Neu anlegen" description now pre-fills as `{deviceLabel} {specValues} {slotLabel}` (e.g. "Lenovo T14 CH Tastatur") instead of just `{deviceHersteller} {slotLabel}`.
+   - **Deferred:** Nothing.
+
+## 852. ✅ Accessories tab: popup transparency, toggle UX, Entnehmen modal, DB crash fix
+   - **Why:** (1) `item_refs` INSERT had `CreatedAt`/`UpdatedAt` columns that don't exist — dropped them. (2) `SparepartSlotPopup` rendered a `.card` with `position:absolute` inside the portal's `.dialog-content`, causing transparent/broken appearance — removed the wrapper, search now uses slot label only, rows are clickable (no per-row confirm button), `RefSearchInput` always visible. (3) Portal `_extra` key lookup stripped suffix before `find()` so extra-instance popup works through the portal instead of inline. (4) Entnehmen inline table row form replaced with `RelocateItemCard` in a portal modal. (5) Ja/Nein toggle uses mint green (Ja active) / orange (Nein active); clicking the active state clears the answer — no separate release button.
+   - **Deferred:** Nothing.
+
+## 851. ✅ Accessories tab bug-fix round 2
+   - **Why:** (1) `new-ref` INSERT used `"SubCategory"` which doesn't exist on `item_refs`; fixed to `"Unterkategorien_A"`. (2) `noLink: true` added to `AssemblyPart` and set on storage slots — SSD/HDD spec answers are sufficient without an item link; hides Erfassen button for storage. (3) "Nicht vorhanden" state now shows ✎ reset button that clears the answer and re-renders the question widget. (4) `canErfassen` now includes `removed` state — extracting a part no longer locks out re-cataloging. (5) Boolean Ja/Nein buttons in ZubehoerCard inline widget now use `quality-review-step__toggle-group` + `--active` CSS classes (same as QualityReviewStep) for proper toggle switch appearance. (6) `specQuestion` (e.g. drive_type) now renders inline for `present`/`unknown`/`removed` states.
+   - **Deferred:** Nothing new.
+
+## 850. ✅ Assembly contract, unified component UX, Zerlegen tab restructure
+   - **Why:** Three overlapping contracts (quality, specs, disassembly) described component data redundantly. Consolidated: assembly contract owns all component questions (presence + specs); quality contract covers device health only; spec contract covers device-level agentic fields. ZubehoerCard restructured: component slots primary, "Weitere Verknüpfungen" collapsed. Slot states (unknown/present/empty/cataloged/removed) drive inline Erfassen flow. Three-path Erfassen: one-click when Ersatzteil ref known, popup search, "Neu anlegen" for unknown refs. Inline quality answering in slots. Intake API pre-fills assembly answers from scan data. Low-quality nudge in QualityReviewModal suggests component cataloging. Sold-as-is cascade deletes unextracted spare parts.
+   - **Deferred:** Multiple linked items per slot (multipleAllowed UI beyond first instance); `keyboard_layout` inline answer in keyboard slot; contracts for categories beyond 201/102; removing RAM/Speicher/Akku from specs/201.json (still lists them — safe since assembly answers take precedence).
+## 847. ✅ Lagerort link bug fix, duplicate /api/items fetch elimination, price/image columns in item list
+   - **Why:** (1) Accessory items had `items.Location` set to the parent's description string; clicking the link navigated to `entity=box&id=<description>` — invalid. Fixed by adding `ParentItemUUID` to `itemSelectColumns` via a correlated subquery on `item_relations`, then using it in ItemList.tsx to call `setEntity('item', parentItemUUID)` instead of `setEntity('box', shelfId)`. (2) ItemDetail fired a duplicate `/api/items` fetch on every item selection to resolve prev/next neighbors. Fixed by computing prev/next from the already-sorted `filtered` list in `handleItemSelect` and writing them as `prev=`/`next=` URL params; `shouldFetchNeighbors` simplified to `neighborContext.source !== 'query'` since null boundary neighbors are final. (3) Feature 28: added CHF and Bild indicator columns (✓/—) to the item list using `Verkaufspreis` and `ImageNames`/`Grafikname` fields already in the response; shrunk `col-desc` with `max-width: 14rem`.
+   - **Deferred:** Nothing.
+
+## 846. ✅ Fix 7 reported UI/UX bugs: quality save, accessories popup, description carry-forward, help pages, stats, QA toggle, pre-fill re-review
+   - **Why:** (1) `quality-review.ts` GET was missing `await` on `getItemQualityResponses` — sent a Promise object as JSON, so "Neu bewerten" never pre-filled previous answers. (2) Quality assessment after kandidat selection via `artikelLookup` was never saved: `qualityReviewResult` state was stale when `handleMatchSelection` ran synchronously after `setQualityReviewResult`. Fixed by passing the result explicitly via a new `qualityResultOverride` parameter. (3) `ArtikelNummerLookupStep.onSkip` now passes the current query so `ItemCreate` can pre-fill `Artikelbeschreibung` in `basicInfo`, preventing users from having to re-type what they searched. (4) `docs/` directory was not copied to the Docker runtime image — added `COPY --from=builder /app/docs ./docs` to Dockerfile, fixing "Keine Dokumente gefunden." in production. (5) Stats card showed e.g. "Angereichert: 1500%" because `enrichedItems` counts article *references* but `counts.items` counts physical *instances* — different denominators. Changed to show absolute count "X Artikeltypen" instead. (6) Boolean QA questions had no visual selection state — added CSS for `.quality-review-step__toggle--active` (blue fill, white text). (7) `SparepartSlotPopup` rendered inline inside the table, causing overlay issues — portaled it to `document.body` via the existing dialog-overlay pattern.
+   - **Deferred:** Nothing.
+
+## 843. ✅ Artikelnummer lookup popup as first step of item creation
+   - **Why:** Operators were forced to fill in the full basicInfo form (description, categories, dimensions) even for items already cataloged in the ERP. The new `artikelLookup` step shows a debounced search input first — if the operator finds the ref and clicks "Übernehmen", the wizard jumps directly to quality review and then creates the instance from the existing reference. The basicInfo form and matchSelection step are skipped entirely for the fast path.
+   - **Deferred:** Auto-lookup by scan (barcode scanner could pre-fill the input); the input requires manual typing for now. The "Weiter erfassen" reset returns to `artikelLookup`, not `basicInfo`.
+
+## 833. ✅ Zerlegen: allow Hinzufügen on Empty slots (part may be added after assessment)
+   - **Why:** The Empty state (quality said "Nicht vorhanden") blocked the Hinzufügen button entirely. This is wrong — a part can be added later (e.g. RAM installed to make a device functional). One-line fix: `state === 'potential'` → `state === 'potential' || state === 'empty'` in ZubehoerCard. Docs updated to match.
+   - **Deferred:** Nothing.
+
+## 832. ✅ Spare Parts Catalog: tests, detail doc, and user guide
+   - **Why:** Feature shipped without test coverage, a technical runbook, or a user-facing guide. Added 48 tests across 3 files (`catalog-spare-part`, `remove-from-device`, `quality-contracts` pure functions). Detail doc at `docs/detailed/spare-parts-catalog.md` covers contract schema, quality integration, data model, API, UI, and runtime checklist. German user guide at `docs/user/Ersatzteile-erfassen.md` covers the Zerlegen workflow step by step.
+   - **Deferred:** Nothing.
+
+## 831. ✅ Spare Parts Catalog: disassembly contracts, quality integration, Zerlegen UI in Accessories tab
+   - **Why:** Broken devices entering the workshop had no way to capture their parts as inventory. Component questions (battery, RAM, storage) were duplicated across quality and disassembly concerns. Solution: new `DisassemblyContract` type with `qualityQuestion` per part; these feed into quality scoring as a third synthetic contract (`[general, disassembly, subCat]`), so no changes to `deriveQualityFromAnswers`/`deriveSpecsFromAnswers`. Battery/RAM/storage questions move OUT of `quality/201.json` (now v4) INTO `contracts/disassembly/201.json`. Zerlegen section added inside the Accessories tab (not a new tab) — conditional on whether a disassembly contract exists for the item's subcategory. Four slot states: Potential (unknown), Empty (quality says absent), Cataloged (BoxID=null, still in device), Removed (BoxID set). New endpoints: `GET/POST /api/items/:id/spare-parts`, `DELETE /api/items/:id/spare-part-link`, `POST /api/items/:id/remove-from-device`. "Ist es das?" popup (`SparepartSlotPopup`) pre-loads search results for quick confirmation. Entnehmen inline form marks parent device quality as Ersatzteil via dedicated endpoint.
+   - **Deferred:** `drive_type` question stays in quality/201.json (TBD placement in storage slot). Bidirectional suggestions (PS ↔ laptop) deferred to phase 2. Agentic article creation in popup. Shop cross-linking of Ersatzteil refs. Disassembly contracts for subcategories beyond 102/201/301.
+
+## 800. ✅ Price summary, CO₂ score display (per-item + overview), nightly ERP sync for changed refs
+   - **Why:** Three independent operator-facing improvements. Price total gives financial stock context. CO₂ score number makes abstract labels concrete ("Hohes Potenzial (~220 kg CO₂)"). Nightly sync was previously all-or-nothing; syncing only changed refs is safer and avoids redundant ERP round-trips. `lastSynced` on `item_refs` (Artikel_Nummer level) because the ERP product is defined there; any instance change triggers a ref re-sync.
+   - **Deferred:** Per-item manual sync trigger from the list (user can sync from admin page). Conditional column for sort keys other than `entryDate`/`lastSynced` is not shown (by design). Relocation-only changes still set `UpdatedAt` and will trigger a sync — acceptable for v1.
+
+## 800. ✅ Fix getNewMaterialNumber always returning 000001
+   - **Why:** `getMaxArtikelNummer()` returns `string | null` directly, but `material-number.ts` accessed `row.Artikel_Nummer` on the string — which is `undefined` — so `max` was always `0` and every call returned `000001`. Fixed by treating the return value as a plain string.
+   - **Deferred:** Nothing.
+
+## 799. ✅ Fix item creation: wire real getMaxItemId so generated UUIDs increment correctly
+   - **Why:** `server.ts` had a stub `getMaxItemId: () => undefined` (left as a deferred TODO during the Postgres migration). `generateSequentialItemUUID` fell back to sequence 1 every time, so every new item for an existing article got UUID `I-{nr}-0001`. `persistItemInstance` uses `ON CONFLICT("ItemUUID") DO UPDATE`, so the second item silently updated the first instead of inserting a new row. Fixed by wrapping the real async `getMaxItemId(pattern, sequenceStartIndex)` into the `{ pattern, sequenceStartIndex } → { ItemUUID }` adapter shape the interface expects.
+   - **Deferred:** Nothing.
+
+## 796. ✅ Per-user item marking: operators can bookmark items with an optional note for personal follow-up
+   - **Why:** Operators needed a personal scratch-pad to flag items they wanted to revisit (check price, inspect unit, etc.). A new `user_item_marks` table stores marks per username with an optional note. Backend exposes `GET/POST/DELETE /api/user-marks`. Frontend: `UserMarksContext` loads marks at startup (and re-fetches when the username changes), a bookmark icon in each item list row toggles the mark, a new "Markierung" tab in ItemDetail shows status and a note textarea, and a "Meine Markierungen" checkbox in ItemListPage filters the list to the current user's flagged items. DB functions are async Postgres (ported during rebase onto the SQLite→Postgres migration).
+   - **Deferred:** Bulk mark in BulkItemActionBar (low priority). Note tooltip on the star icon in the list row.
+
+## 795. ✅ Replace CO2 savings estimate with CO2 recovery potential label (irrelevant / low / medium / high)
+   - **Why:** The previous ADEME formula produced a precise kg value that implied unwarranted precision. The new model ranks devices by reuse viability: `score = E_new × (quality / 5)`, mapped to four labels via configurable thresholds in `contracts/impact/co2.json`. Age/lifecycle factor removed — quality carries the full signal and will be refined via future quality-assessment questions.
+   - **Deferred:** Per-model PCF overrides, Boavizta API integration, ESG export, and quality longevity question (planned separately). The `typical_life_new_yr`/`total_achievable_life_yr` fields are retained in the contract in case lifecycle scoring is reintroduced.
+
+## 810. ✅ Fix CO2 contract path in Docker: switch from process.cwd() to __dirname in co2Calculator.ts
+   - **Why:** `process.cwd()` resolves to `/app` at runtime, but the build script copies contracts into `dist/contracts/`, so the contract lived at `/app/dist/contracts/impact/co2.json` while the code looked at `/app/contracts/impact/co2.json` — causing silent load failure in the container. Using `__dirname` (i.e. `dist/backend/lib/`) + `../../contracts/impact/co2.json` resolves to the correct dist path, consistent with how `registry.ts` handles quality/spec contracts.
+   - **Deferred:** Nothing.
+
+## 810. ✅ Fix Passendes Zubehör availableCount always 0: switch to SUM(Auf_Lager) + NOT EXISTS + ::int cast
+   - **Why:** Three compounding issues: (1) `COUNT(*)` returns PostgreSQL `bigint` which pg returns as a JS string — `::int` cast makes it a native JS number. (2) `NOT IN (SELECT ...)` silently returns zero rows when `item_relations` contains any NULL `ChildItemUUID` (SQL null propagation) — switched to `NOT EXISTS`. (3) The metric was an instance count, not stock units; changed to `SUM(COALESCE("Auf_Lager", 1))` with `COALESCE(..., 0)` wrapper so migrated items with NULL Auf_Lager each count as 1 unit. Applied to both `save-item.ts` and `item-relations.ts`.
+   - **Deferred:** If availableCount still shows 0 after rebuild, the cause is data — no `items` rows exist with matching `Artikel_Nummer` for those accessory types (catalog entries exist in `item_refs` but no physical instances).
+
+## 793. ✅ Fix bulk reference field update (missing await) and deps.logEvent not awaited in agentic service
+   - **Why:** `bulk-update-ref-fields.ts` called `ctx.bulkUpdateItemRefShopFields()` without `await` — the returned Promise was assigned directly to a `string[]` variable, so the DB transaction never ran and `updatedArtikelNummern.length` always returned 0 (Promise object has no `.length`). `AgenticServiceDependencies.logEvent` was typed as `() => void` (sync) but is async; all 5 call sites in `agentic/index.ts` called it without `await`, silently swallowing DB errors for event logging during agentic dispatch.
+   - **Deferred:** Root cause of "agentic runs for references immediately fall back to not started" is not yet identified through static analysis — no obvious code bug remains after these fixes. Needs runtime log investigation to confirm whether dispatch fails, runs complete but aren't stored, or something else.
+
+## 774. ✅ Add missing quality and spec contracts for 5 + 6 subcategories
+   - **Why:** Quality contracts 103/105/302/204/1802 and spec contracts 102/103/105/204/301/401 were listed in todo items 40 and 44 as missing. Pure JSON files — no code change, backend registry auto-discovers them on restart. `Hersteller` intentionally omitted from all new spec contracts (it is a first-class `ItemRef` field, not a `Langtext` spec). OS suggestion lists duplicated per-file (no cross-file reference in current schema).
+   - **Deferred:** `1802` spec contract (model + OS captured by quality contract; low spec-tracking value). `101/104/106/108` quality contracts (identical pattern to 102; no meaningful difference). `302` spec contract (field set identical to 301). Remaining subcategories not in scope for this pass.
+
+## 775. ✅ Search now covers SerialNumber, MacAddress, EAN; desktop camera capture restored in item creation
+   - **Why (search):** The `/api/search` SQL only matched reference-level text fields plus ItemUUID/Artikel_Nummer/BoxID. Operators scanning barcodes (EAN) or typing a serial/MAC found nothing. Added `i.SerialNumber`, `i.MacAddress`, and `r.EAN` to both the token-presence LIKE expressions and the exact-match equality checks in the item search path, and `r.EAN` to the reference (dedupe) search path. JS-side scoring updated accordingly.
+   - **Why (camera):** `PhotoCaptureModal` (webcam via `getUserMedia`) was built and wired in `ItemCreate.tsx` but the "Foto aufnehmen" trigger button was commented out. Added `isCameraAvailable` guard and restored the button — it renders only when the browser exposes camera access, so devices without cameras are unaffected.
+   - **Deferred:** Nothing deferred.
+
+## 769. ✅ Fix shopartikel/shop status modal not persisting Veröffentlicht_Status and Preis changes
+   - **Why:** Two bugs combined to silently discard every save. (1) `handleShopStatus` in `ItemDetail.tsx` omitted `actor` and `confirm: true` from the API request body — the backend validation gate at `bulk-update-ref-fields.ts` returned HTTP 400 before any DB write occurred. (2) The `updateItemRefShopFieldsStatement` SQL used bare `= @Field` for all three columns; when a field was left untouched (null = "do not change"), the UPDATE wrote NULL over the existing value. Fixed by adding `ensureUser()` + the missing fields to the single-item path, and switching the SQL to `COALESCE(@Field, Field)` so null inputs preserve existing data.
+
+## 767. ✅ Fix image persistence bug: ocrPhoto from basicInfo step now propagated as picture1 in all three creation paths
+   - **Why:** The OCR photo captured in the `basicInfo` step was stored in separate `ocrPhoto` state and only forwarded to the agentic trigger as `imageData` for AI recognition — it was never included in the item creation POST body. Fixed by injecting `ocrPhoto` as `picture1` in `handleAgenticPhotos`, `handleManualSubmit`, and `handleMatchSelection` in `ItemCreate.tsx`, skipping the injection when `picture1` is already explicitly set.
+   - **Deferred:** Neither `ItemForm_agentic` (photos mode) nor `ItemForm` (manual form) render any photo upload UI — all photo handlers are dead code in those components. This pre-existing state is not changed; the fix only ensures the already-captured OCR photo is not silently dropped.
+
+## 768. ✅ OS question: add text question type with datalist suggestions; switch 201/102 os_installed to Linux-only free-text combobox
+   - **Why:** revamp-it installs exclusively Linux. A fixed select with Windows entries was wrong, and a plain select can't capture specific distro versions. Added `text` question type to the contract schema; renders as `<input list=datalist>` in QualityReviewStep — common Linux distros appear as suggestions but the operator can type anything.
+   - **Deferred:** Charger/accessories linking during assessment (see feasibility note below in todo.md).
+
+## 767. ✅ Quality contracts extended: editable review with pre-fill, conditional questions (showIf), expanded contracts for 201/401/102, lieferumfang select in general
+   - **Why (editable review):** "Neu bewerten" previously reset all answers from scratch. If only the OS changed, operators had to re-answer every question. Added `GET /api/items/:uuid/quality-review` endpoint returning existing `responses`; `ItemInstanceTab` fetches these before opening the modal; `QualityReviewStep` accepts `initialAnswers` prop and pre-populates the form.
+   - **Why (conditional questions):** OS type is only relevant when OS is installed; showing it unconditionally added noise. Added `showIf: { questionId, value }` to `QualityQuestion` schema; both `QualityReviewStep` (rendering) and the backend derivation functions (`deriveQualityFromAnswers`, `deriveSpecsFromAnswers`) skip hidden questions. Answers for newly-hidden questions are cleared when the gating question changes.
+   - **Why (general.json v2):** `is_complete` boolean gave no detail about what was missing. Replaced with `lieferumfang` select ("Vollständig / Netzteil fehlt / Kabel fehlt / Teile fehlen") that also writes a spec field. New id avoids collision with old boolean answers stored in existing assessments.
+   - **Why (201.json v2 → v3 / 102.json v1 → v2):** Laptop/desktop contract used a fixed select for OS. Replaced with new `text` type (datalist combobox) and removed Windows values.
+   - **Why (new 401/102 contracts):** Monitors and desktop PCs had no quality contracts at all. 401 covers screen condition, resolution, panel type, connection, stand. 102 covers drive type, conditional OS, power cable.
+   - **Deferred:** Export pipeline gap (InstanceSpecs not merged into shop Langtext) — tracked separately. Other subcategory contracts (103 Server, 204 Tablet, 1802 Smartphone) can be added as JSON files without code changes.
+
+## 766. ✅ Quality assessment UX: nullable questions, skip for multi-Stk, quality in success dialog, missing-quality prompt, list filter
+   - **Why (nullable questions):** The required-gate on `QualityReviewStep` blocked submission unless all 3 general questions were answered. Operators often don't know every detail (e.g. RAM on a laptop); made all questions optional — quality defaults to 3 (Ok) when no quality-impacting answers are given.
+   - **Why (multi-Stk skip):** Creating multiple Stk items with one shared quality review was wrong — each physical unit may be in different condition. The quality step is now bypassed when `Einheit=Stk && Anzahl>1`; a note in the success dialog and an amber banner on each item instance prompt per-item review. Menge items keep the quality step (one product, many units).
+   - **Why (success dialog):** Quality result was invisible after creation — the dialog showed article number and print button but nothing about quality. Added a quality badge (if assessed) or an explanatory note (if skipped).
+   - **Why (missing-quality prompt):** Items with null quality showed a grey "?" badge with no call to action. Added an amber `.quality-missing-hint` strip in the instance tab that links directly to the "Neu bewerten" flow.
+   - **Why (list filter):** The quality filter was commented out. Replaced the planned range slider with a 3-option dropdown (Alle / Mit Bewertung / Ohne Bewertung) wired to the existing `ItemListFilters` type with full localStorage persistence.
+   - **Deferred:** Quality threshold filtering (Ok+ / Gut+ / Neuwertig) not included — the user wanted Alle/Mit/Ohne only. Backend-side quality filter (currently all filtering is client-side). Prompt to re-rate items whose quality contract version is outdated.
+
+## 762. ✅ CO₂ impact calculation: ADEME 2022 formula per item + aggregated total in stats card
+   - **Why:** Second-hand IT's primary value proposition is environmental — manufacturing dominates lifecycle CO₂ (70–80%). Surfacing the estimated savings per device and as a warehouse total makes this visible to operators without requiring a DB migration. Phase 1 computes at runtime; a pre-computed `co2_einsparung_kg` DB column is the Phase 2 path once volume warrants it.
+   - **Deferred:** DB column for pre-computed values; per-model PCF overrides (Dell/HP/Cisco vendor data); Boavizta API for unknown server configs; ESG quarterly export; storefront display; manufacture-year field (currently inferred from intake date).
+
+## 763. ✅ Six urgent fixes + mobile hamburger nav
+   - **Why (quality specs):** `updateItemLangtextSpecs` merged per-instance quality-derived specs into the shared `item_refs.Langtext`, overwriting specs from prior instances of the same article. Added `InstanceSpecs TEXT` column to `items`, new `updateItemInstanceSpecs()` function, and display in the instance tab with the same table format as the reference tab.
+   - **Why (QR scan):** Header `QrScanButton` lacked `callback="NavigateToEntity"`, so after scanning the user was returned to the previous page without navigating to the scanned entity.
+   - **Why (Bearbeiten/quality):** Replaced the quality range slider in `EditInstanceCard` with a "Neu bewerten" button that opens a full `QualityReviewModal` (portal wrapping `QualityReviewStep`) wired to `POST /api/items/:uuid/quality-review`.
+   - **Why (Weiter erfassen):** After "Weiter erfassen", the form was reset to `{}` but the `useEffect` re-applying `preselectedBoxId` never re-fired (dep array `[preselectedBoxId]` unchanged). Fixed by seeding `BoxID` directly into the reset state.
+   - **Why (stubs shelf link):** ShelfId was plain text; made it a `link-btn` navigating to `/boxes?entity=box&id=...`.
+   - **Why (stubs boxes count):** `NumberLooseBoxes` removed from frontend, backend action, and DB type — column kept in SQLite schema as DEFAULT 0 (SQLite does not support DROP COLUMN easily).
+   - **Why (hamburger nav):** Header had 7+ nav icons cramped on mobile. Added hamburger toggle button (mobile-only) with slide-in dropdown; desktop unaffected.
+   - **Deferred:** `GoThreeBars` icon availability at runtime — confirmed in react-icons v5.5 Octicons; if missing, swap for a text `≡` fallback. QR color fix scoped to `.header-nav__icon-btn.qr-scan-button` specificity override.
+
+## 750. ✅ Versioned quality contract system: contract-driven questionnaire replaces hardcoded 3-question flow
+   - **Why:** The old yes/no questions produced an arbitrary scalar with no structured data for the shop. The new paradigm uses versioned JSON contracts (`contracts/quality/general.json`, `201.json`) that describe select/boolean questions. Each question can map to Spezifikationen entries (`specField`/`specValue`) and contribute to quality scoring via `qualityImpact`. The `quality_assessments` table gains `responses`, `contract_version`, `derived_specs` columns. After a quality check the derived specs are merged into the item's Langtext automatically. The creation flow now starts with category selection in `ItemBasicInfoForm` so the subcategory is known before the quality step.
+   - **Deferred:** Text/range/checklist question types (only `select` + `boolean` so far). All subcategory contracts except the 201 (Laptop) demo. Quality re-check from ItemDetail (architecture supports it; `Unterkategorien_A` is available). Search by quality detail fields (`derived_specs` column exists; needs `includeQuality` API param + `json_extract`). wipeReport/systemTest document integration (`documents` field in contracts is reserved). "Outdated check" detection UI (`contract_version` is persisted; detection logic deferred).
+
+## 755. ✅ Per-subcategory spec contracts with dynamic disk loading
+   - **Why:** Items lacked a formal schema for what Langtext fields are expected per subcategory. Agentic runs produced whatever they found; quality contracts collect operator answers but don't enforce what the final Langtext must contain. Spec contracts (contracts/specs/*.json) define required and desired fields. On item creation or subcategory change, missing fields are injected as empty strings into Langtext — making gaps visible in the existing spec display and giving the agent natural slots to fill. The existing missingSpecFields pipeline in the extraction flow is also fed contract-required gaps for stronger LLM guidance. Contracts are served from disk at runtime via a new backend registry (restart picks up new files, no redeploy). Quality contracts are migrated from static bundle imports to the same API-served pattern for consistency.
+   - **Deferred:** Frontend gap display component (ItemKiTab "Gezielt anreichern" button) — empty Langtext fields already show as blank rows in the existing spec table, which is sufficient for now. Additional subcategory contracts beyond 201/701 — add new JSON files without code changes. Contract version stamping on agentic_runs — useful for tracking which contract version an extraction used; deferred to a future migration.
+
+## 749. ✅ Four small UI fixes: home button removed, quantity locked in manual entry when SN/MAC set, mobile Ref tab "Bearbeiten" switches to main panel, Ki tab buttons moved to top
+   - **Why:** Home button was redundant (title link covers the same navigation). Quantity lock was missing from manual-entry fallback (`ItemForm` uses `lockedFields`, not the `hasIdentifier` check in `ItemBasicInfoForm`; fixed by making `manualLockedFields` dynamic). Mobile edit from Ref tab navigated to `/items/{id}/edit` which renders in `panel-main` but `mobileShowDetail` remained true, hiding that panel; fixed by calling `setMobileShowDetail(false)` in `handleEdit()`. Ki tab rendered `AgenticStatusCard` before `tab-actions`, unlike all other tabs; swapped order.
+   - **Deferred:** Nothing deferred.
+
+## 746. ✅ Creation form: SN/MAC → Einheit → Anzahl ordering + enforcement + EAN
+   - **Why:** SN/MAC now appear before Einheit so the causal order matches the rules — entering an identifier implicitly makes it a single unit before you've even touched Einheit. Switching to Menge clears the identifier fields. Anzahl is readOnly when an identifier is set (locked to 1) with a contextual hint; defensive clamp also applied on submit. EAN added to the basic info step as a free-entry field.
+   - **Deferred:** Nothing deferred.
+
+## 745. ✅ Edit-instance view: PATCH endpoint + EditInstanceCard modal for post-creation SN/MAC/Quality edits
+   - **Why:** Instance fields (SerialNumber, MacAddress, Quality) were write-once after creation. Added `PATCH /api/items/:uuid/instance` which updates only those three fields with targeted SQL; `EditInstanceCard` mirrors the Umlagern modal pattern — "Bearbeiten" button in the instance tab opens a dialog portal with SN/MAC hidden for Menge items. Quality slider uses the existing 1–5 range from itemFormShared.
+   - **Deferred:** Nothing deferred.
+
+## 743. ✅ Instance fields: surface SerialNumber/MacAddress in UI; route EAN to instance tab
+   - **Why:** SN and MAC existed in the DB and model but had no UI surface — not displayed in the instance tab, not editable in the create form. EAN (on ItemRef) also now routes to the instance tab so all identifiers are visible in one place. `import-item.ts` now reads and persists `SerialNumber`/`MacAddress` from the creation payload; `itemFormShared.tsx` renders the two inputs when not in reference mode; `ItemDetail.tsx` adds the rows to `detailRows` and includes the three keys in `instanceKeys`.
+   - **Deferred:** Editing SN/MAC on existing instances is not yet possible — the PUT `/api/items/:uuid` handler is reference-only. A dedicated instance-edit endpoint or update path via import-item would be needed for that.
+
+## 70. ✅ Fix multi-instance label printing: success dialog now renders one `PrintLabelButton` per created Stk instance instead of only the first; removed shadowed dead-code `const dialogMessage`; added 3-instance regression test.
+   - **Why:** When 3 Stk items were created, the backend correctly returned all 3 UUIDs in `responseItems`, but the success dialog only used `createdItem.ItemUUID` (the first UUID). The auto-print loop (gated on `AUTO_PRINT_ITEM_LABEL=true`) was correct, but the manual-print fallback was not. The fix loops `responseItems` to build `allPrintItemIds` and renders a button for each. The dead outer `const dialogMessage` (lines 1350–1362) was immediately shadowed by `let dialogMessage` inside the `try` block and never used; removed to eliminate confusion.
+   - **Deferred:** Nothing deferred. `AUTO_PRINT_ITEM_LABEL` env-var path was already correct and unchanged.
+
+## 58. ✅ Audit and align `ItemDetailsFields` dimension/weight parsing so empty input stays optional (`undefined`), invalid numeric entries are rejected with warning logs, and inputs render blank instead of silently coercing to `0`.
+
+## 57. ✅ Extend `ItemBasicInfoForm` with optional dimensions/weight inputs (`Länge_mm`, `Breite_mm`, `Höhe_mm`, `Gewicht_kg`) using existing form-state plumbing and guarded parse logging, while preserving null/undefined omission semantics for submit payloads.
+
+## 56. ✅ Add a compact item-list selection export control that downloads the current selection as `filtered-items.csv`, and split the action-bar controls into an 80/20 field+export layout for clearer bulk-action ergonomics.
+
+## 37. ✅ Place `ShopBadge` exactly where requested: replace Item Detail header Quality badge with Shop badge and add a `Shop` column next to `Qualität` in Item List only.
+
+## 36. ✅ Scope ShopBadge placement to Item Detail only (remove unrequested list/box table columns) to keep UI changes minimal until explicit placement confirmation.
+
+## 35. ✅ Add Shop/Veröffentlichung visualization via a compact `ShopBadge` in item/box/detail views, map existing `khaki`/`--head` palette to `--negative`/`--positive` tokens, and keep status parsing resilient with guarded fallback logging.
+
+## 28. ✅ Refine item edit binary controls by replacing range sliders with styled switch toggles for `Shopartikel` and `Veröffentlich-Status`, while preserving 0/1 payload semantics and adding focused switch rendering assertions.
+
+## 27. ✅ Enable binary edit controls for `Shopartikel` and `Veröffentlich-Status` in the item edit form by adding 0/1 slider inputs, preserving reference payload contracts, and adding focused UI rendering coverage for truthy/falsy source values.
+
+## (pre-numbered) ✅ Item list now supports a three-state shop/publication filter (`im Shop` 1/1, `nicht veröffentlicht` 1/0, `kein Shopartikel` 0/X) with persisted filter state + normalization logging for unexpected values. It also replaces the unplaced checkbox with a placement dropdown (`Alle`, `unplatziert`, `platziert`) including legacy filter migration logging. Follow-up: quality slider is now rendered as the final filter control for cleaner visual scan.
+
+## (pre-numbered) ✅ Item list primary filter panel now renders the existing Behälter input again, reusing `boxFilter`/`setBoxFilter` and the existing `filter-grid` structure to keep layout and query filtering behavior aligned.
+
+## (pre-numbered) ✅ Item list now supports a three-state shop/publication filter (`im Shop`, `nicht veröffentlicht`, `kein Shopartikel`) with persisted filter state + normalization logging for unexpected values. It also replaces the unplaced checkbox with a placement dropdown (`Alle`, `unplatziert`, `platziert`) including legacy filter migration logging. Follow-up: quality slider is now rendered as the final filter control for cleaner visual scan.
