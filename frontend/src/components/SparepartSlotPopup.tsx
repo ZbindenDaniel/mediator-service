@@ -29,7 +29,8 @@ export default function SparepartSlotPopup({
   const [loading, setLoading] = useState(true);
   const [confirmingIndex, setConfirmingIndex] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [createDesc, setCreateDesc] = useState(`${deviceHersteller ? deviceHersteller + ' ' : ''}${slotLabel}`);
+  const specModifier = instanceSpecs ? Object.values(instanceSpecs).join(' ') : '';
+  const [createDesc, setCreateDesc] = useState([deviceLabel, specModifier, slotLabel].filter(Boolean).join(' '));
   const [createHersteller, setCreateHersteller] = useState(deviceHersteller ?? '');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);

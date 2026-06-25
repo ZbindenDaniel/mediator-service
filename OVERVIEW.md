@@ -7,6 +7,9 @@ Detailed runbooks and implementation deep-dives are indexed in [`docs/detailed/R
 - Harden pricing-agent JSON reliability by repairing malformed model output before schema validation.
 
 ## Next steps
+853. ✅ Component relocation now marks parent device incomplete; better Artikelbeschreibung suggestions
+   - **Why:** (1) `move-item.ts` now checks if the relocated item was an `erfasst` (BoxID=NULL) component (`Zerlegt_aus` relation) before moving. If so, it inserts a quality assessment marking the parent as Ersatzteil (value=1, is_complete=false) and logs `SparePartRemoved` — mirroring `remove-from-device.ts`. This covers the "Entnehmen" path (which calls plain `/move` via `RelocateItemCard`) and any other relocation that bypasses the strict `remove-from-device` endpoint. (2) `SparepartSlotPopup` "Neu anlegen" description now pre-fills as `{deviceLabel} {specValues} {slotLabel}` (e.g. "Lenovo T14 CH Tastatur") instead of just `{deviceHersteller} {slotLabel}`.
+   - **Deferred:** Nothing.
 852. ✅ Accessories tab: popup transparency, toggle UX, Entnehmen modal, DB crash fix
    - **Why:** (1) `item_refs` INSERT had `CreatedAt`/`UpdatedAt` columns that don't exist — dropped them. (2) `SparepartSlotPopup` rendered a `.card` with `position:absolute` inside the portal's `.dialog-content`, causing transparent/broken appearance — removed the wrapper, search now uses slot label only, rows are clickable (no per-row confirm button), `RefSearchInput` always visible. (3) Portal `_extra` key lookup stripped suffix before `find()` so extra-instance popup works through the portal instead of inline. (4) Entnehmen inline table row form replaced with `RelocateItemCard` in a portal modal. (5) Ja/Nein toggle uses mint green (Ja active) / orange (Nein active); clicking the active state clears the answer — no separate release button.
    - **Deferred:** Nothing.
