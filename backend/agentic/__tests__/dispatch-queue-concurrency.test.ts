@@ -72,7 +72,7 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
   it('does not dispatch queued runs when all 3 slots are occupied', async () => {
     const deps = createDeps();
     (dbClientMod.queryOne as jest.Mock).mockResolvedValueOnce({ runningcount: 3 });
-    const fetchQueuedSpy = jest.spyOn(agenticDb, 'fetchQueuedAgenticRuns').mockResolvedValue([makeRun()]);
+    const fetchQueuedSpy = jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([makeRun()]);
 
     const result = await dispatchQueuedAgenticRuns(deps, { limit: 5 });
 
@@ -84,7 +84,7 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
     // MAX_CONCURRENT_RUNNING_RUNS = 3; availableSlots = 3 - 2 = 1
     const deps = createDeps();
     (dbClientMod.queryOne as jest.Mock).mockResolvedValueOnce({ runningcount: 2 });
-    const fetchQueuedSpy = jest.spyOn(agenticDb, 'fetchQueuedAgenticRuns').mockResolvedValue([]);
+    const fetchQueuedSpy = jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
 
     await dispatchQueuedAgenticRuns(deps, { limit: 5 });
 
@@ -95,7 +95,7 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
     // MAX_CONCURRENT_RUNNING_RUNS = 3; availableSlots = 3 - 0 = 3; limit = 5 → min(5, 3) = 3
     const deps = createDeps();
     (dbClientMod.queryOne as jest.Mock).mockResolvedValueOnce({ runningcount: 0 });
-    const fetchQueuedSpy = jest.spyOn(agenticDb, 'fetchQueuedAgenticRuns').mockResolvedValue([]);
+    const fetchQueuedSpy = jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
     // idle-fill runs when scheduled=0 and remainingSlots = 3-0-0-1 = 2 > 0
     jest.spyOn(agenticDb, 'fetchIdleFillAgenticRuns').mockResolvedValue([]);
 
@@ -108,7 +108,7 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
     // MAX_CONCURRENT_RUNNING_RUNS = 3; availableSlots = 3; limit = 2 → min(2, 3) = 2
     const deps = createDeps();
     (dbClientMod.queryOne as jest.Mock).mockResolvedValueOnce({ runningcount: 0 });
-    const fetchQueuedSpy = jest.spyOn(agenticDb, 'fetchQueuedAgenticRuns').mockResolvedValue([]);
+    const fetchQueuedSpy = jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
     // idle-fill also called when scheduled=0 and remainingSlots > 0
     jest.spyOn(agenticDb, 'fetchIdleFillAgenticRuns').mockResolvedValue([]);
 

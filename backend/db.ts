@@ -1930,20 +1930,36 @@ export type AgenticRunQueueUpdate = {
   LastAttemptAt: string;
 };
 
-export async function fetchQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
+export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
   const now = new Date().toISOString();
   try {
+    // Atomic SELECT FOR UPDATE SKIP LOCKED + UPDATE in one statement so concurrent instances
+    // can never claim the same run. SKIP LOCKED makes competing instances skip locked rows
+    // rather than block, and the rows are immediately moved to 'running' before any other
+    // instance can see them as 'queued'.
     return query<AgenticRun>(
-      `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
-              "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt"
-       FROM agentic_runs
-       WHERE "Status"='queued' AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= $2)
-       ORDER BY "LastModified" ASC, "Id" ASC LIMIT $1`,
+      `WITH next_runs AS (
+         SELECT "Id"
+         FROM agentic_runs
+         WHERE "Status" = 'queued' AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= $2)
+         ORDER BY "LastModified" ASC, "Id" ASC
+         LIMIT $1
+         FOR UPDATE SKIP LOCKED
+       )
+       UPDATE agentic_runs
+       SET "Status" = 'running',
+           "LastModified" = $2,
+           "LastAttemptAt" = $2,
+           "NextRetryAt" = NULL,
+           "LastError" = NULL
+       FROM next_runs
+       WHERE agentic_runs."Id" = next_runs."Id"
+       RETURNING agentic_runs.*`,
       [effectiveLimit, now]
     );
   } catch (err) {
-    console.error('[db] Failed to fetch queued agentic runs', err);
+    console.error('[db] Failed to claim queued agentic runs', err);
     throw err;
   }
 }
