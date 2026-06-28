@@ -193,8 +193,10 @@ CREATE TABLE IF NOT EXISTS label_queue (
   "ItemUUID"  TEXT NOT NULL,
   "CreatedAt" TEXT NOT NULL,
   "Status"    TEXT NOT NULL DEFAULT 'Queued',
-  "Error"     TEXT
+  "Error"     TEXT,
+  "ClaimedAt" TEXT
 );
+ALTER TABLE label_queue ADD COLUMN IF NOT EXISTS "ClaimedAt" TEXT;
 
 CREATE TABLE IF NOT EXISTS events (
   "Id"         SERIAL PRIMARY KEY,
@@ -1506,8 +1508,28 @@ export async function queueLabel(itemUUID: string): Promise<void> {
   );
 }
 
-export async function nextLabelJob(): Promise<LabelJob | null> {
-  return queryOne<LabelJob>(`SELECT * FROM label_queue WHERE "Status"='Queued' ORDER BY "Id" LIMIT 1`);
+export async function claimNextLabelJob(): Promise<LabelJob | null> {
+  return queryOne<LabelJob>(
+    `UPDATE label_queue
+     SET "Status" = 'Processing', "ClaimedAt" = $1
+     WHERE "Id" = (
+       SELECT "Id" FROM label_queue
+       WHERE "Status" = 'Queued'
+       ORDER BY "Id" ASC
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED
+     )
+     RETURNING *`,
+    [new Date().toISOString()]
+  );
+}
+
+export async function recoverStaleLabelJobs(olderThanIso: string): Promise<void> {
+  await execute(
+    `UPDATE label_queue SET "Status"='Queued', "ClaimedAt"=NULL
+     WHERE "Status"='Processing' AND "ClaimedAt" IS NOT NULL AND "ClaimedAt" < $1`,
+    [olderThanIso]
+  );
 }
 
 export async function updateLabelJobStatus(id: number, status: string, error: string | null): Promise<void> {
