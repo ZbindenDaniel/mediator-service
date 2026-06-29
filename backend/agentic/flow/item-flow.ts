@@ -21,7 +21,6 @@ import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
 import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
 import { getSpecContract } from '../..//contracts/registry';
-import { checkSpecGap } from '../../../models/spec-contract';
 
 const REVIEW_CONTEXT_NOTE_LIMIT = 2_000;
 
@@ -97,6 +96,7 @@ export interface ItemFlowDependencies {
 export interface RunItemFlowInput {
   target: unknown;
   // TODO(agent): Align RunItemFlowInput with stronger target typing once downstream callers are updated.
+  instanceSpecs?: Record<string, unknown> | null;
   search?: string | null;
   reviewNotes?: string | null;
   missingSpecFields?: string[];
@@ -106,6 +106,81 @@ export interface RunItemFlowInput {
   cancellationSignal?: AbortSignal | null;
   exampleItemBlock?: string | null;
   imageData?: string | null;
+}
+
+export interface SpecContext {
+  missingRequired: string[];
+  missingDesired: string[];
+  ambiguousFields: Record<string, { itemValue: string; intakeValue: string }>;
+}
+
+// Maps InstanceSpecs keys (written by intake quality answers) to spec contract field keys.
+// Only reference-level fields included — instance data (serial, battery, quality) stays separate.
+const INTAKE_TO_SPEC: Record<string, string> = {
+  ram_gb: 'RAM',
+  storage_gb: 'Speicher',
+  drive_type: 'Speichertyp',
+};
+
+function formatIntakeSpecValue(key: string, rawValue: unknown): string | null {
+  if (rawValue === null || rawValue === undefined) return null;
+  const v = String(rawValue).trim();
+  if (!v) return null;
+  if (key === 'ram_gb') return `${v} GB`;
+  if (key === 'storage_gb') return `${v} GB`;
+  return v;
+}
+
+function buildSpecContext(
+  target: Record<string, unknown>,
+  subcategoryCode: number | null,
+  instanceSpecs: Record<string, unknown> | null
+): SpecContext {
+  const result: SpecContext = { missingRequired: [], missingDesired: [], ambiguousFields: {} };
+
+  if (!subcategoryCode) return result;
+  const specContract = getSpecContract(subcategoryCode);
+  if (!specContract) return result;
+
+  const langtext = target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)
+    ? (target.Langtext as Record<string, unknown>)
+    : {};
+
+  for (const field of specContract.fields) {
+    const itemRaw = langtext[field.key];
+    const itemValue = itemRaw !== undefined && itemRaw !== null && String(itemRaw).trim() !== ''
+      ? String(itemRaw).trim()
+      : null;
+
+    // Find the corresponding InstanceSpecs key for this contract field
+    const intakeKey = Object.entries(INTAKE_TO_SPEC).find(([, v]) => v === field.key)?.[0] ?? null;
+    const intakeValue = intakeKey && instanceSpecs ? formatIntakeSpecValue(intakeKey, instanceSpecs[intakeKey]) : null;
+
+    if (itemValue !== null && intakeValue !== null && itemValue !== intakeValue) {
+      // Both sources disagree — surface as ambiguous, don't inject either
+      result.ambiguousFields[field.key] = { itemValue, intakeValue };
+      continue;
+    }
+
+    const resolvedValue = itemValue ?? intakeValue;
+    if (resolvedValue !== null) {
+      // Inject the known value into Langtext so all pipeline stages see it
+      (langtext as Record<string, unknown>)[field.key] = resolvedValue;
+      if (target.Langtext && typeof target.Langtext === 'object') {
+        (target.Langtext as Record<string, unknown>)[field.key] = resolvedValue;
+      } else {
+        target.Langtext = { ...langtext, [field.key]: resolvedValue };
+      }
+    } else {
+      if (field.required) {
+        result.missingRequired.push(field.key);
+      } else {
+        result.missingDesired.push(field.key);
+      }
+    }
+  }
+
+  return result;
 }
 
 // TODO(agent): Revisit target guard expectations once agentic callers provide strict typing.
@@ -348,7 +423,14 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       itemId
     );
 
-    const missingSchemaFields = identifyMissingSchemaFields(target);
+    const subcategoryCode = typeof target.Unterkategorien_A === 'number' ? target.Unterkategorien_A : null;
+    const instanceSpecs = input.instanceSpecs && typeof input.instanceSpecs === 'object' ? input.instanceSpecs : null;
+    const specCtx = buildSpecContext(target, subcategoryCode, instanceSpecs);
+    logger.debug?.({ msg: 'spec context built', itemId, subcategoryCode, missingRequired: specCtx.missingRequired, missingDesired: specCtx.missingDesired, ambiguousCount: Object.keys(specCtx.ambiguousFields).length });
+
+    // Contract-aware missing fields replace the generic null-field scan; fall back to generic scan when no contract
+    const contractMissingFields = [...specCtx.missingRequired, ...specCtx.missingDesired];
+    const missingSchemaFields = contractMissingFields.length > 0 ? contractMissingFields : identifyMissingSchemaFields(target);
 
     // TODO(agent): Feed planner gating outcomes into telemetry once available.
     let plannerDecision: PlannerDecision | null = null;
@@ -365,6 +447,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
           reviewerNotes: reviewerNotes ?? '',
           target,
           missingFields: missingSchemaFields,
+          ambiguousFields: Object.keys(specCtx.ambiguousFields),
           deviceLabelText,
           logger
         });
@@ -432,22 +515,6 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     checkCancellation();
 
-    // Derive required fields missing from the item's Langtext based on its spec contract.
-    // Merged into missingSpecFields so the existing applyReviewSpecGuidanceToPromptTarget pipeline handles them.
-    const contractMissingFields: string[] = [];
-    const subcategoryCode = typeof target.Unterkategorien_A === 'number' ? target.Unterkategorien_A : null;
-    if (subcategoryCode) {
-      const specContract = getSpecContract(subcategoryCode);
-      if (specContract) {
-        const langtextObj = target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)
-          ? (target.Langtext as Record<string, unknown>)
-          : {};
-        const gap = checkSpecGap(specContract, langtextObj);
-        contractMissingFields.push(...gap.missingRequired);
-        logger.debug?.({ msg: 'spec contract gap computed for extraction', itemId, subcategoryCode, missingRequired: gap.missingRequired, contractVersion: specContract.version });
-      }
-    }
-
     const extractionResult = await runExtractionAttempts({
       llm: deps.llm,
       logger,
@@ -469,8 +536,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       reviewNotes: reviewerNotes,
       missingSpecFields: [
         ...(Array.isArray(input.missingSpecFields) ? input.missingSpecFields : []),
-        ...contractMissingFields
+        ...specCtx.missingRequired
       ],
+      ambiguousFields: specCtx.ambiguousFields,
       unneededSpecFields: Array.isArray(input.unneededSpecFields) ? input.unneededSpecFields : [],
       skipSearch,
       exampleItemBlock: input.exampleItemBlock ?? null,

@@ -102,6 +102,7 @@ interface PlannerInvocationOptions {
   reviewerNotes: string;
   target: AgenticTarget | Record<string, unknown> | null;
   missingFields: string[];
+  ambiguousFields?: string[];
   deviceLabelText?: string | null;
   logger?: Partial<Pick<Console, LoggerMethods>>;
 }
@@ -309,6 +310,7 @@ export async function evaluateSearchPlanner({
   reviewerNotes,
   target,
   missingFields,
+  ambiguousFields,
   deviceLabelText,
   logger
 }: PlannerInvocationOptions): Promise<PlannerDecision | null> {
@@ -321,6 +323,10 @@ export async function evaluateSearchPlanner({
     missingFields,
     reviewerNotes: reviewerNotes || null
   };
+
+  if (ambiguousFields && ambiguousFields.length > 0) {
+    payload.ambiguousFields = ambiguousFields;
+  }
 
   if (deviceLabelText && deviceLabelText.trim()) {
     payload.deviceLabelText = deviceLabelText.trim();

@@ -19,13 +19,14 @@ export interface AgenticReviewInput {
   review_price: number | null;
   shop_article: boolean | null;
   reviewedBy: string | null;
+  specValues?: Record<string, string>;
 }
 
 export function buildAgenticReviewSubmissionPayload(
   actor: string,
   reviewInput: AgenticReviewInput
 ): Record<string, unknown> {
-  return {
+  const payload: Record<string, unknown> = {
     actor,
     action: 'review',
     information_present: reviewInput.information_present,
@@ -39,6 +40,10 @@ export function buildAgenticReviewSubmissionPayload(
     shop_article: reviewInput.shop_article,
     reviewedBy: actor
   };
+  if (reviewInput.specValues && Object.keys(reviewInput.specValues).length > 0) {
+    payload.specValues = reviewInput.specValues;
+  }
+  return payload;
 }
 
 export function parseMissingSpecInput(value: string | null): string[] {
