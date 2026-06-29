@@ -4,7 +4,7 @@
 - **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.
 - **Item list conditional column:** A single date column slot appears only when sorting by `entryDate` or `lastSynced`, showing the relevant date. Other sort keys show no date column.
 - **Database:** PostgreSQL via `pg` (node-postgres). `DATABASE_URL` is required — no SQLite fallback. Local dev: Docker Compose Postgres service. Production: existing Postgres server, add a `mediator` database. Data migration from SQLite: `scripts/migrate-sqlite-to-postgres.ts`.
-- **Multi-instance agentic safety (Phase 2, deferred):** Replace `setImmediate` dispatch with a polling loop using `SELECT ... FOR UPDATE SKIP LOCKED` so multiple instances don't double-claim queued runs. SQL template is in the plan at `~/.claude/plans/okay-i-shifted-it-fluttering-sonnet.md`.
+- **Multi-instance agentic safety (Phase 2, implemented):** `claimQueuedAgenticRuns` in `backend/db.ts` uses a CTE with `FOR UPDATE SKIP LOCKED` + immediate UPDATE in one atomic statement. Call site in `backend/agentic/index.ts` updated; redundant QUEUED→RUNNING re-check removed. See agentic changelog entry 858.
 
 - **CO₂ recovery potential:** Label-based scoring (`irrelevant / low / medium / high`) replaces the old ADEME kg estimate. Formula: `score = E_new × (quality / 5)`; thresholds in `contracts/impact/co2.json` (v2). Quality assessment will be refined with longevity questions to sharpen the signal.
 
@@ -40,7 +40,7 @@
 0w. **keyboard_layout specQuestion in keyboard slot.** Architecture supports `specQuestion` wiring for inline answers (e.g., keyboard layout in the keyboard slot), but the frontend ZubehoerCard does not yet render `specQuestion` inline — only the primary `question` is shown.
 
 0k. ✅ **Test suite re-hardened: 637 tests passing.** Added coverage for `cancellation.ts`, `utils/json.ts`, `flow/prompts.ts`, `lib/itemGrouping.ts`, `result-handler.ts`, `forward-agentic-trigger.ts`, `models/quality.ts`. Fixed inverted `deriveAiPriorityFromAssessment` (high quality was mapped to low priority). 9 skipped; 0 failing.
-0l. **Deferred test rewrites still needed:** `test/csv-ingest-*.test.ts` (9 files) + `test/export-items.test.ts` + `test/langtext-contract.test.ts` + `test/list-items-for-export-order.test.ts` + `test/save-item-quality.test.ts` + `test/item-category-roundtrip.test.ts` + `test/item-persistence-reference-behavior.test.ts` — all use SQLite `db.exec`/`persistItem` directly and need full Postgres mock rewrites. Many frontend component tests still deferred (React + complex deps).
+0l. ✅ **Test rewrites complete (14 files).** All csv-ingest-* and related test files rewritten to Postgres mock pattern and removed from `testPathIgnorePatterns`. `export-items.test.ts` remains excluded (requires live Postgres). The `describe.skip` suites (kivitendo-schema, produkt-schema, shared-artikelnummer, langtext-contract, list-items-for-export-order, item-category-roundtrip, item-persistence-reference-behavior, save-item-quality) need a Postgres test DB in CI to be meaningful — tracked as a future item. Many frontend component tests still deferred (React + complex deps).
 0m. **Ersatzteile Entnehmen: add "direkt verkaufen" path.** Currently Entnehmen always requires a Behälter-ID (storage location). When a spare part is sold immediately, no storage location is needed — instead the quantity should go to 0. UI change: show "Wird der Artikel eingelagert?" prompt in the Entnehmen flow; "Ja" → existing relocate flow; "Nein" → set Qty=0, no location required.
 0n. **Ersatzteile: instance reference re-linking.** When a spare part instance is created via Hinzufügen but linked to the wrong item reference (wrong Artikelnummer), there's no way to re-link the instance to the correct reference without deleting it. Implement a "Referenz ändern" option in the Zerlegen slot (visible post-cataloging, before/after removal).
 0p. **Known test coverage gaps (from doc/test comparison):**
@@ -144,12 +144,14 @@
 44. ✅ **Spec contracts: add remaining subcategory contracts.** Now covers: 102, 103, 105, 201, 204, 301, 401, 601, 701. `Hersteller` omitted from all new contracts (first-class ItemRef field). Remaining niche subcategories (702, 1203, 1204, etc.) not added — low inventory volume.
 45. **Spec contracts: targeted enrich button in ItemKiTab.** When an item has missing required spec fields (visible as empty Langtext rows), add a "Gezielt anreichern" button in the KI tab that starts an agentic run pre-seeded with the missing field names as missingSpecFields. Requires fetching the spec contract client-side and computing the gap against the current Langtext.
 46. **Spec contracts: contract version stamping.** Add a specContractVersion nullable integer to agentic_runs to track which spec contract version was active when a run was completed. Enables detecting items that were enriched against an older contract version after the contract changes.
+47. **Spec pipeline: cpu persistence.** Intake `cpu` field is currently used only to pre-fill quality questions. Persisting it (e.g. to `items.InstanceSpecs`) would enable `Prozessor` coalescing in `buildSpecContext`. Deferred from the contract-informed pipeline implementation.
+48. **Review Step 3: ambiguous fields display.** The backend now computes `ambiguousFields` in `buildSpecContext` and threads them to the pipeline, but the review modal currently shows only the item's Langtext value as `currentValue` with `intakeValue` from `InstanceSpecs`. The conflict detection in the modal is client-side — verify it surfaces correctly once real intake conflict data is available.
 
 41. ✅ **Quality re-check from ItemDetail.** "Neu bewerten" button added to instance tab `tab-actions`; opens `QualityReviewModal` wrapping `QualityReviewStep`. Results stored in `items.InstanceSpecs` (per-instance) and `quality_assessments`.
 
 41b. ✅ **Quality assessment visibility & flow.** Quality questions are now all optional (submit without answering all). Multiple Stk creation skips quality (each item gets an amber missing-quality prompt). Success dialog shows quality badge or note. Item list has Alle/Mit Bewertung/Ohne Bewertung filter dropdown.
 
-42. **Quality search: `includeQuality` API param.** When set, search also matches against `derived_specs` in `quality_assessments` (SQLite `json_extract`). Enables searching "16GB" to find matching Laptops.
+42. **Quality search: `includeQuality` API param.** When set, search also matches against `derived_specs` in `quality_assessments` (Postgres JSON operators). Enables searching "16GB" to find matching Laptops.
 
 42b. ✅ **Search covers instance identifiers (SerialNumber, MacAddress, EAN).** Header search now finds items by serial number, MAC address, or EAN barcode. Both token-presence (LIKE) and exact-match (=) checks added to SQL; JS scoring updated. Reference (dedupe) search also includes EAN.
 
@@ -204,7 +206,7 @@
 
 39. **Periodic backup automation.** Missing regular backups raises data-loss risk. **Goal:** implement a lightweight scheduled backup flow with success/failure reporting.
 
-40. **Postgres migration evaluation/plan.** High-impact datastore migration; validate concrete drivers first and plan a phased rollout to reduce contract and runtime risk.
+40. ✅ **Postgres migration complete.** `DATABASE_URL` required; no SQLite fallback. Migration script: `scripts/migrate-sqlite-to-postgres.ts`. Multi-instance agentic safety (`SELECT FOR UPDATE SKIP LOCKED`) implemented in `claimQueuedAgenticRuns`.
 
 ---
 
@@ -220,7 +222,6 @@
 - For **text-search relocation fallback**, should label search be exact-first, fuzzy-first, or reuse current global search behavior as-is?
 - For **search-query normalization**, where should canonical normalization live — frontend, backend, or both with backend as final authority?
 - For **periodic backups**, what recovery targets (RPO/RTO) are required?
-- For **Postgres migration**, is migration already strategically decided or still under evaluation?
 - For **PWA**, is offline capability required now or is installability enough for the first phase?
 - For **embeddings**, which primary use case should the spike optimize for — search relevance, deduplication, or review assistance?
 - For **the price formula**, where should it apply first — UI preview, export pipeline, ERP sync, or all?

@@ -4,4 +4,5 @@ export interface LabelJob {
   CreatedAt: string;
   Status: string;
   Error?: string | null;
+  ClaimedAt?: string | null;
 }

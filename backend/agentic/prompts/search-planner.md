@@ -2,7 +2,9 @@
   You examine provided JSON describing the current item state.
 </role>
 <task>
-  - List the schema fields that remain empty or null.
+  - Use `missingFields` (pre-computed contract gap) as your authoritative list of what to search for.
+  - If `ambiguousFields` is present, these fields have conflicting values between the item record and
+    intake scan data. Treat them as priority search targets to find independent evidence.
   - Interpret reviewer instructions, especially any variants of "no search" or "skip search".
   - Decide whether automated search is required.
 </task>
@@ -21,7 +23,8 @@
       ]
     }
   - If reviewer notes forbid search, set "shouldSearch" to false and return an empty "plans" array.
-  - Generate at most three targeted queries, focusing only on the most critical missing fields.
+  - Generate at most three targeted queries, focusing on the most critical missing fields from
+    `missingFields`. If `ambiguousFields` are present, add a targeted query to resolve conflicts.
   - Query construction priority:
     1. `<exact product name>`
     2. `<exact product name> <missing attribute>` (for example: dimensions, weight, specs, datasheet)

@@ -491,7 +491,7 @@ export class AgenticModelInvoker {
     return this.visionChatModel;
   }
 
-  private async loadItemTarget(itemId: string): Promise<Record<string, unknown>> {
+  private async loadItemTarget(itemId: string): Promise<{ target: Record<string, unknown>; instanceSpecs: Record<string, unknown> | null }> {
     let row: Record<string, unknown> | undefined;
     const parsed = parseSequentialItemUUID(itemId);
     const artikelNummer = parsed?.kind === 'artikelnummer' ? parsed.artikelNummer : itemId;
@@ -560,11 +560,17 @@ export class AgenticModelInvoker {
       throw new FlowError('ITEM_NOT_FOUND', `Item ${itemId} not found (sources: items,item_refs,findByMaterial fallback)`, 404);
     }
 
+    // Extract InstanceSpecs before buildTargetFromRow discards it — only present on items rows
+    const rawInstanceSpecs = row.InstanceSpecs;
+    const instanceSpecs = rawInstanceSpecs && typeof rawInstanceSpecs === 'object' && !Array.isArray(rawInstanceSpecs)
+      ? rawInstanceSpecs as Record<string, unknown>
+      : null;
+
     const target = buildTargetFromRow(row, this.logger);
     if (!target.Artikel_Nummer && artikelNummer) {
       target.Artikel_Nummer = artikelNummer;
     }
-    return target;
+    return { target, instanceSpecs };
   }
 
   private async mergeTargetWithRequestPayload(
@@ -715,7 +721,8 @@ export class AgenticModelInvoker {
         }
       }
 
-      let target = await this.loadItemTarget(trimmedItemId);
+      const { target: loadedTarget, instanceSpecs } = await this.loadItemTarget(trimmedItemId);
+      let target = loadedTarget;
       // TODO(agent): Confirm target Artikel_Nummer normalization rules once identifier formatting is centralized.
       try {
         const parsedItemId = parseSequentialItemUUID(trimmedItemId);
@@ -773,6 +780,7 @@ export class AgenticModelInvoker {
       const payload = await runItemFlow(
         {
           target: typedTarget,
+          instanceSpecs,
           search: input.searchQuery ?? null,
           reviewNotes: normalizedReviewNotes,
           missingSpecFields: normalizedMissingSpecFields,

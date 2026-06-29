@@ -17,12 +17,13 @@ const action = defineHttpAction({
     if (!requireAdminAuth(req, res)) return;
     try {
       const pendingRow = await queryOne<{ c: number }>(`SELECT COUNT(*) as c FROM label_queue WHERE "Status" = $1`, ['Queued']);
+      const processingRow = await queryOne<{ c: number }>(`SELECT COUNT(*) as c FROM label_queue WHERE "Status" = $1`, ['Processing']);
       const failedRow = await queryOne<{ c: number }>(`SELECT COUNT(*) as c FROM label_queue WHERE "Status" = $1`, ['Error']);
       const recentFailed = await query(
         `SELECT "Id", "ItemUUID", "CreatedAt", "Error" FROM label_queue WHERE "Status" = $1 ORDER BY "Id" DESC LIMIT 10`,
         ['Error']
       );
-      sendJson(res, 200, { pending: pendingRow?.c ?? 0, failed: failedRow?.c ?? 0, recentFailed });
+      sendJson(res, 200, { pending: pendingRow?.c ?? 0, processing: processingRow?.c ?? 0, failed: failedRow?.c ?? 0, recentFailed });
     } catch (err) {
       console.error('[admin-label-queue] Failed to query label queue', err);
       sendJson(res, 500, { error: 'Failed to load label queue' });

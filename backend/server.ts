@@ -58,7 +58,8 @@ import {
   updateAgenticRunStatus,
   updateQueuedAgenticRunQueueState,
   getAgenticRequestLog,
-  nextLabelJob,
+  claimNextLabelJob,
+  recoverStaleLabelJobs,
   updateLabelJobStatus,
   logEvent,
   bulkMoveItems,
@@ -335,7 +336,9 @@ function parseAufLagerValue(value: unknown, itemId: string): number {
 }
 
 async function runPrintWorker(): Promise<void> {
-  const job = await nextLabelJob() as LabelJob | undefined;
+  const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+  await recoverStaleLabelJobs(staleThreshold);
+  const job = await claimNextLabelJob() as LabelJob | undefined;
   if (!job) return;
   try {
     const item = await getItem(job.ItemUUID) as Item | undefined;

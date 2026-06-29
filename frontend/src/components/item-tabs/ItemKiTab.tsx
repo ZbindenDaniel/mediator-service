@@ -2,8 +2,11 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { AgenticStatusCard, type AgenticStatusCardProps } from '../AgenticStatusCard';
 import AgenticSpecFieldReviewModal, {
+  AgenticContractFieldReviewModal,
   type AgenticSpecFieldOption,
-  type AgenticSpecFieldReviewResult
+  type AgenticSpecFieldReviewResult,
+  type AgenticContractFieldReviewResult,
+  type SpecContractFieldEntry
 } from '../AgenticSpecFieldReviewModal';
 
 export interface SpecFieldModalState {
@@ -19,11 +22,21 @@ export interface SpecFieldModalState {
   secondaryAdditionalInputPlaceholder?: string;
 }
 
+export interface ContractFieldModalState {
+  title: string;
+  description?: string;
+  contractFields: SpecContractFieldEntry[];
+  additionalFields?: Record<string, string | string[]>;
+}
+
 interface Props {
   agenticCardProps: AgenticStatusCardProps;
   specFieldModalState: SpecFieldModalState | null;
   onSpecFieldModalClose: () => void;
   onSpecFieldModalConfirm: (result: AgenticSpecFieldReviewResult) => void;
+  contractFieldModalState?: ContractFieldModalState | null;
+  onContractFieldModalClose?: () => void;
+  onContractFieldModalConfirm?: (result: AgenticContractFieldReviewResult) => void;
   canClose: boolean;
   onClose?: () => void | Promise<void>;
   canDelete: boolean;
@@ -36,6 +49,9 @@ export default function ItemKiTab({
   specFieldModalState,
   onSpecFieldModalClose,
   onSpecFieldModalConfirm,
+  contractFieldModalState,
+  onContractFieldModalClose,
+  onContractFieldModalConfirm,
   canClose,
   onClose,
   canDelete,
@@ -99,6 +115,17 @@ export default function ItemKiTab({
           secondaryAdditionalInputPlaceholder={specFieldModalState.secondaryAdditionalInputPlaceholder}
           onCancel={onSpecFieldModalClose}
           onConfirm={onSpecFieldModalConfirm}
+        />,
+        document.body
+      ) : null}
+      {contractFieldModalState && onContractFieldModalClose && onContractFieldModalConfirm ? ReactDOM.createPortal(
+        <AgenticContractFieldReviewModal
+          title={contractFieldModalState.title}
+          description={contractFieldModalState.description}
+          contractFields={contractFieldModalState.contractFields}
+          additionalFields={contractFieldModalState.additionalFields}
+          onCancel={onContractFieldModalClose}
+          onConfirm={onContractFieldModalConfirm}
         />,
         document.body
       ) : null}

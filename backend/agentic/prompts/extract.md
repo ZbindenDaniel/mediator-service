@@ -13,6 +13,9 @@
   - Output must match <output_format> exactly.
   {{OUTPUT_CONTRACT}}
   {{ERROR_POLICY}}
+  - When `Conflicting fields` appear in the user context, find independent evidence from search results
+    for each conflicting field and emit the value supported by sources. Do not copy either conflicting
+    value without evidence — leave the field at its current value if sources are silent.
   - Focus on already present keys in 'Spezifikationen'; add additional fields found in the search.
   - Field notes:
     - Artikelbeschreibung: Correct to the precise product name stated in sources.Add a broad device type in front (e.g. 'Laptop', 'Festplatte', 'Drucker.
