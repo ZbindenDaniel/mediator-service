@@ -26,13 +26,18 @@ const action = defineHttpAction({
       const rawTerm = requestUrl.searchParams.get('term') ?? requestUrl.searchParams.get('query');
       const normalizedTerm = rawTerm ? rawTerm.trim() : '';
       const hasTerm = normalizedTerm.length > 0;
+      const rawBoxId = requestUrl.searchParams.get('boxId');
+      const normalizedBoxId = rawBoxId ? rawBoxId.trim() : '';
+      const hasBoxId = normalizedBoxId.length > 0;
       const parsedLimit = requestedLimit ? Number(requestedLimit) : DEFAULT_LIMIT;
       const limit = Number.isFinite(parsedLimit)
         ? Math.min(Math.max(1, Math.floor(parsedLimit)), MAX_LIMIT)
         : DEFAULT_LIMIT;
 
       let events: unknown[];
-      if (hasTerm) {
+      if (hasBoxId) {
+        events = await ctx.listRecentActivitiesByBoxId(normalizedBoxId, limit);
+      } else if (hasTerm) {
         if (!ctx.listRecentActivitiesByTerm) {
           console.error('Activities term helper missing; falling back to unfiltered feed', {
             term: normalizedTerm,

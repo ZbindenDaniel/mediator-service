@@ -17,6 +17,7 @@ export default function RecentActivitiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [actorFilter, setActorFilter] = useState('');
+  const [boxFilter, setBoxFilter] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -49,6 +50,7 @@ export default function RecentActivitiesPage() {
         const termFromUrl = params.get('term') ?? '';
         const trimmed = (termFromUrl || searchTerm).trim();
         const termParam = trimmed ? `&term=${encodeURIComponent(trimmed)}` : '';
+        const boxParam = boxFilter.trim() ? `&boxId=${encodeURIComponent(boxFilter.trim())}` : '';
         if (trimmed && BOX_SHELF_PATTERN.test(trimmed)) {
           try {
             logger.info('RecentActivitiesPage: box or shelf search term detected', { term: trimmed });
@@ -60,7 +62,7 @@ export default function RecentActivitiesPage() {
           limit: DEFAULT_LIMIT,
           term: trimmed || undefined,
         });
-        const response = await fetch(`/api/activities?limit=${DEFAULT_LIMIT}${termParam}`);
+        const response = await fetch(`/api/activities?limit=${DEFAULT_LIMIT}${termParam}${boxParam}`);
         if (!response.ok) {
           throw new Error(`Aktivitäten konnten nicht geladen werden (Status ${response.status}).`);
         }
@@ -88,7 +90,7 @@ export default function RecentActivitiesPage() {
     return () => {
       cancelled = true;
     };
-  }, [location.search, searchTerm]);
+  }, [location.search, searchTerm, boxFilter]);
 
   const displayedEvents = useMemo(() => {
     const trimmed = actorFilter.trim().toLowerCase();
@@ -123,6 +125,13 @@ export default function RecentActivitiesPage() {
           onChange={event => setActorFilter(event.target.value)}
           placeholder="Akteur filtern"
           aria-label="Aktivitäten nach Akteur filtern"
+        />
+        <input
+          type="search"
+          value={boxFilter}
+          onChange={event => setBoxFilter(event.target.value)}
+          placeholder="Box / Regal-ID"
+          aria-label="Aktivitäten nach Box- oder Regal-ID filtern"
         />
       </div>
       {loading && <p className="muted">Aktivitäten werden geladen…</p>}

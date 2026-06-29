@@ -424,6 +424,11 @@ CREATE TABLE IF NOT EXISTS printer_queues (
   // Additive column migrations — safe no-ops after first run
   await execBatch(`
 ALTER TABLE item_refs ADD COLUMN IF NOT EXISTS "LastSyncedAt" TEXT;
+ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedAt" TEXT;
+ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedBy" TEXT;
+ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "Confidence" FLOAT;
+ALTER TABLE events ALTER COLUMN "Meta" TYPE jsonb USING CASE WHEN "Meta" IS NULL THEN NULL ELSE "Meta"::jsonb END;
+CREATE INDEX IF NOT EXISTS idx_events_meta_gin ON events USING GIN("Meta");
 `);
 
   console.info('[db] Postgres schema ready');
@@ -1644,6 +1649,26 @@ export async function listRecentActivitiesByTerm(term: string, limit: number): P
   );
 }
 
+export async function listRecentActivitiesByBoxId(boxId: string, limit: number): Promise<any[]> {
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
+  return query(
+    `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
+            r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
+     FROM events e
+     LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
+     LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
+     AND (
+       e."Meta" @> jsonb_build_object('from', $1)
+       OR e."Meta" @> jsonb_build_object('to', $1)
+       OR e."Meta" @> jsonb_build_object('fromBox', $1)
+       OR e."Meta" @> jsonb_build_object('toBox', $1)
+     )
+     ORDER BY e."CreatedAt" DESC LIMIT $2`,
+    [boxId, effectiveLimit]
+  );
+}
+
 export async function countEvents(): Promise<number> {
   const row = await queryOne<{ c: string }>(`SELECT COUNT(*) as c FROM events WHERE ${levelFilterExpression()} AND ${topicFilterExpression()}`);
   return Number(row?.c ?? 0);
@@ -1761,10 +1786,11 @@ export async function upsertAgenticRun(params: {
   ReviewedBy?: string | null;
   LastReviewDecision?: string | null;
   LastReviewNotes?: string | null;
+  Confidence?: number | null;
 }): Promise<void> {
   await execute(
-    `INSERT INTO agentic_runs ("Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy","LastReviewDecision","LastReviewNotes")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+    `INSERT INTO agentic_runs ("Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy","LastReviewDecision","LastReviewNotes","Confidence")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
      ON CONFLICT("Artikel_Nummer") DO UPDATE SET
        "SearchQuery"=COALESCE(EXCLUDED."SearchQuery",agentic_runs."SearchQuery"),
        "LastSearchLinksJson"=COALESCE(EXCLUDED."LastSearchLinksJson",agentic_runs."LastSearchLinksJson"),
@@ -1774,18 +1800,19 @@ export async function upsertAgenticRun(params: {
        "ReviewedBy"=EXCLUDED."ReviewedBy",
        "LastReviewDecision"=COALESCE(EXCLUDED."LastReviewDecision",agentic_runs."LastReviewDecision"),
        "LastReviewNotes"=COALESCE(EXCLUDED."LastReviewNotes",agentic_runs."LastReviewNotes"),
+       "Confidence"=COALESCE(EXCLUDED."Confidence",agentic_runs."Confidence"),
        "RetryCount"=CASE WHEN EXCLUDED."Status"='queued' THEN 0 ELSE agentic_runs."RetryCount" END,
        "NextRetryAt"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."NextRetryAt" END,
        "LastError"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."LastError" END,
        "LastAttemptAt"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."LastAttemptAt" END`,
-    [params.Artikel_Nummer, params.SearchQuery ?? null, params.LastSearchLinksJson ?? null, params.Status, params.LastModified, params.ReviewState, params.ReviewedBy ?? null, params.LastReviewDecision ?? null, params.LastReviewNotes ?? null]
+    [params.Artikel_Nummer, params.SearchQuery ?? null, params.LastSearchLinksJson ?? null, params.Status, params.LastModified, params.ReviewState, params.ReviewedBy ?? null, params.LastReviewDecision ?? null, params.LastReviewNotes ?? null, params.Confidence ?? null]
   );
 }
 
 export async function getAgenticRun(artikelNummer: string): Promise<AgenticRun | null> {
   return queryOne<AgenticRun>(
     `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
-            "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt"
+            "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt","Confidence"
      FROM agentic_runs WHERE "Artikel_Nummer"=$1`,
     [artikelNummer]
   );
@@ -2418,10 +2445,8 @@ export type BoxStub = {
 };
 
 export const listStubs = {
-  active: async (): Promise<BoxStub[]> => {
-    const rows = await query<BoxStub>(`SELECT * FROM box_stubs ORDER BY "CreatedAt" DESC`);
-    return rows.filter((r) => r.IsActive === 1);
-  },
+  active: async (): Promise<BoxStub[]> =>
+    query<BoxStub>(`SELECT * FROM box_stubs WHERE "IsActive" = 1 ORDER BY "CreatedAt" DESC`),
   all: async (): Promise<BoxStub[]> => query<BoxStub>(`SELECT * FROM box_stubs ORDER BY "CreatedAt" DESC`)
 };
 
@@ -2439,6 +2464,15 @@ export async function createStub(params: {
      VALUES ($1,$2,$3,$4,0,$5,$6,1,$7)`,
     [params.id, params.shelfId, params.description, params.numberLooseItems, params.createdAt, params.createdBy, params.notes ?? null]
   );
+}
+
+export async function closeStub(id: string, closedBy: string, closedAt: string): Promise<boolean> {
+  const rowCount = await execute(
+    `UPDATE box_stubs SET "IsActive" = 0, "ClosedAt" = $2, "ClosedBy" = $3
+     WHERE "Id" = $1 AND "IsActive" = 1`,
+    [id, closedAt, closedBy]
+  );
+  return rowCount > 0;
 }
 
 // ---------------------------------------------------------------------------

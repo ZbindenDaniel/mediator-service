@@ -15,4 +15,5 @@ export interface AgenticRun {
   LastError: string | null;
   LastAttemptAt: string | null;
   TranscriptUrl?: string | null;
+  Confidence?: number | null;
 }
