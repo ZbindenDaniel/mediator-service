@@ -1566,7 +1566,7 @@ export default function ItemDetail({ itemId }: Props) {
   // TODO(agentic-review-flow-order): Reconfirm whether optional note should remain a final prompt once reviewer feedback is collected.
   // TODO(agentic-review-step-telemetry): Revisit per-question logging payload fields if analytics schema expands.
   // TODO(agentic-review-note-modal): Keep this as a single-step modal unless operators request guided note validation.
-  async function promptAgenticReviewNote(): Promise<{ notes: string; skipSearch: boolean } | null> {
+  async function promptAgenticReviewNote(): Promise<string | null> {
     let promptResult: string | null;
     try {
       promptResult = await dialogService.prompt({
@@ -1586,19 +1586,7 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
-    let skipSearch = false;
-    try {
-      skipSearch = await dialogService.confirm({
-        title: 'Suche überspringen',
-        message: 'Soll die Websuche beim nächsten KI-Lauf übersprungen werden? (Gespeicherte Quellen werden verwendet.)',
-        confirmLabel: 'Ja, Suche überspringen',
-        cancelLabel: 'Nein, neue Suche'
-      });
-    } catch (error) {
-      logError('ItemDetail: Failed to prompt for skipSearch', error, { itemId });
-    }
-
-    return { notes: promptResult.trim(), skipSearch };
+    return promptResult.trim();
   }
 
   async function promptAgenticCloseNote(): Promise<string | null> {
@@ -1985,14 +1973,12 @@ export default function ItemDetail({ itemId }: Props) {
     }
 
     let notes = '';
-    let skipSearch = false;
     if (!reviewPositiveSoFar) {
-      const noteResult = await promptAgenticReviewNote();
-      if (noteResult === null) {
+      const noteValue = await promptAgenticReviewNote();
+      if (noteValue === null) {
         return null;
       }
-      notes = noteResult.notes;
-      skipSearch = noteResult.skipSearch;
+      notes = noteValue;
     }
 
     const mappedInput = mapReviewAnswersToInput(
@@ -2010,8 +1996,7 @@ export default function ItemDetail({ itemId }: Props) {
         reviewPrice,
         shopArticle,
         wrongInformation: explicitWrongInformationFlag,
-        reviewedBy: null,
-        skipSearch
+        reviewedBy: null
       }
     );
     if (Object.keys(specValues).length > 0) {
