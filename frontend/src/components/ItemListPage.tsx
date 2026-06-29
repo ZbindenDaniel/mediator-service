@@ -429,7 +429,7 @@ export default function ItemListPage() {
   const [qualityThreshold, setQualityThreshold] = useState(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
   const [qualityFilter, setQualityFilter] = useState<ItemListFilters['qualityFilter']>(ITEM_LIST_DEFAULT_FILTERS.qualityFilter);
   const [myMarksOnly, setMyMarksOnly] = useState(ITEM_LIST_DEFAULT_FILTERS.myMarksOnly);
-  const { markedUUIDs } = useUserMarks();
+  const { allMarkedUUIDs } = useUserMarks();
   const [filtersReady, setFiltersReady] = useState(false);
   const latestFiltersRef = useRef<ItemListFilters>(ITEM_LIST_DEFAULT_FILTERS);
   const persistTimeoutRef = useRef<number | null>(null);
@@ -782,7 +782,7 @@ export default function ItemListPage() {
     });
     if (!myMarksOnly) return sorted;
     return sorted.filter((group) =>
-      group.items.some((item) => item.ItemUUID && markedUUIDs.has(item.ItemUUID))
+      group.items.some((item) => item.ItemUUID && allMarkedUUIDs.has(item.ItemUUID))
     );
   }, [
     items,
@@ -799,7 +799,7 @@ export default function ItemListPage() {
     qualityThreshold,
     qualityFilter,
     myMarksOnly,
-    markedUUIDs
+    allMarkedUUIDs
   ]);
 
   const visibleIds = useMemo(() => {
@@ -1171,7 +1171,7 @@ export default function ItemListPage() {
                 <label className="filter-control--checkbox">
                   <input
                     type="checkbox"
-                    aria-label="Nur meine Markierungen anzeigen"
+                    aria-label="Nur markierte Artikel anzeigen"
                     checked={myMarksOnly}
                     onChange={(e) => setMyMarksOnly(e.target.checked)}
                   />

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { GoPlus, GoX, GoTrash } from 'react-icons/go';
 import { getUser } from '../lib/user';
 import { usePanelContext } from '../context/PanelContext';
+import { dialogService } from './dialog';
 
 type BoxStub = {
   Id: string;
@@ -69,11 +70,22 @@ export default function StubListPage() {
   }
 
   async function handleDeleteStub(stub: BoxStub) {
-    if (!window.confirm(`"${stub.Description}" wirklich löschen?`)) return;
+    const confirmed = await dialogService.confirm({
+      title: 'Fund löschen',
+      message: `"${stub.Description}" wirklich löschen?`,
+      confirmLabel: 'Löschen',
+      cancelLabel: 'Abbrechen'
+    });
+    if (!confirmed) return;
     setDeletingId(stub.Id);
     try {
       const actor = encodeURIComponent(getUser());
-      await fetch(`/api/stubs/${encodeURIComponent(stub.Id)}?closedBy=${actor}`, { method: 'DELETE' });
+      const res = await fetch(`/api/stubs/${encodeURIComponent(stub.Id)}?closedBy=${actor}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setError((err as any).error ?? 'Löschen fehlgeschlagen.');
+        return;
+      }
       loadStubs();
     } catch {
       setError('Löschen fehlgeschlagen.');

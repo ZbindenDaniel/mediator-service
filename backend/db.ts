@@ -1009,12 +1009,14 @@ export interface ListBoxesHelper {
 
 const LIST_BOXES_SQL = `
   SELECT b.*, shelf."Label" AS "ShelfLabel",
-    COUNT(i."ItemUUID")::int AS "ItemCount",
-    COALESCE(SUM(COALESCE(i."Auf_Lager", 0) * COALESCE(r."Gewicht_kg", 0)), 0) AS "TotalWeightKg"
+    COUNT(DISTINCT i."ItemUUID")::int AS "ItemCount",
+    COALESCE(SUM(COALESCE(i."Auf_Lager", 0) * COALESCE(r."Gewicht_kg", 0)), 0) AS "TotalWeightKg",
+    COUNT(DISTINCT child."BoxID")::int AS "BoxCount"
   FROM boxes b
   LEFT JOIN boxes shelf ON b."LocationId" = shelf."BoxID"
   LEFT JOIN items i ON i."BoxID" = b."BoxID"
   LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
+  LEFT JOIN boxes child ON child."LocationId" = b."BoxID"
   GROUP BY b."BoxID", shelf."Label"
   ORDER BY b."BoxID"
 `;
@@ -1029,12 +1031,14 @@ export const listBoxes: ListBoxesHelper = {
     }
     return query(
       `SELECT b.*, shelf."Label" AS "ShelfLabel",
-        COUNT(i."ItemUUID")::int AS "ItemCount",
-        COALESCE(SUM(COALESCE(i."Auf_Lager", 0) * COALESCE(r."Gewicht_kg", 0)), 0) AS "TotalWeightKg"
+        COUNT(DISTINCT i."ItemUUID")::int AS "ItemCount",
+        COALESCE(SUM(COALESCE(i."Auf_Lager", 0) * COALESCE(r."Gewicht_kg", 0)), 0) AS "TotalWeightKg",
+        COUNT(DISTINCT child."BoxID")::int AS "BoxCount"
        FROM boxes b
        LEFT JOIN boxes shelf ON b."LocationId" = shelf."BoxID"
        LEFT JOIN items i ON i."BoxID" = b."BoxID"
        LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
+       LEFT JOIN boxes child ON child."LocationId" = b."BoxID"
        WHERE SUBSTRING(b."BoxID", 1, 1) = $1
        GROUP BY b."BoxID", shelf."Label"
        ORDER BY b."BoxID"`,
@@ -1659,10 +1663,10 @@ export async function listRecentActivitiesByBoxId(boxId: string, limit: number):
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
      WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
      AND (
-       e."Meta" @> jsonb_build_object('from', $1)
-       OR e."Meta" @> jsonb_build_object('to', $1)
-       OR e."Meta" @> jsonb_build_object('fromBox', $1)
-       OR e."Meta" @> jsonb_build_object('toBox', $1)
+       e."Meta" @> jsonb_build_object('from', $1::text)
+       OR e."Meta" @> jsonb_build_object('to', $1::text)
+       OR e."Meta" @> jsonb_build_object('fromBox', $1::text)
+       OR e."Meta" @> jsonb_build_object('toBox', $1::text)
      )
      ORDER BY e."CreatedAt" DESC LIMIT $2`,
     [boxId, effectiveLimit]
@@ -2492,6 +2496,11 @@ export type {
 export type { ShopwareSyncQueueEntry, ShopwareSyncQueueInsert, ShopwareSyncQueueStatus } from './shopware/queueTypes';
 
 // ── User item marks ──────────────────────────────────────────────────────────
+
+export async function getAllMarkedItemUUIDs(): Promise<string[]> {
+  const rows = await query<{ ItemUUID: string }>(`SELECT DISTINCT "ItemUUID" FROM user_item_marks`);
+  return rows.map((r) => r.ItemUUID);
+}
 
 export async function getUserMarks(username: string): Promise<Array<{ ItemUUID: string; Note: string | null }>> {
   const rows = await query<{ ItemUUID: string; Note: string | null }>(

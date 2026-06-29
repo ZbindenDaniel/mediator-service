@@ -10,7 +10,9 @@ import { getUser } from '../lib/user';
 
 interface UserMarksContextValue {
   markedUUIDs: Set<string>;
+  allMarkedUUIDs: Set<string>;
   isMarked: (itemUUID: string) => boolean;
+  isMarkedByAnyone: (itemUUID: string) => boolean;
   getNote: (itemUUID: string) => string | null;
   toggleMark: (itemUUID: string, currentNote?: string | null) => Promise<void>;
   saveMark: (itemUUID: string, note: string | null) => Promise<void>;
@@ -24,9 +26,21 @@ export const USERNAME_CHANGED_EVENT = 'mediator:username-changed';
 
 export function UserMarksProvider({ children }: PropsWithChildren) {
   const [markedUUIDs, setMarkedUUIDs] = useState<Set<string>>(new Set());
+  const [allMarkedUUIDs, setAllMarkedUUIDs] = useState<Set<string>>(new Set());
   const [notes, setNotes] = useState<Map<string, string | null>>(new Map());
   // Tracks the username the context last loaded marks for.
   const [loadedForUser, setLoadedForUser] = useState('');
+
+  const loadAllMarks = useCallback(() => {
+    void fetch('/api/user-marks/all')
+      .then((r) => r.json())
+      .then((data: { markedUUIDs?: string[] }) => {
+        if (Array.isArray(data.markedUUIDs)) {
+          setAllMarkedUUIDs(new Set(data.markedUUIDs));
+        }
+      })
+      .catch((err) => console.error('[UserMarks] Failed to load all marks', err));
+  }, []);
 
   const loadMarks = useCallback(() => {
     const username = getUser().trim();
@@ -45,6 +59,7 @@ export function UserMarksProvider({ children }: PropsWithChildren) {
 
   // Load on mount and whenever the username changes (same-tab dispatch from setUser).
   useEffect(() => {
+    loadAllMarks();
     loadMarks();
     const handleUsernameChange = () => loadMarks();
     window.addEventListener(USERNAME_CHANGED_EVENT, handleUsernameChange);
@@ -57,6 +72,7 @@ export function UserMarksProvider({ children }: PropsWithChildren) {
   }, []);
 
   const isMarked = useCallback((itemUUID: string) => markedUUIDs.has(itemUUID), [markedUUIDs]);
+  const isMarkedByAnyone = useCallback((itemUUID: string) => allMarkedUUIDs.has(itemUUID), [allMarkedUUIDs]);
   const getNote = useCallback((itemUUID: string) => notes.get(itemUUID) ?? null, [notes]);
 
   const saveMark = useCallback(async (itemUUID: string, note: string | null) => {
@@ -69,6 +85,7 @@ export function UserMarksProvider({ children }: PropsWithChildren) {
     });
     if (res.ok) {
       setMarkedUUIDs((prev) => new Set([...prev, itemUUID]));
+      setAllMarkedUUIDs((prev) => new Set([...prev, itemUUID]));
       setNotes((prev) => new Map([...prev, [itemUUID, note]]));
     }
   }, []);
@@ -104,7 +121,7 @@ export function UserMarksProvider({ children }: PropsWithChildren) {
   }, [markedUUIDs, removeMark, saveMark]);
 
   return (
-    <UserMarksContext.Provider value={{ markedUUIDs, isMarked, getNote, toggleMark, saveMark, removeMark }}>
+    <UserMarksContext.Provider value={{ markedUUIDs, allMarkedUUIDs, isMarked, isMarkedByAnyone, getNote, toggleMark, saveMark, removeMark }}>
       {children}
     </UserMarksContext.Provider>
   );

@@ -183,6 +183,7 @@ export default function BoxList({ boxes, searchValue, sortKey, typeFilter, locat
             <th className="col-box-id">Behälter</th>
             <th className="col-location">Standort</th>
             <th className="col-item-count">Artikel</th>
+            <th className="col-box-count">Behälter</th>
             <th className="col-total-weight">Gewicht gesamt (kg)</th>
             <th className="col-updated">Aktualisiert</th>
           </tr>
@@ -235,7 +236,8 @@ export default function BoxList({ boxes, searchValue, sortKey, typeFilter, locat
                       labelOverride={normalizedShelfLabel || null}
                     />
                   </td>
-                  <td className="col-item-count">{Number.isFinite(box.ItemCount) ? box.ItemCount : 0}</td>
+                  <td className="col-item-count">{isShelf ? '—' : (Number.isFinite(box.ItemCount) ? box.ItemCount : 0)}</td>
+                  <td className="col-box-count">{isShelf ? (Number.isFinite(box.BoxCount) ? box.BoxCount : 0) : '—'}</td>
                   <td className="col-total-weight">
                     {Number.isFinite(box.TotalWeightKg) ? Number(box.TotalWeightKg).toFixed(3) : '0.000'}
                   </td>

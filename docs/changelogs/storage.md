@@ -4,6 +4,10 @@ Covers: boxes, shelves, locations, relocation, stubs, inventory cycles, box hier
 
 ---
 
+## 862. ✅ Fix stub deletion (id parsing + dialog pattern) and add BoxCount column for shelves
+   - **Why:** (1) `close-stub.ts` extracted the stub id via `split('/').pop()` which included the query string (e.g. `abc123?closedBy=user`), causing every DELETE to fail silently. Fixed by parsing id from `url.pathname` instead. (2) `StubListPage` used `window.confirm()` instead of the app-standard `dialogService.confirm()`; also missing `res.ok` check left the stub visible after a failed delete. (3) Box list query joined only direct items for each box; shelves always showed 0. Added `LEFT JOIN boxes child ON child."LocationId" = b."BoxID"` and `COUNT(DISTINCT child."BoxID") AS "BoxCount"` so the BoxList can show the number of child boxes for shelf rows instead of a misleading 0 item count.
+   - **Deferred:** Nothing.
+
 ## 809. ✅ Fix nginx 429s on item detail: split rate-limit zones for API vs browser-facing routes
    - **Why:** The `auth_limit` zone (5r/s burst=10) was applied globally to all requests. Loading one item's instances fires one `/api/boxes/:id` request per distinct box simultaneously — easily 10–15 concurrent requests — which exceeded the burst. The limit was meant for brute-force protection on the basic-auth login prompt, not for SPA API traffic. Fixed by: (1) adding a permissive `api_limit` zone (100r/s burst=300) applied to `/api/` and `/api/admin/` locations; (2) restricting the strict `auth_limit` (5r/s burst=20) to the `location /` block only.
    - **Deferred:** Per-instance box fetches in LocationTag are still N individual requests; batching them would be a further improvement but isn't blocking.

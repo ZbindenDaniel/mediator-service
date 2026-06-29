@@ -1529,24 +1529,26 @@ const action = defineHttpAction({
           }
           try {
             for (const itemData of itemDataList) {
-              await ctx.persistItemWithinTransaction(itemData);
-              const shouldPersistAgenticRun = Boolean(seedArtikelNummer && !agenticRunPersisted);
-
-              let itemExists: { ItemUUID: string } | undefined;
+              // Check existence before persist so we can distinguish create from update in the event log.
+              let itemExistedBeforePersist = isUpdateRequest;
               if (!isUpdateRequest) {
                 try {
-                  itemExists = ctx.getItem ? await ctx.getItem(itemData.ItemUUID) as { ItemUUID: string } | undefined : undefined;
+                  const found = ctx.getItem ? await ctx.getItem(itemData.ItemUUID) as { ItemUUID: string } | undefined : undefined;
+                  itemExistedBeforePersist = Boolean(found);
                 } catch (lookupErr) {
                   console.error('[import-item] Failed to check existing item state during event logging', lookupErr);
                 }
               }
-              const eventType = isUpdateRequest || itemExists ? 'Updated' : 'Created';
+              await ctx.persistItemWithinTransaction(itemData);
+              const shouldPersistAgenticRun = Boolean(seedArtikelNummer && !agenticRunPersisted);
+
+              const eventType = itemExistedBeforePersist ? 'Updated' : 'Created';
               await ctx.logEvent({
                 Actor: a,
                 EntityType: 'Item',
                 EntityId: itemData.ItemUUID,
                 Event: eventType,
-                Meta: JSON.stringify({ BoxID: boxId })
+                Meta: JSON.stringify({ source: 'import', artikelNummer: itemData.Artikel_Nummer ?? null, boxId: boxId ?? null })
               });
               if (shouldPersistAgenticRun) {
                 agenticRunPersisted = true;
