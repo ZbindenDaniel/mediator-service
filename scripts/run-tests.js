@@ -110,24 +110,7 @@ function collectTests(dir, matches) {
   }
 }
 
-function ensureBetterSqlite3Available() {
-  try {
-    require.resolve('better-sqlite3');
-    return true;
-  } catch (error) {
-    console.error(
-      '[run-tests] Missing native dependency: better-sqlite3. Install dependencies or rebuild the module before running tests.',
-      error
-    );
-    return false;
-  }
-}
-
 async function main() {
-  if (!ensureBetterSqlite3Available()) {
-    process.exit(1);
-  }
-
   const roots = [
     path.join(__dirname, '..', 'test'),
     path.join(__dirname, '..', 'backend', 'actions', '__tests__'),
