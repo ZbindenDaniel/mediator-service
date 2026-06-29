@@ -141,17 +141,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
   if (mockEntry) {
     return instantiateMock(mockEntry, request);
   }
-  try {
-    return originalLoad(request, parent, isMain);
-  } catch (error) {
-    if (request === 'better-sqlite3' && error && error.code === 'MODULE_NOT_FOUND') {
-      console.error(
-        '[harness] Native module missing: better-sqlite3. Install dependencies or rebuild before running DB-backed tests.',
-        error
-      );
-    }
-    throw error;
-  }
+  return originalLoad(request, parent, isMain);
 };
 
 function createSuite(name, parent = null) {

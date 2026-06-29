@@ -52,6 +52,7 @@ export interface RunExtractionOptions {
   target: AgenticTarget;
   reviewNotes?: string | null;
   missingSpecFields?: string[];
+  ambiguousFields?: Record<string, { itemValue: string; intakeValue: string }>;
   unneededSpecFields?: string[];
   skipSearch?: boolean;
   exampleItemBlock?: string | null;
@@ -668,6 +669,7 @@ export async function runExtractionAttempts({
   target,
   reviewNotes,
   missingSpecFields,
+  ambiguousFields,
   unneededSpecFields,
   skipSearch,
   exampleItemBlock,
@@ -684,6 +686,15 @@ export async function runExtractionAttempts({
   let lastInvalidJsonErrorHint = '';
   // TODO(agent-placeholder): Persist placeholder detection telemetry for correction prompts.
   let lastInvalidJsonPlaceholderIssues: string[] = [];
+
+  // Pre-build ambiguous fields instruction block so the extractor finds independent evidence rather than guessing
+  let ambiguousFieldsBlock = '';
+  if (ambiguousFields && Object.keys(ambiguousFields).length > 0) {
+    const fieldLines = Object.entries(ambiguousFields)
+      .map(([key, { itemValue, intakeValue }]) => `  - ${key}: item says "${itemValue}", intake says "${intakeValue}"`)
+      .join('\n');
+    ambiguousFieldsBlock = `Conflicting fields (find independent evidence for each — do not guess):\n${fieldLines}`;
+  }
 
   let attempt = 1;
   // TODO(agent): Revisit pass-level retry ceilings once extraction telemetry shows stable pass success rates.
@@ -1120,6 +1131,9 @@ export async function runExtractionAttempts({
     }
     if (reviewSignalInstructionBlock) {
       contextSections.push(reviewSignalInstructionBlock);
+    }
+    if (ambiguousFieldsBlock) {
+      contextSections.push(ambiguousFieldsBlock);
     }
     contextSections.push('Current search context:', singleContextText || 'None.');
     contextSections.push('Accumulated candidate (compact JSON):', compactAccumulator);

@@ -189,6 +189,89 @@ export async function pruneUnneededSpecsAfterReview(
 }
 
 
+export async function applySpecValuesAfterReview(
+  artikelNummer: string,
+  specValues: Record<string, string>,
+  ctx: {
+    getItemReference: (id: string) => Promise<ItemRef | undefined>;
+    persistItemReference?: (ref: ItemRef) => Promise<void> | void;
+  },
+  logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
+): Promise<void> {
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!trimmedArtikelNummer || !specValues || Object.keys(specValues).length === 0) {
+    return;
+  }
+
+  let reference: ItemRef | undefined;
+  try {
+    reference = await ctx.getItemReference(trimmedArtikelNummer);
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to load reference for spec values write-back', {
+      artikelNummer: trimmedArtikelNummer,
+      error
+    });
+    return;
+  }
+
+  if (!reference) {
+    logger.warn?.('[agentic-review] Artikelnummer reference not found for spec values write-back', {
+      artikelNummer: trimmedArtikelNummer
+    });
+    return;
+  }
+
+  if (!ctx.persistItemReference) {
+    logger.error?.('[agentic-review] Persistence helper unavailable; cannot write spec values', {
+      artikelNummer: trimmedArtikelNummer
+    });
+    return;
+  }
+
+  const langtext = reference.Langtext;
+  const nextLangtext: Record<string, unknown> = langtext && typeof langtext === 'object' && !Array.isArray(langtext)
+    ? { ...(langtext as Record<string, unknown>) }
+    : {};
+
+  const written: string[] = [];
+  const removed: string[] = [];
+  for (const [key, value] of Object.entries(specValues)) {
+    if (!key.trim()) continue;
+    if (value === null || value === undefined || String(value).trim() === '') {
+      // Empty value = operator removed this field
+      if (key in nextLangtext) {
+        delete nextLangtext[key];
+        removed.push(key);
+      }
+    } else {
+      nextLangtext[key] = String(value).trim();
+      written.push(key);
+    }
+  }
+
+  if (written.length === 0 && removed.length === 0) {
+    logger.debug?.('[agentic-review] No spec value changes to persist', { artikelNummer: trimmedArtikelNummer });
+    return;
+  }
+
+  try {
+    await ctx.persistItemReference({
+      ...reference,
+      Langtext: nextLangtext as typeof reference.Langtext
+    });
+    logger.info?.('[agentic-review] Applied operator spec values from review', {
+      artikelNummer: trimmedArtikelNummer,
+      writtenCount: written.length,
+      removedCount: removed.length
+    });
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to persist spec values write-back', {
+      artikelNummer: trimmedArtikelNummer,
+      error
+    });
+  }
+}
+
 export async function applyManualReviewReferenceUpdates(
   artikelNummer: string,
   reviewMetadata: { review_price: number | null; shop_article: boolean | null },
@@ -541,6 +624,13 @@ const action = defineHttpAction({
       }
 
       const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
+      const specValues: Record<string, string> = data.specValues && typeof data.specValues === 'object' && !Array.isArray(data.specValues)
+        ? Object.fromEntries(
+            Object.entries(data.specValues as Record<string, unknown>)
+              .filter(([k, v]) => typeof k === 'string' && (v === null || v === undefined || typeof v === 'string'))
+              .map(([k, v]) => [k, v == null ? '' : String(v)])
+          )
+        : {};
       const reviewMetadata = normalizeReviewMetadataPayload(data);
       const notes = reviewMetadata.notes ?? '';
       const reviewedBy = reviewMetadata.reviewedBy ?? actor;
@@ -787,6 +877,14 @@ const action = defineHttpAction({
           await applyPriceFallbackAfterReview(artikelNummer, ctx, console);
         } catch (err) {
           console.error('Failed to apply fallback sale price after review for Artikelnummer', err);
+        }
+
+        if (Object.keys(specValues).length > 0) {
+          try {
+            await applySpecValuesAfterReview(artikelNummer, specValues, ctx, console);
+          } catch (err) {
+            console.error('Failed to apply spec values write-back after review for Artikelnummer', err);
+          }
         }
       }
 

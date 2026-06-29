@@ -87,7 +87,7 @@ import ZubehoerBadge, { type ZubehoerMode } from './ZubehoerBadge';
 import { buildAgenticReviewMetricRows } from './AgenticReviewMetricsRows';
 import DetailTabBar from './DetailTabBar';
 import ItemReferenceTab from './item-tabs/ItemReferenceTab';
-import ItemKiTab, { type SpecFieldModalState } from './item-tabs/ItemKiTab';
+import ItemKiTab, { type SpecFieldModalState, type ContractFieldModalState } from './item-tabs/ItemKiTab';
 import ItemInstanceTab from './item-tabs/ItemInstanceTab';
 import ItemImagesTab from './item-tabs/ItemImagesTab';
 import ItemAttachmentsTab from './item-tabs/ItemAttachmentsTab';
@@ -101,8 +101,11 @@ import {
   parseReviewSpecTokenList
 } from './agenticReviewSpecFields';
 import AgenticSpecFieldReviewModal, {
+  AgenticContractFieldReviewModal,
   type AgenticSpecFieldOption,
-  type AgenticSpecFieldReviewResult
+  type AgenticSpecFieldReviewResult,
+  type AgenticContractFieldReviewResult,
+  type SpecContractFieldEntry
 } from './AgenticSpecFieldReviewModal';
 import {
   agenticStatusDisplay,
@@ -122,6 +125,7 @@ import {
   resolveDetailEinheit,
   resolveQuantityEinheit,
 } from '../lib/itemDetailFormatting';
+import { fetchSpecContract } from '../lib/contractsApi';
 
 interface Props {
   itemId: string;
@@ -274,6 +278,13 @@ export default function ItemDetail({ itemId }: Props) {
     includeSecondaryAdditionalInput?: boolean;
     secondaryAdditionalInputPlaceholder?: string;
     resolve: (result: AgenticSpecFieldReviewResult | null) => void;
+  } | null>(null);
+  const [contractFieldReviewModalState, setContractFieldReviewModalState] = useState<{
+    title: string;
+    description?: string;
+    contractFields: SpecContractFieldEntry[];
+    additionalFields?: Record<string, string | string[]>;
+    resolve: (result: AgenticContractFieldReviewResult | null) => void;
   } | null>(null);
   const [agenticReviewAutomation, setAgenticReviewAutomation] = useState<ItemDetailReviewAutomationSignal | null>(null);
   const [agenticCardWarning, setAgenticCardWarning] = useState<string | null>(null);
@@ -1600,6 +1611,28 @@ export default function ItemDetail({ itemId }: Props) {
 
 
 
+  async function promptContractFieldReview(options: {
+    title: string;
+    description?: string;
+    contractFields: SpecContractFieldEntry[];
+    additionalFields?: Record<string, string | string[]>;
+  }): Promise<AgenticContractFieldReviewResult | null> {
+    try {
+      return await new Promise<AgenticContractFieldReviewResult | null>((resolve) => {
+        setContractFieldReviewModalState({
+          title: options.title,
+          description: options.description,
+          contractFields: options.contractFields,
+          additionalFields: options.additionalFields,
+          resolve
+        });
+      });
+    } catch (error) {
+      logError('ItemDetail: Failed to collect contract field review', error, { itemId, title: options.title });
+      return null;
+    }
+  }
+
   async function promptSpecFieldReviewSelection(options: {
     title: string;
     description: string;
@@ -1755,34 +1788,95 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
-    const specSelection = await promptSpecFieldReviewSelection({
-      title: 'Schritt 3 · Spezifikationen',
-      description: 'Unnötige Felder markieren und fehlende Felder unten als Freitext eintragen.',
-      fieldOptions: normalizedSpecFieldOptions,
-      includeAdditionalInput: true,
-      additionalInputPlaceholder: 'Fehlende Felder: z. B. Spannung, Material, Schutzklasse'
-    });
-    if (specSelection === null) {
-      logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
-        itemId,
-        stepKey: 'specSelectionSingleInput',
-        completed: false
-      });
-      return null;
+    // Build contract-field list for Step 3: coalesce spec contract + Langtext + InstanceSpecs
+    const INTAKE_TO_SPEC: Record<string, string> = { ram_gb: 'RAM', storage_gb: 'Speicher', drive_type: 'Speichertyp' };
+    const INTAKE_FORMAT: Record<string, (v: string) => string> = {
+      ram_gb: (v) => `${v} GB`,
+      storage_gb: (v) => `${v} GB`,
+      drive_type: (v) => v
+    };
+
+    const langtextParsed = parseLangtext(item?.Langtext ?? '');
+    const langtextMap: Record<string, string> = {};
+    if (langtextParsed.kind === 'json') {
+      for (const e of langtextParsed.entries) { if (e.value.trim()) langtextMap[e.key] = e.value.trim(); }
     }
 
-    const unneededSpecRaw = mergeSpecFieldSelection(specSelection.selectedFields, '');
-    const missingSpecRaw = mergeSpecFieldSelection([], specSelection.additionalInput);
-    const hasUnnecessarySpecs = parseReviewSpecTokenList(unneededSpecRaw).length > 0;
-    const hasMissingSpecs = parseReviewSpecTokenList(missingSpecRaw).length > 0;
+    const instanceSpecsParsed = parseLangtext(item?.InstanceSpecs ?? '');
+    const instanceSpecsMap: Record<string, string> = {};
+    if (instanceSpecsParsed.kind === 'json') {
+      for (const e of instanceSpecsParsed.entries) { if (e.value.trim()) instanceSpecsMap[e.key] = e.value.trim(); }
+    }
 
-    logger.info?.('ItemDetail: Agentic review checklist step completed', {
-      itemId,
-      stepKey: 'specSelectionSingleInput',
-      completed: true,
-      unneededSpecCount: parseReviewSpecTokenList(unneededSpecRaw).length,
-      missingSpecCount: parseReviewSpecTokenList(missingSpecRaw).length
-    });
+    const subcategoryCode = typeof item?.Unterkategorien_A === 'number' ? item.Unterkategorien_A : null;
+    const specContract = subcategoryCode ? await fetchSpecContract(subcategoryCode) : null;
+
+    let contractFields: SpecContractFieldEntry[] = [];
+    let specValues: Record<string, string> = {};
+
+    if (specContract) {
+      const contractFieldKeys = new Set(specContract.fields.map((f) => f.key));
+      contractFields = specContract.fields.map((f): SpecContractFieldEntry => {
+        const currentValue = langtextMap[f.key] ?? null;
+        const intakeKey = Object.entries(INTAKE_TO_SPEC).find(([, v]) => v === f.key)?.[0] ?? null;
+        const rawIntakeValue = intakeKey ? instanceSpecsMap[intakeKey] : null;
+        const intakeValue = rawIntakeValue && intakeKey ? INTAKE_FORMAT[intakeKey]?.(rawIntakeValue) ?? rawIntakeValue : null;
+        return { key: f.key, required: f.required, description: f.description, currentValue, intakeValue };
+      });
+
+      // Additional extracted specs not in contract
+      const additionalFields: Record<string, string | string[]> = {};
+      for (const [k, v] of Object.entries(langtextMap)) {
+        if (!contractFieldKeys.has(k)) additionalFields[k] = v;
+      }
+
+      const contractReviewResult = await promptContractFieldReview({
+        title: 'Schritt 3 · Spezifikationen',
+        description: 'Alle Vertragsfelder prüfen, Konflikte auflösen, Werte korrigieren. Leeres Feld = Feld entfernen.',
+        contractFields,
+        additionalFields
+      });
+      if (contractReviewResult === null) {
+        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
+          itemId,
+          stepKey: 'contractFieldReview',
+          completed: false
+        });
+        return null;
+      }
+      specValues = contractReviewResult.specValues;
+      logger.info?.('ItemDetail: Agentic review checklist step completed', {
+        itemId,
+        stepKey: 'contractFieldReview',
+        completed: true,
+        specValueCount: Object.keys(specValues).length
+      });
+    } else {
+      // Fallback to old free-text approach when no spec contract is available
+      const specSelection = await promptSpecFieldReviewSelection({
+        title: 'Schritt 3 · Spezifikationen',
+        description: 'Unnötige Felder markieren und fehlende Felder unten als Freitext eintragen.',
+        fieldOptions: normalizedSpecFieldOptions,
+        includeAdditionalInput: true,
+        additionalInputPlaceholder: 'Fehlende Felder: z. B. Spannung, Material, Schutzklasse'
+      });
+      if (specSelection === null) {
+        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
+          itemId,
+          stepKey: 'specSelectionSingleInput',
+          completed: false
+        });
+        return null;
+      }
+      logger.info?.('ItemDetail: Agentic review checklist step completed', {
+        itemId,
+        stepKey: 'specSelectionSingleInput',
+        completed: true
+      });
+    }
+
+    const hasUnnecessarySpecs = false;
+    const hasMissingSpecs = false;
 
     const dimensionsPlausible = await askFlag(
       'dimensionsPlausible',
@@ -1893,8 +1987,8 @@ export default function ItemDetail({ itemId }: Props) {
         dimensionsPlausible
       },
       {
-        missingSpecRaw,
-        unneededSpecRaw,
+        missingSpecRaw: null,
+        unneededSpecRaw: null,
         notes,
         reviewPrice,
         shopArticle,
@@ -1902,6 +1996,9 @@ export default function ItemDetail({ itemId }: Props) {
         reviewedBy: null
       }
     );
+    if (Object.keys(specValues).length > 0) {
+      mappedInput.specValues = specValues;
+    }
 
     const wrongInformationExplicitlyFlagged = typeof explicitWrongInformationFlag === 'boolean';
 
@@ -2782,6 +2879,27 @@ export default function ItemDetail({ itemId }: Props) {
       finally { setSpecFieldReviewModalState(null); }
     };
 
+    const contractFieldModalData = contractFieldReviewModalState
+      ? {
+          title: contractFieldReviewModalState.title,
+          description: contractFieldReviewModalState.description,
+          contractFields: contractFieldReviewModalState.contractFields,
+          additionalFields: contractFieldReviewModalState.additionalFields
+        }
+      : null;
+
+    const handleContractFieldModalClose = () => {
+      try { contractFieldReviewModalState?.resolve(null); }
+      catch (error) { logError('ItemDetail: Failed to resolve cancelled contract field modal', error, { itemId }); }
+      finally { setContractFieldReviewModalState(null); }
+    };
+
+    const handleContractFieldModalConfirm = (result: AgenticContractFieldReviewResult) => {
+      try { contractFieldReviewModalState?.resolve(result); }
+      catch (error) { logError('ItemDetail: Failed to resolve confirmed contract field modal', error, { itemId }); }
+      finally { setContractFieldReviewModalState(null); }
+    };
+
     let tabContent: React.ReactNode;
     switch (activeTab ?? 'instance') {
       case 'reference':
@@ -2804,6 +2922,9 @@ export default function ItemDetail({ itemId }: Props) {
             specFieldModalState={specModalData}
             onSpecFieldModalClose={handleSpecFieldModalClose}
             onSpecFieldModalConfirm={handleSpecFieldModalConfirm}
+            contractFieldModalState={contractFieldModalData}
+            onContractFieldModalClose={handleContractFieldModalClose}
+            onContractFieldModalConfirm={handleContractFieldModalConfirm}
             canClose={agenticCanClose}
             onClose={agenticCanClose ? handleAgenticClose : undefined}
             canDelete={agenticCanDelete}
