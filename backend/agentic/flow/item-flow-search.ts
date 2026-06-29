@@ -41,6 +41,7 @@ export interface CollectSearchContextOptions {
   plannerDecision?: PlannerDecision | null;
   missingSchemaFields?: string[];
   reviewerSkip?: boolean;
+  storedSources?: SearchSource[];
   transcriptWriter?: AgentTranscriptWriter | null;
 }
 
@@ -734,6 +735,7 @@ export async function collectSearchContexts({
   plannerDecision,
   missingSchemaFields: providedMissingFields,
   reviewerSkip,
+  storedSources,
   transcriptWriter
 }: CollectSearchContextOptions): Promise<CollectSearchContextsResult> {
   const resolvedMaxPlans = Number.isFinite(searchLimits.maxPlans) && searchLimits.maxPlans > 0
@@ -901,11 +903,20 @@ export async function collectSearchContexts({
   const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
 
   if (!shouldSearch) {
+    // When skipSearch is active but stored sources exist, inject them so the extraction model
+    // has prior evidence to work from — sanitization runs via the buildAggregatedSearchText closure.
+    if (Array.isArray(storedSources) && storedSources.length > 0) {
+      const storedText = storedSources.map((s) => (typeof s.content === 'string' ? s.content : '')).filter(Boolean).join('\n\n');
+      searchContexts.push({ query: searchTerm ?? 'stored-search-data', text: storedText, sources: storedSources });
+      recordSources(storedSources);
+    }
+
     try {
       logger?.info?.({
         msg: 'search execution skipped',
         itemId,
         reviewerSkip: Boolean(reviewerSkip),
+        storedSourceCount: searchContexts.length > 0 ? (searchContexts[0]?.sources?.length ?? 0) : 0,
         hasReviewerNotes: Boolean(sanitizedReviewerNotes),
         missingFields: missingSchemaFields.slice(0, 10),
         plannerShouldSearch: plannerDecision?.shouldSearch ?? null
