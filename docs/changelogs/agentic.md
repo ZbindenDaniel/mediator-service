@@ -4,6 +4,10 @@ Covers: AI enrichment pipeline, search, extraction, categorization, pricing, sup
 
 ---
 
+## 858. ✅ Atomic SELECT FOR UPDATE SKIP LOCKED claim query for multi-instance agentic safety
+**Why:** `fetchQueuedAgenticRuns` issued an unlocked SELECT, so a second instance could pick up the same rows before the first updated their status to `running` — a double-claim race. Replaced with `claimQueuedAgenticRuns` in `backend/db.ts`: a single CTE that locks candidate rows with `FOR UPDATE SKIP LOCKED`, then immediately UPDATEs their `Status` to `running` in the same statement (`RETURNING agentic_runs.*`). Runs inside `withTransaction`. Updated the call site in `backend/agentic/index.ts` to use the new function; removed the now-redundant QUEUED→RUNNING promotion check that the caller previously did after the SELECT. Also removed the stale `DB_PATH` env var row from `docs/ENVIRONMENT.md` (no SQLite fallback). Supersedes the deferred item from entry 797.
+**Deferred:** Unit test for concurrent claim (two async calls against a Postgres test DB asserting each run is claimed exactly once) — requires a live Postgres instance in CI.
+
 ## 857. ✅ Add 2 more missing agentic event translations (AgenticRunQueued, AgenticRunRequeued)
    - **Why:** A follow-up scan found these two keys actively logged in `backend/agentic/index.ts` but absent from `models/event-resources.json`, so operators saw raw camelCase strings. Added: `AgenticRunQueued` → "KI-Lauf eingereiht" and `AgenticRunRequeued` → "KI-Lauf erneut eingereiht", both `info`/`agentic`.
    - **Deferred:** Nothing.

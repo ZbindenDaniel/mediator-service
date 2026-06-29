@@ -4,6 +4,10 @@ Covers: label printing, CUPS integration, printer queue management, print templa
 
 ---
 
+## 859. ✅ Atomic label-queue claim (FOR UPDATE SKIP LOCKED) — enables cross-instance printing
+**Why:** `nextLabelJob()` issued an unlocked SELECT; with multiple instances each polling every 750 ms, two workers could claim the same row and print the same label twice. Replaced with `claimNextLabelJob()` — an atomic UPDATE…RETURNING with a subquery using `FOR UPDATE SKIP LOCKED`, which transitions the row to `Processing` in the same statement. Added `recoverStaleLabelJobs()` to reset Processing rows older than 5 minutes back to Queued (crash recovery). Added `ClaimedAt` TEXT column to `label_queue` (via `ALTER TABLE … ADD COLUMN IF NOT EXISTS`). Side-effect: all instances share one label queue through Postgres, so a print request from any instance is fulfilled by whichever worker is free — printing to that instance's local CUPS printer. Admin endpoint (`/api/admin/label-queue`) now also reports `processing` count.
+**Deferred:** Explicit printer routing (a `TargetPrinter` column to direct a job to a specific named printer) — implicit routing via whichever instance claims the job is sufficient for now. Unit test for double-claim prevention requires a live Postgres DB.
+
 ## 853. ✅ Fix CUPS fd limit (ulimits) and www-data lpinfo Forbidden error
    - **Why:** (1) CUPS crashes on hosts with high/unlimited fd limits — added `ulimits.nofile: 65000/65000` to the cups service in both compose files; CUPS internal calculations assume lower limits and produce an invalid value when the limit is too high, causing EFAULT. (2) www-data (uid 33) in the mediator container gets "Forbidden" from `lpinfo` via the Unix socket — `AuthType None` in cupsd.conf disables credential prompts but CUPS still enforces lpadmin group membership at the socket level; fixed by adding `www-data` to `lpadmin` in `cups/Dockerfile`. USB device passthrough was already handled by docker-compose.usb.yml.
    - **Deferred:** Nothing.

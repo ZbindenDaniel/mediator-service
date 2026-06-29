@@ -29,8 +29,7 @@ This document enumerates all environment variables consumed by the mediator serv
 
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
-| `DATABASE_URL` | (unset) | Postgres connection string. When set, `DB_PATH` is ignored. |
-| `DB_PATH` | `backend/data/mediator.sqlite` | Legacy SQLite database path when `DATABASE_URL` is unset. |
+| `DATABASE_URL` | (required) | Postgres connection string. No SQLite fallback — the service refuses to start without this. |
 | `INBOX_DIR` | `backend/data/inbox` | Directory watched for CSV imports. |
 | `ARCHIVE_DIR` | `backend/data/archive` | Directory used to archive processed CSVs. |
 | `MEDIA_STORAGE_MODE` | `local` | `local` or `webdav` media storage backend. |
