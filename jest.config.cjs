@@ -78,22 +78,23 @@ module.exports = {
     // Rewritten and active — removed from ignore list:
     // /test/event-log-topics.test.ts (module-cache pattern verified working)
     // Uses old AgenticServiceDependencies interface (pre-Postgres refactor) — needs rewrite
-    // Use SQLite directly — need Postgres rewrite before running in CI
+    // CSV export test uses SQLite directly — needs Postgres integration test harness
     '/test/export-items.test.ts',
-    '/test/csv-ingest-datum-erfasst.test.ts',
-    '/test/csv-ingest-decimal-normalization.test.ts',
-    '/test/csv-ingest-insertdateset.test.ts',
-    '/test/csv-ingest-kivitendo-schema.test.ts',
-    '/test/csv-ingest-location-fallback.test.ts',
-    '/test/csv-ingest-onhand-fallback.test.ts',
-    '/test/csv-ingest-produkt-schema.test.ts',
-    '/test/csv-ingest-shared-artikelnummer.test.ts',
-    '/test/csv-ingest-standort-label.test.ts',
-    '/test/item-persistence-reference-behavior.test.ts',
-    '/test/item-category-roundtrip.test.ts',
-    '/test/langtext-contract.test.ts',
-    '/test/list-items-for-export-order.test.ts',
-    '/test/save-item-quality.test.ts',
+    // Rewritten and active (mock preamble + describe.skip for DB-behavior assertions) — removed from ignore list:
+    // /test/csv-ingest-datum-erfasst.test.ts
+    // /test/csv-ingest-decimal-normalization.test.ts (full mock assertions for numeric parsing)
+    // /test/csv-ingest-insertdateset.test.ts
+    // /test/csv-ingest-kivitendo-schema.test.ts
+    // /test/csv-ingest-location-fallback.test.ts
+    // /test/csv-ingest-onhand-fallback.test.ts
+    // /test/csv-ingest-produkt-schema.test.ts
+    // /test/csv-ingest-shared-artikelnummer.test.ts
+    // /test/csv-ingest-standort-label.test.ts
+    // /test/item-persistence-reference-behavior.test.ts
+    // /test/item-category-roundtrip.test.ts
+    // /test/langtext-contract.test.ts
+    // /test/list-items-for-export-order.test.ts
+    // /test/save-item-quality.test.ts
     // Rewritten and active — removed from ignore list:
     // /test/agentic-review-persistence.test.ts (rewrote: dropped SQLite schema test + invokeModel, added no-review and queue-event tests)
     // Rewritten and active — removed from ignore list:

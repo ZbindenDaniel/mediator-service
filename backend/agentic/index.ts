@@ -35,7 +35,7 @@ import {
   saveAgenticRequestPayload,
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure,
-  fetchQueuedAgenticRuns,
+  claimQueuedAgenticRuns,
   fetchIdleFillAgenticRuns,
   updateQueuedAgenticRunQueueState,
   listAgenticRunReviewHistory,
@@ -773,28 +773,15 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
     const attemptTimestamp = nowIso;
     const nextRetryCount = (existingRun?.RetryCount ?? 0) + 1;
 
-    // Atomically verify the run is still queued and the concurrency cap has not been reached,
-    // then update to 'running' in the same transaction. This prevents multiple scheduled
-    // callbacks from all proceeding to 'running' if slots were exhausted between dispatch and
-    // execution, and closes the race window left by the dispatch-time cap check.
+    // claimQueuedAgenticRuns already moved the row to 'running' atomically via FOR UPDATE
+    // SKIP LOCKED, so multi-instance double-claiming is prevented at the DB level. We still
+    // re-read here to pick up the latest field values (SearchQuery etc.) and to catch the
+    // edge case where the run was cancelled between claim and execution.
     let promoted = false;
     try {
-      promoted = await withTransaction(async (client) => {
-        const countResult = await client.query(
-          `SELECT COUNT(*) as runningcount FROM agentic_runs WHERE "Status" = $1`,
-          [AGENTIC_RUN_STATUS_RUNNING]
-        );
-        const currentRunningCount = Number(countResult.rows[0]?.runningcount ?? 0);
-        if (currentRunningCount >= MAX_CONCURRENT_RUNNING_RUNS) {
-          logger.info?.('[agentic-service] Concurrency cap reached at promotion; leaving run queued', {
-            artikelNummer: payload.artikelNummer,
-            runningCount: currentRunningCount,
-            cap: MAX_CONCURRENT_RUNNING_RUNS
-          });
-          return false;
-        }
+      promoted = await withTransaction(async (_client) => {
         const latestRun = await fetchAgenticRun(payload.artikelNummer, deps, logger);
-        if (!latestRun || latestRun.Status !== AGENTIC_RUN_STATUS_QUEUED) {
+        if (!latestRun || latestRun.Status !== AGENTIC_RUN_STATUS_RUNNING) {
           return false;
         }
         const updateResult = await deps.updateAgenticRunStatus(
@@ -1157,7 +1144,7 @@ export async function dispatchQueuedAgenticRuns(
   let queuedRuns: AgenticRun[] = [];
 
   try {
-    queuedRuns = await fetchQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots));
+    queuedRuns = await claimQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots));
   } catch (err) {
     logger.error?.('[agentic-service] Failed to load queued agentic runs for dispatch', {
       error: toErrorMessage(err),
