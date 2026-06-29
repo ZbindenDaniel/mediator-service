@@ -68,6 +68,7 @@ import {
   listEventsForItem,
   listRecentActivities,
   listRecentActivitiesByTerm,
+  listRecentActivitiesByBoxId,
   listRecentEvents,
   countBoxes,
   countEvents,
@@ -103,6 +104,7 @@ import {
   insertAgenticRunReviewHistoryEntry,
   listStubs,
   createStub,
+  closeStub,
   initDb
 } from './db';
 import { AgenticModelInvoker } from './agentic/invoker';
@@ -475,6 +477,7 @@ type ActionContext = {
   listEventsForItem: typeof listEventsForItem;
   listRecentActivities: typeof listRecentActivities;
   listRecentActivitiesByTerm: typeof listRecentActivitiesByTerm;
+  listRecentActivitiesByBoxId: typeof listRecentActivitiesByBoxId;
   listRecentEvents: typeof listRecentEvents;
   countBoxes: typeof countBoxes;
   countEvents: typeof countEvents;
@@ -497,6 +500,7 @@ type ActionContext = {
   updateAgenticReview: typeof updateAgenticReview;
   listStubs: typeof listStubs;
   createStub: typeof createStub;
+  closeStub: typeof closeStub;
   INBOX_DIR: typeof INBOX_DIR;
   PUBLIC_DIR: typeof PUBLIC_DIR;
   PREVIEW_DIR: typeof PREVIEW_DIR;
@@ -1003,6 +1007,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           listEventsForItem,
           listRecentActivities,
           listRecentActivitiesByTerm,
+          listRecentActivitiesByBoxId,
           listRecentEvents,
           countBoxes,
           countEvents,
@@ -1028,6 +1033,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           insertAgenticRunReviewHistoryEntry,
           listStubs,
           createStub,
+          closeStub,
           INBOX_DIR,
           PUBLIC_DIR,
           PREVIEW_DIR,

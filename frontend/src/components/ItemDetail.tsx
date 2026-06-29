@@ -896,18 +896,18 @@ export default function ItemDetail({ itemId }: Props) {
       if (ev.Event !== 'AgenticReviewApproved' && ev.Event !== 'AgenticReviewRejected') {
         continue;
       }
-      const rawMeta = typeof ev.Meta === 'string' ? ev.Meta.trim() : '';
-      if (!rawMeta) {
-        continue;
+      let parsed: Record<string, unknown> | null = null;
+      if (typeof ev.Meta === 'object' && ev.Meta !== null) {
+        parsed = ev.Meta as Record<string, unknown>;
+      } else if (typeof ev.Meta === 'string' && ev.Meta.trim()) {
+        try {
+          parsed = JSON.parse(ev.Meta);
+        } catch (parseError) {
+          console.error('Failed to parse agentic review meta for note display', parseError);
+          continue;
+        }
       }
-
-      let parsed: any = null;
-      try {
-        parsed = JSON.parse(rawMeta);
-      } catch (parseError) {
-        console.error('Failed to parse agentic review meta for note display', parseError);
-        continue;
-      }
+      if (!parsed) continue;
 
       const candidate = typeof parsed.notes === 'string' ? parsed.notes.trim() : '';
       if (!candidate) {
@@ -993,6 +993,9 @@ export default function ItemDetail({ itemId }: Props) {
   }
   if (agentic?.LastError) {
     agenticRows.push(['Letzter Fehler', agentic.LastError]);
+  }
+  if (agentic?.Confidence != null) {
+    agenticRows.push(['Konfidenz', `${Math.round(agentic.Confidence * 100)} %`]);
   }
   if (agentic?.TranscriptUrl) {
     agenticRows.push([

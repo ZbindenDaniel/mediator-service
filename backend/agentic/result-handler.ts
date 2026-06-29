@@ -691,6 +691,11 @@ export async function handleAgenticResult(
           ? agenticPayload.searchQuery.trim()
           : existingRun?.SearchQuery ?? null;
       const lastSearchLinksJson = serializeSearchLinksJson(agenticPayload?.sources, logger, artikelNummerInput);
+      const rawConfidence = agenticPayload?.confidence;
+      const confidence =
+        rawConfidence != null && !isNaN(Number(rawConfidence))
+          ? Math.max(0, Math.min(1, Number(rawConfidence)))
+          : null;
       searchQueryForLog = searchQueryUpdate;
 
       if (!artikelNummerInput) {
@@ -704,6 +709,7 @@ export async function handleAgenticResult(
           SearchQuery: searchQueryUpdate,
           LastSearchLinksJson: lastSearchLinksJson,
           LastSearchLinksJsonIsSet: true,
+          Confidence: confidence,
           Status: status,
           LastModified: now,
           ReviewState: effectiveReviewState,

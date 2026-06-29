@@ -15,7 +15,7 @@ export interface EventLog {
   EntityId: string;
   Event: string;
   Level: EventLogLevel;
-  Meta?: string | null;
+  Meta?: string | Record<string, unknown> | null;
   Artikelbeschreibung?: string | null;
   Artikel_Nummer?: string | null;
 }

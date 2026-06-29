@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { GoPlus, GoX } from 'react-icons/go';
+import { GoPlus, GoX, GoTrash } from 'react-icons/go';
 import { getUser } from '../lib/user';
 import { usePanelContext } from '../context/PanelContext';
 
@@ -24,6 +24,7 @@ export default function StubListPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   function loadStubs() {
     fetch('/api/stubs')
@@ -64,6 +65,20 @@ export default function StubListPage() {
       setFormError('Fehler beim Speichern.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDeleteStub(stub: BoxStub) {
+    if (!window.confirm(`"${stub.Description}" wirklich löschen?`)) return;
+    setDeletingId(stub.Id);
+    try {
+      const actor = encodeURIComponent(getUser());
+      await fetch(`/api/stubs/${encodeURIComponent(stub.Id)}?closedBy=${actor}`, { method: 'DELETE' });
+      loadStubs();
+    } catch {
+      setError('Löschen fehlgeschlagen.');
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -156,6 +171,7 @@ export default function StubListPage() {
               <th>Lose Artikel</th>
               <th>Erstellt von</th>
               <th>Datum</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -174,6 +190,18 @@ export default function StubListPage() {
                 <td>{stub.NumberLooseItems || '—'}</td>
                 <td>{stub.CreatedBy}</td>
                 <td className="muted">{new Date(stub.CreatedAt).toLocaleDateString('de-CH')}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Löschen"
+                    disabled={deletingId === stub.Id}
+                    onClick={() => handleDeleteStub(stub)}
+                    title="Fund löschen"
+                  >
+                    <GoTrash />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>

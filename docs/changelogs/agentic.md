@@ -4,6 +4,10 @@ Covers: AI enrichment pipeline, search, extraction, categorization, pricing, sup
 
 ---
 
+## 858. ✅ Surface extraction confidence in UI; events.Meta → JSONB + box filter; stub close action
+**Why:** Three untapped data signals promoted to usable form. (1) Extraction confidence (0–1) was computed per run and dropped into `PayloadJson` but never persisted or shown — added `Confidence FLOAT` to `agentic_runs`, wired write path in `result-handler.ts`, displayed as "Konfidenz: N %" in the agentic status card in `ItemDetail.tsx`. (2) `events.Meta` was stored as opaque TEXT, making the full operational history unqueryable — migrated to JSONB with a GIN index; added `listRecentActivitiesByBoxId()` using `@>` JSONB operators; added a Box/Regal filter input to `RecentActivitiesPage`; updated `safeParseMeta` and `ItemDetail` Meta parsing to handle objects (pg returns JSONB as objects). (3) `box_stubs.IsActive` was never set to 0 — added `ClosedAt`/`ClosedBy` columns, `closeStub()` DB function, `DELETE /api/stubs/:id` action, and a trash icon button in `StubListPage`; also fixed SQL filter (was client-side JS, now `WHERE "IsActive" = 1`).
+**Deferred:** Review signal feedback loop (aggregated `ReviewMetadata` signals not yet injected into extraction prompts). Pricing confidence/evidenceCount not yet persisted (separate signal from extraction confidence).
+
 ## 857. ✅ Add 2 more missing agentic event translations (AgenticRunQueued, AgenticRunRequeued)
    - **Why:** A follow-up scan found these two keys actively logged in `backend/agentic/index.ts` but absent from `models/event-resources.json`, so operators saw raw camelCase strings. Added: `AgenticRunQueued` → "KI-Lauf eingereiht" and `AgenticRunRequeued` → "KI-Lauf erneut eingereiht", both `info`/`agentic`.
    - **Deferred:** Nothing.

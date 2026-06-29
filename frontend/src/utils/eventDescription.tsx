@@ -2,9 +2,10 @@ import React from 'react';
 import type { EventLog } from '../../../models';
 import { eventLabel } from '../../../models/event-labels';
 
-function safeParseMeta(meta: string | null | undefined): Record<string, unknown> {
+function safeParseMeta(meta: unknown): Record<string, unknown> {
   if (!meta) return {};
-  try { return JSON.parse(meta) as Record<string, unknown>; } catch { return {}; }
+  if (typeof meta === 'object') return meta as Record<string, unknown>;
+  try { return JSON.parse(String(meta)) as Record<string, unknown>; } catch { return {}; }
 }
 
 function str(v: unknown): string | null {
