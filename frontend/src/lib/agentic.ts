@@ -465,6 +465,7 @@ export interface AgenticRestartRequestInput {
   reviewDecision?: string | null;
   reviewNotes?: string | null;
   reviewedBy?: string | null;
+  skipSearch?: boolean;
 }
 
 export function buildAgenticRestartRequestPayload({
@@ -472,7 +473,8 @@ export function buildAgenticRestartRequestPayload({
   search,
   reviewDecision,
   reviewNotes,
-  reviewedBy
+  reviewedBy,
+  skipSearch
 }: AgenticRestartRequestInput): Record<string, unknown> {
   const trimmedActor = actor.trim();
   const trimmedSearch = (search ?? '').trim();
@@ -480,6 +482,9 @@ export function buildAgenticRestartRequestPayload({
     actor: trimmedActor,
     search: trimmedSearch
   };
+  if (skipSearch) {
+    payload.skipSearch = true;
+  }
 
   const decisionNormalized = reviewDecision && reviewDecision.trim() ? reviewDecision.trim().toLowerCase() : null;
   const notesNormalized = reviewNotes && reviewNotes.trim() ? reviewNotes.trim() : null;

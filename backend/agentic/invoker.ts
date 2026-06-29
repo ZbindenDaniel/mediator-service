@@ -708,19 +708,7 @@ export class AgenticModelInvoker {
         this.logger.warn?.({ err, msg: 'failed to normalize review metadata for agentic invocation', itemId: trimmedItemId });
       }
 
-      let skipSearch = Boolean(input.skipSearch);
-      if (!skipSearch && normalizedReviewNotes) {
-        try {
-          skipSearch = /skip\s+search|keine\s+suche|no\s+search/i.test(normalizedReviewNotes);
-          this.logger.info?.({
-            msg: 'agentic invocation received reviewer notes',
-            itemId: trimmedItemId,
-            skipSearchHint: skipSearch
-          });
-        } catch (err) {
-          this.logger.warn?.({ err, msg: 'failed to evaluate skip search hint', itemId: trimmedItemId });
-        }
-      }
+      const skipSearch = Boolean(input.skipSearch);
 
       const { target: loadedTarget, instanceSpecs } = await this.loadItemTarget(trimmedItemId);
       let target = loadedTarget;

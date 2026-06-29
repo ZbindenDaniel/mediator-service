@@ -756,7 +756,7 @@ export async function runExtractionAttempts({
       if (searchSkipped) {
         logger?.info?.({ msg: 'needs_more_search suppressed: search skipped', query: outcome.query, itemId });
         advanceAttempt();
-        continue;
+        return 'continue';
       }
       const previousContextCount = searchContexts.length;
       try {

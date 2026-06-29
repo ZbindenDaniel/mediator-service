@@ -1566,7 +1566,7 @@ export default function ItemDetail({ itemId }: Props) {
   // TODO(agentic-review-flow-order): Reconfirm whether optional note should remain a final prompt once reviewer feedback is collected.
   // TODO(agentic-review-step-telemetry): Revisit per-question logging payload fields if analytics schema expands.
   // TODO(agentic-review-note-modal): Keep this as a single-step modal unless operators request guided note validation.
-  async function promptAgenticReviewNote(): Promise<string | null> {
+  async function promptAgenticReviewNote(): Promise<{ notes: string; skipSearch: boolean } | null> {
     let promptResult: string | null;
     try {
       promptResult = await dialogService.prompt({
@@ -1586,7 +1586,19 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
-    return promptResult.trim();
+    let skipSearch = false;
+    try {
+      skipSearch = await dialogService.confirm({
+        title: 'Suche überspringen',
+        message: 'Soll die Websuche beim nächsten KI-Lauf übersprungen werden? (Gespeicherte Quellen werden verwendet.)',
+        confirmLabel: 'Ja, Suche überspringen',
+        cancelLabel: 'Nein, neue Suche'
+      });
+    } catch (error) {
+      logError('ItemDetail: Failed to prompt for skipSearch', error, { itemId });
+    }
+
+    return { notes: promptResult.trim(), skipSearch };
   }
 
   async function promptAgenticCloseNote(): Promise<string | null> {
@@ -1973,12 +1985,14 @@ export default function ItemDetail({ itemId }: Props) {
     }
 
     let notes = '';
+    let skipSearch = false;
     if (!reviewPositiveSoFar) {
-      const noteValue = await promptAgenticReviewNote();
-      if (noteValue === null) {
+      const noteResult = await promptAgenticReviewNote();
+      if (noteResult === null) {
         return null;
       }
-      notes = noteValue;
+      notes = noteResult.notes;
+      skipSearch = noteResult.skipSearch;
     }
 
     const mappedInput = mapReviewAnswersToInput(
@@ -1996,7 +2010,8 @@ export default function ItemDetail({ itemId }: Props) {
         reviewPrice,
         shopArticle,
         wrongInformation: explicitWrongInformationFlag,
-        reviewedBy: null
+        reviewedBy: null,
+        skipSearch
       }
     );
     if (Object.keys(specValues).length > 0) {
@@ -2211,12 +2226,25 @@ export default function ItemDetail({ itemId }: Props) {
 
     setAgenticSearchTerm(baseSearchTerm);
 
+    let restartSkipSearch = false;
+    try {
+      restartSkipSearch = await dialogService.confirm({
+        title: 'Suche überspringen',
+        message: 'Soll die Websuche übersprungen werden? (Gespeicherte Quellen werden verwendet.)',
+        confirmLabel: 'Ja, Suche überspringen',
+        cancelLabel: 'Nein, neue Suche'
+      });
+    } catch (error) {
+      logError('ItemDetail: Failed to prompt for restart skipSearch', error, { referenceId });
+    }
+
     const restartRequestPayload = buildAgenticRestartRequestPayload({
       actor,
       search: baseSearchTerm,
       reviewDecision: agentic?.LastReviewDecision ?? null,
       reviewNotes: agentic?.LastReviewNotes ?? null,
-      reviewedBy: agentic?.ReviewedBy ?? null
+      reviewedBy: agentic?.ReviewedBy ?? null,
+      skipSearch: restartSkipSearch || undefined
     });
 
     setAgenticActionPending(true);

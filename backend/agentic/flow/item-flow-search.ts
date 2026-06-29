@@ -906,7 +906,7 @@ export async function collectSearchContexts({
     // When skipSearch is active but stored sources exist, inject them so the extraction model
     // has prior evidence to work from — sanitization runs via the buildAggregatedSearchText closure.
     if (Array.isArray(storedSources) && storedSources.length > 0) {
-      const storedText = storedSources.map((s) => (typeof s.content === 'string' ? s.content : '')).filter(Boolean).join('\n\n');
+      const storedText = storedSources.map((s) => (typeof s.description === 'string' && s.description ? s.description : typeof s.content === 'string' ? s.content : '')).filter(Boolean).join('\n\n');
       searchContexts.push({ query: searchTerm ?? 'stored-search-data', text: storedText, sources: storedSources });
       recordSources(storedSources);
     }

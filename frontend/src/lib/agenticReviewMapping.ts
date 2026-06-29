@@ -20,6 +20,7 @@ export interface AgenticReviewInput {
   shop_article: boolean | null;
   reviewedBy: string | null;
   specValues?: Record<string, string>;
+  skipSearch?: boolean;
 }
 
 export function buildAgenticReviewSubmissionPayload(
@@ -42,6 +43,9 @@ export function buildAgenticReviewSubmissionPayload(
   };
   if (reviewInput.specValues && Object.keys(reviewInput.specValues).length > 0) {
     payload.specValues = reviewInput.specValues;
+  }
+  if (reviewInput.skipSearch) {
+    payload.skipSearch = true;
   }
   return payload;
 }
@@ -75,6 +79,7 @@ export function mapReviewAnswersToInput(
     shopArticle?: boolean | null;
     wrongInformation?: boolean | null;
     reviewedBy?: string | null;
+    skipSearch?: boolean;
   }
 ): AgenticReviewInput {
   // TODO(agentic-review-wrong-information): Wire a dedicated checklist input when reviewers need to flag factually wrong content.
@@ -94,6 +99,7 @@ export function mapReviewAnswersToInput(
       ? options.reviewPrice
       : null,
     shop_article: typeof options.shopArticle === 'boolean' ? options.shopArticle : null,
-    reviewedBy: options.reviewedBy ?? null
+    reviewedBy: options.reviewedBy ?? null,
+    skipSearch: options.skipSearch === true ? true : undefined
   };
 }
