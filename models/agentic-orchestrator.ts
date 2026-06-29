@@ -40,6 +40,7 @@ export interface AgenticRunStartInput {
   context?: string | null;
   request?: AgenticRequestContext | null;
   imageData?: string | null;
+  skipSearch?: boolean;
 }
 
 export interface AgenticRunStartResult {
@@ -103,6 +104,7 @@ export interface AgenticModelInvocationInput {
   review?: AgenticRunReviewMetadata | null;
   requestId?: string | null;
   imageData?: string | null;
+  skipSearch?: boolean;
 }
 
 export interface AgenticModelInvocationResult {

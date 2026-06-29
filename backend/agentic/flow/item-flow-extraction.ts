@@ -752,6 +752,12 @@ export async function runExtractionAttempts({
     }
 
     if (outcome.type === 'needs_more_search') {
+      // When search is skipped (stored-data mode), do not fire new Tavily queries — treat as a retry.
+      if (searchSkipped) {
+        logger?.info?.({ msg: 'needs_more_search suppressed: search skipped', query: outcome.query, itemId });
+        advanceAttempt();
+        return 'continue';
+      }
       const previousContextCount = searchContexts.length;
       try {
         const { text: extraText, sources: extraSources } = await searchInvoker(outcome.query, 5, {

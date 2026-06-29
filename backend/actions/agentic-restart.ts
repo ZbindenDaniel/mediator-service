@@ -180,6 +180,7 @@ const action = defineHttpAction({
     }
 
     const replaceReviewMetadata = payload.replaceReviewMetadata === true;
+    const skipSearch = payload.skipSearch === true;
     const requestContext = resolveAgenticRequestContext(payload, itemId);
 
     try {
@@ -190,6 +191,7 @@ const action = defineHttpAction({
           actor,
           review: normalizedReview,
           replaceReviewMetadata,
+          skipSearch,
           context: 'agentic-restart',
           request: requestContext
         },

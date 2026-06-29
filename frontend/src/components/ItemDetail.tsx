@@ -2211,12 +2211,25 @@ export default function ItemDetail({ itemId }: Props) {
 
     setAgenticSearchTerm(baseSearchTerm);
 
+    let restartSkipSearch = false;
+    try {
+      restartSkipSearch = await dialogService.confirm({
+        title: 'Suche überspringen',
+        message: 'Soll die Websuche übersprungen werden? (Gespeicherte Quellen werden verwendet.)',
+        confirmLabel: 'Ja, Suche überspringen',
+        cancelLabel: 'Nein, neue Suche'
+      });
+    } catch (error) {
+      logError('ItemDetail: Failed to prompt for restart skipSearch', error, { referenceId });
+    }
+
     const restartRequestPayload = buildAgenticRestartRequestPayload({
       actor,
       search: baseSearchTerm,
       reviewDecision: agentic?.LastReviewDecision ?? null,
       reviewNotes: agentic?.LastReviewNotes ?? null,
-      reviewedBy: agentic?.ReviewedBy ?? null
+      reviewedBy: agentic?.ReviewedBy ?? null,
+      skipSearch: restartSkipSearch || undefined
     });
 
     setAgenticActionPending(true);

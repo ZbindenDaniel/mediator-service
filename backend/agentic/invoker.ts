@@ -27,6 +27,7 @@ import type { SearchResult } from './tools/tavily-client';
 import { FlowError } from './flow/errors';
 import { handleAgenticResult, type AgenticResultPayload } from './result-handler';
 import { parseSequentialItemUUID } from '../lib/itemIds';
+import type { SearchSource } from './utils/source-formatter';
 
 // TODO(agent): Audit request payload merge rules whenever the AgenticTarget schema evolves.
 
@@ -707,19 +708,7 @@ export class AgenticModelInvoker {
         this.logger.warn?.({ err, msg: 'failed to normalize review metadata for agentic invocation', itemId: trimmedItemId });
       }
 
-      let skipSearch = false;
-      if (normalizedReviewNotes) {
-        try {
-          skipSearch = /skip\s+search|keine\s+suche|no\s+search/i.test(normalizedReviewNotes);
-          this.logger.info?.({
-            msg: 'agentic invocation received reviewer notes',
-            itemId: trimmedItemId,
-            skipSearchHint: skipSearch
-          });
-        } catch (err) {
-          this.logger.warn?.({ err, msg: 'failed to evaluate skip search hint', itemId: trimmedItemId });
-        }
-      }
+      const skipSearch = Boolean(input.skipSearch);
 
       const { target: loadedTarget, instanceSpecs } = await this.loadItemTarget(trimmedItemId);
       let target = loadedTarget;
@@ -777,6 +766,21 @@ export class AgenticModelInvoker {
         exampleItemBlock = STATIC_EXAMPLE_ITEM_BLOCK;
       }
 
+      let storedSources: SearchSource[] | undefined;
+      if (skipSearch) {
+        try {
+          const existingRun = await getAgenticRun(trimmedItemId);
+          if (existingRun?.LastSearchLinksJson) {
+            const parsed = JSON.parse(existingRun.LastSearchLinksJson);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              storedSources = parsed as SearchSource[];
+            }
+          }
+        } catch (err) {
+          this.logger.warn?.({ err, msg: 'failed to load stored search sources for skipSearch run', itemId: trimmedItemId });
+        }
+      }
+
       const payload = await runItemFlow(
         {
           target: typedTarget,
@@ -786,6 +790,7 @@ export class AgenticModelInvoker {
           missingSpecFields: normalizedMissingSpecFields,
           unneededSpecFields: normalizedUnneededSpecFields,
           skipSearch,
+          storedSources,
           exampleItemBlock,
           imageData: input.imageData ?? null
         },

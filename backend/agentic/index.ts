@@ -96,6 +96,10 @@ const REQUEST_STATUS_CANCELLED = 'CANCELLED';
 // This is intentionally transient: if the server restarts before dispatch, OCR is simply skipped.
 const pendingOcrImageData = new Map<string, string>();
 
+// Tracks runs queued with skipSearch=true so the dispatcher can pass the flag to the invoker.
+// Same transience caveat as pendingOcrImageData — lost on restart, which is fine.
+const pendingSkipSearch = new Set<string>();
+
 // TODO(agentic-flag-normalization): Fold boolean-to-integer coercion into the shared DB layer
 // once SQLite bindings accept native booleans in our migration plan.
 type AgenticRunStatusFlag =
@@ -700,6 +704,7 @@ interface BackgroundInvocationPayload {
   deps: AgenticServiceDependencies;
   logger: AgenticServiceLogger;
   imageData?: string | null;
+  skipSearch?: boolean;
 }
 
 async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): Promise<void> {
@@ -961,7 +966,8 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
         context: payload.context,
         review: payload.review,
         requestId: payload.request?.id ?? null,
-        imageData: payload.imageData ?? null
+        imageData: payload.imageData ?? null,
+        skipSearch: payload.skipSearch ?? false
       });
       if (!result?.ok) {
         const failureMessage = typeof result?.message === 'string' ? result.message : null;
@@ -1198,6 +1204,10 @@ export async function dispatchQueuedAgenticRuns(
       if (imageData) {
         pendingOcrImageData.delete(artikelNummer);
       }
+      const skipSearch = pendingSkipSearch.has(artikelNummer);
+      if (skipSearch) {
+        pendingSkipSearch.delete(artikelNummer);
+      }
       void scheduleAgenticModelInvocation({
         artikelNummer,
         searchQuery,
@@ -1205,6 +1215,7 @@ export async function dispatchQueuedAgenticRuns(
         review: null,
         request: null,
         imageData,
+        skipSearch,
         deps,
         logger
       });
@@ -1380,6 +1391,10 @@ export async function startAgenticRun(
 
     if (input.imageData && typeof input.imageData === 'string') {
       pendingOcrImageData.set(artikelNummer, input.imageData);
+    }
+
+    if (input.skipSearch) {
+      pendingSkipSearch.add(artikelNummer);
     }
 
     // Run is now queued. The background dispatcher (dispatchQueuedAgenticRuns,
@@ -1845,6 +1860,10 @@ export async function restartAgenticRun(
 
   if (input.imageData && typeof input.imageData === 'string') {
     pendingOcrImageData.set(artikelNummer, input.imageData);
+  }
+
+  if (input.skipSearch) {
+    pendingSkipSearch.add(artikelNummer);
   }
 
   // Run is now queued. The background dispatcher will pick it up and

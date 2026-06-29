@@ -13,6 +13,7 @@ import {
   type SearchInvoker,
   type SearchInvokerMetadata
 } from './item-flow-search';
+import type { SearchSource } from '../utils/source-formatter';
 import { runExtractionAttempts, type ChatModel, type ExtractionLogger } from './item-flow-extraction';
 import { runOcrExtraction } from './item-flow-ocr';
 import { searchShopwareRaw, isShopwareConfigured, type ShopwareSearchResult } from '../tools/shopware';
@@ -102,6 +103,7 @@ export interface RunItemFlowInput {
   missingSpecFields?: string[];
   unneededSpecFields?: string[];
   skipSearch?: boolean;
+  storedSources?: SearchSource[];
   maxAttempts?: number;
   cancellationSignal?: AbortSignal | null;
   exampleItemBlock?: string | null;
@@ -510,6 +512,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       plannerDecision,
       missingSchemaFields,
       reviewerSkip: skipSearch,
+      storedSources: input.storedSources,
       transcriptWriter
     });
 
