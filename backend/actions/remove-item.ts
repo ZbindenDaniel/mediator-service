@@ -120,7 +120,7 @@ const action = defineHttpAction({
             [part.ChildItemUUID]
           );
           await _client.query(`DELETE FROM items WHERE "ItemUUID" = $1`, [part.ChildItemUUID]);
-          removedUUIDs.push(part.ChildItemUUID);
+          removedUUIDs.push(part.ChildItemUUID as string);
         }
         if (removedUUIDs.length > 0) {
           await ctx.logEvent({

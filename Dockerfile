@@ -54,9 +54,6 @@ RUN apt-get update \
 
 WORKDIR /app
 
-# Copy env file
-COPY .env /app/.env
-
 ## copy compiled migration script (ts-node not available at runtime)
 COPY scripts/migrate-sqlite-to-postgres.js scripts/migrate-sqlite-to-postgres.js
 

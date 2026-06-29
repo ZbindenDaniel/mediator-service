@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "questions": [
     {
       "id": "condition_optical",
@@ -13,20 +13,6 @@
         "Gut": 4,
         "Gebrauchsspuren": 3,
         "Beschädigt": 2
-      }
-    },
-    {
-      "id": "lieferumfang",
-      "type": "select",
-      "question": "Lieferumfang?",
-      "values": ["Vollständig", "Netzteil fehlt", "Zubehör fehlt", "Allerelei fehlt"],
-      "specField": "Lieferumfang",
-      "specValue": "%v",
-      "qualityImpact": {
-        "Vollständig": 5,
-        "Netzteil fehlt": 4,
-        "Zubehör fehlt":3,
-        "Allerelei fehlt": 2
       }
     },
     {

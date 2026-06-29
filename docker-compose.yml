@@ -75,6 +75,8 @@ services:
       - /mnt:/app/dist/backend/webDav
       # Shared CUPS socket from the cups service — not :ro because lpadmin writes to socket
       - cups-socket:/run/cups
+      - ./config/alt-doc-dirs.json:/etc/mediator/alt-doc-dirs.json:ro
+      - mediator-scans:/mnt/mediator-scans
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -128,6 +130,8 @@ volumes:
     name: nginx-logs
   cups-socket:
     name: mediator-cups-socket
+  mediator-scans:
+    name: mediator-scans
 
 secrets:
   mediator_htpasswd:

@@ -1,0 +1,11 @@
+[
+  {
+    "name": "intake-scans",
+    "mountPath": "/mnt/mediator-scans",
+    "identifierType": "serialNumber",
+    "normalize": "uppercase",
+    "docType": "Intake-Scan",
+    "writable": true,
+    "deletable": false
+  }
+]
