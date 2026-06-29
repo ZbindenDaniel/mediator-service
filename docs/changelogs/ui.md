@@ -4,6 +4,14 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 862. ✅ Marks filter shows all users' marks; BoxCount column for shelves in box list
+   - **Why:** `UserMarksContext` only loaded marks for the current user; the "Markiert" filter was per-user. Added `GET /api/user-marks/all` endpoint + `getAllMarkedItemUUIDs()` DB helper; context now also fetches all marks on mount and exposes `allMarkedUUIDs`/`isMarkedByAnyone`. `ItemListPage` filter now uses `allMarkedUUIDs` so all users see items marked by anyone. Box list adds a "Behälter" column for shelf rows showing child box count; "Artikel" column shows `—` for shelves.
+   - **Deferred:** The star icon in the item list still reflects only the current user's marks (toggling is always per-user). A separate visual treatment for "marked by someone else but not me" is not yet added.
+
+## 862. ✅ Fix event BoxID filter 500 error; event type Created vs Updated; event metadata
+   - **Why:** `listRecentActivitiesByBoxId` used `jsonb_build_object('from', $1)` without a type cast — Postgres could not determine parameter type and raised a 500. Fixed by adding `::text` cast. Also: `import-item.ts` checked `getItem` after persisting, so the item always existed and every event was `Updated`; moved check to before persist. `save-item.ts` always emitted `Updated` even for new refs; now uses `existingReference === null ? 'Created' : 'Updated'`. Both endpoints now include `{ source, artikelNummer, boxId }` in Meta.
+   - **Deferred:** Nothing.
+
 ## 854. ✅ Panel-detail reference header: item/box label shown next to Liste button
    - **Why:** Operators had no visible context for which item/box was loaded in the detail panel. Added an always-visible `panel-detail-header` bar above the tabs: "← Liste" button on the left (arrow `←` rotated 180° via CSS transform to point right), and the current item/box reference label in the center (e.g. "Lenovo T14 Gen7 – 019345"). `PanelContext` exposes `panelDetailLabel`/`setPanelDetailLabel`; `ItemDetail` pushes `Artikelbeschreibung – Artikel_Nummer` and `BoxDetail` pushes `Label – BoxID` on load, cleared on unmount. Old `mobile-back-btn` CSS removed.
    - **Deferred:** Nothing.

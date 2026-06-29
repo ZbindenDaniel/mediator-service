@@ -13,10 +13,11 @@ const action = defineHttpAction({
   matches: (path, method) => /^\/api\/stubs\/[^/]+$/.test(path) && method === 'DELETE',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
-      const id = req.url?.split('/').pop() ?? '';
+      const url = new URL(req.url ?? '', 'http://localhost');
+      const pathParts = url.pathname.split('/');
+      const id = pathParts[pathParts.length - 1] ?? '';
       if (!id) return sendJson(res, 400, { error: 'id is required' });
 
-      const url = new URL(req.url ?? '', 'http://localhost');
       const closedBy = url.searchParams.get('closedBy') ?? 'unknown';
       const closedAt = new Date().toISOString();
 

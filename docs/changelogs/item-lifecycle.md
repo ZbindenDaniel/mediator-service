@@ -4,6 +4,10 @@ Covers: item creation, editing, quality assessment, specs, accessories, spare pa
 
 ---
 
+## 862. ✅ Fix Created vs Updated events in import-item and save-item; add event metadata
+   - **Why:** `import-item.ts` called `getItem` after `persistItemWithinTransaction`, so the item was always found and the event always said `Updated`. Moved the existence check to before the persist. `save-item.ts` always emitted `Updated` regardless of whether the reference was new; now emits `Created` when `existingReference === null`. Both handlers now populate `Meta` with `{ source, artikelNummer, boxId }`.
+   - **Deferred:** Nothing.
+
 ## 853. ✅ Component relocation now marks parent device incomplete; better Artikelbeschreibung suggestions
    - **Why:** (1) `move-item.ts` now checks if the relocated item was an `erfasst` (BoxID=NULL) component (`Zerlegt_aus` relation) before moving. If so, it inserts a quality assessment marking the parent as Ersatzteil (value=1, is_complete=false) and logs `SparePartRemoved` — mirroring `remove-from-device.ts`. This covers the "Entnehmen" path (which calls plain `/move` via `RelocateItemCard`) and any other relocation that bypasses the strict `remove-from-device` endpoint. (2) `SparepartSlotPopup` "Neu anlegen" description now pre-fills as `{deviceLabel} {specValues} {slotLabel}` (e.g. "Lenovo T14 CH Tastatur") instead of just `{deviceHersteller} {slotLabel}`.
    - **Deferred:** Nothing.

@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { getUserMarks, markItem, unmarkItem, getUserMark, getItemMarks } from '../db';
+import { getUserMarks, markItem, unmarkItem, getUserMark, getItemMarks, getAllMarkedItemUUIDs } from '../db';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -18,12 +18,17 @@ const action = defineHttpAction({
   label: 'User item marks',
   appliesTo: () => false,
   matches: (path, method) =>
-    (path === '/api/user-marks' || path.startsWith('/api/user-marks?') || path.startsWith('/api/user-marks/item/'))
+    (path === '/api/user-marks' || path.startsWith('/api/user-marks?') || path.startsWith('/api/user-marks/item/') || path === '/api/user-marks/all')
     && ['GET', 'POST', 'DELETE'].includes(method),
 
   async handle(req: IncomingMessage, res: ServerResponse) {
     const method = req.method || 'GET';
     const url = new URL(req.url || '/', 'http://localhost');
+
+    if (method === 'GET' && url.pathname === '/api/user-marks/all') {
+      const uuids = await getAllMarkedItemUUIDs();
+      return sendJson(res, 200, { markedUUIDs: uuids });
+    }
 
     if (method === 'GET' && url.pathname.startsWith('/api/user-marks/item/')) {
       const itemUUID = url.pathname.replace('/api/user-marks/item/', '').trim();

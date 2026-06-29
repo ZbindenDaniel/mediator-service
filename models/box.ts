@@ -18,4 +18,6 @@ export interface Box {
   ItemCount?: number | null;
   // Optional aggregate weight (kg) projected by list queries for box list summaries.
   TotalWeightKg?: number | null;
+  // Count of child boxes (non-null only for shelf rows in list queries).
+  BoxCount?: number | null;
 }

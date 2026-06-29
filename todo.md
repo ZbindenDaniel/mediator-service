@@ -66,7 +66,11 @@
 
 0b. ✅ **Filter state resets intermittently when switching items.** Fixed — filter-init useEffect now deps on `[boxParam, qParam]` instead of full `[searchParams]`, so PanelContext entity/tab URL writes no longer retrigger it.
 
-1. **Fix eventLog display on item and box detail.** Empty state added (shows "Keine Aktivitäten." instead of blank). If events are still absent when they should exist, the data-fetch path needs investigation.
+1. ✅ **Fix eventLog display on item and box detail.** Empty state added; BoxID filter 500 fixed (::text cast in listRecentActivitiesByBoxId).
+1e. ✅ **Stub deletion** fixed: id parsing bug in close-stub.ts; StubListPage now uses dialogService.confirm and checks res.ok.
+1f. ✅ **Marks visibility** — marks now visible to all users; allMarkedUUIDs loaded globally; filter uses all marks.
+1g. ✅ **Shelf BoxCount** — box list query adds BoxCount via child JOIN; BoxList shows Behälter count for shelves.
+1h. ✅ **Created vs Updated events** — import-item checks existence before persist; save-item uses existingReference to decide; both add structured Meta.
 
 1c. **Investigate remaining tester-reported bugs (need runtime testing):**
    - "KI lauf kann nicht geloescht werden" — `agentic-delete.ts` looks correct; check browser network tab for 400/404 response and whether `actor` is sent in request body

@@ -1371,8 +1371,8 @@ const action = defineHttpAction({
             Actor: actor,
             EntityType: 'Item',
             EntityId: itemId,
-            Event: 'Updated',
-            Meta: null
+            Event: existingReference === null ? 'Created' : 'Updated',
+            Meta: JSON.stringify({ source: 'manual', artikelNummer })
           });
           try {
             const correlationId = generateShopwareCorrelationId('save-item', itemId);

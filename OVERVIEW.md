@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+862. ✅ Fix stub deletion, BoxID event filter 500, marks visibility, shelf BoxCount, Created/Updated events → [storage]
 861. ✅ Surface extraction confidence in UI; events.Meta → JSONB + box filter; stub close action → [agentic]
 860. ✅ Contract-informed pipeline: SpecContext coalesces contract + Langtext + InstanceSpecs; structured review Step 3 → [agentic]
 859. ✅ Atomic label-queue claim (FOR UPDATE SKIP LOCKED); enables cross-instance shared printing → [printing]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 856. ✅ Add German translations for 12 missing event types + rich descriptions for 4 → [agentic]
 855. ✅ Fix dimension decimal truncation in asNullableInteger; guide model toward integer mm output → [agentic]
 854. ✅ Panel-detail reference header: item/box label shown next to Liste button → [ui]
-854. ✅ Documentation restructure: filesystem-aligned READMEs + topic changelogs → [docs-infra]
