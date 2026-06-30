@@ -15,6 +15,8 @@ import {
 } from './config';
 import { getSetting, getAllSettings } from './utils/app-settings';
 import { renderHtmlToPdf, type HtmlToPdfOptions } from './labelpdf';
+import { getPrinterQueuesForSite } from './db';
+import { isAgentConnected } from './agentConnections';
 
 // TODO(agent): Unify renderer selection with PDF preview generation once headless dependencies stabilize.
 
@@ -47,8 +49,28 @@ export interface PrinterQueueResolution {
 
 export async function resolvePrinterQueue(
   labelType: PrintLabelType,
+  site?: string | null,
   logger: Pick<Console, 'warn'> = console
 ): Promise<PrinterQueueResolution> {
+  const normalizedSite = (site || '').trim();
+  if (normalizedSite) {
+    const candidates = await getPrinterQueuesForSite(normalizedSite);
+    for (const row of candidates) {
+      if (!row.instance_id || !isAgentConnected(row.instance_id)) {
+        continue;
+      }
+      let labelTypes: string[] = [];
+      try {
+        labelTypes = row.label_types ? JSON.parse(row.label_types) : [];
+      } catch {
+        labelTypes = [];
+      }
+      if (labelTypes.includes(labelType)) {
+        return { queue: row.name, source: 'label' };
+      }
+    }
+  }
+
   const settings = await getAllSettings({
     'printer.queue.box': PRINTER_QUEUE_BOX,
     'printer.queue.item': PRINTER_QUEUE_ITEM,

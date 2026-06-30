@@ -110,6 +110,7 @@ import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
 import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
 import { syncPrinterQueuesToCups, startPrinterQueueSyncInterval } from './utils/sync-printer-queues';
+import { attachAgentServer } from './agentServer';
 import { htmlForBox, htmlForItem, htmlForShelf } from './lib/labelHtml';
 import type { ItemLabelPayload } from './lib/labelHtml';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
@@ -1063,6 +1064,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 export const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
   void handleRequest(req, res);
 });
+
+attachAgentServer(server);
 
 function formatListenerUrl(protocol: 'http' | 'https', hostname: string, port: number): string {
   const needsPort = !((protocol === 'http' && port === 80) || (protocol === 'https' && port === 443));

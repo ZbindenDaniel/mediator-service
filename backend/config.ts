@@ -145,6 +145,9 @@ export const PRINTER_QUEUE_ITEM_SMALL = (process.env.PRINTER_QUEUE_ITEM_SMALL ||
 export const PRINTER_QUEUE_SHELF = (process.env.PRINTER_QUEUE_SHELF || '').trim();
 export const PRINTER_QUEUE_MARKETING = (process.env.PRINTER_QUEUE_MARKETING || '').trim();
 export const PRINTER_SERVER = (process.env.PRINTER_SERVER || '').trim();
+// Shared secret validated at /agent WebSocket handshake (docs/PLANNING_multi_instance.md).
+// Single token for all worker agents — deliberate simplicity tradeoff, revisit if blast radius matters more.
+export const AGENT_TOKEN = (process.env.AGENT_TOKEN || '').trim();
 if (!PRINTER_QUEUE_BOX) {
   console.warn('[config] PRINTER_QUEUE_BOX not set; box labels will fall back to PRINTER_QUEUE.');
 }

@@ -331,12 +331,13 @@ export async function handleUnifiedPrintRequest(
     }
 
     let actor = '';
+    let site = '';
     try {
       const body = await readRequestBody(req);
       if (!body.length) {
         return sendJson(res, 400, { error: 'actor required' });
       }
-      let payload: { actor?: unknown; labelType?: unknown };
+      let payload: { actor?: unknown; labelType?: unknown; site?: unknown };
       try {
         payload = JSON.parse(body.toString() || '{}');
       } catch (err) {
@@ -365,6 +366,9 @@ export async function handleUnifiedPrintRequest(
       actor = payload.actor.trim();
       if (!actor) {
         return sendJson(res, 400, { error: 'actor required' });
+      }
+      if (typeof payload.site === 'string') {
+        site = payload.site.trim();
       }
     } catch (bodyErr) {
       console.error('Failed to parse request body for print', { labelType, entityId: id, actor, error: bodyErr });
@@ -466,7 +470,7 @@ export async function handleUnifiedPrintRequest(
     }
 
     let printResult: PrintFileResult = { sent: false, reason: 'print_not_attempted' };
-    const queueResolution = await resolvePrinterQueue(labelType);
+    const queueResolution = await resolvePrinterQueue(labelType, site);
     if (queueResolution.source === 'missing') {
       console.warn('[print-unified] Printer queue missing for label type', { ...logContext });
     }

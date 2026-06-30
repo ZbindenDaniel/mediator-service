@@ -424,6 +424,15 @@ CREATE TABLE IF NOT EXISTS printer_queues (
   // Additive column migrations — safe no-ops after first run
   await execBatch(`
 ALTER TABLE item_refs ADD COLUMN IF NOT EXISTS "LastSyncedAt" TEXT;
+
+-- Multi-location print routing (docs/PLANNING_multi_instance.md)
+ALTER TABLE label_queue ADD COLUMN IF NOT EXISTS "TargetQueue" TEXT;
+CREATE INDEX IF NOT EXISTS idx_label_queue_target
+  ON label_queue ("Status", "TargetQueue") WHERE "Status" = 'Queued';
+
+ALTER TABLE printer_queues ADD COLUMN IF NOT EXISTS instance_id TEXT;
+ALTER TABLE printer_queues ADD COLUMN IF NOT EXISTS site TEXT;
+ALTER TABLE printer_queues ADD COLUMN IF NOT EXISTS label_types TEXT;
 `);
 
   console.info('[db] Postgres schema ready');
@@ -1501,10 +1510,10 @@ export async function hasItemReferenceByArtikelNummer(artikelNummer: string): Pr
 // Label queue
 // ---------------------------------------------------------------------------
 
-export async function queueLabel(itemUUID: string): Promise<void> {
+export async function queueLabel(itemUUID: string, targetQueue?: string | null): Promise<void> {
   await execute(
-    `INSERT INTO label_queue ("ItemUUID","CreatedAt") VALUES ($1,$2)`,
-    [itemUUID, new Date().toISOString()]
+    `INSERT INTO label_queue ("ItemUUID","CreatedAt","TargetQueue") VALUES ($1,$2,$3)`,
+    [itemUUID, new Date().toISOString(), targetQueue ?? null]
   );
 }
 
@@ -1521,6 +1530,45 @@ export async function claimNextLabelJob(): Promise<LabelJob | null> {
      )
      RETURNING *`,
     [new Date().toISOString()]
+  );
+}
+
+// Worker print-agents only claim jobs targeting one of their own queues, or
+// untargeted jobs (TargetQueue IS NULL) for backward compat with un-configured setups.
+export async function claimNextLabelJobForAgent(ownedQueues: string[]): Promise<LabelJob | null> {
+  return queryOne<LabelJob>(
+    `UPDATE label_queue
+     SET "Status" = 'Processing', "ClaimedAt" = $1
+     WHERE "Id" = (
+       SELECT "Id" FROM label_queue
+       WHERE "Status" = 'Queued'
+         AND ("TargetQueue" IS NULL OR "TargetQueue" = ANY($2))
+       ORDER BY "Id" ASC
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED
+     )
+     RETURNING *`,
+    [new Date().toISOString(), ownedQueues]
+  );
+}
+
+export interface PrinterQueueRow {
+  name: string;
+  device_uri: string;
+  ppd_model: string;
+  media: string;
+  description: string;
+  enabled: boolean;
+  updated_at: string;
+  instance_id: string | null;
+  site: string | null;
+  label_types: string | null;
+}
+
+export async function getPrinterQueuesForSite(site: string): Promise<PrinterQueueRow[]> {
+  return query<PrinterQueueRow>(
+    `SELECT * FROM printer_queues WHERE site = $1 AND enabled = TRUE`,
+    [site]
   );
 }
 
