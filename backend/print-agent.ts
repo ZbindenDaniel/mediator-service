@@ -141,6 +141,11 @@ function connect(): void {
     if (msg.type === 'job_available') {
       void claimAndPrintOnce();
     }
+    if (msg.type === 'scan_devices') {
+      // Admin "Gather queues" button — resend hello so the cloud app re-upserts this
+      // instance's current queue list (docs/PLANNING_multi_instance.md, Worker nodes view).
+      ws.send(JSON.stringify({ type: 'hello', instanceId: INSTANCE_ID, queues: QUEUES }));
+    }
   });
 
   ws.on('error', (err) => {

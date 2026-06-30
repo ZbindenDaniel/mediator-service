@@ -7,6 +7,8 @@ import { cupsLpinfo, cupsLpstat, cupsCancel, cupsRefreshDiscovery, cupsDiscovery
 const runCupsCancel = cupsCancel;
 import { syncPrinterQueuesToCups, removePrinterQueueFromCups } from '../utils/sync-printer-queues';
 import { requireAdminAuth } from '../utils/admin-auth';
+import { listAllPrinterQueues, updatePrinterQueueRouting } from '../db';
+import { listConnectedInstanceIds, isAgentConnected, broadcastToAgents } from '../agentConnections';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -37,6 +39,11 @@ function extractQueueName(urlPath: string): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+function extractRoutingQueueName(urlPath: string): string | null {
+  const match = urlPath.match(/^\/api\/admin\/printer-queues\/([^/?]+)\/routing$/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 const action = defineHttpAction({
   key: 'admin-printer-queues',
   label: 'Admin: printer queues',
@@ -49,7 +56,10 @@ const action = defineHttpAction({
            path === '/api/admin/cups-diagnostics' ||
            path === '/api/admin/cups-sync' ||
            path === '/api/admin/cups-cancel-jobs' ||
-           /^\/api\/admin\/printer-queues\/[^/]+$/.test(path);
+           path === '/api/admin/worker-agents' ||
+           path === '/api/admin/worker-agents/gather' ||
+           /^\/api\/admin\/printer-queues\/[^/]+$/.test(path) ||
+           /^\/api\/admin\/printer-queues\/[^/]+\/routing$/.test(path);
   },
   async handle(req: IncomingMessage, res: ServerResponse) {
     if (!requireAdminAuth(req, res)) return;
@@ -148,10 +158,41 @@ const action = defineHttpAction({
 
       // GET /api/admin/printer-queues — list all configured queues from DB
       if (urlPath === '/api/admin/printer-queues' && method === 'GET') {
-        const rows = await query<PrinterQueueRow>(
-          'SELECT name, device_uri, ppd_model, media, description, enabled, updated_at FROM printer_queues ORDER BY name'
-        );
-        sendJson(res, 200, { queues: rows });
+        const rows = await listAllPrinterQueues();
+        const queues = rows.map((row) => ({
+          ...row,
+          online: row.instance_id ? isAgentConnected(row.instance_id) : false,
+          labelTypes: row.label_types ? (JSON.parse(row.label_types) as string[]) : [],
+        }));
+        sendJson(res, 200, { queues });
+        return;
+      }
+
+      // GET /api/admin/worker-agents — connected print-agent instances (Worker nodes view)
+      if (urlPath === '/api/admin/worker-agents' && method === 'GET') {
+        sendJson(res, 200, { instanceIds: listConnectedInstanceIds() });
+        return;
+      }
+
+      // POST /api/admin/worker-agents/gather — ask all connected agents to resend their
+      // queue list (docs/PLANNING_multi_instance.md "Gather queues" button)
+      if (urlPath === '/api/admin/worker-agents/gather' && method === 'POST') {
+        broadcastToAgents({ type: 'scan_devices' });
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      // PATCH /api/admin/printer-queues/:name/routing — admin sets Site + LabelTypes for a
+      // discovered queue (docs/PLANNING_multi_instance.md). Does not touch CUPS/lpadmin.
+      const routingQueueName = extractRoutingQueueName(urlPath);
+      if (routingQueueName && method === 'PUT') {
+        const raw = await readBody(req);
+        const body = JSON.parse(raw) as { site?: string; labelTypes?: string[] };
+        const site = typeof body.site === 'string' ? body.site.trim() : null;
+        const labelTypes = Array.isArray(body.labelTypes) ? body.labelTypes : null;
+        const updated = await updatePrinterQueueRouting(routingQueueName, site, labelTypes);
+        if (!updated) { sendJson(res, 404, { error: 'Queue not found' }); return; }
+        sendJson(res, 200, { ok: true });
         return;
       }
 

@@ -1570,6 +1570,42 @@ export async function getPrinterQueuesForSite(site: string): Promise<PrinterQueu
   );
 }
 
+export async function listAllPrinterQueues(): Promise<PrinterQueueRow[]> {
+  return query<PrinterQueueRow>(`SELECT * FROM printer_queues ORDER BY instance_id NULLS LAST, name`);
+}
+
+// Upserts a queue name reported by an agent's `hello` message (docs/PLANNING_multi_instance.md,
+// Worker nodes view). Only sets device_uri etc. defaults on first insert — site/label_types are
+// admin-edited and must not be clobbered on every reconnect. Site default: reuse this instance's
+// other queues' site if any are already set, otherwise fall back to the instanceId itself.
+export async function upsertDiscoveredQueue(instanceId: string, name: string): Promise<void> {
+  const existingSite = await queryOne<{ site: string | null }>(
+    `SELECT site FROM printer_queues WHERE instance_id = $1 AND site IS NOT NULL AND site != '' LIMIT 1`,
+    [instanceId]
+  );
+  const defaultSite = existingSite?.site || instanceId;
+  await execute(
+    `INSERT INTO printer_queues (name, instance_id, site, updated_at)
+     VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (name) DO UPDATE SET
+       instance_id = EXCLUDED.instance_id,
+       updated_at = NOW()`,
+    [name, instanceId, defaultSite]
+  );
+}
+
+export async function updatePrinterQueueRouting(name: string, site: string | null, labelTypes: string[] | null): Promise<boolean> {
+  const updated = await execute(
+    `UPDATE printer_queues SET
+       site = COALESCE($2, site),
+       label_types = COALESCE($3, label_types),
+       updated_at = NOW()
+     WHERE name = $1`,
+    [name, site, labelTypes !== null ? JSON.stringify(labelTypes) : null]
+  );
+  return updated > 0;
+}
+
 export async function recoverStaleLabelJobs(olderThanIso: string): Promise<void> {
   await execute(
     `UPDATE label_queue SET "Status"='Queued', "ClaimedAt"=NULL

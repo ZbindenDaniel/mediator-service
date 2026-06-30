@@ -32,3 +32,9 @@ export function unregisterAgent(instanceId: string, ws: WebSocket): void {
 export function listConnectedInstanceIds(): string[] {
   return Array.from(connectedAgents.keys()).filter((id) => isAgentConnected(id));
 }
+
+export function broadcastToAgents(message: unknown): void {
+  for (const instanceId of listConnectedInstanceIds()) {
+    sendToAgent(instanceId, message);
+  }
+}

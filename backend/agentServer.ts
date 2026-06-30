@@ -3,6 +3,7 @@ import type { Server as HttpServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import { AGENT_TOKEN } from './config';
 import { registerAgent, unregisterAgent } from './agentConnections';
+import { upsertDiscoveredQueue } from './db';
 
 interface AgentHelloMessage {
   type: 'hello';
@@ -68,6 +69,14 @@ export function attachAgentServer(httpServer: HttpServer): WebSocketServer {
         instanceId = hello.instanceId;
         registerAgent(instanceId, ws);
         console.info('[agentServer] Agent connected', { instanceId, queues: hello.queues ?? [] });
+        // Upsert reported queues into printer_queues so they show up in the admin
+        // Worker nodes view without a manual lpadmin-style push (docs/PLANNING_multi_instance.md).
+        for (const queueName of hello.queues ?? []) {
+          if (!queueName) continue;
+          upsertDiscoveredQueue(instanceId, queueName).catch((err) => {
+            console.error('[agentServer] Failed to upsert discovered queue', { instanceId, queueName, error: err });
+          });
+        }
         return;
       }
 
