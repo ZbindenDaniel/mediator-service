@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+860. ✅ Multi-location print routing foundation: TargetQueue schema, per-site resolvePrinterQueue, /agent WebSocket control plane → [printing]
 859. ✅ Atomic label-queue claim (FOR UPDATE SKIP LOCKED); enables cross-instance shared printing → [printing]
 858. ✅ Atomic SELECT FOR UPDATE SKIP LOCKED claim query for multi-instance agentic safety → [agentic]
 858. ✅ Rewrite 14 SQLite-backed tests to Postgres mock pattern; removed from testPathIgnorePatterns → [testing]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 854. ✅ Panel-detail reference header: item/box label shown next to Liste button → [ui]
 854. ✅ Documentation restructure: filesystem-aligned READMEs + topic changelogs → [docs-infra]
 853. ✅ Component relocation marks parent incomplete; better Artikelbeschreibung suggestions → [item-lifecycle]
-853. ✅ Fix CUPS fd limit (ulimits) and www-data lpinfo Forbidden error → [printing]
