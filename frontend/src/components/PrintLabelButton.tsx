@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { PrintLabelType } from '../../../models';
-import { ensureUser } from '../lib/user';
+import { ensureUser, getSite } from '../lib/user';
 import { logError, logger } from '../utils/logger';
 import { requestPrintLabel } from '../utils/printLabelRequest';
 
@@ -119,6 +119,7 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline =
         boxId,
         itemId,
         actor,
+        site: getSite().trim() || undefined,
         labelTypeOverride: resolvedLabelTypeOverride
       });
       if (!result.labelType || !result.entityId) {

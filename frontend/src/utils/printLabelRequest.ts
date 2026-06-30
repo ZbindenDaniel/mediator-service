@@ -13,6 +13,7 @@ export interface PrintLabelRequestOptions {
   boxId?: string;
   itemId?: string;
   actor: string;
+  site?: string;
   labelTypeOverride?: PrintLabelType;
   fetchImpl?: typeof fetch;
 }
@@ -45,6 +46,7 @@ export async function requestPrintLabel({
   boxId,
   itemId,
   actor,
+  site,
   labelTypeOverride,
   fetchImpl = fetch
 }: PrintLabelRequestOptions): Promise<PrintLabelRequestResult> {
@@ -77,7 +79,12 @@ export async function requestPrintLabel({
   const url = `/api/print/${labelType}/${encodeURIComponent(entityId)}`;
 
   let response: Response;
-  const payload: PrintLabelRequestBody = { actor: trimmedActor, labelType };
+  const trimmedSite = site?.trim();
+  const payload: PrintLabelRequestBody = {
+    actor: trimmedActor,
+    labelType,
+    ...(trimmedSite ? { site: trimmedSite } : {})
+  };
   try {
     response = await fetchImpl(url, {
       method: 'POST',

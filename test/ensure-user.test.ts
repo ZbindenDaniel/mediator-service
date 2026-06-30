@@ -1,4 +1,4 @@
-import { ensureUser } from '../frontend/src/lib/user';
+import { ensureUser, getSite, setSite } from '../frontend/src/lib/user';
 import { dialogService } from '../frontend/src/components/dialog/dialogService';
 
 describe('ensureUser helper', () => {
@@ -58,5 +58,37 @@ describe('ensureUser helper', () => {
 
     expect(result).toBe('');
     expect((global as any).localStorage.getItem('username')).toBeNull();
+  });
+});
+
+describe('site helpers (docs/PLANNING_multi_instance.md)', () => {
+  let store: Map<string, string>;
+
+  beforeEach(() => {
+    store = new Map();
+    (global as any).localStorage = {
+      getItem: (key: string) => (store.has(key) ? store.get(key) : null),
+      setItem: (key: string, value: string) => {
+        store.set(key, value);
+      },
+      removeItem: (key: string) => {
+        store.delete(key);
+      }
+    };
+  });
+
+  afterEach(() => {
+    delete (global as any).localStorage;
+  });
+
+  test('getSite returns an empty string when nothing is stored', () => {
+    expect(getSite()).toBe('');
+  });
+
+  test('setSite persists under its own storage key, independent of username', () => {
+    (global as any).localStorage.setItem('username', 'SomeUser');
+    setSite('Warehouse');
+    expect(getSite()).toBe('Warehouse');
+    expect((global as any).localStorage.getItem('username')).toBe('SomeUser');
   });
 });

@@ -5,6 +5,7 @@ import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
 import { dialogService } from './dialog';
 import { requestPrintLabel } from '../utils/printLabelRequest';
+import { getSite } from '../lib/user';
 import { AUTO_PRINT_ITEM_LABEL_CONFIG } from '../utils/printSettings';
 import QrScanButton from './QrScanButton';
 // TODO(agent): Remove hardcoded relocation defaults once backend exposes canonical location metadata endpoints.
@@ -268,7 +269,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
       }
       if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled) {
         try {
-          const printResult = await requestPrintLabel({ itemId, actor });
+          const printResult = await requestPrintLabel({ itemId, actor, site: getSite().trim() || undefined });
           if (!printResult.ok) {
             console.error('Auto-print item label failed after relocation', {
               itemId,

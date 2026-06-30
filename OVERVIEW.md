@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+862. ✅ Gate legacy runPrintWorker to untargeted jobs only; add operator `site` (lib/user.ts) sent with print requests → [printing]
 861. ✅ print-agent.ts standalone process + AGENT_TOKEN HTTP claim-job/status API for credential-free remote printing → [printing]
 860. ✅ Multi-location print routing foundation: TargetQueue schema, per-site resolvePrinterQueue, /agent WebSocket control plane → [printing]
 859. ✅ Atomic label-queue claim (FOR UPDATE SKIP LOCKED); enables cross-instance shared printing → [printing]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 856. ✅ Add German translations for 12 missing event types + rich descriptions for 4 → [agentic]
 855. ✅ Fix dimension decimal truncation in asNullableInteger; guide model toward integer mm output → [agentic]
 854. ✅ Panel-detail reference header: item/box label shown next to Liste button → [ui]
-853. ✅ Component relocation marks parent incomplete; better Artikelbeschreibung suggestions → [item-lifecycle]

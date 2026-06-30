@@ -7,7 +7,7 @@ import {
   isItemEinheit,
   ItemEinheit
 } from '../../../models';
-import { ensureUser } from '../lib/user';
+import { ensureUser, getSite } from '../lib/user';
 import { buildAgenticItemRefPath, triggerAgenticRun as triggerAgenticRunRequest } from '../lib/agentic';
 import type { AgenticRunTriggerPayload } from '../lib/agentic';
 import ItemForm_Agentic from './ItemForm_agentic';
@@ -1315,7 +1315,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
                 try {
                   const printResult = await requestPrintLabel({
                     itemId,
-                    actor: printActor
+                    actor: printActor,
+                    site: getSite().trim() || undefined
                   });
                   if (!printResult.ok) {
                     failures.push({

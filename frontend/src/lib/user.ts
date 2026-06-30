@@ -2,6 +2,11 @@ import type { PromptDialogOptions } from '../components/dialog/DialogProvider';
 import { dialogService } from '../components/dialog/dialogService';
 
 const USERNAME_STORAGE_KEY = 'username';
+// Operator's current physical site (docs/PLANNING_multi_instance.md) — reuses the
+// username localStorage pattern rather than introducing a new "ask once, remember,
+// editable any time" UI surface. Empty by default (single-site / unconfigured deployments
+// fall back to legacy app_settings-based queue resolution, unaffected by this value).
+const SITE_STORAGE_KEY = 'site';
 
 export function setUser(username: string): void {
   try {
@@ -18,6 +23,24 @@ export function getUser(): string {
     return localStorage.getItem(USERNAME_STORAGE_KEY) || '';
   } catch (err) {
     console.error('Failed to read username', err);
+    return '';
+  }
+}
+
+export function setSite(site: string): void {
+  try {
+    localStorage.setItem(SITE_STORAGE_KEY, site);
+    window.dispatchEvent(new CustomEvent('mediator:site-changed'));
+  } catch (err) {
+    console.error('Failed to persist site', err);
+  }
+}
+
+export function getSite(): string {
+  try {
+    return localStorage.getItem(SITE_STORAGE_KEY) || '';
+  } catch (err) {
+    console.error('Failed to read site', err);
     return '';
   }
 }

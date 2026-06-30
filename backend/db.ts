@@ -1531,22 +1531,6 @@ export async function queueLabel(itemUUID: string, targetQueue?: string | null):
   }
 }
 
-export async function claimNextLabelJob(): Promise<LabelJob | null> {
-  return queryOne<LabelJob>(
-    `UPDATE label_queue
-     SET "Status" = 'Processing', "ClaimedAt" = $1
-     WHERE "Id" = (
-       SELECT "Id" FROM label_queue
-       WHERE "Status" = 'Queued'
-       ORDER BY "Id" ASC
-       LIMIT 1
-       FOR UPDATE SKIP LOCKED
-     )
-     RETURNING *`,
-    [new Date().toISOString()]
-  );
-}
-
 // Worker print-agents only claim jobs targeting one of their own queues, or
 // untargeted jobs (TargetQueue IS NULL) for backward compat with un-configured setups.
 export async function claimNextLabelJobForAgent(ownedQueues: string[]): Promise<LabelJob | null> {

@@ -58,7 +58,7 @@ import {
   updateAgenticRunStatus,
   updateQueuedAgenticRunQueueState,
   getAgenticRequestLog,
-  claimNextLabelJob,
+  claimNextLabelJobForAgent,
   recoverStaleLabelJobs,
   updateLabelJobStatus,
   logEvent,
@@ -337,7 +337,11 @@ function parseAufLagerValue(value: unknown, itemId: string): number {
 async function runPrintWorker(): Promise<void> {
   const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   await recoverStaleLabelJobs(staleThreshold);
-  const job = await claimNextLabelJob() as LabelJob | undefined;
+  // Only claims untargeted jobs (TargetQueue IS NULL) — jobs targeting a specific
+  // queue belong to a remote print-agent (docs/PLANNING_multi_instance.md); this
+  // local worker has no local CUPS to print to once remote agents are in play, and
+  // must not race a remote agent for its own job.
+  const job = await claimNextLabelJobForAgent([]) as LabelJob | undefined;
   if (!job) return;
   try {
     const item = await getItem(job.ItemUUID) as Item | undefined;

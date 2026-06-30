@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { getUser, setUser as persistUser } from '../lib/user';
+import { getUser, setUser as persistUser, getSite, setSite as persistSite } from '../lib/user';
 import { useDialog } from './dialog';
 import { GoArchive, GoListUnordered, GoPlus, GoLog, GoSearch, GoGift, GoHash, GoTools, GoQuestion } from 'react-icons/go';
 import { logError } from '../utils/logger';
@@ -33,11 +33,13 @@ export default function Header() {
   const [isSearching, setIsSearching] = useState(false);
   const searchFormRef = useRef<HTMLFormElement | null>(null);
   const [user, setUserState] = useState(() => getUser().trim());
+  const [site, setSiteState] = useState(() => getSite().trim());
   const [navOpen, setNavOpen] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setUserState(getUser().trim());
+    setSiteState(getSite().trim());
   }, []);
 
   // Close hamburger nav on outside click
@@ -147,13 +149,34 @@ export default function Header() {
         cancelLabel: 'Abbrechen'
       });
       const trimmed = (result ?? '').trim();
-      if (!trimmed || trimmed === user) return;
-      persistUser(trimmed);
-      setUserState(trimmed);
+      if (trimmed && trimmed !== user) {
+        persistUser(trimmed);
+        setUserState(trimmed);
+      }
     } catch (err) {
       console.error('Failed to update username through dialog', err);
     }
-  }, [dialog, user]);
+
+    // Chained second prompt for the operator's physical site (docs/PLANNING_multi_instance.md)
+    // — reuses the same prompt dialog rather than adding a new UI surface; optional, so
+    // cancelling/leaving it empty just keeps the legacy unkeyed printer queue resolution.
+    try {
+      const siteResult = await dialog.prompt({
+        title: 'Standort bearbeiten',
+        message: 'An welchem Standort befinden Sie sich? (optional, für Drucker-Routing)',
+        defaultValue: site,
+        confirmLabel: 'Speichern',
+        cancelLabel: 'Abbrechen'
+      });
+      const trimmedSite = (siteResult ?? '').trim();
+      if (siteResult !== null && trimmedSite !== site) {
+        persistSite(trimmedSite);
+        setSiteState(trimmedSite);
+      }
+    } catch (err) {
+      console.error('Failed to update site through dialog', err);
+    }
+  }, [dialog, user, site]);
 
   return (
     <header className="header">
@@ -267,10 +290,10 @@ export default function Header() {
         <div
           className="user"
           onDoubleClick={handleUserDoubleClick}
-          title="Doppelklicken zum Bearbeiten des Benutzernamens"
-          aria-label="Benutzername, doppelklicken zum Bearbeiten"
+          title="Doppelklicken zum Bearbeiten von Benutzername und Standort"
+          aria-label="Benutzername und Standort, doppelklicken zum Bearbeiten"
         >
-          {user}
+          {site ? `${user} · ${site}` : user}
         </div>
       </div>
     </header>
