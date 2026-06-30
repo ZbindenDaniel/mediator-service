@@ -34,6 +34,14 @@ services:
       nofile:
         soft: 65000
         hard: 65000
+    # Web UI for local printer setup/diagnostics. Bound to the host loopback only — cupsd.conf's
+    # <Location> Allow rules (172.16.0.0/12 etc.) assume only Docker-internal traffic reaches this
+    # container, and Docker's port-forwarding makes published-port traffic appear to originate from
+    # the bridge gateway IP, which falls inside those ranges. A wider bind would let /admin
+    # (lpadmin etc.) be reached unauthenticated from anywhere that can reach the host. Access via
+    # `ssh -L 631:127.0.0.1:631 <host>` rather than opening this further.
+    ports:
+      - "127.0.0.1:631:631"
     volumes:
       - cups-socket:/run/cups
     restart: unless-stopped
