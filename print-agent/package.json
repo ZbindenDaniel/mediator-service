@@ -1,0 +1,9 @@
+{
+  "name": "mediator-print-agent",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Standalone WebSocket print agent (docs/PLANNING_multi_instance.md). Deliberately separate from the main app's package.json so its image doesn't pull in chromium/postgres/etc.",
+  "dependencies": {
+    "ws": "^8.21.0"
+  }
+}

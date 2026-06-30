@@ -1,0 +1,53 @@
+# Worker stack — runs at a physical location with a printer attached (shop, warehouse, etc.),
+# separate from the cloud `docker-compose.yml` service stack (app + DB). See
+# docs/PLANNING_multi_instance.md, Component 4.
+#
+# Two ways to provide CUPS for this worker:
+#   1. Bundled container (default below) — `docker compose -f docker-compose.worker.yml up -d`
+#   2. An existing CUPS server already reachable on the network (e.g. the Raspberry Pi setup in
+#      docs/detailed/printer-server-setup.md) — print-agent only needs network access to its
+#      port 631, not co-location. Drop the `cups` service below and point CUPS_HOST at the Pi's
+#      hostname/IP in .env; nothing else changes.
+services:
+  cups:
+    build:
+      context: ./cups
+    container_name: mediator-worker-cups
+    ports:
+      - "631:631"
+    ulimits:
+      nofile:
+        soft: 65000
+        hard: 65000
+    volumes:
+      - mediator-worker-cups-data:/etc/cups
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "lpstat -r 2>/dev/null | grep -q 'running'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  print-agent:
+    build:
+      context: .
+      dockerfile: print-agent/Dockerfile
+    container_name: mediator-print-agent
+    environment:
+      APP_URL: ${APP_URL}
+      AGENT_TOKEN: ${AGENT_TOKEN}
+      INSTANCE_ID: ${INSTANCE_ID}
+      # Points at the bundled `cups` service above by default. Set to an existing CUPS
+      # server's host[:port] instead (e.g. the Pi) to skip the bundled container entirely —
+      # see the note at the top of this file.
+      CUPS_HOST: ${CUPS_HOST:-cups}
+      AGENT_QUEUES: ${AGENT_QUEUES:-}
+    depends_on:
+      cups:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  mediator-worker-cups-data:
+    name: mediator-worker-cups-data
