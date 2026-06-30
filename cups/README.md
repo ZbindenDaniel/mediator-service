@@ -12,11 +12,18 @@ CUPS print server Docker image — provides label printing for Brother QL and ot
 - `ppds/` — PPD driver description files for specific printer models
 
 ## Relations
-- Used by: `backend/actions/admin-printer-queues.ts`, `backend/actions/printer-status.ts`
+- Used by (cloud-side fallback worker): `backend/actions/admin-printer-queues.ts`, `backend/actions/printer-status.ts`
 - Backend communicates via: `backend/lib/cups-client.ts` (CUPS HTTP API on port 631)
+- Used by (per-location worker stack): `backend/print-agent.ts` via `lp -h $CUPS_HOST`, deployed alongside this image (or an existing reachable CUPS host) by `docker-compose.worker.yml` — see `docs/PLANNING_multi_instance.md`
 
 ## Scope
 Print server only. Label content and PDF rendering live in `backend/labelpdf.ts` and `frontend/public/print/`. This container receives rendered PDFs via `lp`.
+
+This same image is used in two deployments: co-located with the cloud app
+(`docker-compose.yml`, port 631 bound to loopback only — fallback path for
+untargeted print jobs) and standalone at each physical location
+(`docker-compose.worker.yml`, port 631 published normally for local printer
+setup, paired with `print-agent`).
 
 ## Rules
 - QL-series printers using the open-source `ptouch-ql` driver work without any files in `drivers/`

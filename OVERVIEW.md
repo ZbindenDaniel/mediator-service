@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+867. ✅ Rewrite PLANNING_multi_instance.md to describe shipped architecture; cups/README.md notes dual deployment → [printing]
 866. ✅ Expose cloud cups container's port 631 (loopback-only, no basic auth) for local web-UI access → [printing]
 865. ✅ docker-compose.worker.yml + print-agent/Dockerfile shipping artifact; supports bundled CUPS or existing Pi-hosted CUPS → [printing]
 864. ✅ Fix silent item-creation failure on duplicate-match quality review; surface error dialog instead of stuck-looking questionnaire → [item-lifecycle]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 860. ✅ Multi-location print routing foundation: TargetQueue schema, per-site resolvePrinterQueue, /agent WebSocket control plane → [printing]
 859. ✅ Atomic label-queue claim (FOR UPDATE SKIP LOCKED); enables cross-instance shared printing → [printing]
 858. ✅ Atomic SELECT FOR UPDATE SKIP LOCKED claim query for multi-instance agentic safety → [agentic]
-858. ✅ Rewrite 14 SQLite-backed tests to Postgres mock pattern; removed from testPathIgnorePatterns → [testing]

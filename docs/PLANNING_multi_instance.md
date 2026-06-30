@@ -1,13 +1,20 @@
-# Multi-instance deployment — current situation
+# Multi-instance / multi-location deployment — current state
+
+Implemented per `docs/changelogs/printing.md` entries 858–866. This doc reflects
+the shipped architecture; see those changelog entries for the why/deferred
+detail on each piece.
 
 ## Database layer
 
-All instances connect to the same Postgres database via `DATABASE_URL`.
-There is no SQLite fallback. All persistent state — items, boxes, events, agentic runs,
-print jobs, Shopware sync jobs — lives in the shared database.
+A single cloud app instance connects to one shared Postgres database via
+`DATABASE_URL`. There is no SQLite fallback. All persistent state — items,
+boxes, events, agentic runs, print jobs, Shopware sync jobs, printer queue
+registry — lives in the shared database.
 
-No instance-local state is persisted to disk except for temporary label render artifacts
-(`PREVIEW_DIR`), which are ephemeral and not shared.
+Because there is exactly one app instance, there is no leader-election,
+double-claim, or cross-instance coordination problem for the agentic loop,
+Shopware sync, or any other background worker. Those concerns only existed
+under a multi-app-instance model, which this design replaced.
 
 ## Job queues
 
@@ -19,63 +26,79 @@ Three background job queues exist, all backed by Postgres tables:
 | Shopware sync | `shopware_sync_queue` | `claimShopwareSyncJobs()` | `FOR UPDATE SKIP LOCKED` |
 | Label printing | `label_queue` | `claimNextLabelJob()` | `FOR UPDATE SKIP LOCKED` |
 
-All three use the same pattern: a single atomic SQL statement that locks candidate rows
-with `FOR UPDATE SKIP LOCKED` and immediately updates their status in the same CTE, returning
-the claimed rows. Competing instances skip already-locked rows and get a disjoint set — no
-double-claiming.
+The label queue is additionally routable: `label_queue."TargetQueue"` names a
+specific CUPS queue, set by `resolvePrinterQueue()` (`backend/print.ts`) at
+enqueue time based on the operator's `site` (`frontend/src/lib/user.ts`) and
+the `printer_queues` registry (`Site`, `LabelTypes` columns). Untargeted jobs
+(`TargetQueue IS NULL`) are still claimed by the app's own local
+`runPrintWorker()` loop for backward compatibility with non-agent setups.
 
-Status lifecycles:
+## Print agents (per physical location)
 
-- **Agentic:** `queued` → `running` → `succeeded | failed | cancelled | review`
-- **Shopware:** `queued` → `processing` → `succeeded | failed` (retry reschedules to `queued`)
-- **Label:** `Queued` → `Processing` → `Done | Error` (stale `Processing` rows older than 5 min reset to `Queued`)
+Printing is no longer "whichever instance polls the queue first" — each
+physical location runs a standalone `backend/print-agent.ts` process
+(shipped as `print-agent/Dockerfile`, deployed via `docker-compose.worker.yml`)
+that:
 
-## What each instance does independently
+- Holds **no DB credentials.** It talks to the cloud app only over a
+  persistent WebSocket (`/agent` endpoint, `backend/agentServer.ts`),
+  authenticated with a shared `AGENT_TOKEN` (`backend/utils/agent-auth.ts`).
+- Sends a `hello` message on connect (and on demand) listing its locally
+  discovered CUPS queues (`lpstat -p`); the app upserts these into
+  `printer_queues` with `InstanceId` set, visible live in the admin
+  "Worker nodes" view — no manual registration step.
+- Wakes on a `job_available` push (sent by the app when it enqueues a job
+  targeting this agent's connected socket — see `connectedAgents` map in
+  `backend/agentConnections.ts`), claims via a lightweight authenticated HTTP
+  call, and prints locally via `lp -h <CUPS_HOST>`. A 30 s local fallback
+  poll covers a missed/dropped push.
+- Reuses the existing CUPS diagnostics/scan/cancel tooling: those admin
+  actions are now routed over the same WebSocket instead of calling CUPS
+  directly, since the app and CUPS are no longer co-located.
 
-Each running instance:
-
-- Polls `label_queue` every 750 ms (`setInterval(runPrintWorker, 750)` in `server.ts`)
-- Runs the agentic dispatch loop (interval-based, `backend/agentic/index.ts`)
-- Runs the Shopware sync worker (`backend/workers/processShopwareQueue.ts`)
-- Serves all HTTP API and frontend requests
-
-There is no instance identity in the system — no instance ID column in any queue table,
-no registration, no leader election.
+`CUPS_HOST` is a plain `lp -h` target, so a location can either run the
+bundled `cups` service from `docker-compose.worker.yml` or point at any
+already-reachable CUPS server (e.g. an existing Pi-hosted setup).
 
 ## Printer configuration
 
-Printer queues are configured per-instance via environment variables:
+Routing is now a registry, not per-instance env vars:
 
-| Variable | Purpose |
+| Mechanism | Purpose |
 |---|---|
-| `PRINTER_QUEUE` | Default CUPS queue name (item labels, box labels) |
-| `PRINTER_QUEUE_MARKETING` | A4 marketing sheet queue (falls back to `PRINTER_QUEUE` if unset) |
+| `printer_queues.Site` / `LabelTypes` (admin-editable, "Worker nodes" view) | Per-queue routing intent — "this queue, at this site, prints these label types" |
+| `frontend/src/lib/user.ts` `site` value | Operator-set location (same pattern as `username`), sent with print requests |
+| `PRINTER_QUEUE*` env vars | Fallback only — used when no `site`/registry match exists (single-site / no-agent deployments) |
 
-CUPS itself is also per-instance — each instance connects to whatever CUPS socket/host
-is reachable from its container. There is no shared CUPS daemon and no printer registry
-in the database.
+`resolvePrinterQueue(labelType, site)` (`backend/print.ts`) checks the
+registry first (only considering queues whose owning agent is currently
+connected — `isAgentConnected()`), then falls back to the env-var lookup.
 
-## Consequence: implicit cross-instance printing
+CUPS itself remains local to each worker. The cloud app's own `cups`
+service (in `docker-compose.yml`) still exists for any jobs handled by the
+in-process fallback worker; its web UI (port 631) is bound to loopback only
+— see printing changelog 866 for why a wider bind would be unsafe given
+`cupsd.conf`'s IP-range trust model.
 
-Because the label queue is now shared and all instances poll it, a print job enqueued
-by any instance will be claimed and printed by whichever instance's worker picks it up
-first. That instance prints to its own locally configured CUPS printer.
+## What changed from the original (rejected) design
 
-In practice this means:
+The original draft considered running multiple full app instances (one per
+location) sharing one DB, with no routing — any instance could claim and
+print any job to its own local printer, which was unpredictable for the
+operator and required solving leader-election/concurrency-cap coordination
+for every background loop. That model is **not** what was built. The shipped
+design keeps exactly one app instance and pushes only the printing
+concern out to lightweight per-location agents, which avoids that whole
+class of coordination problems entirely (see printing changelog 860 "What
+disappears from the old multi-instance plan").
 
-- A user on the shop UI queues a label → the warehouse instance (if running) may claim
-  it and print to the warehouse printer.
-- There is no way to direct a job to a specific printer today. The outcome depends
-  entirely on which instance claims the row first.
+## Known follow-ups (not yet done)
 
-## What is not yet addressed
-
-- **Instance identity / routing:** No mechanism exists to say "print this label on the
-  printer at location X". A `TargetPrinter` or `TargetInstance` column would be needed.
-- **Printer registry in DB:** Printer names and their locations are not stored anywhere
-  accessible to other instances. Each instance only knows its own `PRINTER_QUEUE`.
-- **Concurrency cap coordination:** The agentic concurrency cap (`MAX_CONCURRENT_RUNS`)
-  is enforced per-instance only. Two instances can each run up to the cap independently,
-  so the effective global cap is `N × MAX_CONCURRENT_RUNS`.
-- **Health / presence:** No instance announces itself or tracks liveness. There is no way
-  to know how many instances are running or where they are.
+- `backend/utils/sync-printer-queues.ts` (the old push-to-CUPS-via-lpadmin
+  mechanism) is still present; retiring it is deferred until a worker/agent
+  is actually deployed in production, since `PrinterQueuesCard.tsx`'s admin
+  CRUD still depends on it (see printing changelog 863 Deferred).
+- No registry/CI pipeline publishes `print-agent`/`cups` images; the worker
+  stack currently builds locally only (see printing changelog 865 Deferred).
+- Auth at the proxy layer (nginx + Authelia + LDAP) for the cloud deployment
+  is infra configuration, not app code, and is out of scope here.
