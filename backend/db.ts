@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 import { query, queryOne, execute, insert, withTransaction, namedQuery, namedQueryOne, namedExecute, getPoolInstance, execBatch } from './db-client';
+import { sendToAgent } from './agentConnections';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
   ShopwareSyncQueueEntry,
@@ -1515,6 +1516,19 @@ export async function queueLabel(itemUUID: string, targetQueue?: string | null):
     `INSERT INTO label_queue ("ItemUUID","CreatedAt","TargetQueue") VALUES ($1,$2,$3)`,
     [itemUUID, new Date().toISOString(), targetQueue ?? null]
   );
+
+  // Wake the owning agent immediately instead of waiting for its local fallback poll
+  // (docs/PLANNING_multi_instance.md — job_available control-plane message).
+  const queueName = (targetQueue ?? '').trim();
+  if (queueName) {
+    const row = await queryOne<{ instance_id: string | null }>(
+      `SELECT instance_id FROM printer_queues WHERE name = $1`,
+      [queueName]
+    );
+    if (row?.instance_id) {
+      sendToAgent(row.instance_id, { type: 'job_available' });
+    }
+  }
 }
 
 export async function claimNextLabelJob(): Promise<LabelJob | null> {
