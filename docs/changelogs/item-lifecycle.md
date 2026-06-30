@@ -4,6 +4,10 @@ Covers: item creation, editing, quality assessment, specs, accessories, spare pa
 
 ---
 
+## 864. ✅ Fix silent item-creation failure on duplicate-match quality review
+   - **Why:** Reported as "the questionnaire comes up over and over again." Root cause: when a user picks an existing duplicate match in `ArtikelLookupStep` (`selectedRef` set), `ItemCreate.tsx`'s `handleQualityReviewComplete` submits directly via `handleMatchSelection` instead of routing through the `matchSelection` step. `handleMatchSelection`'s catch block only `console.error`'d on submit failure — unlike its siblings `handleManualSubmit`/`handleAgenticPhotos`, which rethrow so their step components can show an error. With no rethrow and no UI feedback, a failed `/api/import/item` call left `creationStep` stuck at `'qualityReview'`: same component still mounted, no error shown, so retrying "Weiter" looked like the questionnaire kept reappearing. Fixed by adding a `dialog.alert` in the catch block, matching the existing alert pattern used elsewhere in this file (e.g. missing-username guard in `submitNewItem`).
+   - **Deferred:** Not investigating why the underlying `/api/import/item` call itself was failing for this user (no specific error reproduced) — this fix only ensures any future failure is visible instead of silent.
+
 ## 853. ✅ Component relocation now marks parent device incomplete; better Artikelbeschreibung suggestions
    - **Why:** (1) `move-item.ts` now checks if the relocated item was an `erfasst` (BoxID=NULL) component (`Zerlegt_aus` relation) before moving. If so, it inserts a quality assessment marking the parent as Ersatzteil (value=1, is_complete=false) and logs `SparePartRemoved` — mirroring `remove-from-device.ts`. This covers the "Entnehmen" path (which calls plain `/move` via `RelocateItemCard`) and any other relocation that bypasses the strict `remove-from-device` endpoint. (2) `SparepartSlotPopup` "Neu anlegen" description now pre-fills as `{deviceLabel} {specValues} {slotLabel}` (e.g. "Lenovo T14 CH Tastatur") instead of just `{deviceHersteller} {slotLabel}`.
    - **Deferred:** Nothing.

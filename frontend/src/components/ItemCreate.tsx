@@ -1669,6 +1669,16 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
       await submitNewItem(clone, 'match-selection', qualityResultOverride);
     } catch (err) {
       console.error('Failed to create item from duplicate selection', err);
+      // Surface the failure — otherwise creationStep stays on 'qualityReview' with no feedback,
+      // and the user just sees the same questionnaire "come back" every time they retry submitting.
+      try {
+        await dialog.alert({
+          title: 'Artikel konnte nicht erstellt werden',
+          message: 'Beim Erstellen des Artikels ist ein Fehler aufgetreten. Bitte erneut versuchen.'
+        });
+      } catch (alertError) {
+        console.error('Failed to display item creation failure alert', alertError);
+      }
     }
   };
 

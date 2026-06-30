@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+864. ✅ Fix silent item-creation failure on duplicate-match quality review; surface error dialog instead of stuck-looking questionnaire → [item-lifecycle]
 863. ✅ Admin "Worker nodes" view: agent hello auto-upserts discovered queues, Site/LabelTypes editing, "Queues abrufen" → [printing]
 862. ✅ Gate legacy runPrintWorker to untargeted jobs only; add operator `site` (lib/user.ts) sent with print requests → [printing]
 861. ✅ print-agent.ts standalone process + AGENT_TOKEN HTTP claim-job/status API for credential-free remote printing → [printing]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 858. ✅ Rewrite 14 SQLite-backed tests to Postgres mock pattern; removed from testPathIgnorePatterns → [testing]
 857. ✅ Add 2 more missing agentic event translations (AgenticRunQueued, AgenticRunRequeued) → [agentic]
 856. ✅ Add German translations for 12 missing event types + rich descriptions for 4 → [agentic]
-855. ✅ Fix dimension decimal truncation in asNullableInteger; guide model toward integer mm output → [agentic]
