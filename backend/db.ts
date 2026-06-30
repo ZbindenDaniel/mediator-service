@@ -1162,6 +1162,7 @@ export async function listItemReferencesWithFilters(filters: {
       ROUND(NULLIF(r."Hauptkategorien_B", '')::NUMERIC)::INTEGER AS "Hauptkategorien_B",
       ROUND(NULLIF(r."Unterkategorien_B", '')::NUMERIC)::INTEGER AS "Unterkategorien_B",
       r."Veröffentlicht_Status",r."Shopartikel",r."Artikeltyp",r."Einheit",r."EntityType",r."EAN",r."ShopwareProductId",
+      r."LastSyncedAt",
       COALESCE(ar."Status",'notStarted') AS "AgenticStatus",
       COALESCE(ar."ReviewState",'not_required') AS "AgenticReviewState"
      FROM item_refs r

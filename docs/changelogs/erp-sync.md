@@ -4,6 +4,10 @@ Covers: ERP import/export, CSV ingestion, Langtext formatting, nightly sync sche
 
 ---
 
+## 866. ✅ Fix reference-only items missing LastSyncedAt in item list query
+**Why:** `listItemReferencesWithFilters()` (used for box-less/instance-less ref rows) omitted `r."LastSyncedAt"` from its SELECT, while `itemSelectColumns()` (used for instance-backed items) already included it. The frontend's "Zuletzt synchronisiert" sort/column reads `representative?.LastSyncedAt` regardless of row type, so reference-only rows always rendered blank even when manually ERP-synced. Added the missing column to the SELECT list to match the instance query's projection.
+**Deferred:** Nothing — frontend already handled the field correctly once present in the API response.
+
 ## 830. ✅ Restore ERP Langtext export format to HTML; wire LANGTEXT_EXPORT_FORMAT env var
    - **Why:** Commit e3a84c2 introduced `resolveLangtextExportFormat` and changed ERP format from HTML to markdown without confirming with the downstream importer. The ERP had been receiving HTML for months and broke silently. Restored `'html'` as the default for erp mode. Also wired `LANGTEXT_EXPORT_FORMAT` env var (documented in `.env.example` but never read) so operators can override format without a code change.
    - **Deferred:** Nothing.

@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+866. ✅ Fix reference-only items missing LastSyncedAt in item list query → [erp-sync]
 865. ✅ Fix 3 skipSearch bugs; replace notes-regex with explicit UI confirm; wire skipSearch through API + restart → [agentic]
 864. ✅ No-planner correction flow: skipSearch feeds stored LastSearchLinksJson into extraction → [agentic]
 863. ✅ Fix stub deletion, BoxID event filter 500, marks visibility, shelf BoxCount, Created/Updated events → [storage]
@@ -45,5 +46,4 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 860. ✅ Atomic label-queue claim (FOR UPDATE SKIP LOCKED); enables cross-instance shared printing → [printing]
 859. ✅ Atomic SELECT FOR UPDATE SKIP LOCKED claim query for multi-instance agentic safety → [agentic]
 858. ✅ Rewrite 14 SQLite-backed tests to Postgres mock pattern; removed from testPathIgnorePatterns → [testing]
-857. ✅ Add 2 more missing agentic event translations (AgenticRunQueued, AgenticRunRequeued) → [agentic]
 856. ✅ Add German translations for 12 missing event types + rich descriptions for 4 → [agentic]
