@@ -669,6 +669,117 @@ function deriveReviewAdjustedTargetSchemaFormat(params: {
 }
 
 
+interface SchemaIssueLike {
+  code?: string;
+  path?: Array<string | number>;
+  received?: unknown;
+}
+
+// Extracts the dotted paths of fields that are required-but-missing from a batch of zod issues —
+// the one failure mode a rename-only repair can safely address (the data likely exists under a
+// different key name, e.g. the model used "product_name" instead of "Artikelbeschreibung"). Other
+// issue kinds (e.g. wrong type for a field that IS present) aren't something blind renaming can
+// fix, so they're left for the raw-issue retry summary instead.
+function describeMissingRequiredFields(issues: unknown): string[] {
+  if (!Array.isArray(issues)) {
+    return [];
+  }
+  return Array.from(
+    new Set(
+      (issues as SchemaIssueLike[])
+        .filter((issue) => issue?.code === 'invalid_type' && issue?.received === 'undefined')
+        .map((issue) => (Array.isArray(issue.path) ? issue.path.join('.') : ''))
+        .filter((path) => path.length > 0)
+    )
+  );
+}
+
+// Repairs a payload that failed schema validation because required fields are missing but present
+// under a different key name. Reuses the same JSON-correction agent/prompt used for syntax repair:
+// json-correction.md's rule is "conform to the canonical schema", which already permits remapping a
+// non-canonical key onto its canonical name — so this just supplies the schema + the missing-field
+// list and lets that rule do the work. Runs once per failed pass and never consumes an extraction
+// attempt itself — it either salvages the response or falls through to the existing retry path.
+async function attemptSchemaCorrection({
+  correctionAgent,
+  correctionPrompt,
+  targetFormat,
+  invalidPayload,
+  issues,
+  itemId,
+  attempt,
+  logger
+}: {
+  correctionAgent: ChatModel;
+  correctionPrompt: string;
+  targetFormat: string;
+  invalidPayload: unknown;
+  issues: unknown;
+  itemId: string;
+  attempt: number;
+  logger?: ExtractionLogger;
+}): Promise<ReturnType<typeof AgentOutputSchema.safeParse> | null> {
+  const missingRequiredFields = describeMissingRequiredFields(issues);
+  if (missingRequiredFields.length === 0) {
+    return null;
+  }
+
+  let invalidPayloadText: string;
+  try {
+    invalidPayloadText = JSON.stringify(invalidPayload, null, 2);
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to serialize payload for schema correction', attempt, itemId });
+    return null;
+  }
+
+  const userContent = [
+    `Missing required field(s): ${missingRequiredFields.join(', ')}.`,
+    'The data likely exists under a different key name in the payload below — remap it onto the canonical schema.',
+    'Canonical schema:',
+    targetFormat,
+    'Payload to repair:',
+    invalidPayloadText
+  ].join('\n\n');
+
+  let raw: string;
+  try {
+    logger?.info?.({ msg: 'invoking schema correction agent', attempt, itemId, missingRequiredFields });
+    const res = await correctionAgent.invoke([
+      { role: 'system', content: correctionPrompt },
+      { role: 'user', content: userContent }
+    ]);
+    raw = stringifyLangChainContent(res?.content, { context: 'itemFlow.schemaCorrection', logger });
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'schema correction agent invocation failed', attempt, itemId });
+    return null;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = parseJsonWithSanitizer(raw, {
+      loggerInstance: logger,
+      context: { itemId, attempt, stage: 'schema-correction' }
+    });
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'schema correction agent returned invalid json', attempt, itemId });
+    return null;
+  }
+
+  const repaired = AgentOutputSchema.safeParse(parsed);
+  if (!repaired.success) {
+    logger?.warn?.({
+      msg: 'schema correction agent output still failed validation',
+      attempt,
+      itemId,
+      issues: repaired.error.issues
+    });
+    return null;
+  }
+
+  logger?.info?.({ msg: 'schema correction agent repaired payload', attempt, itemId, missingRequiredFields });
+  return repaired;
+}
+
 // TODO(agent): Refactor extraction attempt orchestration into explicit iteration pipeline.
 export async function runExtractionAttempts({
   llm,
@@ -1184,8 +1295,20 @@ export async function runExtractionAttempts({
           validationSummaryParts.push(`Placeholders: ${placeholderSummary}.`);
         }
       } else if (Array.isArray(passFailureValidationIssues)) {
-        const issueSummary = truncateForPrompt(JSON.stringify(passFailureValidationIssues));
-        validationSummaryParts.push(`Schema issues: ${issueSummary}.`);
+        // Plain-language over raw zod internals: naming the exact missing keys and forbidding
+        // renamed/translated variants is a clearer correction signal than a JSON dump of
+        // {code, expected, received, path} objects, and doesn't require the model to reverse-
+        // engineer which of its own keys should have mapped to which required field.
+        const missingRequiredFields = describeMissingRequiredFields(passFailureValidationIssues);
+        if (missingRequiredFields.length > 0) {
+          validationSummaryParts.push(
+            `Missing required field(s): ${missingRequiredFields.join(', ')}. Use these EXACT key names ` +
+              `— do not rename, translate, or abbreviate them (e.g. no "product_name", "Artikelbezeichnung", "title", etc.).`
+          );
+        } else {
+          const issueSummary = truncateForPrompt(JSON.stringify(passFailureValidationIssues));
+          validationSummaryParts.push(`Schema issues: ${issueSummary}.`);
+        }
       } else if (passFailureValidationIssues) {
         validationSummaryParts.push(`Validation: ${truncateForPrompt(String(passFailureValidationIssues))}.`);
       }
@@ -1620,7 +1743,7 @@ export async function runExtractionAttempts({
     } catch (err) {
       logger?.warn?.({ err, msg: 'failed to compute extraction spec telemetry', itemId, attempt });
     }
-    const agentParsed = AgentOutputSchema.safeParse(candidatePayload);
+    let agentParsed = AgentOutputSchema.safeParse(candidatePayload);
     if (!agentParsed.success) {
       const issuePaths = agentParsed.error.issues.map((issue) => issue.path.join('.') || '(root)');
       logger?.warn?.({
@@ -1631,21 +1754,42 @@ export async function runExtractionAttempts({
         itemId,
         legacyIdentifiers: sanitizeForLog(legacyIdentifiers)
       });
-      lastValidated = null;
-      lastSupervision = `Schema validation failed: ${JSON.stringify(agentParsed.error.issues)}`;
-      lastValidationIssues = agentParsed.error.issues;
-      passFailureSupervision = lastSupervision;
-      passFailureValidationIssues = agentParsed.error.issues;
-      const schemaValidationOutcome: IterationOutcome = {
-        type: 'retry_same_context',
-        reason: 'SCHEMA_VALIDATION_FAILED',
-        decisionPath: 'parse -> schema-validation-failed',
-        details: { issues: agentParsed.error.issues }
-      };
-      if (await dispatchIterationOutcome(schemaValidationOutcome) === 'break') {
-        break;
+
+      // Try to salvage this response before giving up on it: if the failure is specifically
+      // "required field missing" and other keys are present, the data likely exists under a
+      // different name (e.g. "product_name" instead of "Artikelbeschreibung") and can be
+      // remapped rather than discarding a response that already did most of the work.
+      const corrected = await attemptSchemaCorrection({
+        correctionAgent: correctionModel ?? llm,
+        correctionPrompt,
+        targetFormat,
+        invalidPayload: candidatePayload,
+        issues: agentParsed.error.issues,
+        itemId,
+        attempt,
+        logger
+      });
+      if (corrected) {
+        agentParsed = corrected;
       }
-      continue;
+
+      if (!agentParsed.success) {
+        lastValidated = null;
+        lastSupervision = `Schema validation failed: ${JSON.stringify(agentParsed.error.issues)}`;
+        lastValidationIssues = agentParsed.error.issues;
+        passFailureSupervision = lastSupervision;
+        passFailureValidationIssues = agentParsed.error.issues;
+        const schemaValidationOutcome: IterationOutcome = {
+          type: 'retry_same_context',
+          reason: 'SCHEMA_VALIDATION_FAILED',
+          decisionPath: 'parse -> schema-validation-failed',
+          details: { issues: agentParsed.error.issues }
+        };
+        if (await dispatchIterationOutcome(schemaValidationOutcome) === 'break') {
+          break;
+        }
+        continue;
+      }
     }
 
     const parsedData = agentParsed.data as AgenticOutput & Record<string, unknown>;
