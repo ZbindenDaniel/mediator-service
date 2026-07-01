@@ -145,4 +145,86 @@ describe('pricing stage json repair', () => {
     expect(result).toBeNull();
     expect(invoke).toHaveBeenCalledTimes(2);
   });
+
+  // Mirrors the categorizer's "assigned_categories" failure mode: valid JSON using an
+  // unrecognized key shape used to satisfy the permissive passthrough schema and silently
+  // resolve to "no usable price", indistinguishable from genuinely having no pricing evidence.
+  it('retries via repair when the response is valid JSON but uses an unrecognized key shape', async () => {
+    const invoke = jest
+      .fn()
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ price: { amount: '129,90 €', confidenceScore: 0.92, sources: 3 } })
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          directListingPrice: '129,90 €',
+          confidence: 0.92,
+          evidenceCount: 3,
+          parseStatus: 'repaired'
+        })
+      });
+
+    const result = await runPricingStage({
+      llm: { invoke },
+      itemId: '019173',
+      pricingPrompt: 'Return JSON only',
+      candidate: {
+        Artikel_Nummer: '019173',
+        Artikelbeschreibung: '',
+        Verkaufspreis: null,
+        Kurzbeschreibung: '',
+        Langtext: '',
+        Hersteller: '',
+        Länge_mm: null,
+        Breite_mm: null,
+        Höhe_mm: null,
+        Gewicht_kg: null,
+        Zustand: '',
+        trustedHistoricalPrice: null,
+        directListingPrice: null,
+        confidence: 1,
+        evidenceCount: 1
+      }
+    });
+
+    expect(result).toEqual({ Verkaufspreis: 129.9 });
+    expect(invoke).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns null when the unrecognized shape cannot be repaired either', async () => {
+    const invoke = jest
+      .fn()
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ price: { amount: 129.9 } })
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({ price: { amount: 129.9 } })
+      });
+
+    const result = await runPricingStage({
+      llm: { invoke },
+      itemId: '019174',
+      pricingPrompt: 'Return JSON only',
+      candidate: {
+        Artikel_Nummer: '019174',
+        Artikelbeschreibung: '',
+        Verkaufspreis: null,
+        Kurzbeschreibung: '',
+        Langtext: '',
+        Hersteller: '',
+        Länge_mm: null,
+        Breite_mm: null,
+        Höhe_mm: null,
+        Gewicht_kg: null,
+        Zustand: '',
+        trustedHistoricalPrice: null,
+        directListingPrice: null,
+        confidence: 1,
+        evidenceCount: 1
+      }
+    });
+
+    expect(result).toBeNull();
+    expect(invoke).toHaveBeenCalledTimes(2);
+  });
 });

@@ -149,6 +149,33 @@ function mapLangtextToSpezifikationenForLlm(
   }
 }
 
+const PRICING_RECOGNIZED_KEYS = [
+  'Verkaufspreis',
+  'directListingPrice',
+  'trustedHistoricalPrice',
+  'confidence',
+  'evidenceCount'
+] as const;
+
+// Whether the parsed payload (or its nested "item" wrapper) contains at least one field the
+// stage actually knows how to read. PricingResponseSchema is passthrough + all-optional, so it
+// validates any object shape — without this check a response using unrecognized key names (e.g.
+// nested under a renamed wrapper) would silently resolve to "no usable price", indistinguishable
+// from the model genuinely having no pricing evidence.
+function hasRecognizedPricingShape(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  if (PRICING_RECOGNIZED_KEYS.some((key) => record[key] !== undefined)) {
+    return true;
+  }
+  if (record.item && typeof record.item === 'object' && !Array.isArray(record.item)) {
+    return 'Verkaufspreis' in (record.item as Record<string, unknown>);
+  }
+  return false;
+}
+
 export function isUsablePrice(value: unknown): boolean {
   const normalized = normalizePriceValue(value, { allowZero: false });
   return typeof normalized === 'number' && Number.isFinite(normalized) && normalized > 0;
@@ -393,10 +420,46 @@ export async function runPricingStage({
     }
   }
 
-  const validated = PricingResponseSchema.safeParse(parsed);
+  let validated = PricingResponseSchema.safeParse(parsed);
   if (!validated.success) {
     logger?.warn?.({ msg: 'pricing response validation failed', itemId, issues: validated.error.issues });
     return null;
+  }
+
+  if (!hasRecognizedPricingShape(validated.data)) {
+    logger?.warn?.({
+      msg: 'pricing response used unrecognized shape; attempting repair',
+      itemId,
+      responseKeys: Object.keys(validated.data as Record<string, unknown>)
+    });
+
+    const repairedRaw = await repairPricingJsonResponse({
+      llm,
+      logger,
+      itemId,
+      pricingPrompt,
+      requestPayload: userPayload,
+      invalidResponse: raw,
+      parseError: 'response used unrecognized key shape (no known pricing fields found)'
+    });
+
+    if (repairedRaw) {
+      try {
+        const repairedParsed = parseJsonWithSanitizer(repairedRaw, {
+          loggerInstance: logger,
+          context: { itemId, stage: 'pricing-agent-shape-repair' }
+        });
+        const repairedValidated = PricingResponseSchema.safeParse(repairedParsed);
+        if (repairedValidated.success && hasRecognizedPricingShape(repairedValidated.data)) {
+          logger?.info?.({ msg: 'pricing shape repair succeeded', itemId });
+          validated = repairedValidated;
+        } else {
+          logger?.warn?.({ msg: 'pricing shape repair did not produce recognizable fields', itemId });
+        }
+      } catch (repairParseErr) {
+        logger?.warn?.({ err: repairParseErr, msg: 'pricing shape repair output invalid json', itemId });
+      }
+    }
   }
 
   let decision;
