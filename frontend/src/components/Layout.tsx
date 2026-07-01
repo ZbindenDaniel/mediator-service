@@ -72,7 +72,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <div className="app-shell__right">
               {hasEntity && !isCreateMode && (
                 <div className="panel-detail-header">
-                  <button type="button" className="panel-detail-header__back" onClick={() => setMobileShowDetail(false)}>
+                  <button type="button" className="panel-detail-header__back" onClick={() => { setMobileShowDetail(false); clearSelection(); }}>
                     <span className="panel-detail-header__arrow" aria-hidden="true">←</span>
                     <span>Liste</span>
                   </button>

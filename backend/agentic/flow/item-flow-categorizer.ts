@@ -82,6 +82,33 @@ function mapLangtextToSpezifikationenForLlm(
   }
 }
 
+// Model sometimes returns markdown bullets instead of JSON (e.g. "* **Kategorie:** 160 (...)").
+// Parse the known label patterns into the expected schema so the stage doesn't hard-fail.
+function repairCategorizerMarkdown(raw: string): string | null {
+  if (raw.includes('{')) return null; // looks like JSON already, skip
+  const result: Record<string, number | null> = {
+    Hauptkategorien_A: null,
+    Unterkategorien_A: null,
+    Hauptkategorien_B: null,
+    Unterkategorien_B: null
+  };
+  let matched = false;
+  for (const line of raw.split('\n')) {
+    const lower = line.toLowerCase();
+    const numMatch = line.match(/(\d{2,5})/);
+    if (!numMatch) continue;
+    const code = parseInt(numMatch[1], 10);
+    if (lower.includes('unterkategor') || lower.includes('subcategor')) {
+      result[result.Unterkategorien_A == null ? 'Unterkategorien_A' : 'Unterkategorien_B'] = code;
+      matched = true;
+    } else if (lower.includes('hauptkategor') || lower.includes('kategor') || lower.includes('categor')) {
+      result[result.Hauptkategorien_A == null ? 'Hauptkategorien_A' : 'Hauptkategorien_B'] = code;
+      matched = true;
+    }
+  }
+  return matched ? JSON.stringify(result) : null;
+}
+
 function extractNumericCode(value: unknown): number | null | undefined {
   if (value == null) {
     return null;
@@ -200,9 +227,13 @@ export async function runCategorizerStage({
 
   await appendTranscriptSection(transcriptWriter, 'categorizer', transcriptPayload, raw, logger, itemId);
 
+  const repairedRaw = repairCategorizerMarkdown(raw);
+  if (repairedRaw) {
+    logger?.warn?.({ msg: 'categorizer returned markdown; repaired to JSON', itemId, rawSnippet: raw.slice(0, 200) });
+  }
   let parsed: unknown;
   try {
-    parsed = parseJsonWithSanitizer(raw, {
+    parsed = parseJsonWithSanitizer(repairedRaw ?? raw, {
       loggerInstance: logger,
       context: { itemId, stage: 'categorizer-agent' }
     });
