@@ -98,7 +98,8 @@ export function PanelProvider({ children }: PropsWithChildren<{}>) {
   const navigate = useNavigate();
   const location = useLocation();
   const [state, setState] = useState<PanelState>(() => paramsToState(searchParams));
-  const [mobileShowDetail, setMobileShowDetail] = useState(false);
+  // On desktop start with the right panel visible; on mobile start with the list.
+  const [mobileShowDetail, setMobileShowDetail] = useState(() => window.matchMedia('(min-width: 901px)').matches);
   const [panelDetailLabel, setPanelDetailLabel] = useState<string | null>(null);
   // skip the initial URL write — state was already derived from the URL on mount
   const isMounted = useRef(false);

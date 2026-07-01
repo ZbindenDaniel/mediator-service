@@ -4,6 +4,18 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 870. ✅ Activities: actor server-side, topic chips, clear button, Enter-to-submit both fields
+**Why:** Actor filter was client-side (only filtered the already-loaded 50 events), so filtering by actor + search term together was unreliable. Moved actor to `?actor=` query param, wired through backend (`listRecentActivities*` DB helpers accept optional actor for `ILIKE` filtering). Added topic filter chips (Logistik / Daten / Export / Druck / KI) as client-side post-filter on the returned events — avoids a new endpoint while covering the full result set. Removed the separate "Suchen" button that only existed for one input — both fields now submit on Enter with a shared "Suchen" button. Added a "Zurücksetzen" button that appears whenever any filter is active.
+**Deferred:** Topic filter is client-side (applied after the server returns results), so it reduces the displayed count below the limit but doesn't fetch more to compensate. Acceptable trade-off given the small number of topics.
+
+## 869. ✅ Remove duplicate Box/Regal-ID filter from activities view
+**Why:** The activities page had two inputs accepting box IDs: the main search field (which already accepts box/shelf IDs and passes them as `?term=` to the backend) and a separate "Box / Regal-ID" input that sent `&boxId=` in parallel. The duplicate was confusing and redundant. Removed `boxFilter` state, the `&boxId=` query param, the input element, and the now-dead `BOX_SHELF_PATTERN` log block.
+**Deferred:** Nothing.
+
+## 867. ✅ Restore OverviewPanel on desktop; fix Liste button clearing selection
+**Why:** Commit 70e5638 added `@media (min-width: 901px)` CSS that hid `.app-shell__right` whenever `app-shell--mobile-list` class was active. Since `mobileShowDetail` initialises as `false`, the right panel (containing the OverviewPanel) was hidden on every page load on desktop. Removed the desktop-width block entirely — the right panel is always visible on desktop and the class only controls mobile slide animation. Also fixed the "← Liste" button to call `clearSelection()` in addition to `setMobileShowDetail(false)` so clicking it on desktop properly deselects the entity and reveals the OverviewPanel.
+**Deferred:** Nothing.
+
 ## 862. ✅ Marks filter shows all users' marks; BoxCount column for shelves in box list
    - **Why:** `UserMarksContext` only loaded marks for the current user; the "Markiert" filter was per-user. Added `GET /api/user-marks/all` endpoint + `getAllMarkedItemUUIDs()` DB helper; context now also fetches all marks on mount and exposes `allMarkedUUIDs`/`isMarkedByAnyone`. `ItemListPage` filter now uses `allMarkedUUIDs` so all users see items marked by anyone. Box list adds a "Behälter" column for shelf rows showing child box count; "Artikel" column shows `—` for shelves.
    - **Deferred:** The star icon in the item list still reflects only the current user's marks (toggling is always per-user). A separate visual treatment for "marked by someone else but not me" is not yet added.

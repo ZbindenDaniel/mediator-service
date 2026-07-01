@@ -29,26 +29,30 @@ const action = defineHttpAction({
       const rawBoxId = requestUrl.searchParams.get('boxId');
       const normalizedBoxId = rawBoxId ? rawBoxId.trim() : '';
       const hasBoxId = normalizedBoxId.length > 0;
+      const rawActor = requestUrl.searchParams.get('actor');
+      const normalizedActor = rawActor ? rawActor.trim() : '';
+      const hasActor = normalizedActor.length > 0;
       const parsedLimit = requestedLimit ? Number(requestedLimit) : DEFAULT_LIMIT;
       const limit = Number.isFinite(parsedLimit)
         ? Math.min(Math.max(1, Math.floor(parsedLimit)), MAX_LIMIT)
         : DEFAULT_LIMIT;
+      const actorArg = hasActor ? normalizedActor : undefined;
 
       let events: unknown[];
       if (hasBoxId) {
-        events = await ctx.listRecentActivitiesByBoxId(normalizedBoxId, limit);
+        events = await ctx.listRecentActivitiesByBoxId(normalizedBoxId, limit, actorArg);
       } else if (hasTerm) {
         if (!ctx.listRecentActivitiesByTerm) {
           console.error('Activities term helper missing; falling back to unfiltered feed', {
             term: normalizedTerm,
             limit
           });
-          events = await ctx.listRecentActivities(limit);
+          events = await ctx.listRecentActivities(limit, actorArg);
         } else {
-          events = await ctx.listRecentActivitiesByTerm(`%${normalizedTerm}%`, limit);
+          events = await ctx.listRecentActivitiesByTerm(`%${normalizedTerm}%`, limit, actorArg);
         }
       } else {
-        events = await ctx.listRecentActivities(limit);
+        events = await ctx.listRecentActivities(limit, actorArg);
       }
       if (hasTerm) {
         console.info('Activities feed filtered by search term', { term: normalizedTerm, limit });

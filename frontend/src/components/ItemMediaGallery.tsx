@@ -273,6 +273,7 @@ export default function ItemMediaGallery({
               ) : (
                 <div className="item-media-gallery__fallback" role="status">
                   <span>Bild konnte nicht geladen werden.</span>
+                  <code className="item-media-gallery__fallback-filename">{selectedAsset.src.split('/').pop()}</code>
                 </div>
               )}
               <figcaption className="item-media-gallery__dialog-caption">{selectedAsset.label}</figcaption>
@@ -360,6 +361,7 @@ export default function ItemMediaGallery({
                     aria-label={`${asset.label}: Bild nicht verfügbar. Klicken zum Verwalten.`}
                   >
                     <span>Bild konnte nicht geladen werden.</span>
+                    <code className="item-media-gallery__fallback-filename">{asset.src.split('/').pop()}</code>
                   </button>
                 )}
                 {/* <figcaption>{asset.label}</figcaption> */}
