@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+875. ✅ Reuse JSON-correction agent to salvage schema-drifted extractions; plain-language retry hints → [agentic]
 874. ✅ Shrink categorizer prompt (~34% off taxonomy reference) to reduce context-overflow risk → [agentic]
 873. ✅ Audit all agentic prompts; thread spec-contract field descriptions into extraction guidance → [agentic]
 872. ✅ Harden categorizer/pricing against valid-JSON-wrong-shape model responses (silent null categories) → [agentic]
@@ -46,6 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 868. ✅ Fix categorizer markdown response; repair to JSON + strengthen prompt → [agentic]
 867. ✅ Restore OverviewPanel on desktop; fix Liste button clearing selection → [ui]
 866. ✅ Fix reference-only items missing LastSyncedAt in item list query → [erp-sync]
-865. ✅ Fix 3 skipSearch bugs; replace notes-regex with explicit UI confirm; wire skipSearch through API + restart → [agentic]
-864. ✅ No-planner correction flow: skipSearch feeds stored LastSearchLinksJson into extraction → [agentic]
-859. ✅ Atomic SELECT FOR UPDATE SKIP LOCKED claim query for multi-instance agentic safety → [agentic]
