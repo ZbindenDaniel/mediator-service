@@ -114,6 +114,10 @@ export interface SpecContext {
   missingRequired: string[];
   missingDesired: string[];
   ambiguousFields: Record<string, { itemValue: string; intakeValue: string }>;
+  // Contract `description` per missing field key — lets the extraction prompt explain what a bare
+  // key name like "Speicher" actually expects (e.g. "Storage size and type (e.g. 256 GB SSD)")
+  // instead of leaving the model to guess format/content from the key alone.
+  missingFieldDescriptions: Record<string, string>;
 }
 
 // Maps InstanceSpecs keys (written by intake quality answers) to spec contract field keys.
@@ -138,7 +142,12 @@ function buildSpecContext(
   subcategoryCode: number | null,
   instanceSpecs: Record<string, unknown> | null
 ): SpecContext {
-  const result: SpecContext = { missingRequired: [], missingDesired: [], ambiguousFields: {} };
+  const result: SpecContext = {
+    missingRequired: [],
+    missingDesired: [],
+    ambiguousFields: {},
+    missingFieldDescriptions: {}
+  };
 
   if (!subcategoryCode) return result;
   const specContract = getSpecContract(subcategoryCode);
@@ -178,6 +187,9 @@ function buildSpecContext(
         result.missingRequired.push(field.key);
       } else {
         result.missingDesired.push(field.key);
+      }
+      if (field.description) {
+        result.missingFieldDescriptions[field.key] = field.description;
       }
     }
   }
@@ -542,6 +554,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
         ...specCtx.missingRequired
       ],
       ambiguousFields: specCtx.ambiguousFields,
+      missingSpecFieldDescriptions: specCtx.missingFieldDescriptions,
       unneededSpecFields: Array.isArray(input.unneededSpecFields) ? input.unneededSpecFields : [],
       skipSearch,
       exampleItemBlock: input.exampleItemBlock ?? null,

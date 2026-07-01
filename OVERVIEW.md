@@ -37,6 +37,8 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+873. ✅ Audit all agentic prompts; thread spec-contract field descriptions into extraction guidance → [agentic]
+872. ✅ Harden categorizer/pricing against valid-JSON-wrong-shape model responses (silent null categories) → [agentic]
 871. ✅ Show filename on broken image in media gallery → [media]
 870. ✅ Activities: actor server-side, topic chips, clear button, Enter-to-submit both fields → [ui]
 869. ✅ Remove duplicate Box/Regal-ID filter from activities view → [ui]
@@ -45,6 +47,4 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 866. ✅ Fix reference-only items missing LastSyncedAt in item list query → [erp-sync]
 865. ✅ Fix 3 skipSearch bugs; replace notes-regex with explicit UI confirm; wire skipSearch through API + restart → [agentic]
 864. ✅ No-planner correction flow: skipSearch feeds stored LastSearchLinksJson into extraction → [agentic]
-863. ✅ Fix stub deletion, BoxID event filter 500, marks visibility, shelf BoxCount, Created/Updated events → [storage]
-862. ✅ Surface extraction confidence in UI; events.Meta → JSONB + box filter; stub close action → [agentic]
 859. ✅ Atomic SELECT FOR UPDATE SKIP LOCKED claim query for multi-instance agentic safety → [agentic]

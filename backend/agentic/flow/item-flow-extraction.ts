@@ -52,6 +52,9 @@ export interface RunExtractionOptions {
   target: AgenticTarget;
   reviewNotes?: string | null;
   missingSpecFields?: string[];
+  // Spec-contract `description` per missing field key (contracts/specs/<subcategory>.json), so the
+  // extraction prompt can explain what a bare key name expects instead of leaving it to guesswork.
+  missingSpecFieldDescriptions?: Record<string, string>;
   ambiguousFields?: Record<string, { itemValue: string; intakeValue: string }>;
   unneededSpecFields?: string[];
   skipSearch?: boolean;
@@ -595,14 +598,28 @@ function applyReviewSpecGuidanceToPromptTarget(params: {
   }
 }
 
+const MISSING_SPEC_DESCRIPTION_MAX_LENGTH = 160;
+
+// Contract descriptions (contracts/specs/<subcategory>.json) turn a bare key like "Speicher" into
+// "Speicher (Storage size and type (e.g. 256 GB SSD))" so the model knows the expected format
+// instead of guessing from the key name alone.
+function formatMissingSpecKeyWithDescription(key: string, description?: string): string {
+  if (typeof description !== 'string') {
+    return key;
+  }
+  const sanitized = description.replace(/\s+/g, ' ').trim().slice(0, MISSING_SPEC_DESCRIPTION_MAX_LENGTH);
+  return sanitized ? `${key} (${sanitized})` : key;
+}
+
 function deriveReviewAdjustedTargetSchemaFormat(params: {
   targetFormat: string;
   missingSpecFields: unknown;
+  missingSpecFieldDescriptions?: Record<string, string>;
   unneededSpecFields: unknown;
   itemId: string;
   logger?: ExtractionLogger;
 }): string {
-  const { targetFormat, missingSpecFields, unneededSpecFields, itemId, logger } = params;
+  const { targetFormat, missingSpecFields, missingSpecFieldDescriptions, unneededSpecFields, itemId, logger } = params;
   const baselineFormat = typeof targetFormat === 'string' ? targetFormat : '';
 
   try {
@@ -617,6 +634,7 @@ function deriveReviewAdjustedTargetSchemaFormat(params: {
       unneededSpecCount: normalizedUnneededSpecFields.length,
       missingSpecSample: normalizedMissingSpecFields.slice(0, REVIEW_SPEC_SAMPLE_LIMIT),
       unneededSpecSample: normalizedUnneededSpecFields.slice(0, REVIEW_SPEC_SAMPLE_LIMIT),
+      missingSpecDescriptionCount: missingSpecFieldDescriptions ? Object.keys(missingSpecFieldDescriptions).length : 0,
       adjustedFormatApplied: hasGuidance
     });
 
@@ -624,9 +642,13 @@ function deriveReviewAdjustedTargetSchemaFormat(params: {
       return baselineFormat;
     }
 
+    const missingSpecEntries = normalizedMissingSpecFields.map((key) =>
+      formatMissingSpecKeyWithDescription(key, missingSpecFieldDescriptions?.[key])
+    );
+
     const reviewGuidanceLines: string[] = [
       'Review-enforced spec guidance:',
-      `- missing_spec: expected keys to include when evidence exists${normalizedMissingSpecFields.length > 0 ? ` (${normalizedMissingSpecFields.join(', ')})` : ''}`,
+      `- missing_spec: expected keys to include when evidence exists${missingSpecEntries.length > 0 ? ` (${missingSpecEntries.join(', ')})` : ''}`,
       `- unneeded_spec: keys to avoid/remove unless explicitly required by evidence${normalizedUnneededSpecFields.length > 0 ? ` (${normalizedUnneededSpecFields.join(', ')})` : ''}`
     ];
 
@@ -669,6 +691,7 @@ export async function runExtractionAttempts({
   target,
   reviewNotes,
   missingSpecFields,
+  missingSpecFieldDescriptions,
   ambiguousFields,
   unneededSpecFields,
   skipSearch,
@@ -734,6 +757,7 @@ export async function runExtractionAttempts({
   const adjustedTargetSchemaFormat = deriveReviewAdjustedTargetSchemaFormat({
     targetFormat,
     missingSpecFields,
+    missingSpecFieldDescriptions,
     unneededSpecFields,
     itemId,
     logger

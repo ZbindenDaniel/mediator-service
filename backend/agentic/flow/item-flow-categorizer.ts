@@ -109,6 +109,66 @@ function repairCategorizerMarkdown(raw: string): string | null {
   return matched ? JSON.stringify(result) : null;
 }
 
+const CANONICAL_CATEGORY_KEYS = [
+  'Hauptkategorien_A',
+  'Unterkategorien_A',
+  'Hauptkategorien_B',
+  'Unterkategorien_B',
+  'Hauptkategorien',
+  'Unterkategorien'
+] as const;
+
+// Whether the parsed payload (or its nested "item" wrapper) contains at least one field the
+// stage actually knows how to read. Passthrough zod schemas validate any object shape, so this
+// check is the real gate against silently accepting a well-formed-but-wrong-shape response.
+function hasCanonicalCategoryShape(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  if (CANONICAL_CATEGORY_KEYS.some((key) => key in record)) {
+    return true;
+  }
+  if (record.item && typeof record.item === 'object' && !Array.isArray(record.item)) {
+    return CANONICAL_CATEGORY_KEYS.some((key) => key in (record.item as Record<string, unknown>));
+  }
+  return false;
+}
+
+// Observed failure mode: model wraps codes as { assigned_categories: { primary, secondary } }
+// (or similarly named variants) instead of the four flat fields. Remap it onto the canonical
+// shape so a correctly-categorized response isn't discarded just because of key naming.
+// Taxonomy convention: subcategory codes are the main code with a running suffix
+// (e.g. 1603 belongs to main category 160), so the main code is derivable as floor(sub / 10).
+function normalizeCategorizerAltShape(parsed: unknown): Record<string, unknown> | null {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return null;
+  }
+  const record = parsed as Record<string, unknown>;
+  const wrapper = record.assigned_categories ?? record.assignedCategories ?? record.categories;
+  if (!wrapper || typeof wrapper !== 'object' || Array.isArray(wrapper)) {
+    return null;
+  }
+  const wrapperRecord = wrapper as Record<string, unknown>;
+  const primary = extractNumericCode(
+    wrapperRecord.primary ?? wrapperRecord.main ?? wrapperRecord.Hauptkategorie ?? wrapperRecord.hauptkategorie
+  );
+  const secondary = extractNumericCode(
+    wrapperRecord.secondary ?? wrapperRecord.sub ?? wrapperRecord.Unterkategorie ?? wrapperRecord.unterkategorie
+  );
+  if (primary == null && secondary == null) {
+    return null;
+  }
+  const deriveMain = (code: number | null | undefined): number | null =>
+    typeof code === 'number' && code >= 1000 ? Math.floor(code / 10) : null;
+  return {
+    Hauptkategorien_A: deriveMain(primary),
+    Unterkategorien_A: primary ?? null,
+    Hauptkategorien_B: deriveMain(secondary),
+    Unterkategorien_B: secondary ?? null
+  };
+}
+
 function extractNumericCode(value: unknown): number | null | undefined {
   if (value == null) {
     return null;
@@ -244,6 +304,19 @@ export async function runCategorizerStage({
 
   logSchemaKeyTelemetry(logger, { stage: 'categorizer', itemId, payload: parsed });
 
+  if (!hasCanonicalCategoryShape(parsed)) {
+    const altShape = normalizeCategorizerAltShape(parsed);
+    if (altShape) {
+      logger?.warn?.({
+        msg: 'categorizer used non-canonical response shape; remapped to canonical fields',
+        itemId,
+        responseKeys: Object.keys(parsed as Record<string, unknown>),
+        remapped: altShape
+      });
+      parsed = altShape;
+    }
+  }
+
   const validated = CategorizerPayloadSchema.safeParse(parsed);
   if (!validated.success) {
     logger?.error?.({
@@ -254,6 +327,24 @@ export async function runCategorizerStage({
     throw new FlowError('CATEGORIZER_SCHEMA_FAILED', 'Categorizer agent returned malformed payload', 422, {
       cause: validated.error
     });
+  }
+
+  // The schema is deliberately permissive (passthrough + nullish fields) so it validates any
+  // object shape. Without this check, a well-formed-but-wrong-shape response (e.g. a renamed
+  // wrapper key the alt-shape remap above doesn't recognize) would silently resolve to an empty
+  // patch and the run would complete with null categories instead of surfacing a failure.
+  if (!hasCanonicalCategoryShape(validated.data)) {
+    logger?.error?.({
+      msg: 'categorizer response had no recognizable category fields',
+      itemId,
+      responseKeys: Object.keys(validated.data as Record<string, unknown>)
+    });
+    throw new FlowError(
+      'CATEGORIZER_UNRECOGNIZED_SHAPE',
+      'Categorizer agent returned a response with no recognizable category fields',
+      422,
+      { context: { responseKeys: Object.keys(validated.data as Record<string, unknown>) } }
+    );
   }
 
   const result: Partial<AgenticOutput> = {};
