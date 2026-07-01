@@ -4,6 +4,10 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 870. ✅ Activities: actor server-side, topic chips, clear button, Enter-to-submit both fields
+**Why:** Actor filter was client-side (only filtered the already-loaded 50 events), so filtering by actor + search term together was unreliable. Moved actor to `?actor=` query param, wired through backend (`listRecentActivities*` DB helpers accept optional actor for `ILIKE` filtering). Added topic filter chips (Logistik / Daten / Export / Druck / KI) as client-side post-filter on the returned events — avoids a new endpoint while covering the full result set. Removed the separate "Suchen" button that only existed for one input — both fields now submit on Enter with a shared "Suchen" button. Added a "Zurücksetzen" button that appears whenever any filter is active.
+**Deferred:** Topic filter is client-side (applied after the server returns results), so it reduces the displayed count below the limit but doesn't fetch more to compensate. Acceptable trade-off given the small number of topics.
+
 ## 869. ✅ Remove duplicate Box/Regal-ID filter from activities view
 **Why:** The activities page had two inputs accepting box IDs: the main search field (which already accepts box/shelf IDs and passes them as `?term=` to the backend) and a separate "Box / Regal-ID" input that sent `&boxId=` in parallel. The duplicate was confusing and redundant. Removed `boxFilter` state, the `&boxId=` query param, the input element, and the now-dead `BOX_SHELF_PATTERN` log block.
 **Deferred:** Nothing.

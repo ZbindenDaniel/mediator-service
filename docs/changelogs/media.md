@@ -4,6 +4,10 @@ Covers: item photos, file attachments, external docs (EAN/Serial/MAC-keyed), Web
 
 ---
 
+## 871. ✅ Show filename on broken image in media gallery
+**Why:** When an image fails to load, operators saw only "Bild konnte nicht geladen werden." with no way to know which file was missing. Added the filename (last path segment of the src URL) below the error message in both the thumbnail and the modal fallback views, so operators can immediately identify and check the missing file.
+**Deferred:** Nothing.
+
 ## 844. ✅ ALT_DOC_DIRS_FILE config, artikelNummer identifier, and grouped UI for external docs
    - **Why:** Config file (ALT_DOC_DIRS_FILE) replaces the inline JSON env var — easier to read, comment, and diff. Added `artikelNummer` as a fourth identifier type (alongside ean, serialNumber, macAddress), sourced from `items.Artikel_Nummer`, for service manuals and catalog-level supplier docs. UI binding modal now shows two-line options (label + `SN: value`, `EAN: value`, etc.) so operators see exactly where a file will be filed. File list groups external docs under a section header per directory showing the identifier type and value, replacing the flat mixed list. `identifierValue` added to ExternalDocSummary so the resolved identifier is available to the frontend.
    - **Deferred:** Image/photo support in external-docs serving (still PDF/TXT/CSV/XML/JSON only). Automatic cleanup on item delete (by design — no cascade).

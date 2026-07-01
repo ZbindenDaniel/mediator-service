@@ -1625,22 +1625,26 @@ export async function listRecentEvents(): Promise<any[]> {
   );
 }
 
-export async function listRecentActivities(limit: number): Promise<any[]> {
+export async function listRecentActivities(limit: number, actor?: string): Promise<any[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
+  const actorClause = actor ? `AND e."Actor" ILIKE $2` : '';
+  const params: unknown[] = actor ? [effectiveLimit, `%${actor}%`] : [effectiveLimit];
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
      FROM events e
      LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} ${actorClause}
      ORDER BY e."CreatedAt" DESC LIMIT $1`,
-    [effectiveLimit]
+    params
   );
 }
 
-export async function listRecentActivitiesByTerm(term: string, limit: number): Promise<any[]> {
+export async function listRecentActivitiesByTerm(term: string, limit: number, actor?: string): Promise<any[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
+  const actorClause = actor ? `AND e."Actor" ILIKE $3` : '';
+  const params: unknown[] = actor ? [term, effectiveLimit, `%${actor}%`] : [term, effectiveLimit];
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
@@ -1649,13 +1653,16 @@ export async function listRecentActivitiesByTerm(term: string, limit: number): P
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
      WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
      AND (e."EntityId" LIKE $1 OR COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") LIKE $1 OR i."BoxID" LIKE $1)
+     ${actorClause}
      ORDER BY e."CreatedAt" DESC LIMIT $2`,
-    [term, effectiveLimit]
+    params
   );
 }
 
-export async function listRecentActivitiesByBoxId(boxId: string, limit: number): Promise<any[]> {
+export async function listRecentActivitiesByBoxId(boxId: string, limit: number, actor?: string): Promise<any[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
+  const actorClause = actor ? `AND e."Actor" ILIKE $3` : '';
+  const params: unknown[] = actor ? [boxId, effectiveLimit, `%${actor}%`] : [boxId, effectiveLimit];
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
@@ -1669,8 +1676,9 @@ export async function listRecentActivitiesByBoxId(boxId: string, limit: number):
        OR e."Meta" @> jsonb_build_object('fromBox', $1::text)
        OR e."Meta" @> jsonb_build_object('toBox', $1::text)
      )
+     ${actorClause}
      ORDER BY e."CreatedAt" DESC LIMIT $2`,
-    [boxId, effectiveLimit]
+    params
   );
 }
 
