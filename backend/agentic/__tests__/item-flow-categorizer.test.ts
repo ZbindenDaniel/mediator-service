@@ -1,8 +1,10 @@
 jest.mock('fs/promises', () => ({
-  readFile: jest.fn().mockResolvedValue('# Kategoriecodes\n\n## 160 – Kabel_Adapter_Montage\n- 1603 – Adapter\n- 1602 – Kabel Intern\n')
+  readFile: jest
+    .fn()
+    .mockResolvedValue('# Kategoriecodes\n\n## 160 – Kabel_Adapter_Montage\n\n- **1603** – Adapter\n- **1602** – Kabel Intern\n')
 }));
 
-import { runCategorizerStage } from '../flow/item-flow-categorizer';
+import { compactTaxonomyReference, runCategorizerStage } from '../flow/item-flow-categorizer';
 
 const baseCandidate = {
   Artikel_Nummer: '019157',
@@ -82,5 +84,68 @@ describe('runCategorizerStage alt-shape handling', () => {
       Hauptkategorien_B: null,
       Unterkategorien_B: null
     });
+  });
+});
+
+describe('compactTaxonomyReference', () => {
+  // The taxonomy reference is the single largest fixed cost in the categorizer prompt (a full
+  // markdown category catalog injected on every call). This strips markdown formatting overhead
+  // and an irrelevant CSV-import section without dropping any category code, to reduce the risk
+  // of overflowing the model's context window (which manifests as an empty completion).
+  const sample = [
+    '# Kategoriecodes',
+    '',
+    'Die folgenden Codes werden für Haupt- und Unterkategorien verwendet. Die Hauptkategorien sind in Zehnerschritten nummeriert.',
+    '',
+    '## Unterstützte Kategorienamen für CSV-Importe',
+    '',
+    'Die Import-APIs akzeptieren auch ausgeschriebene Namen.',
+    '',
+    '- Groß- und Kleinschreibung wird ignoriert.',
+    '',
+    '## 120 – Externe_Netzwerkgeräte',
+    '',
+    '- **1201** – 5G-, LTE-, UMTS-, GPRS-, GMS-Modems',
+    '- **1202** – Wireless Adapter',
+    '',
+    '## 200 – Non_IT',
+    '',
+    '- Keine Unterkategorien definiert',
+    ''
+  ].join('\n');
+
+  it('drops the CSV-import section but keeps the numbering-convention sentence', () => {
+    const compact = compactTaxonomyReference(sample);
+    expect(compact).toContain('Die Hauptkategorien sind in Zehnerschritten nummeriert');
+    expect(compact).not.toContain('CSV-Importe');
+    expect(compact).not.toContain('Groß- und Kleinschreibung');
+  });
+
+  it('preserves every category and subcategory code', () => {
+    const compact = compactTaxonomyReference(sample);
+    expect(compact).toContain('120 Externe_Netzwerkgeräte');
+    expect(compact).toContain('1201');
+    expect(compact).toContain('1202 Wireless Adapter');
+    expect(compact).toContain('200 Non_IT');
+  });
+
+  it('joins entries with semicolons so a comma-containing name stays unambiguous', () => {
+    const compact = compactTaxonomyReference(sample);
+    expect(compact).toContain('1201 5G-, LTE-, UMTS-, GPRS-, GMS-Modems; 1202 Wireless Adapter');
+  });
+
+  it('marks a heading with no subcategory bullets as having none', () => {
+    const compact = compactTaxonomyReference(sample);
+    expect(compact).toContain('200 Non_IT (keine Unterkategorien)');
+  });
+
+  it('is shorter than the raw source', () => {
+    const compact = compactTaxonomyReference(sample);
+    expect(compact.length).toBeLessThan(sample.length);
+  });
+
+  it('falls back to the raw text when no category headings are found', () => {
+    const malformed = 'not a taxonomy document at all';
+    expect(compactTaxonomyReference(malformed)).toBe(malformed);
   });
 });
