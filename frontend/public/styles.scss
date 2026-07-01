@@ -406,6 +406,15 @@ button {
     border-bottom: 1px solid var(--border, #e1e4e8);
 }
 
+@media (min-width: 901px) {
+    .app-shell--mobile-list .app-shell__right {
+        display: none;
+    }
+    .app-shell--mobile-list .panel-main {
+        flex: 0 0 100%;
+    }
+}
+
 @media (max-width: 900px) {
 
     /* Clip off-screen panel during slide */
