@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+874. ✅ Reuse JSON-correction agent to salvage schema-drifted extractions; plain-language retry hints → [agentic]
 873. ✅ Audit all agentic prompts; thread spec-contract field descriptions into extraction guidance → [agentic]
 872. ✅ Harden categorizer/pricing against valid-JSON-wrong-shape model responses (silent null categories) → [agentic]
 871. ✅ Show filename on broken image in media gallery → [media]
