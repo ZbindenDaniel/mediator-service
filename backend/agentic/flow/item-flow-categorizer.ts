@@ -36,15 +36,102 @@ const CategorizerPayloadSchema = z.union([
 
 let cachedReference: string | null = null;
 
+const CATEGORY_HEADING_RE = /^##\s*(\d+)\s*[–—-]\s*(.+)$/;
+const SUBCATEGORY_BULLET_RE = /^-\s*\*\*(\d+)\*\*\s*[–—-]\s*(.+)$/;
+
+// docs/data_struct.md doubles as human-facing documentation (linked from docs/OVERVIEW.md) and as
+// the categorizer's taxonomy reference, so we don't trim the source file. Instead this strips it
+// down to just what the categorization task needs: the numbering-convention sentence plus every
+// code/name pair, dropping the CSV-import normalization section (irrelevant to picking a category
+// from an item description) and the markdown bullet/heading formatting overhead. This is the
+// single largest fixed cost in the categorizer prompt — cutting it materially reduces the risk of
+// overflowing the model's context window (which manifests as an empty/truncated completion).
+// Every code present in the source must survive; falls back to the raw text if parsing goes wrong
+// rather than risk silently dropping a valid category.
+export function compactTaxonomyReference(raw: string): string {
+  try {
+    const introLines: string[] = [];
+    const categoryLines: string[] = [];
+    let mode: 'intro' | 'skip-section' | 'categories' = 'intro';
+    let currentHeading: { code: string; name: string } | null = null;
+    let currentSubs: string[] = [];
+
+    const flushCurrent = () => {
+      if (!currentHeading) {
+        return;
+      }
+      // Semicolon-joined, not comma-joined: several subcategory names contain commas of their own
+      // (e.g. "5G-, LTE-, UMTS-, GPRS-, GMS-Modems"), which would make a comma-separated list
+      // ambiguous about where one entry ends and the next begins.
+      const subsText = currentSubs.length > 0 ? `: ${currentSubs.join('; ')}` : ' (keine Unterkategorien)';
+      categoryLines.push(`${currentHeading.code} ${currentHeading.name}${subsText}`);
+      currentHeading = null;
+      currentSubs = [];
+    };
+
+    for (const rawLine of raw.split('\n')) {
+      const trimmed = rawLine.trim();
+      const headingMatch = trimmed.match(CATEGORY_HEADING_RE);
+
+      if (headingMatch) {
+        flushCurrent();
+        currentHeading = { code: headingMatch[1], name: headingMatch[2].trim() };
+        mode = 'categories';
+        continue;
+      }
+
+      if (mode === 'intro') {
+        if (trimmed.startsWith('## ')) {
+          // A non-numbered heading before the first category (e.g. the CSV-import notes) — drop it and its body.
+          mode = 'skip-section';
+          continue;
+        }
+        if (trimmed && !trimmed.startsWith('#')) {
+          introLines.push(trimmed);
+        }
+        continue;
+      }
+
+      if (mode === 'skip-section') {
+        continue;
+      }
+
+      if (mode === 'categories' && currentHeading) {
+        const subMatch = trimmed.match(SUBCATEGORY_BULLET_RE);
+        if (subMatch) {
+          currentSubs.push(`${subMatch[1]} ${subMatch[2].trim()}`);
+        }
+      }
+    }
+    flushCurrent();
+
+    if (categoryLines.length === 0) {
+      // Parsing found no categories at all — trust the raw reference over a possibly-empty result.
+      return raw;
+    }
+
+    return [...introLines, '', ...categoryLines].join('\n').trim();
+  } catch {
+    return raw;
+  }
+}
+
 async function loadCategoryReference(logger: ExtractionLogger | undefined, itemId: string): Promise<string> {
   if (cachedReference) {
     return cachedReference;
   }
 
   try {
-    const reference = await fs.readFile(CATEGORY_REFERENCE_PATH, 'utf8');
+    const rawReference = await fs.readFile(CATEGORY_REFERENCE_PATH, 'utf8');
+    const reference = compactTaxonomyReference(rawReference);
     cachedReference = reference;
-    logger?.debug?.({ msg: 'category reference loaded', itemId, referencePath: CATEGORY_REFERENCE_PATH });
+    logger?.debug?.({
+      msg: 'category reference loaded',
+      itemId,
+      referencePath: CATEGORY_REFERENCE_PATH,
+      rawLength: rawReference.length,
+      compactedLength: reference.length
+    });
     return reference;
   } catch (err) {
     logger?.error?.({ err, msg: 'failed to load category reference', itemId, referencePath: CATEGORY_REFERENCE_PATH });
