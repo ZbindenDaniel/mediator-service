@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+869. ✅ Remove duplicate Box/Regal-ID filter from activities view → [ui]
 868. ✅ Fix categorizer markdown response; repair to JSON + strengthen prompt → [agentic]
 867. ✅ Restore OverviewPanel on desktop; fix Liste button clearing selection → [ui]
 866. ✅ Fix reference-only items missing LastSyncedAt in item list query → [erp-sync]
@@ -47,4 +48,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 861. ✅ Contract-informed pipeline: SpecContext coalesces contract + Langtext + InstanceSpecs; structured review Step 3 → [agentic]
 860. ✅ Atomic label-queue claim (FOR UPDATE SKIP LOCKED); enables cross-instance shared printing → [printing]
 859. ✅ Atomic SELECT FOR UPDATE SKIP LOCKED claim query for multi-instance agentic safety → [agentic]
-858. ✅ Rewrite 14 SQLite-backed tests to Postgres mock pattern; removed from testPathIgnorePatterns → [testing]

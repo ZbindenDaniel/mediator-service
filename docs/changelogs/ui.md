@@ -4,6 +4,10 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 869. ✅ Remove duplicate Box/Regal-ID filter from activities view
+**Why:** The activities page had two inputs accepting box IDs: the main search field (which already accepts box/shelf IDs and passes them as `?term=` to the backend) and a separate "Box / Regal-ID" input that sent `&boxId=` in parallel. The duplicate was confusing and redundant. Removed `boxFilter` state, the `&boxId=` query param, the input element, and the now-dead `BOX_SHELF_PATTERN` log block.
+**Deferred:** Nothing.
+
 ## 867. ✅ Restore OverviewPanel on desktop; fix Liste button clearing selection
 **Why:** Commit 70e5638 added `@media (min-width: 901px)` CSS that hid `.app-shell__right` whenever `app-shell--mobile-list` class was active. Since `mobileShowDetail` initialises as `false`, the right panel (containing the OverviewPanel) was hidden on every page load on desktop. Removed the desktop-width block entirely — the right panel is always visible on desktop and the class only controls mobile slide animation. Also fixed the "← Liste" button to call `clearSelection()` in addition to `setMobileShowDetail(false)` so clicking it on desktop properly deselects the entity and reveals the OverviewPanel.
 **Deferred:** Nothing.

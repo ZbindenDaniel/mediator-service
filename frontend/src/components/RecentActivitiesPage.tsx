@@ -3,13 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import type { EventLog } from '../../../models';
 import { RecentEventsList } from './RecentEventsCard';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
-import { logger } from '../utils/logger';
-
 const DEFAULT_LIMIT = 50;
 // TODO(agent): Clean up duplicate search term parsing between URL state and local input.
-// TODO(agent): Monitor activities term filtering now that the feed request includes term data.
-// TODO(agent): Revisit activities search helper text once box/shelf search guidance is validated.
-const BOX_SHELF_PATTERN = /^[BS]-/i;
 
 export default function RecentActivitiesPage() {
   const [events, setEvents] = useState<EventLog[]>([]);
@@ -17,7 +12,6 @@ export default function RecentActivitiesPage() {
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [actorFilter, setActorFilter] = useState('');
-  const [boxFilter, setBoxFilter] = useState('');
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -50,19 +44,11 @@ export default function RecentActivitiesPage() {
         const termFromUrl = params.get('term') ?? '';
         const trimmed = (termFromUrl || searchTerm).trim();
         const termParam = trimmed ? `&term=${encodeURIComponent(trimmed)}` : '';
-        const boxParam = boxFilter.trim() ? `&boxId=${encodeURIComponent(boxFilter.trim())}` : '';
-        if (trimmed && BOX_SHELF_PATTERN.test(trimmed)) {
-          try {
-            logger.info('RecentActivitiesPage: box or shelf search term detected', { term: trimmed });
-          } catch (logError) {
-            console.error('RecentActivitiesPage: Failed to log box/shelf search term', logError);
-          }
-        }
         console.info('RecentActivitiesPage: fetching activities', {
           limit: DEFAULT_LIMIT,
           term: trimmed || undefined,
         });
-        const response = await fetch(`/api/activities?limit=${DEFAULT_LIMIT}${termParam}${boxParam}`);
+        const response = await fetch(`/api/activities?limit=${DEFAULT_LIMIT}${termParam}`);
         if (!response.ok) {
           throw new Error(`Aktivitäten konnten nicht geladen werden (Status ${response.status}).`);
         }
@@ -90,7 +76,7 @@ export default function RecentActivitiesPage() {
     return () => {
       cancelled = true;
     };
-  }, [location.search, searchTerm, boxFilter]);
+  }, [location.search, searchTerm]);
 
   const displayedEvents = useMemo(() => {
     const trimmed = actorFilter.trim().toLowerCase();
@@ -125,13 +111,6 @@ export default function RecentActivitiesPage() {
           onChange={event => setActorFilter(event.target.value)}
           placeholder="Akteur filtern"
           aria-label="Aktivitäten nach Akteur filtern"
-        />
-        <input
-          type="search"
-          value={boxFilter}
-          onChange={event => setBoxFilter(event.target.value)}
-          placeholder="Box / Regal-ID"
-          aria-label="Aktivitäten nach Box- oder Regal-ID filtern"
         />
       </div>
       {loading && <p className="muted">Aktivitäten werden geladen…</p>}
