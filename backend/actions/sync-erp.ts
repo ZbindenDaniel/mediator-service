@@ -723,6 +723,11 @@ const action = defineHttpAction({
       });
 
       if (scriptResult.exitCode === 0) {
+        if (scopedArtikelNummern.length > 0 && typeof ctx.markRefsSynced === 'function') {
+          void ctx.markRefsSynced(scopedArtikelNummern).catch(
+            (err: unknown) => console.error('[sync-erp] Failed to mark refs synced', err)
+          );
+        }
         return sendJson(res, 200, {
           ok: true,
           phase: 'script_finished',

@@ -1031,6 +1031,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           listItemReferences,
           listItemReferencesWithFilters,
           listItemsForExport,
+          markRefsSynced,
           listItemsWithFilters,
           updateAgenticReview,
           insertAgenticRunReviewHistoryEntry,
