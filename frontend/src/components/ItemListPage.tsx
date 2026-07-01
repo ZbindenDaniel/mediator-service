@@ -1005,8 +1005,8 @@ export default function ItemListPage() {
                     onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
                     value={sortDirection}
                   >
-                    <option value="asc">Aufsteigend</option>
                     <option value="desc">Absteigend</option>
+                    <option value="asc">Aufsteigend</option>
                   </select>
                 </label>
               </div>
