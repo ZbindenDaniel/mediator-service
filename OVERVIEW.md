@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+868. ✅ nginx /agent WebSocket location + requireAgentAuth fail-closed fix + worker compose profiles → [printing]
 867. ✅ Rewrite PLANNING_multi_instance.md to describe shipped architecture; cups/README.md notes dual deployment → [printing]
 866. ✅ Expose cloud cups container's port 631 (loopback-only, no basic auth) for local web-UI access → [printing]
 865. ✅ docker-compose.worker.yml + print-agent/Dockerfile shipping artifact; supports bundled CUPS or existing Pi-hosted CUPS → [printing]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 861. ✅ print-agent.ts standalone process + AGENT_TOKEN HTTP claim-job/status API for credential-free remote printing → [printing]
 860. ✅ Multi-location print routing foundation: TargetQueue schema, per-site resolvePrinterQueue, /agent WebSocket control plane → [printing]
 859. ✅ Atomic label-queue claim (FOR UPDATE SKIP LOCKED); enables cross-instance shared printing → [printing]
-858. ✅ Atomic SELECT FOR UPDATE SKIP LOCKED claim query for multi-instance agentic safety → [agentic]

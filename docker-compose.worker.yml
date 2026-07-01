@@ -10,6 +10,7 @@
 #      hostname/IP in .env; nothing else changes.
 services:
   cups:
+    profiles: [printing]
     build:
       context: ./cups
     container_name: mediator-worker-cups
@@ -30,6 +31,7 @@ services:
       start_period: 10s
 
   print-agent:
+    profiles: [printing]
     build:
       context: .
       dockerfile: print-agent/Dockerfile
