@@ -4,7 +4,7 @@ import os from 'os';
 import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { PUBLIC_ORIGIN } from '../config';
+import { PUBLIC_ORIGIN, ERP_SYNC_REQUIRE_APPROVAL } from '../config';
 import { ItemEinheit, normalizeItemEinheit, describeQuality } from '../../models';
 import type { LangtextPayload } from '../../models';
 import { CategoryFieldType, resolveCategoryCodeToLabel } from '../lib/categoryLabelLookup';
@@ -675,6 +675,86 @@ function resolveColumnsForHeaderRegime(
   return selected;
 }
 
+// Canonical agentic-approval check, shared by the published-status gate and the ERP approval filter.
+// ReviewState is authoritative when present; fall back to Status==='approved' for legacy status-only rows.
+export function resolveAgenticApproval(rawRow: Record<string, unknown>): {
+  approved: boolean;
+  agenticStatus: string | null;
+  agenticReviewState: string | null;
+} {
+  const parseAgenticState = (state: unknown): string | null => {
+    if (typeof state !== 'string') {
+      return null;
+    }
+    const normalized = state.trim().toLowerCase();
+    return normalized || null;
+  };
+
+  const agenticStatus = parseAgenticState(rawRow.AgenticStatus);
+  const agenticReviewState = parseAgenticState(rawRow.AgenticReviewState);
+  const approved = agenticReviewState !== null
+    ? agenticReviewState === 'approved'
+    : agenticStatus === 'approved';
+
+  return { approved, agenticStatus, agenticReviewState };
+}
+
+export interface ErpApprovalFilterResult {
+  approved: Record<string, unknown>[];
+  suppressed: Record<string, unknown>[];
+}
+
+// ERP exports must never carry unapproved items when approval is required (ERP_SYNC_REQUIRE_APPROVAL):
+// surfacing unreviewed AI-generated data to the live ERP/shop is considered too dangerous to allow.
+export function filterErpItemsByApproval(
+  items: Record<string, unknown>[],
+  options: { requireApproval?: boolean; logger?: Pick<Console, 'error' | 'info' | 'warn'> } = {}
+): ErpApprovalFilterResult {
+  const requireApproval = options.requireApproval ?? true;
+  const logger = options.logger ?? console;
+
+  if (!requireApproval) {
+    return { approved: items, suppressed: [] };
+  }
+
+  const approved: Record<string, unknown>[] = [];
+  const suppressed: Record<string, unknown>[] = [];
+
+  for (const item of items) {
+    let isApproved = false;
+    try {
+      ({ approved: isApproved } = resolveAgenticApproval(item));
+    } catch (error) {
+      // Fail closed: an item we cannot evaluate is treated as unapproved and excluded.
+      logger.error?.('[export-items] Failed to evaluate approval for ERP export item; excluding as unapproved.', {
+        itemUUID: typeof item.ItemUUID === 'string' ? item.ItemUUID : null,
+        artikelNummer: typeof item.Artikel_Nummer === 'string' ? item.Artikel_Nummer : null,
+        error
+      });
+      isApproved = false;
+    }
+
+    if (isApproved) {
+      approved.push(item);
+    } else {
+      suppressed.push(item);
+    }
+  }
+
+  if (suppressed.length > 0) {
+    logger.warn?.('[export-items] Excluded unapproved items from ERP export.', {
+      excludedCount: suppressed.length,
+      approvedCount: approved.length,
+      excludedItemUUIDs: suppressed
+        .map((item) => (typeof item.ItemUUID === 'string' ? item.ItemUUID : null))
+        .filter((value): value is string => Boolean(value))
+        .slice(0, 50)
+    });
+  }
+
+  return { approved, suppressed };
+}
+
 function toCsvValue(val: any): string {
   if (val === null || val === undefined) return '';
   const s = String(val);
@@ -842,17 +922,9 @@ function resolveExportValue(
   if (field === 'Veröffentlicht_Status') {
     const itemUUID = typeof rawRow.ItemUUID === 'string' ? rawRow.ItemUUID : null;
     const artikelNummer = typeof rawRow.Artikel_Nummer === 'string' ? rawRow.Artikel_Nummer : null;
-    const parseAgenticState = (state: unknown): string | null => {
-      if (typeof state !== 'string') {
-        return null;
-      }
-      const normalized = state.trim().toLowerCase();
-      return normalized || null;
-    };
 
     try {
-      const agenticStatus = parseAgenticState(rawRow.AgenticStatus);
-      const agenticReviewState = parseAgenticState(rawRow.AgenticReviewState);
+      const { approved: isApproved, agenticStatus, agenticReviewState } = resolveAgenticApproval(rawRow);
       const normalizedPublished = normalizePublishedStatus(value);
 
       if (agenticStatus === null && agenticReviewState === null) {
@@ -874,7 +946,6 @@ function resolveExportValue(
         return 0;
       }
 
-      const isApproved = agenticReviewState !== null ? agenticReviewState === 'approved' : agenticStatus === 'approved';
       // Gate requires both stored published flag and agentic approval — OR would publish unapproved items.
       const gatedPublished = normalizedPublished && isApproved;
 
@@ -1231,18 +1302,32 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
       groupingActive = false;
     }
 
-    let groupedRows = options.items;
+    // Single choke point for every ERP export path (sync-erp, export-items?mode=erp, export-data?mode=erp):
+    // unapproved items are dropped here so no ERP CSV can ever contain unreviewed data when approval is required.
+    let exportItems = options.items;
+    if (exportMode === 'erp' && ERP_SYNC_REQUIRE_APPROVAL) {
+      try {
+        const { approved } = filterErpItemsByApproval(options.items, { requireApproval: true, logger });
+        exportItems = approved;
+      } catch (approvalError) {
+        // Fail closed: if the approval filter itself throws, export nothing rather than risk leaking unapproved items.
+        logger.error?.('[export-items] ERP approval filtering failed; exporting no items to stay safe.', approvalError);
+        exportItems = [];
+      }
+    }
+
+    let groupedRows = exportItems;
     let mergedCount = 0;
     let clearedGroupedItemUUIDs = 0;
     if (groupingActive) {
       try {
-        const groupingResult = groupExportRows(options.items, logger);
+        const groupingResult = groupExportRows(exportItems, logger);
         groupedRows = groupingResult.groupedRows;
         mergedCount = groupingResult.mergedCount;
         clearedGroupedItemUUIDs = groupingResult.clearedGroupedItemUUIDs;
       } catch (groupingError) {
         logger.error?.('[export-items] Failed to group export rows; using raw rows instead.', groupingError);
-        groupedRows = options.items;
+        groupedRows = exportItems;
       }
     }
 

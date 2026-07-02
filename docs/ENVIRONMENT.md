@@ -147,6 +147,7 @@ Identifier values are validated against allowlist regexes (EAN: alphanumeric; se
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
 | `IMPORTER_FORCE_ZERO_STOCK` | `false` | Force incoming imports to zero stock values. |
+| `ERP_SYNC_REQUIRE_APPROVAL` | `true` | When true (default), only approved items are exported/synced to the ERP; unapproved items are excluded from `/api/sync/erp` and all ERP-mode exports (`/api/export/items?mode=erp`, `/api/export/data?mode=erp`). Backup-mode exports are unaffected. Set false only for controlled backfills. |
 | `ERP_IMPORT_INCLUDE_MEDIA` | `false` | Includes media files in ERP import flows. |
 | `ERP_IMPORT_URL` | (unset) | URL for ERP import POST requests. |
 | `ERP_IMPORT_USERNAME` | (unset) | HTTP basic auth username for ERP imports. |

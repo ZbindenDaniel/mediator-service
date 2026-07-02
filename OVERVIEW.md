@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+878. ✅ Gate ERP export/sync to approved items only (configurable via ERP_SYNC_REQUIRE_APPROVAL, default on) → [erp-sync]
 877. ✅ Route product-level attachments (Scope/Artikel_Nummer) so all instances of a product see them → [media]
 876. ✅ Fix agentic Abschliessen (always Freigegeben, drop numeric-only Artikel_Nummer guard) + delete now sticks (clear SearchQuery so idle-fill can't re-promote) → [agentic]
 875. ✅ Reuse JSON-correction agent to salvage schema-drifted extractions; plain-language retry hints → [agentic]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 871. ✅ Show filename on broken image in media gallery → [media]
 870. ✅ Activities: actor server-side, topic chips, clear button, Enter-to-submit both fields → [ui]
 869. ✅ Remove duplicate Box/Regal-ID filter from activities view → [ui]
-868. ✅ Fix categorizer markdown response; repair to JSON + strengthen prompt → [agentic]

@@ -2,9 +2,9 @@ import path from 'path';
 import fs from 'fs';
 import { spawn } from 'child_process';
 import type { IncomingMessage, ServerResponse } from 'http';
-import { stageItemsExport, type ItemsExportArtifact } from './export-items';
+import { stageItemsExport, filterErpItemsByApproval, type ItemsExportArtifact } from './export-items';
 import { defineHttpAction } from './index';
-import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED, LOCAL_MEDIA_DIR } from '../config';
+import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED, ERP_SYNC_REQUIRE_APPROVAL, LOCAL_MEDIA_DIR } from '../config';
 import { formatArtikelNummerForMedia, resolveMediaFolder } from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
 import { resolvePathWithinRoot } from '../lib/path-guard';
@@ -591,9 +591,32 @@ const action = defineHttpAction({
         });
       }
 
+      // Gate ERP sync to approved items before resolving media scope / marking refs synced, so those
+      // side effects only ever cover items that will actually be exported (ERP_SYNC_REQUIRE_APPROVAL).
+      const { approved: approvedItems, suppressed } = filterErpItemsByApproval(items, {
+        requireApproval: ERP_SYNC_REQUIRE_APPROVAL,
+        logger: console
+      });
+      if (suppressed.length > 0) {
+        console.warn('[sync-erp] unapproved_items_excluded', {
+          requestedCount: items.length,
+          approvedCount: approvedItems.length,
+          excludedCount: suppressed.length
+        });
+      }
+      if (approvedItems.length === 0) {
+        return sendJson(res, 422, {
+          ok: false,
+          phase: 'export_staged',
+          error: ERP_SYNC_REQUIRE_APPROVAL
+            ? 'No approved items to sync. ERP sync is limited to approved items (configurable via ERP_SYNC_REQUIRE_APPROVAL).'
+            : 'No matching items found for provided itemIds.'
+        });
+      }
+
       const boxes = typeof ctx.listBoxes === 'function' ? await ctx.listBoxes() : [];
-      const scopedArtikelNummern = resolveArtikelNummerMirrorScope(items, console);
-      const explicitMediaSources = resolveExplicitMediaMirrorSources(items, console);
+      const scopedArtikelNummern = resolveArtikelNummerMirrorScope(approvedItems, console);
+      const explicitMediaSources = resolveExplicitMediaMirrorSources(approvedItems, console);
       console.info('[sync-erp] script_item_scope', {
         requestedInstanceCount: itemIds.length,
         resolvedArtikelCount: scopedArtikelNummern.length,
@@ -623,13 +646,13 @@ const action = defineHttpAction({
         boxes: Array.isArray(boxes) ? boxes : [],
         exportMode: 'automatic_import',
         includeMedia: false,
-        items,
+        items: approvedItems,
         logger: console
       });
 
       console.info('[sync-erp] export_staged', {
         csvPath: stagedExport.itemsPath,
-        itemCount: items.length
+        itemCount: approvedItems.length
       });
 
       let scriptPath: string;

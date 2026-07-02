@@ -347,6 +347,10 @@ if (ERP_IMPORT_INCLUDE_MEDIA && !ERP_MEDIA_MIRROR_ENABLED) {
 }
 // TODO(agent): Add startup healthcheck coverage for ERP_SYNC_ENABLED + ERP_IMPORT_URL combinations.
 export const ERP_SYNC_ENABLED = parseBooleanFlag(process.env.ERP_SYNC_ENABLED, 'ERP_SYNC_ENABLED') ?? true;
+// Default true: pushing unreviewed AI-generated data to the live ERP/shop is considered too dangerous,
+// so only approved items are exported. Set false only for controlled backfills where approval is not required.
+export const ERP_SYNC_REQUIRE_APPROVAL =
+  parseBooleanFlag(process.env.ERP_SYNC_REQUIRE_APPROVAL, 'ERP_SYNC_REQUIRE_APPROVAL') ?? true;
 export const ERP_NIGHTLY_SYNC_ENABLED = parseBooleanFlag(process.env.ERP_NIGHTLY_SYNC_ENABLED, 'ERP_NIGHTLY_SYNC_ENABLED') ?? false;
 export const ERP_NIGHTLY_SYNC_HOUR = parseInt(process.env.ERP_NIGHTLY_SYNC_HOUR || '2', 10);
 export const ERP_IMPORT_URL = stripTrailingSlash((process.env.ERP_IMPORT_URL || '').trim());
@@ -477,6 +481,10 @@ export const ERP_IMPORT_CLIENT_ID = (process.env.ERP_IMPORT_CLIENT_ID || '').tri
 
 if (!ERP_SYNC_ENABLED) {
   console.info('[config] ERP sync disabled via ERP_SYNC_ENABLED flag.');
+}
+
+if (!ERP_SYNC_REQUIRE_APPROVAL) {
+  console.warn('[config] ERP_SYNC_REQUIRE_APPROVAL=false; unapproved items may be exported to the ERP.');
 }
 
 console.info('[config] Media root runtime configuration.', {
