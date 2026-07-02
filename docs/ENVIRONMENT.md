@@ -147,13 +147,16 @@ Identifier values are validated against allowlist regexes (EAN: alphanumeric; se
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
 | `IMPORTER_FORCE_ZERO_STOCK` | `false` | Force incoming imports to zero stock values. |
+| `ERP_SYNC_REQUIRE_APPROVAL` | `true` | When true (default), only approved items are exported/synced to the ERP; unapproved items are excluded from `/api/sync/erp` and all ERP-mode exports (`/api/export/items?mode=erp`, `/api/export/data?mode=erp`). Backup-mode exports are unaffected. Set false only for controlled backfills. |
+| `ERP_SYNC_ENABLED` | `true` | Gates the **nightly automated** sync only; manual `/api/sync/erp` and ERP-mode exports ignore it. Not a full "master switch". |
 | `ERP_IMPORT_INCLUDE_MEDIA` | `false` | Includes media files in ERP import flows. |
-| `ERP_IMPORT_URL` | (unset) | URL for ERP import POST requests. |
-| `ERP_IMPORT_USERNAME` | (unset) | HTTP basic auth username for ERP imports. |
-| `ERP_IMPORT_PASSWORD` | (unset) | HTTP basic auth password for ERP imports. |
+| `ERP_IMPORT_URL` | (unset) | **Required** for ERP sync — the kivitendo import endpoint (`.../controller.pl`) the sync script POSTs to. When unset, `/api/sync/erp` returns `503 credentials_missing`. |
+| `ERP_IMPORT_USERNAME` | (unset) | **Required** for ERP sync — login for the import (and the media-mirror WebDAV). Consumed by `backend/scripts/erp-sync.sh`; no longer hardcoded. |
+| `ERP_IMPORT_PASSWORD` | (unset) | **Required** for ERP sync — password for the import (and the media-mirror WebDAV). No longer hardcoded. |
 | `ERP_IMPORT_FORM_FIELD` | `file` | Form field name used to upload the import file. |
 | `ERP_IMPORT_TIMEOUT_MS` | `30000` | Timeout for ERP import requests. |
-| `ERP_IMPORT_CLIENT_ID` | (unset) | Optional client identifier for ERP imports. |
+| `ERP_IMPORT_CLIENT_ID` | `1` | kivitendo client id passed to the import; optional. |
+| `ERP_WEBDAV_SHOPBILDER_URL` | (unset) | Optional WebDAV endpoint for the ERP media-mirror stage (reuses `ERP_IMPORT_USERNAME`/`ERP_IMPORT_PASSWORD`). When unset, the mirror step skips gracefully and the CSV import still runs. |
 | `ERP_MEDIA_MIRROR_DIR` | Derived from `MEDIA_ROOT_DIR` | Mirror destination for `/api/sync/erp` media copy stage (`<root>/shopbilder-import`). Override only for controlled maintenance windows; keep runtime configuration aligned with the fixed root contract. |
 | `ERP_NIGHTLY_SYNC_ENABLED` | `false` | Sets the initial value of the nightly sync toggle in the database on first startup. After first run, the toggle is controlled from the admin page and this variable is ignored. |
 | `ERP_NIGHTLY_SYNC_HOUR` | `2` | UTC hour at which the nightly sync scheduler fires (0–23). The scheduler polls every 60 seconds and runs at most once per UTC day. |

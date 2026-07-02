@@ -4,6 +4,7 @@ import { createFsSandbox, type FsSandbox } from '../../test-utils/fs-sandbox';
 
 let serializeItemsToCsv: typeof import('../export-items').serializeItemsToCsv;
 let stageItemsExport: typeof import('../export-items').stageItemsExport;
+let filterErpItemsByApproval: typeof import('../export-items').filterErpItemsByApproval;
 let sandbox: FsSandbox;
 
 beforeAll(() => {
@@ -11,6 +12,7 @@ beforeAll(() => {
   const mod = sandbox.importFresh<typeof import('../export-items')>('../export-items', __dirname);
   serializeItemsToCsv = mod.serializeItemsToCsv;
   stageItemsExport = mod.stageItemsExport;
+  filterErpItemsByApproval = mod.filterErpItemsByApproval;
 });
 
 afterAll(async () => {
@@ -606,6 +608,104 @@ describe('export-items import contract header regimes', () => {
   });
 });
 
+
+describe('filterErpItemsByApproval', () => {
+  const approvedRow = { ItemUUID: 'approved-1', Artikel_Nummer: 'A-1', AgenticReviewState: 'approved' };
+  const legacyApprovedRow = { ItemUUID: 'approved-2', Artikel_Nummer: 'A-2', AgenticStatus: 'approved' };
+  const pendingRow = { ItemUUID: 'pending-1', Artikel_Nummer: 'A-3', AgenticReviewState: 'pending' };
+  const notRequiredRow = { ItemUUID: 'none-1', Artikel_Nummer: 'A-4', AgenticReviewState: 'not_required' };
+
+  test('keeps only approved items (canonical review state or legacy status) when approval required', () => {
+    const { approved, suppressed } = filterErpItemsByApproval(
+      [approvedRow, legacyApprovedRow, pendingRow, notRequiredRow],
+      { requireApproval: true }
+    );
+
+    expect(approved.map((r) => r.ItemUUID)).toEqual(['approved-1', 'approved-2']);
+    expect(suppressed.map((r) => r.ItemUUID)).toEqual(['pending-1', 'none-1']);
+  });
+
+  test('passes all items through unchanged when approval is not required', () => {
+    const items = [approvedRow, pendingRow, notRequiredRow];
+    const { approved, suppressed } = filterErpItemsByApproval(items, { requireApproval: false });
+
+    expect(approved).toBe(items);
+    expect(suppressed).toEqual([]);
+  });
+
+  test('logs an exclusion summary when items are suppressed', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    filterErpItemsByApproval([approvedRow, pendingRow], { requireApproval: true });
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[export-items] Excluded unapproved items from ERP export.',
+      expect.objectContaining({ excludedCount: 1, approvedCount: 1, excludedItemUUIDs: ['pending-1'] })
+    );
+
+    warnSpy.mockRestore();
+  });
+});
+
+describe('stageItemsExport ERP approval gating', () => {
+  const makeRow = (uuid: string, reviewState: string) => ({
+    Artikel_Nummer: `A-${uuid}`,
+    Artikeltyp: 'Laptop',
+    Datum_erfasst: '2024-01-01',
+    Grafikname: '',
+    Artikelbeschreibung: 'Test item',
+    Kurzbeschreibung: 'Short',
+    Langtext: 'Detail',
+    Hersteller: 'Example Inc',
+    Verkaufspreis: 199.99,
+    Auf_Lager: 1,
+    Veröffentlicht_Status: true,
+    Einheit: 'Stk',
+    ItemUUID: uuid,
+    AgenticReviewState: reviewState,
+    UpdatedAt: '2024-02-02T00:00:00.000Z'
+  });
+
+  const readItemsCsv = async (itemsPath: string): Promise<string> => {
+    // eslint-disable-next-line global-require, @typescript-eslint/no-var-requires
+    const fs = require('fs') as typeof import('fs');
+    return fs.promises.readFile(itemsPath, 'utf8');
+  };
+
+  test('erp export omits unapproved item rows (approval required by default)', async () => {
+    const staged = await stageItemsExport({
+      boxes: [],
+      exportMode: 'automatic_import',
+      includeMedia: false,
+      items: [makeRow('approved-uuid', 'approved'), makeRow('pending-uuid', 'pending')]
+    });
+
+    try {
+      const csv = await readItemsCsv(staged.itemsPath);
+      expect(csv).toContain('A-approved-uuid');
+      expect(csv).not.toContain('A-pending-uuid');
+    } finally {
+      await staged.cleanup();
+    }
+  });
+
+  test('backup export keeps unapproved item rows', async () => {
+    const staged = await stageItemsExport({
+      boxes: [],
+      exportMode: 'manual_import',
+      includeMedia: false,
+      items: [makeRow('approved-uuid', 'approved'), makeRow('pending-uuid', 'pending')]
+    });
+
+    try {
+      const csv = await readItemsCsv(staged.itemsPath);
+      expect(csv).toContain('A-approved-uuid');
+      expect(csv).toContain('A-pending-uuid');
+    } finally {
+      await staged.cleanup();
+    }
+  });
+});
 
 describe('export-items staging sandbox safety', () => {
   test('cleanup helper refuses to remove paths outside its sandbox root', async () => {

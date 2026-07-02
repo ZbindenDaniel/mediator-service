@@ -1,6 +1,7 @@
 # Todo
 
 ## Confirmed Decisions
+- **ERP export approval gate:** Only approved items may be exported/synced to the ERP — exporting unreviewed items is too dangerous. Enforced as a single choke point in `stageItemsExport` for `erp` mode (covers `/api/sync/erp`, `/api/export/items?mode=erp`, `/api/export/data?mode=erp`) plus an early filter in `sync-erp`. Configurable via `ERP_SYNC_REQUIRE_APPROVAL` (default `true`); backup-mode exports are unaffected.
 - **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.
 - **Item list conditional column:** A single date column slot appears only when sorting by `entryDate` or `lastSynced`, showing the relevant date. Other sort keys show no date column.
 - **Database:** PostgreSQL via `pg` (node-postgres). `DATABASE_URL` is required — no SQLite fallback. Local dev: Docker Compose Postgres service. Production: existing Postgres server, add a `mediator` database. Data migration from SQLite: `scripts/migrate-sqlite-to-postgres.ts`.
@@ -27,6 +28,7 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0y1. ✅ **Leaked ERP sync credentials removed and rotated.** The kivitendo `csvimport` login/password (and controller/WebDAV URLs) were hardcoded in `backend/scripts/erp-sync.sh`; they are now sourced from env (`ERP_IMPORT_USERNAME`/`PASSWORD`/`URL`, `ERP_WEBDAV_SHOPBILDER_URL`) and the old password has been rotated on the ERP side. The pre-rotation password remains in git history but is now dead. See erp-sync changelog #880.
 0y2. ✅ **Container "mediator is unhealthy" on existing databases.** The `events.Meta`→jsonb migration in `initDb()` cast every legacy `Meta` value to jsonb unconditionally on each boot; one non-JSON/empty legacy row threw `invalid input syntax for type json`, rejecting the schema batch → `process.exit(1)` → healthcheck never passed. Fresh DBs (CI/first run) passed because the table was empty. Fixed: guarded, one-time migration that sanitizes non-JSON legacy `Meta` to NULL before the cast (`backend/db.ts`, see docs-infra changelog #878).
 
 0x. ✅ **Product-level attachments now shared across all instances.** `item_attachments` gained `Scope`/`Artikel_Nummer` columns; the "Artikel (Produktebene)" upload sends `X-Attachment-Scope: product`, is stored under `products/<artikelnummer>/`, and every instance of the product lists and can delete it (delete-for-all). Previously the choice only wrote a cosmetic `artikel:` label. The binding modal now also appears when a product option exists (renewed purpose for 0g). **Deferred:** no backfill of pre-existing `artikel:`-labeled rows — they stay instance-bound until re-uploaded. See media changelog.

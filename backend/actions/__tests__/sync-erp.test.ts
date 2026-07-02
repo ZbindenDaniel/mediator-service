@@ -197,11 +197,67 @@ describe('sync-erp payload normalization', () => {
     fs.rmSync(path.join(MEDIA_DIR, mediaFolder), { recursive: true, force: true });
   });
 
+  it('refuses to sync when no requested items are approved (approval required by default)', async () => {
+    const req = createJsonRequest({ itemIds: ['I-PENDING-0001'] });
+    const { res, getStatus, getBody } = createMockResponse();
+    const ctx = {
+      listItemsForExport: jest.fn(async () => [
+        { ItemUUID: 'I-PENDING-0001', Artikel_Nummer: '123', AgenticReviewState: 'pending' }
+      ]),
+      listBoxes: jest.fn(async () => []),
+      markRefsSynced: jest.fn(async () => undefined)
+    };
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(422);
+    expect(getBody()).toEqual(
+      expect.objectContaining({
+        ok: false,
+        phase: 'export_staged',
+        error: expect.stringContaining('No approved items to sync')
+      })
+    );
+    // Nothing was synced, so refs must not be marked as synced.
+    expect(ctx.markRefsSynced).not.toHaveBeenCalled();
+  });
+
+  it('refuses to sync with 503 when ERP credentials are not configured', async () => {
+    // Credentials are read from config constants (captured at import time). The jest environment has
+    // no ERP_IMPORT_* configured — the same default the rest of this suite relies on — so the preflight
+    // must reject before any script execution.
+    const req = createJsonRequest({ itemIds: ['I-APPROVED-0001'] });
+    const { res, getStatus, getBody } = createMockResponse();
+    const ctx = {
+      // Approved with a valid Artikel_Nummer so the request reaches the credential preflight.
+      listItemsForExport: jest.fn(async () => [
+        { ItemUUID: 'I-APPROVED-0001', Artikel_Nummer: '123', AgenticReviewState: 'approved' }
+      ]),
+      listBoxes: jest.fn(async () => []),
+      markRefsSynced: jest.fn(async () => undefined)
+    };
+
+    await action.handle(req, res, ctx);
+
+    expect(getStatus()).toBe(503);
+    expect(getBody()).toEqual(
+      expect.objectContaining({
+        ok: false,
+        phase: 'credentials_missing',
+        error: expect.stringContaining('ERP sync credentials are not configured')
+      })
+    );
+    expect(ctx.markRefsSynced).not.toHaveBeenCalled();
+  });
+
   it('fails fast with 422 when no Artikelnummer values can be resolved', async () => {
     const req = createJsonRequest({ itemIds: ['I-MISSING-0001'] });
     const { res, getStatus, getBody } = createMockResponse();
     const ctx = {
-      listItemsForExport: jest.fn(async () => [{ ItemUUID: 'I-MISSING-0001', Artikel_Nummer: null }]),
+      // Approved so the request passes the approval gate and reaches Artikelnummer-scope resolution.
+      listItemsForExport: jest.fn(async () => [
+        { ItemUUID: 'I-MISSING-0001', Artikel_Nummer: null, AgenticReviewState: 'approved' }
+      ]),
       listBoxes: jest.fn(async () => [])
     };
 

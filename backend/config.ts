@@ -347,11 +347,18 @@ if (ERP_IMPORT_INCLUDE_MEDIA && !ERP_MEDIA_MIRROR_ENABLED) {
 }
 // TODO(agent): Add startup healthcheck coverage for ERP_SYNC_ENABLED + ERP_IMPORT_URL combinations.
 export const ERP_SYNC_ENABLED = parseBooleanFlag(process.env.ERP_SYNC_ENABLED, 'ERP_SYNC_ENABLED') ?? true;
+// Default true: pushing unreviewed AI-generated data to the live ERP/shop is considered too dangerous,
+// so only approved items are exported. Set false only for controlled backfills where approval is not required.
+export const ERP_SYNC_REQUIRE_APPROVAL =
+  parseBooleanFlag(process.env.ERP_SYNC_REQUIRE_APPROVAL, 'ERP_SYNC_REQUIRE_APPROVAL') ?? true;
 export const ERP_NIGHTLY_SYNC_ENABLED = parseBooleanFlag(process.env.ERP_NIGHTLY_SYNC_ENABLED, 'ERP_NIGHTLY_SYNC_ENABLED') ?? false;
 export const ERP_NIGHTLY_SYNC_HOUR = parseInt(process.env.ERP_NIGHTLY_SYNC_HOUR || '2', 10);
 export const ERP_IMPORT_URL = stripTrailingSlash((process.env.ERP_IMPORT_URL || '').trim());
 export const ERP_IMPORT_USERNAME = (process.env.ERP_IMPORT_USERNAME || '').trim();
 export const ERP_IMPORT_PASSWORD = (process.env.ERP_IMPORT_PASSWORD || '').trim();
+// Optional WebDAV endpoint for the ERP media mirror stage (reuses ERP_IMPORT_USERNAME/PASSWORD).
+// When unset, erp-sync.sh's media mirror step skips gracefully; the CSV import still runs.
+export const ERP_WEBDAV_SHOPBILDER_URL = stripTrailingSlash((process.env.ERP_WEBDAV_SHOPBILDER_URL || '').trim());
 export const ERP_IMPORT_FORM_FIELD = (process.env.ERP_IMPORT_FORM_FIELD || 'file').trim() || 'file';
 // TODO(agent-erp-form-overrides): Promote ERP import overrides into a dedicated schema-driven config module.
 export const ERP_IMPORT_FORM_SEPARATOR = (process.env.ERP_IMPORT_FORM_SEPARATOR || 'comma').trim() || 'comma';
@@ -477,6 +484,22 @@ export const ERP_IMPORT_CLIENT_ID = (process.env.ERP_IMPORT_CLIENT_ID || '').tri
 
 if (!ERP_SYNC_ENABLED) {
   console.info('[config] ERP sync disabled via ERP_SYNC_ENABLED flag.');
+}
+
+if (!ERP_SYNC_REQUIRE_APPROVAL) {
+  console.warn('[config] ERP_SYNC_REQUIRE_APPROVAL=false; unapproved items may be exported to the ERP.');
+}
+
+// Credentials for the ERP sync script are no longer hardcoded — an unconfigured sync now fails fast.
+if (ERP_SYNC_ENABLED && !(ERP_IMPORT_USERNAME && ERP_IMPORT_PASSWORD && ERP_IMPORT_URL)) {
+  const missing = [
+    !ERP_IMPORT_USERNAME && 'ERP_IMPORT_USERNAME',
+    !ERP_IMPORT_PASSWORD && 'ERP_IMPORT_PASSWORD',
+    !ERP_IMPORT_URL && 'ERP_IMPORT_URL'
+  ].filter(Boolean);
+  console.warn(
+    `[config] ERP sync credentials incomplete (missing ${missing.join(', ')}); /api/sync/erp will fail until configured.`
+  );
 }
 
 console.info('[config] Media root runtime configuration.', {
