@@ -143,6 +143,7 @@ body {
     white-space: nowrap;
     flex-shrink: 0;
     color: inherit;
+
     &:hover {
         background: var(--hover-bg, #e8eaed);
     }
@@ -410,6 +411,7 @@ button {
     .app-shell--mobile-list .app-shell__right {
         display: none;
     }
+
     .app-shell--mobile-list .panel-main {
         flex: 0 0 100%;
     }
@@ -1362,7 +1364,10 @@ div {
     font-size: 0.8rem;
     color: #b03a14;
 
-    em { font-style: normal; font-weight: 600; }
+    em {
+        font-style: normal;
+        font-weight: 600;
+    }
 }
 
 .contract-field-row__input-row {
@@ -1370,7 +1375,10 @@ div {
     gap: 6px;
     align-items: center;
 
-    input { flex: 1; min-width: 0; }
+    input {
+        flex: 1;
+        min-width: 0;
+    }
 }
 
 .contract-field-row__remove {
@@ -1383,7 +1391,10 @@ div {
     cursor: pointer;
     font-size: 0.8rem;
 
-    &:hover { color: var(--danger, #c0392b); border-color: var(--danger, #c0392b); }
+    &:hover {
+        color: var(--danger, #c0392b);
+        border-color: var(--danger, #c0392b);
+    }
 }
 
 .review-dialog__extra-specs {
@@ -2413,6 +2424,7 @@ button:focus {
     background: var(--bg, #f6f8fa);
     font-size: 0.8rem;
     cursor: pointer;
+
     &.is-active {
         background: var(--fg, #24292f);
         color: var(--bg-inv, #fff);
@@ -2424,13 +2436,18 @@ button:focus {
     gap: 6px;
     flex-wrap: wrap;
     margin-top: 4px;
+    flex-direction: row;
+    justify-content: center;
 }
 
 .btn--ghost {
     background: none;
     border: 1px solid var(--line, #d0d0d0);
     color: var(--text-secondary, #555);
-    &:hover { background: var(--hover-bg, #e8eaed); }
+
+    &:hover {
+        background: var(--hover-bg, #e8eaed);
+    }
 }
 
 .pill {

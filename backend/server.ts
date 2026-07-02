@@ -651,7 +651,7 @@ setInterval(() => {
 }, 60_000);
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<any> {
   try {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    // console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
     if (!req.url) {
       sendJson(res, 400, { error: 'Bad request' });
       return;
@@ -960,7 +960,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     const action = actions.find((a) => a.matches?.(url.pathname, req.method || 'GET'));
     if (action) {
       try {
-        console.log('Handling action', action.key);
+        // console.log('Handling action', action.key);
         // TODO(agent): Formalize ItemUUID generator typing once action contexts are consolidated.
         const generateItemId = async (artikelNummer: string | null | undefined) =>
           generateSequentialItemUUID(artikelNummer, {
