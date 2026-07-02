@@ -334,17 +334,20 @@ CREATE INDEX IF NOT EXISTS idx_item_relations_parent ON item_relations("ParentIt
 CREATE INDEX IF NOT EXISTS idx_item_relations_child  ON item_relations("ChildItemUUID");
 
 CREATE TABLE IF NOT EXISTS item_attachments (
-  "Id"        SERIAL PRIMARY KEY,
-  "ItemUUID"  TEXT NOT NULL,
-  "FileName"  TEXT NOT NULL,
-  "FilePath"  TEXT NOT NULL,
-  "MimeType"  TEXT,
-  "Label"     TEXT,
-  "FileSize"  INTEGER,
-  "CreatedAt" TEXT NOT NULL
+  "Id"             SERIAL PRIMARY KEY,
+  "ItemUUID"       TEXT NOT NULL,
+  "FileName"       TEXT NOT NULL,
+  "FilePath"       TEXT NOT NULL,
+  "MimeType"       TEXT,
+  "Label"          TEXT,
+  "FileSize"       INTEGER,
+  "CreatedAt"      TEXT NOT NULL,
+  "Scope"          TEXT NOT NULL DEFAULT 'instance',
+  "Artikel_Nummer" TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_item_attachments_item ON item_attachments("ItemUUID");
+CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
 
 CREATE TABLE IF NOT EXISTS agentic_runs (
   "Id"                 SERIAL PRIMARY KEY,
@@ -427,6 +430,9 @@ ALTER TABLE item_refs ADD COLUMN IF NOT EXISTS "LastSyncedAt" TEXT;
 ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedAt" TEXT;
 ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedBy" TEXT;
 ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "Confidence" FLOAT;
+ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Scope" TEXT NOT NULL DEFAULT 'instance';
+ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Artikel_Nummer" TEXT;
+CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
 ALTER TABLE events ALTER COLUMN "Meta" TYPE jsonb USING CASE WHEN "Meta" IS NULL THEN NULL ELSE "Meta"::jsonb END;
 CREATE INDEX IF NOT EXISTS idx_events_meta_gin ON events USING GIN("Meta");
 `);

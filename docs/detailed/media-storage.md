@@ -8,7 +8,7 @@ concepts with different identifiers, lifecycle rules, and access patterns.
 | Storage concept | Identifier used | Written by service | Example use |
 |---|---|---|---|
 | Item media (photos) | `Artikel_Nummer` | Yes | Product photos uploaded in item gallery |
-| Item attachments | `ItemUUID` | Yes | Per-unit PDFs, scans, purchase records |
+| Item attachments | `ItemUUID` (instance) or `Artikel_Nummer` (product) | Yes | Per-unit PDFs/scans, or product-level docs shared across all instances |
 | Alternative document directories | `EAN`, `SerialNumber`, or `MacAddress` | No — read-only | Wipe reports, test certificates from external systems |
 
 ---
@@ -62,43 +62,59 @@ to enable the WebDAV read root. See `docs/ENVIRONMENT.md` for full configuration
 
 ## 2. Item attachments
 
-Item attachments are per-instance files (PDFs, scans, invoices, certificates) uploaded directly by
-operators. They are tracked in the `item_attachments` database table.
+Item attachments are files (PDFs, scans, invoices, certificates) uploaded directly by operators. They
+are tracked in the `item_attachments` database table and come in two **scopes**:
+
+- **Instance scope** (`Scope='instance'`, the default) — bound to one `ItemUUID`. Only that physical unit
+  sees the file.
+- **Product scope** (`Scope='product'`) — bound to the item's `Artikel_Nummer`. **Every instance of that
+  product sees the file.** Used for datasheets, manuals, and other product-level documents.
 
 ### Storage layout
 
 ```
 dist/media/
   instances/
-    I-123456-0001/
+    I-123456-0001/        ← instance-scoped: keyed by ItemUUID
       wipe-report.pdf
       purchase-receipt.pdf
     I-123456-0002/
       ...
+  products/
+    000123/               ← product-scoped: keyed by Artikel_Nummer (zero-padded to 6, see media.ts)
+      datasheet.pdf
+      manual.pdf
 ```
 
-The folder is keyed by `ItemUUID`, making attachments per-instance rather than per-product. Two instances
-of the same Artikel_Nummer have independent attachment folders.
+Instance folders are keyed by `ItemUUID`; product folders by `Artikel_Nummer`
+(`formatArtikelNummerForMedia()`). The product number is always derived server-side from the item row on
+upload — a client-supplied value is never trusted as a path segment.
 
 ### API surface
 
 | Method | Route | Action |
 |---|---|---|
-| `GET` | `/api/item/:itemUUID/attachments` | List all attachments for an instance |
+| `GET` | `/api/item/:itemUUID/attachments` | List this instance's own files **plus** product-level files for its `Artikel_Nummer` |
 | `POST` | `/api/item/:itemUUID/attachments` | Upload a file (body = raw bytes, `X-Filename` header required) |
-| `DELETE` | `/api/item/:itemUUID/attachments/:id` | Remove a single attachment by DB id |
+| `DELETE` | `/api/item/:itemUUID/attachments/:id` | Remove a single attachment by DB id (product-scoped rows are removable from any sibling instance — delete-for-all) |
 
 **Upload constraints:**
 - Maximum file size: 50 MB
 - Filename is sanitised: only `[a-zA-Z0-9._-]` characters are kept
 - `X-Label` header: optional human-readable label stored in the DB
+- `X-Attachment-Scope` header: `product` routes the file to product scope (requires the item to have an
+  `Artikel_Nummer`, else `400`); anything else (or omitted) defaults to `instance`
+
+The list query returns `WHERE "ItemUUID" = $1 OR ("Scope"='product' AND "Artikel_Nummer" = $2)`, so a
+product-level upload made from one instance is visible to all siblings. The same widened query backs the
+attachments shown in the item-detail payload (`backend/actions/save-item.ts`).
 
 **Events logged:** `AttachmentAdded`, `AttachmentRemoved` (entity type `Item`, entity ID = `ItemUUID`).
 
 ### Known limitations
 
-- No automatic folder cleanup when an item is deleted; orphaned `instances/<ItemUUID>/` directories must
-  be removed manually.
+- No automatic folder cleanup when an item or product is deleted; orphaned `instances/<ItemUUID>/` and
+  `products/<Artikel_Nummer>/` directories must be removed manually.
 - Attachments are not included in ZIP exports (media bundling was removed once WebDAV became the primary
   storage; re-evaluate if backup exports need per-unit attachments).
 
@@ -290,8 +306,8 @@ All media operations (uploads, deletes, mirrors, external-doc serves) emit struc
 
 | Gap | Notes |
 |---|---|
-| Artikel_Nummer-keyed item attachments | Attachments still use ItemUUID as the folder key |
-| Automatic cleanup on item delete | Orphaned folders must be removed manually (by design — no cascade delete) |
+| Backfill of legacy product attachments | Pre-existing `artikel:`-labeled rows stay instance-bound (`Scope='instance'`); only new uploads route to product scope |
+| Automatic cleanup on item/product delete | Orphaned `instances/` and `products/` folders must be removed manually (by design — no cascade delete) |
 | Filesystem readiness check for ERP mirror target | TODO in `backend/actions/sync-erp.ts` |
 | Queryable media manifest API | TODO in `backend/actions/export-items.ts` — would enable CSV derivation |
 

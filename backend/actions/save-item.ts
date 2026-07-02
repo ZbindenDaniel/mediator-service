@@ -952,10 +952,14 @@ const action = defineHttpAction({
             `, [item.Artikel_Nummer]);
           }
 
+          // Include product-level attachments (shared across all instances of the Artikel_Nummer)
+          // alongside this instance's own files.
           attachments = await dbQuery(`
-            SELECT "Id", "ItemUUID", "FileName", "FilePath", "MimeType", "Label", "FileSize", "CreatedAt"
-            FROM item_attachments WHERE "ItemUUID" = $1 ORDER BY "CreatedAt" DESC
-          `, [resolvedItemId]);
+            SELECT "Id", "ItemUUID", "FileName", "FilePath", "MimeType", "Label", "FileSize", "CreatedAt", "Scope", "Artikel_Nummer"
+            FROM item_attachments
+            WHERE "ItemUUID" = $1 OR ("Scope" = 'product' AND "Artikel_Nummer" = $2)
+            ORDER BY "CreatedAt" DESC
+          `, [resolvedItemId, item.Artikel_Nummer ?? null]);
         } catch (relationErr) {
           console.error('[save-item] Failed to load relations/attachments for item detail', {
             itemId,
