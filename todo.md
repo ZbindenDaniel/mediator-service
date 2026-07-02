@@ -27,6 +27,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0y2. ✅ **Container "mediator is unhealthy" on existing databases.** The `events.Meta`→jsonb migration in `initDb()` cast every legacy `Meta` value to jsonb unconditionally on each boot; one non-JSON/empty legacy row threw `invalid input syntax for type json`, rejecting the schema batch → `process.exit(1)` → healthcheck never passed. Fresh DBs (CI/first run) passed because the table was empty. Fixed: guarded, one-time migration that sanitizes non-JSON legacy `Meta` to NULL before the cast (`backend/db.ts`, see docs-infra changelog #878).
+
 0x. ✅ **Product-level attachments now shared across all instances.** `item_attachments` gained `Scope`/`Artikel_Nummer` columns; the "Artikel (Produktebene)" upload sends `X-Attachment-Scope: product`, is stored under `products/<artikelnummer>/`, and every instance of the product lists and can delete it (delete-for-all). Previously the choice only wrote a cosmetic `artikel:` label. The binding modal now also appears when a product option exists (renewed purpose for 0g). **Deferred:** no backfill of pre-existing `artikel:`-labeled rows — they stay instance-bound until re-uploaded. See media changelog.
 
 0t. ✅ **Agentic delete silent failure + "← Liste" button on desktop fixed** (see OVERVIEW 848).

@@ -433,7 +433,36 @@ ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "Confidence" FLOAT;
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Scope" TEXT NOT NULL DEFAULT 'instance';
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Artikel_Nummer" TEXT;
 CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
-ALTER TABLE events ALTER COLUMN "Meta" TYPE jsonb USING CASE WHEN "Meta" IS NULL THEN NULL ELSE "Meta"::jsonb END;
+-- Convert legacy TEXT "Meta" to jsonb exactly once. Guarded so it does not rewrite the
+-- table on every boot, and legacy non-JSON rows are coerced to NULL first — otherwise a
+-- single malformed value makes the cast (and thus initDb) throw, aborting startup and
+-- leaving the container permanently unhealthy on any pre-existing database.
+CREATE OR REPLACE FUNCTION mediator_is_valid_json(txt text) RETURNS boolean AS $fn$
+BEGIN
+  IF txt IS NULL THEN RETURN true; END IF;
+  PERFORM txt::jsonb;
+  RETURN true;
+EXCEPTION WHEN others THEN
+  RETURN false;
+END;
+$fn$ LANGUAGE plpgsql IMMUTABLE;
+
+DO $do$
+DECLARE
+  col_type text;
+BEGIN
+  SELECT data_type INTO col_type
+    FROM information_schema.columns
+    WHERE table_name = 'events' AND column_name = 'Meta';
+  IF col_type IS NOT NULL AND col_type <> 'jsonb' THEN
+    UPDATE events SET "Meta" = NULL
+      WHERE "Meta" IS NOT NULL AND NOT mediator_is_valid_json("Meta");
+    ALTER TABLE events
+      ALTER COLUMN "Meta" TYPE jsonb
+      USING CASE WHEN "Meta" IS NULL THEN NULL ELSE "Meta"::jsonb END;
+  END IF;
+END
+$do$;
 CREATE INDEX IF NOT EXISTS idx_events_meta_gin ON events USING GIN("Meta");
 `);
 
