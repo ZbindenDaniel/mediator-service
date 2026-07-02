@@ -347,7 +347,10 @@ CREATE TABLE IF NOT EXISTS item_attachments (
 );
 
 CREATE INDEX IF NOT EXISTS idx_item_attachments_item ON item_attachments("ItemUUID");
-CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
+-- NB: the index on "Artikel_Nummer" is created in the additive-migration batch below,
+-- after the ALTER that adds that column — creating it here would abort initDb on any
+-- pre-existing DB whose item_attachments table predates the column (CREATE TABLE IF NOT
+-- EXISTS is a no-op there, so the column would still be missing at this point).
 
 CREATE TABLE IF NOT EXISTS agentic_runs (
   "Id"                 SERIAL PRIMARY KEY,
