@@ -154,8 +154,10 @@ Additionally, when model-result processing transitions a run into pending review
 ## Frontend entry points and backend mappings
 - Item detail review submit:
   - `frontend/src/components/ItemDetail.tsx` builds payload via `buildAgenticReviewSubmissionPayload(...)` and posts to `/agentic/review`.
-- Item detail close:
+- Item detail close (`Abschliessen`):
   - Uses `persistAgenticRunClose(...)` (`frontend/src/lib/agentic.ts`) to call `/agentic/close`.
+  - Quick "skip the run and approve" shortcut: always finalizes as `approved` (Freigegeben) regardless of automation trigger signals; reviewers who want to reject use the full Review checklist instead.
+  - Only rejects the request for ItemUUID (`I-`) keys — Artikel_Nummers are alphanumeric (`A-100`), so there is no numeric-only guard.
 - Item detail restart:
   - Posts restart payload to `/agentic/restart`, then conditionally retriggers `/api/agentic/run`.
   - If retrigger fails, calls persisted cancel helper to avoid stale intermediate state.
