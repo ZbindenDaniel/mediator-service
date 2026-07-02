@@ -7,4 +7,7 @@ export interface ItemAttachment {
   Label: string | null;
   FileSize: number | null;
   CreatedAt: string;
+  // 'instance' = bound to this ItemUUID; 'product' = shared across all instances of Artikel_Nummer
+  Scope: string;
+  Artikel_Nummer: string | null;
 }

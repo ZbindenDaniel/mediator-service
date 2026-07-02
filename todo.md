@@ -27,6 +27,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0x. ✅ **Product-level attachments now shared across all instances.** `item_attachments` gained `Scope`/`Artikel_Nummer` columns; the "Artikel (Produktebene)" upload sends `X-Attachment-Scope: product`, is stored under `products/<artikelnummer>/`, and every instance of the product lists and can delete it (delete-for-all). Previously the choice only wrote a cosmetic `artikel:` label. The binding modal now also appears when a product option exists (renewed purpose for 0g). **Deferred:** no backfill of pre-existing `artikel:`-labeled rows — they stay instance-bound until re-uploaded. See media changelog.
+
 0t. ✅ **Agentic delete silent failure + "← Liste" button on desktop fixed** (see OVERVIEW 848).
 
 0s. ✅ **Lagerort link, duplicate fetch, price/image columns fixed** (see OVERVIEW 847).

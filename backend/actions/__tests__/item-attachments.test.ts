@@ -100,9 +100,9 @@ describe('item-attachments action', () => {
 
     it('returns attachment list for existing item', async () => {
       const attachments = [
-        { Id: 1, FileName: 'doc.pdf', FilePath: 'instances/test-uuid/doc.pdf', MimeType: 'application/pdf', Label: null, FileSize: 1024, CreatedAt: '2024-01-01' }
+        { Id: 1, FileName: 'doc.pdf', FilePath: 'instances/test-uuid/doc.pdf', MimeType: 'application/pdf', Label: null, FileSize: 1024, CreatedAt: '2024-01-01', Scope: 'instance', Artikel_Nummer: null }
       ];
-      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid', Artikel_Nummer: '12345' });
       mockQuery.mockResolvedValue(attachments);
       const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/test-uuid/attachments', 'GET');
@@ -113,6 +113,21 @@ describe('item-attachments action', () => {
       expect(getStatus()).toBe(200);
       expect(getBody().attachments).toHaveLength(1);
       expect(getBody().attachments[0].FileName).toBe('doc.pdf');
+    });
+
+    it('queries product-level attachments by the item Artikel_Nummer', async () => {
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid', Artikel_Nummer: '12345' });
+      mockQuery.mockResolvedValue([]);
+      const ctx = { logEvent: jest.fn() };
+      const req = makeRequest('/api/item/test-uuid/attachments', 'GET');
+      const { res } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      // widened query includes the product clause and passes the item's Artikel_Nummer as $2
+      const [sql, params] = mockQuery.mock.calls[0];
+      expect(sql).toMatch(/"Scope" = 'product' AND "Artikel_Nummer" = \$2/);
+      expect(params).toEqual(['test-uuid', '12345']);
     });
 
     it('returns empty list when item has no attachments', async () => {
@@ -155,6 +170,48 @@ describe('item-attachments action', () => {
       expect(meta.fileName).toBe('document.pdf');
       expect(meta.mimeType).toBe('application/pdf');
       expect(meta.fileSize).toBe(fileData.length);
+    });
+
+    it('routes a product-scoped upload to the product folder and stores Artikel_Nummer', async () => {
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid', Artikel_Nummer: '12345' });
+      mockInsert.mockResolvedValue({ Id: 7 });
+      const writeSpy = jest.spyOn(fs, 'writeFileSync');
+      const ctx = { logEvent: jest.fn() };
+      const req = makeRequest('/api/item/test-uuid/attachments', 'POST', {
+        'x-filename': 'manual.pdf',
+        'content-type': 'application/pdf',
+        'x-attachment-scope': 'product'
+      }, Buffer.from('data'));
+      const { res, getStatus, getBody } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      expect(getStatus()).toBe(201);
+      // Artikel_Nummer 12345 is zero-padded to 6 digits for the media folder
+      expect(getBody().relativePath).toBe('products/012345/manual.pdf');
+      const insertParams = mockInsert.mock.calls[0][1];
+      expect(insertParams).toContain('product');       // Scope
+      expect(insertParams).toContain('12345');          // Artikel_Nummer
+      expect(insertParams).toContain('products/012345/manual.pdf'); // FilePath
+      const writtenPath = writeSpy.mock.calls[writeSpy.mock.calls.length - 1][0] as string;
+      expect(writtenPath).toContain('products');
+    });
+
+    it('rejects a product-scoped upload when the item has no Artikel_Nummer', async () => {
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid', Artikel_Nummer: null });
+      const ctx = { logEvent: jest.fn() };
+      const req = makeRequest('/api/item/test-uuid/attachments', 'POST', {
+        'x-filename': 'manual.pdf',
+        'content-type': 'application/pdf',
+        'x-attachment-scope': 'product'
+      }, Buffer.from('data'));
+      const { res, getStatus, getBody } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      expect(getStatus()).toBe(400);
+      expect(getBody().error).toMatch(/Artikel_Nummer/);
+      expect(ctx.logEvent).not.toHaveBeenCalled();
     });
 
     it('records optional label in Meta when X-Label header is provided', async () => {
@@ -254,10 +311,30 @@ describe('item-attachments action', () => {
       expect(meta.fileName).toBe('old.pdf');
     });
 
+    it('deletes a product-level attachment from a sibling instance (delete-for-all)', async () => {
+      // sibling-uuid does not own the row, but it shares the product Artikel_Nummer
+      mockQueryOne
+        .mockReturnValueOnce(Promise.resolve({ ItemUUID: 'sibling-uuid', Artikel_Nummer: '12345' }))
+        .mockReturnValueOnce(Promise.resolve({ Id: 5, FileName: 'manual.pdf', FilePath: 'products/012345/manual.pdf' }));
+      const ctx = { logEvent: jest.fn() };
+      const req = makeRequest('/api/item/sibling-uuid/attachments/5', 'DELETE');
+      const { res, getStatus, getBody } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      expect(getStatus()).toBe(200);
+      expect(getBody().ok).toBe(true);
+      // delete SQL matches by owning instance OR shared product number
+      const [delSql, delParams] = mockExecute.mock.calls[0];
+      expect(delSql).toMatch(/"Scope" = 'product' AND "Artikel_Nummer" = \$3/);
+      expect(delParams).toEqual([5, 'sibling-uuid', '12345']);
+      expect(ctx.logEvent).toHaveBeenCalledWith(expect.objectContaining({ Event: 'AttachmentRemoved' }));
+    });
+
     it('returns 404 when attachment does not exist', async () => {
       // First queryOne = item exists; second queryOne = attachment not found
       mockQueryOne
-        .mockReturnValueOnce(Promise.resolve({ ItemUUID: 'test-uuid' }))
+        .mockReturnValueOnce(Promise.resolve({ ItemUUID: 'test-uuid', Artikel_Nummer: null }))
         .mockReturnValueOnce(Promise.resolve(null));
       const ctx = { logEvent: jest.fn() };
       const req = makeRequest('/api/item/test-uuid/attachments/99', 'DELETE');

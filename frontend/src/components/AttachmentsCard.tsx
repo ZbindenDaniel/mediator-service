@@ -139,6 +139,8 @@ export default function AttachmentsCard({
           'X-Filename': file.name
         };
         if (label) headers['X-Label'] = label;
+        // 'artikel' binding routes to product scope so every instance of the product sees the file.
+        if (binding.type === 'artikel') headers['X-Attachment-Scope'] = 'product';
         const res = await fetch(`/api/item/${encodeURIComponent(itemUUID)}/attachments`, {
           method: 'POST', headers, body: file
         });
@@ -178,10 +180,9 @@ export default function AttachmentsCard({
     if (!file) return;
     const ids = { artikelNummer, serialNumber, macAddress, ean };
     const options = buildBindingOptions(itemUUID, ids, externalDocs);
-    // only show the binding choice modal when there is at least one external dir to route to;
-    // without ALT_DOC_DIRS all options share the same endpoint so the choice adds no value
-    const hasExternalOption = options.some(o => o.endpoint.kind === 'external');
-    if (!hasExternalOption) {
+    // Show the binding choice whenever there is a real routing decision — a product-level
+    // ('artikel') option and/or an external dir. With only the instance option there is no choice.
+    if (options.length <= 1) {
       doUpload(file, options[0]);
     } else {
       setPendingFile(file);
@@ -260,7 +261,9 @@ export default function AttachmentsCard({
                         </a>
                       </td>
                       <td className="muted" style={{ fontSize: '0.85em' }}>
-                        {binding ? bindingBadgeText(binding.type) : att.Label || null}
+                        {att.Scope === 'product'
+                          ? 'Artikel (alle Instanzen)'
+                          : binding ? bindingBadgeText(binding.type) : att.Label || null}
                       </td>
                       <td className="muted">{att.MimeType || ''}</td>
                       <td className="muted">{formatBytes(att.FileSize)}</td>
