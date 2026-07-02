@@ -56,7 +56,7 @@
   - `restart-review-metadata.test.ts` covers 3 of 4 restart truth-table cases from `review-flow.md`; case 3 (`review` provided + `replaceReviewMetadata=true`) is not tested.
   - `item-flow-pricing.test.ts` threshold test uses values below both gates simultaneously — cannot verify the documented `confidence >= 0.6 AND evidenceCount >= 2` thresholds independently from the test alone.
   - Categorizer `__locked` field behavior (`item-flow.md`: "Locked fields are preserved and not overwritten") is asserted nowhere in the test suite; only appears as fixture setup data.
-  - `backend/actions/agentic-delete.ts` has no test coverage.
+  - `backend/actions/agentic-delete.ts` HTTP handler still has no direct test; the underlying `deleteAgenticRun` service is now covered by `test/agentic-delete-reset.test.ts` (reset clears SearchQuery; not-started decline).
   - No production telemetry yet confirms the pricing stage actually hits the same unrecognized-shape failure mode as the categorizer did — the hardening in #872/0y is defensive; revisit once pricing transcripts are reviewed to see how often it triggers.
   - Follow-up `__searchQueries` not hard-blocked by `skipSearch` is a documented known gap in `item-flow.md` but no test pins the current inconsistent behavior to catch if it changes.
 
@@ -83,7 +83,7 @@
 1h. ✅ **Created vs Updated events** — import-item checks existence before persist; save-item uses existingReference to decide; both add structured Meta.
 
 1c. **Investigate remaining tester-reported bugs (need runtime testing):**
-   - "KI lauf kann nicht geloescht werden" — `agentic-delete.ts` looks correct; check browser network tab for 400/404 response and whether `actor` is sent in request body
+   - ✅ "KI lauf kann nicht geloescht werden" — root cause: `deleteAgenticRun` reset the run to `notStarted` but kept its `SearchQuery`, so the idle-fill dispatcher re-promoted it within ~5s. Fixed by clearing `SearchQuery`/`LastSearchLinksJson` on reset (OVERVIEW 876). Also fixed: Abschliessen never reached the backend (numeric-only Artikel_Nummer guard) and now always finalizes as Freigegeben.
    - "ki erfassung indefinite" — agentic capture stuck; stale-run recovery now reliably clears stuck RUNNING runs (fire-and-forget race fixed); auto-retry re-queues after backoff. If still stuck, check model service callback.
    - "bearbeiten fehler, KI-Status nicht angezeigt" — `save-item.ts` silently sets `agentic = null` on fetch error; check if `getAgenticRun` errors after migration
    - "list button broken" — unclear; may self-resolve now that box-detail is fixed

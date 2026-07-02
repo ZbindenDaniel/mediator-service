@@ -2468,16 +2468,10 @@ export default function ItemDetail({ itemId }: Props) {
       return;
     }
 
-    const triggerStates = agenticReviewAutomation?.triggerStates;
-    const derivedDecision = triggerStates && (
-      triggerStates.information_present_low_trigger
-      || triggerStates.bad_format_trigger
-      || triggerStates.wrong_information_trigger
-      || triggerStates.wrong_physical_dimensions_trigger
-      || triggerStates.missing_spec_trigger
-    )
-      ? 'rejected'
-      : 'approved';
+    // Abschliessen is the "skip the run and approve quickly" shortcut, so it always finalizes
+    // as approved (Freigegeben) regardless of automation trigger signals. Reviewers who want to
+    // reject based on those signals use the full Review checklist flow instead.
+    const derivedDecision = 'approved' as const;
 
     const noteInput = await promptAgenticCloseNote();
     if (noteInput === null) {

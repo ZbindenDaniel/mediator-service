@@ -4,7 +4,7 @@ Covers: item photos, file attachments, external docs (EAN/Serial/MAC-keyed), Web
 
 ---
 
-## 876. ✅ Route product-level attachments so all instances of a product see them
+## 877. ✅ Route product-level attachments so all instances of a product see them
 **Why:** The "Artikel (Produktebene)" binding was cosmetic — the file was still stored against a single `ItemUUID` and only listed for that instance, so sibling instances of the same `Artikel_Nummer` never saw it (the deferred gap from #760/#761). Gave `item_attachments` a product scope: added `Scope` (default `'instance'`) and `Artikel_Nummer` columns; product uploads send `X-Attachment-Scope: product`, are written under `dist/media/products/<artikelnummer>/`, and stored with `Scope='product'`. The product folder is derived server-side from the item row via `formatArtikelNummerForMedia()` — the client-supplied number is never trusted. Both read paths (the GET endpoint and the item-detail payload in `save-item.ts`) now return `WHERE "ItemUUID" = $1 OR ("Scope"='product' AND "Artikel_Nummer" = $2)`. Deleting a product-level attachment from any instance removes it for all (delete-for-all), matching its shared nature. The binding modal now appears whenever a real routing choice exists (product and/or external), not only for external dirs.
 **Deferred:** No backfill of existing `artikel:`-labeled attachments — they remain instance-bound until re-uploaded (per product decision). Automatic cleanup of `products/<nr>/` folders on product delete (consistent with the existing no-cascade policy for instance attachments).
 

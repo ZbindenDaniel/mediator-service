@@ -1609,14 +1609,16 @@ export async function deleteAgenticRun(
 
       await deps.upsertAgenticRun({
         Artikel_Nummer: artikelNummer,
-        SearchQuery: existing.SearchQuery ?? null,
+        // Clear SearchQuery/LastSearchLinksJson: a reset run that keeps a SearchQuery is
+        // immediately re-promoted by the idle-fill dispatcher, so the deletion never sticks.
+        SearchQuery: null,
         Status: AGENTIC_RUN_STATUS_NOT_STARTED,
         LastModified: nowIso,
         ReviewState: 'not_required',
         ReviewedBy: null,
         LastReviewDecision: null,
         LastReviewNotes: null,
-        LastSearchLinksJson: existing.LastSearchLinksJson ?? null
+        LastSearchLinksJson: null
       });
 
       try {
