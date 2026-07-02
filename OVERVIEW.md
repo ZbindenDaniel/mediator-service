@@ -37,8 +37,9 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
-879. ✅ Remove hardcoded ERP sync credentials; read from env + fail fast (503) when unconfigured → [erp-sync]
-878. ✅ Gate ERP export/sync to approved items only (configurable via ERP_SYNC_REQUIRE_APPROVAL, default on) → [erp-sync]
+880. ✅ Remove hardcoded ERP sync credentials; read from env + fail fast (503) when unconfigured → [erp-sync]
+879. ✅ Gate ERP export/sync to approved items only (configurable via ERP_SYNC_REQUIRE_APPROVAL, default on) → [erp-sync]
+878. ✅ Fix "container mediator is unhealthy": guard events.Meta→jsonb migration so legacy non-JSON rows can't abort initDb startup → [docs-infra]
 877. ✅ Route product-level attachments (Scope/Artikel_Nummer) so all instances of a product see them → [media]
 876. ✅ Fix agentic Abschliessen (always Freigegeben, drop numeric-only Artikel_Nummer guard) + delete now sticks (clear SearchQuery so idle-fill can't re-promote) → [agentic]
 875. ✅ Reuse JSON-correction agent to salvage schema-drifted extractions; plain-language retry hints → [agentic]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 873. ✅ Audit all agentic prompts; thread spec-contract field descriptions into extraction guidance → [agentic]
 872. ✅ Harden categorizer/pricing against valid-JSON-wrong-shape model responses (silent null categories) → [agentic]
 871. ✅ Show filename on broken image in media gallery → [media]
-870. ✅ Activities: actor server-side, topic chips, clear button, Enter-to-submit both fields → [ui]
