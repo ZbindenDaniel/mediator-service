@@ -28,6 +28,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0y1. **Rotate the leaked ERP sync credentials.** The kivitendo `csvimport` login/password (and controller/WebDAV URLs) were hardcoded in `backend/scripts/erp-sync.sh` and are now sourced from env (`ERP_IMPORT_USERNAME`/`PASSWORD`/`URL`, `ERP_WEBDAV_SHOPBILDER_URL`). Removing them from the working tree does **not** purge git history — the old password is still recoverable from prior commits and must be rotated on the ERP side, then set via the environment. See erp-sync changelog #879.
+
 0x. ✅ **Product-level attachments now shared across all instances.** `item_attachments` gained `Scope`/`Artikel_Nummer` columns; the "Artikel (Produktebene)" upload sends `X-Attachment-Scope: product`, is stored under `products/<artikelnummer>/`, and every instance of the product lists and can delete it (delete-for-all). Previously the choice only wrote a cosmetic `artikel:` label. The binding modal now also appears when a product option exists (renewed purpose for 0g). **Deferred:** no backfill of pre-existing `artikel:`-labeled rows — they stay instance-bound until re-uploaded. See media changelog.
 
 0t. ✅ **Agentic delete silent failure + "← Liste" button on desktop fixed** (see OVERVIEW 848).

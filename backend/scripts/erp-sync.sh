@@ -11,12 +11,14 @@
 # temporären Datei ausgegeben, in der der HTML-Code der Fehlermeldung
 # sichtbar ist. Exit-Code ist dann 2.
 
-# ---- Logindaten und URL anpassen: ----
-login='csvimport'
-password='B9kc!O-?b*w=i8<'
-client_id='1'
-url='https://revamp.kivitendo.ch/kivitendo-erp/controller.pl'
-webdav_shopbilder_url='https://revamp.kivitendo.ch/edit/shopbilder'
+# ---- Credentials and endpoints come from the environment (see backend/config.ts / .env). ----
+# No secrets are stored in this script. The Node caller (backend/actions/sync-erp.ts) injects these
+# from the configured ERP_IMPORT_* values; a missing value is a hard failure (see the guard below).
+login="${ERP_IMPORT_USERNAME:-}"
+password="${ERP_IMPORT_PASSWORD:-}"
+client_id="${ERP_IMPORT_CLIENT_ID:-1}"
+url="${ERP_IMPORT_URL:-}"
+webdav_shopbilder_url="${ERP_WEBDAV_SHOPBILDER_URL:-}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIRROR_SCRIPT_PATH="$SCRIPT_DIR/erp-media-mirror.sh"
@@ -25,6 +27,16 @@ function fail {
   echo "$@"
   exit 1
 }
+
+# Fail fast if the ERP sync credentials/endpoint are not configured, rather than silently
+# attempting an unauthenticated import. The media-mirror WebDAV URL is optional (it skips when unset).
+missing_config=""
+[ -z "$login" ] && missing_config+=" ERP_IMPORT_USERNAME"
+[ -z "$password" ] && missing_config+=" ERP_IMPORT_PASSWORD"
+[ -z "$url" ] && missing_config+=" ERP_IMPORT_URL"
+if [ -n "$missing_config" ]; then
+  fail "[erp-sync] credentials_missing: ERP sync is not configured. Set the following environment variable(s):${missing_config}."
+fi
 
 
 resolve_positive_integer_or_default() {

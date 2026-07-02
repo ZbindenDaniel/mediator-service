@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+879. ✅ Remove hardcoded ERP sync credentials; read from env + fail fast (503) when unconfigured → [erp-sync]
 878. ✅ Gate ERP export/sync to approved items only (configurable via ERP_SYNC_REQUIRE_APPROVAL, default on) → [erp-sync]
 877. ✅ Route product-level attachments (Scope/Artikel_Nummer) so all instances of a product see them → [media]
 876. ✅ Fix agentic Abschliessen (always Freigegeben, drop numeric-only Artikel_Nummer guard) + delete now sticks (clear SearchQuery so idle-fill can't re-promote) → [agentic]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 872. ✅ Harden categorizer/pricing against valid-JSON-wrong-shape model responses (silent null categories) → [agentic]
 871. ✅ Show filename on broken image in media gallery → [media]
 870. ✅ Activities: actor server-side, topic chips, clear button, Enter-to-submit both fields → [ui]
-869. ✅ Remove duplicate Box/Regal-ID filter from activities view → [ui]

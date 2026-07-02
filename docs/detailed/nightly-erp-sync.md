@@ -61,7 +61,10 @@ Operators change the toggle from the admin page (NightlyErpSyncCard). The change
 |---|---|---|
 | `ERP_NIGHTLY_SYNC_ENABLED` | `false` | Sets the DB toggle on first startup only. Subsequent changes must be made via the admin page. |
 | `ERP_NIGHTLY_SYNC_HOUR` | `2` | UTC hour at which the scheduler runs (0–23). Changing this requires a restart. |
-| `ERP_SYNC_ENABLED` | (see config.ts) | Master ERP switch — nightly sync is skipped entirely when this is false. |
+| `ERP_SYNC_ENABLED` | `true` | Gates the **nightly automated** sync only — the tick is skipped entirely when false. It does **not** block manual syncs: `/api/sync/erp` and the ERP-mode exports ignore this flag. Also surfaced (read-only) on the admin page as `erpSyncEnabled`. |
+| `ERP_IMPORT_USERNAME` / `ERP_IMPORT_PASSWORD` / `ERP_IMPORT_URL` | (unset) | Required credentials/endpoint for the ERP sync script. When any is missing, `/api/sync/erp` fails fast with `503 credentials_missing` (nightly sync therefore no-ops too). No longer hardcoded in `backend/scripts/erp-sync.sh`. |
+| `ERP_IMPORT_CLIENT_ID` | `1` | kivitendo client id passed to the import; optional. |
+| `ERP_WEBDAV_SHOPBILDER_URL` | (unset) | Optional WebDAV endpoint for the media-mirror stage (reuses the username/password above). When unset, the mirror step skips gracefully and the CSV import still runs. |
 
 ---
 

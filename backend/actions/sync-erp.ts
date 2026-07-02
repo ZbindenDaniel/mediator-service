@@ -4,7 +4,17 @@ import { spawn } from 'child_process';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { stageItemsExport, filterErpItemsByApproval, type ItemsExportArtifact } from './export-items';
 import { defineHttpAction } from './index';
-import { ERP_MEDIA_MIRROR_DIR, ERP_MEDIA_MIRROR_ENABLED, ERP_SYNC_REQUIRE_APPROVAL, LOCAL_MEDIA_DIR } from '../config';
+import {
+  ERP_MEDIA_MIRROR_DIR,
+  ERP_MEDIA_MIRROR_ENABLED,
+  ERP_SYNC_REQUIRE_APPROVAL,
+  ERP_IMPORT_USERNAME,
+  ERP_IMPORT_PASSWORD,
+  ERP_IMPORT_URL,
+  ERP_IMPORT_CLIENT_ID,
+  ERP_WEBDAV_SHOPBILDER_URL,
+  LOCAL_MEDIA_DIR
+} from '../config';
 import { formatArtikelNummerForMedia, resolveMediaFolder } from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
 import { resolvePathWithinRoot } from '../lib/path-guard';
@@ -322,6 +332,19 @@ function deriveLastObservedPhase(output: string): string | null {
   return lastObservedPhase;
 }
 
+// Matching failure mode for removed hardcoded credentials: refuse to run the sync when the ERP
+// login/password/endpoint are not configured, instead of attempting an unauthenticated import.
+export function resolveErpSyncCredentialError(): string | null {
+  const missing: string[] = [];
+  if (!ERP_IMPORT_USERNAME) missing.push('ERP_IMPORT_USERNAME');
+  if (!ERP_IMPORT_PASSWORD) missing.push('ERP_IMPORT_PASSWORD');
+  if (!ERP_IMPORT_URL) missing.push('ERP_IMPORT_URL');
+  if (missing.length === 0) {
+    return null;
+  }
+  return `ERP sync credentials are not configured. Set: ${missing.join(', ')}.`;
+}
+
 export function buildErpSyncScriptEnv(
   mediaSourceFiles: string[],
   mediaMirrorDir: string | null,
@@ -331,7 +354,14 @@ export function buildErpSyncScriptEnv(
     ...process.env,
     ERP_MEDIA_SOURCE_DIR: mediaSourceDir,
     // Contract: ERP_SYNC_ITEM_IDS is newline-delimited; entries may contain commas (e.g. GVFS/WebDAV paths).
-    ERP_SYNC_ITEM_IDS: mediaSourceFiles.join('\n')
+    ERP_SYNC_ITEM_IDS: mediaSourceFiles.join('\n'),
+    // Credentials/endpoints come from config (never hardcoded in erp-sync.sh). Injecting the normalized
+    // config values guarantees the script sees trimmed values regardless of the inherited environment.
+    ERP_IMPORT_USERNAME,
+    ERP_IMPORT_PASSWORD,
+    ERP_IMPORT_URL,
+    ERP_IMPORT_CLIENT_ID,
+    ERP_WEBDAV_SHOPBILDER_URL
   };
 
   if (mediaMirrorDir) {
@@ -637,6 +667,18 @@ const action = defineHttpAction({
           ok: false,
           phase: 'export_staged',
           error: 'No Artikelnummer values resolved for media mirroring scope.'
+        });
+      }
+
+      // Preflight: credentials are no longer hardcoded in erp-sync.sh, so refuse cleanly here rather
+      // than spawning the script for an unauthenticated import that would fail deep in curl.
+      const credentialError = resolveErpSyncCredentialError();
+      if (credentialError) {
+        console.error('[sync-erp] credentials_missing', { error: credentialError });
+        return sendJson(res, 503, {
+          ok: false,
+          phase: 'credentials_missing',
+          error: credentialError
         });
       }
 
