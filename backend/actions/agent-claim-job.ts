@@ -110,7 +110,7 @@ const action = defineHttpAction({
       }
       try {
         const html = await renderItemJobHtml(job);
-        return sendJson(res, 200, { job: { id: job.Id, itemUUID: job.ItemUUID }, html });
+        return sendJson(res, 200, { job: { id: job.Id, itemUUID: job.ItemUUID, targetQueue: job.TargetQueue ?? null }, html });
       } catch (err) {
         console.error('[agent-claim-job] Failed to render claimed job', job.Id, err);
         await updateLabelJobStatus(job.Id, 'Error', (err as Error).message);

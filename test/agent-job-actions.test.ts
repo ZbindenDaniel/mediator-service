@@ -77,13 +77,13 @@ describe('agent-claim-job action', () => {
   });
 
   test('renders and returns HTML for a claimed job', async () => {
-    claimMock.mockResolvedValueOnce({ Id: 1, ItemUUID: 'ITEM-1' });
+    claimMock.mockResolvedValueOnce({ Id: 1, ItemUUID: 'ITEM-1', TargetQueue: 'ShopQueue' });
     getItemMock.mockResolvedValueOnce({ ItemUUID: 'ITEM-1', Artikel_Nummer: 'A-1', Einheit: 'Stück' });
     const { res, getStatus, getBody } = createMockResponse();
     const req = createRequest('/api/agent/claim-job', { authorization: 'Bearer correct-token' }, { queues: ['ShopQueue'] });
     await claimAction.handle(req, res, {});
     expect(getStatus()).toBe(200);
-    expect(getBody().job).toEqual({ id: 1, itemUUID: 'ITEM-1' });
+    expect(getBody().job).toEqual({ id: 1, itemUUID: 'ITEM-1', targetQueue: 'ShopQueue' });
     expect(getBody().html).toContain('<html>');
   });
 

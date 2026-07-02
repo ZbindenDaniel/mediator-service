@@ -94,8 +94,9 @@ async function claimAndPrintOnce(): Promise<void> {
   try {
     const { status, json } = await apiRequest('POST', '/api/agent/claim-job', { queues: QUEUES });
     if (status !== 200 || !json?.job) return;
-    const { job, html } = json as { job: { id: number; itemUUID: string }; html: string };
-    const queue = QUEUES[0];
+    const { job, html } = json as { job: { id: number; itemUUID: string; targetQueue: string | null }; html: string };
+    // Use the job's TargetQueue when set; fall back to QUEUES[0] for legacy untargeted jobs.
+    const queue = job.targetQueue ?? QUEUES[0];
     if (!queue) {
       console.error('[print-agent] Claimed job but no local queue configured', job.id);
       await apiRequest('POST', `/api/agent/jobs/${job.id}/status`, { status: 'Error', error: 'no_local_queue_configured' });

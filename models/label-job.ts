@@ -5,4 +5,5 @@ export interface LabelJob {
   Status: string;
   Error?: string | null;
   ClaimedAt?: string | null;
+  TargetQueue?: string | null;
 }
