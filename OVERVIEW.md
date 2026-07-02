@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+876. ✅ Fix agentic Abschliessen (always Freigegeben, drop numeric-only Artikel_Nummer guard) + delete now sticks (clear SearchQuery so idle-fill can't re-promote) → [agentic]
 875. ✅ Reuse JSON-correction agent to salvage schema-drifted extractions; plain-language retry hints → [agentic]
 874. ✅ Shrink categorizer prompt (~34% off taxonomy reference) to reduce context-overflow risk → [agentic]
 873. ✅ Audit all agentic prompts; thread spec-contract field descriptions into extraction guidance → [agentic]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 869. ✅ Remove duplicate Box/Regal-ID filter from activities view → [ui]
 868. ✅ Fix categorizer markdown response; repair to JSON + strengthen prompt → [agentic]
 867. ✅ Restore OverviewPanel on desktop; fix Liste button clearing selection → [ui]
-866. ✅ Fix reference-only items missing LastSyncedAt in item list query → [erp-sync]
