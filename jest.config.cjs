@@ -8,6 +8,7 @@ module.exports = {
     '**/backend/integrations/**/__tests__/**/*.test.ts',
     '**/backend/**/__tests__/**/*.test.ts',
     '**/frontend/src/components/__tests__/**/*.test.tsx',
+    '**/frontend/src/utils/__tests__/**/*.test.ts',
     '**/scripts/__tests__/**/*.test.ts'
   ],
   testPathIgnorePatterns: [

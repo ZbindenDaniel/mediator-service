@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+882. ✅ Hardware barcode scanners no longer submit forms: global capture-phase keystroke-timing guard swallows the scanner's trailing Enter (human Enter-to-submit preserved) → [scanning]
 881. ✅ Fix production initDb crash-loop: move premature item_attachments("Artikel_Nummer") index after the ALTER that adds the column (unblocks Confidence migration too) → [docs-infra]
 880. ✅ Remove hardcoded ERP sync credentials; read from env + fail fast (503) when unconfigured → [erp-sync]
 879. ✅ Gate ERP export/sync to approved items only (configurable via ERP_SYNC_REQUIRE_APPROVAL, default on) → [erp-sync]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 875. ✅ Reuse JSON-correction agent to salvage schema-drifted extractions; plain-language retry hints → [agentic]
 874. ✅ Shrink categorizer prompt (~34% off taxonomy reference) to reduce context-overflow risk → [agentic]
 873. ✅ Audit all agentic prompts; thread spec-contract field descriptions into extraction guidance → [agentic]
-872. ✅ Harden categorizer/pricing against valid-JSON-wrong-shape model responses (silent null categories) → [agentic]
