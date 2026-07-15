@@ -19,6 +19,7 @@ import AdminPage from './AdminPage';
 import PlacementScanView from './PlacementScanView';
 import StubListPage from './StubListPage';
 import HilfePage from './HilfePage';
+import { createScanDetector } from '../utils/scannerDetection';
 
 // TODO(agent): Confirm admin-only shelf create route visibility expectations with product.
 
@@ -80,6 +81,21 @@ export function AppRoutes() {
 }
 
 export default function App() {
+  useEffect(() => {
+    const detector = createScanDetector();
+    const onKeyDown = (event: KeyboardEvent) => {
+      // Capture phase runs before React handlers and native implicit form submission, so
+      // cancelling the scanner's trailing Enter here stops any form from submitting. Only
+      // machine-fast Enter bursts are cancelled; human Enter-to-submit is preserved.
+      if (detector.observe(event.key, event.timeStamp, event.repeat)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+
   return (
     <Router>
       <DialogProvider>
