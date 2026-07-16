@@ -9,6 +9,7 @@ import {
   updateItemInstanceSpecs,
   getMaxArtikelNummer,
   getMaxItemId,
+  logEvent,
 } from '../db';
 import { queryOne } from '../db-client';
 import { generateItemUUID } from '../lib/itemIds';
@@ -108,6 +109,22 @@ async function ensureItem(
     Auf_Lager: 1,
     SerialNumber: serial ?? undefined,
     MacAddress: mac ?? undefined,
+  });
+
+  // Intake creates instances directly, bypassing add-item/import-item, so emit the
+  // Created event here — otherwise intake-born items have an empty audit trail and
+  // appear "out of nowhere" (only findable by number, with no logs).
+  await logEvent({
+    Actor: 'intake-station',
+    EntityType: 'Item',
+    EntityId: itemUUID,
+    Event: 'Created',
+    Meta: JSON.stringify({
+      source: 'intake',
+      artikelNummer,
+      serial: serial ?? null,
+      mac: mac ?? null,
+    }),
   });
 
   return itemUUID;
