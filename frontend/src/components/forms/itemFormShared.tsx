@@ -1199,9 +1199,10 @@ export function ItemDetailsFields({
         <label>
           Kurzbeschreibung
         </label>
-        <input
+        <textarea
           value={form.Kurzbeschreibung || ''}
           onChange={(e) => onUpdate('Kurzbeschreibung', e.target.value)}
+          rows={3}
         />
       </div>
 

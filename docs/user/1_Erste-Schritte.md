@@ -15,9 +15,9 @@ Oben im Bildschirm findest du die Navigation:
 | **+** | Neuen Artikel erfassen |
 | Listen-Symbol | Alle Artikel |
 | Karton-Symbol | Alle Behälter und Regale |
-| Puls-Symbol | Letzte Aktivitäten |
-| Etiketten-Symbol | Unbearbeitete Kisten (Fundsachen) |
-| Zahnrad-Symbol | Administration |
+| Log-Symbol | Letzte Aktivitäten |
+| Geschenck-Symbol | Unbearbeitete Kisten (Fundsachen) |
+| Schlüssel-Symbol | Administration |
 | Fragezeichen | Diese Hilfeseite |
 | Suchfeld | Direkt nach Artikel, Behälter-ID oder Beschreibung suchen |
 

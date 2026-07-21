@@ -1,0 +1,130 @@
+@base_url = https://192.168.10.178
+@serial = SN12345001
+@intake_key = SN:{{serial}}
+@intake_token = 123456
+@auth_token = YWRtaW46bDFuMnhrM3JuNGwh
+@artikel_nummer = ABC123
+@vendor = ExampleVendor
+@description = Example item description
+@quality_condition = good
+@quality_comment = No visible damage
+@upload_filename = intake-scan.txt
+@upload_file = ./intake-scan.txt
+
+### Start intake
+POST {{base_url}}/api/intake/start
+Authorization: Basic {{auth_token}} 
+X-Intake-Token: {{intake_token}}
+Content-Type: application/json
+
+{
+  "serial": "{{serial}}",
+  "mac": "aa:bb:cc:dd:ee:ff",
+  "vendor": "ExampleVendor",
+  "model": "ExampleModel",
+  "cpu": "Example CPU",
+  "ramMb": 8192,
+  "disks": [
+    {
+      "name": "sda",
+      "sizeGb": 256,
+      "type": "ssd"
+    }
+  ],
+  "batteryPercent": 95
+}
+
+### Answer ref with existing artikelNummer
+POST {{base_url}}/api/intake/{{intake_key}}/answer
+Authorization: Basic {{auth_token}} 
+X-Intake-Token: {{intake_token}}
+Content-Type: application/json
+
+{
+  "type": "ref",
+  "artikelNummer": "{{artikel_nummer}}",
+  "scanPayload": {
+    "serial": "{{serial}}",
+    "mac": "aa:bb:cc:dd:ee:ff",
+    "vendor": "ExampleVendor",
+    "model": "ExampleModel",
+    "cpu": "Example CPU",
+    "ramMb": 8192,
+    "disks": [
+      {
+        "name": "sda",
+        "sizeGb": 256,
+        "type": "ssd"
+      }
+    ],
+    "batteryPercent": 95
+  }
+}
+
+### Answer ref by creating a new reference
+POST {{base_url}}/api/intake/{{intake_key}}/answer
+Authorization: Basic {{auth_token}} 
+X-Intake-Token: {{intake_token}}
+Content-Type: application/json
+
+{
+  "type": "ref",
+  "newRef": {
+    "Hersteller": "{{vendor}}",
+    "Kurzbeschreibung": "{{description}}",
+    "Hauptkategorien_A": 20,
+    "Unterkategorien_A": 201
+  },
+  "scanPayload": {
+    "serial": "{{serial}}",
+    "mac": "aa:bb:cc:dd:ee:ff",
+    "vendor": "revamp",
+    "model": "M2",
+    "cpu": "I5",
+    "ramMb": 8192,
+    "disks": [
+      {
+        "name": "sda",
+        "sizeGb": 256,
+        "type": "ssd"
+      }
+    ],
+    "batteryPercent": 95
+  }
+}
+
+### Submit quality feedback
+POST {{base_url}}/api/intake/{{intake_key}}/answer
+Authorization: Basic {{auth_token}} 
+X-Intake-Token: {{intake_token}}
+Content-Type: application/json
+
+{
+  "type": "quality",
+  "qualityAnswers": {
+    "condition": "{{quality_condition}}",
+    "comment": "{{quality_comment}}"
+  },
+  "instanceSpecs": {
+    "RAM": "8 GB",
+    "Speicher": "256 GB SSD"
+  }
+}
+
+### Complete intake
+POST {{base_url}}/api/intake/{{intake_key}}/complete
+Authorization: Basic {{auth_token}} 
+X-Intake-Token: {{intake_token}}
+Content-Type: application/json
+
+{}
+
+
+### Upload Doc
+POST {{base_url}}/api/items/{{intake_key}}/external-docs/intake-scans
+Authorization: Basic {{auth_token}} 
+X-Intake-Token: {{intake_token}}
+X-Filename: {{upload_filename}}
+Content-Type: application/octet-stream
+
+< {{upload_file}}

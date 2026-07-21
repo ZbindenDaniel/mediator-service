@@ -16,3 +16,56 @@ Content-Type: application/json
 
 {
 }
+
+###
+
+
+# Intake start via the nginx proxy. Replace the Basic auth value with the base64 of `admin:<password>`.
+POST https://localhost/api/intake/start
+Authorization: Basic YWRtaW46bDFuMnhrM3JuNGwh
+Content-Type: application/json
+X-Intake-Token: 123456
+
+{
+    "serial": "1234567",
+    "mac": ""
+}
+
+###
+
+GET https://localhost/api/intake/categories
+Authorization: Basic YWRtaW46bDFuMnhrM3JuNGwh
+Content-Type: application/json
+X-Intake-Token: 123456
+
+###
+
+POST https://localhost/api/intake/SN:1234567/answer
+Authorization: Basic YWRtaW46bDFuMnhrM3JuNGwh
+Content-Type: application/json
+X-Intake-Token: 123456
+
+{
+  "type": "ref",
+  "newRef": {
+    "Hersteller": "ExampleVendor",
+    "Hauptkategorien_A": 20,
+    "Unterkategorien_A": 201
+  },
+  "scanPayload": {
+    "serial": "SN12345678",
+    "mac": "aa:bb:cc:dd:ee:ff",
+    "vendor": "ExampleVendor",
+    "model": "ExampleModel",
+    "cpu": "Example CPU",
+    "ramMb": 8192,
+    "disks": [
+      {
+        "name": "sda",
+        "sizeGb": 256,
+        "type": "ssd"
+      }
+    ],
+    "batteryPercent": 95
+  }
+}

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="de">
+
+<head>
+  <meta charset="utf-8" />
+  <title>Etikett 62x29</title>
+  <!-- TODO(agent): Keep 62x29 layout aligned with backend PDF sizing. -->
+  <!-- TODO(agent): Confirm box label branding once warehouse ops finalize box-specific print specs. -->
+  <!-- TODO(agentic-printing): Capture printer margin telemetry to keep single-page sizing reliable across devices. -->
+  <!-- TODO(agentic-printing): Verify inline payload injection stays in sync with backend QR generation. -->
+  <style>
+    @page {
+      size: 62mm 29mm;
+      margin: 0;
+    }
+
+    :root {
+      color-scheme: only light;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #f3f4f6;
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      width: 62mm;
+      height: 29mm;
+    }
+
+    .label {
+      box-sizing: border-box;
+      width: 62mm;
+      height: 29mm;
+      padding: 2mm;
+      background: #fff;
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 2mm;
+    }
+
+    .qr {
+      width: 28mm;
+      height: 28mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .qr img,
+    .qr canvas {
+      width: 24mm;
+      height: 24mm;
+      max-width: 24mm;
+      max-height: 24mm;
+      aspect-ratio: 1 / 1;
+      image-rendering: pixelated;
+    }
+
+    .text {
+      width: calc(100% - 20mm);
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 1mm;
+    }
+
+    .item-id {
+      width: 100%;
+      text-align: left;
+      font-size: 10.5pt;
+      font-weight: 700;
+      letter-spacing: 0.4pt;
+      color: #111827;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .line {
+      font-size: 9pt;
+      line-height: 1.2;
+      color: #111827;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+
+    .error {
+      margin: 16px;
+      padding: 12px 14px;
+      border-radius: 6px;
+      background: #fee2e2;
+      color: #b91c1c;
+      font-size: 8pt;
+      max-width: 420px;
+    }
+
+    @media print {
+      body {
+        background: none;
+        width: 62mm;
+        height: 29mm;
+        min-height: 29mm;
+      }
+
+      .label {
+        box-shadow: none;
+        border-color: transparent;
+        page-break-inside: avoid;
+      }
+
+      .error {
+        display: none !important;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="label" id="label" hidden>
+    <div class="qr">
+      <img id="qrImage" alt="QR-Code" />
+      <canvas id="qrCanvas" hidden></canvas>
+    </div>
+    <div class="text">
+      <div class="line item-id" id="itemId">I-000000-0001</div>
+      <div class="line"><span>UUID: </span><strong id="itemUuid"></strong></div>
+    </div>
+  </div>
+  <div class="error" id="error" hidden></div>
+  <script>
+    (function init() {
+      const state = { payload: null };
+      const labelEl = document.getElementById('label');
+      const qrImage = document.getElementById('qrImage');
+      const qrCanvas = document.getElementById('qrCanvas');
+      const itemIdEl = document.getElementById('itemId');
+      const itemUuidEl = document.getElementById('itemUuid');
+      const errorEl = document.getElementById('error');
+
+      function drawMatrix(modules, margin = 0) {
+        if (!qrCanvas || !Array.isArray(modules) || modules.length === 0) return false;
+        try {
+          const size = modules.length;
+          const pixelSize = 480;
+          const available = pixelSize - margin * 2;
+          const scale = Math.floor(available / size);
+          const offset = Math.floor((pixelSize - size * scale) / 2);
+          const ctx = qrCanvas.getContext('2d');
+          if (!ctx) return false;
+          qrCanvas.width = pixelSize;
+          qrCanvas.height = pixelSize;
+          ctx.clearRect(0, 0, pixelSize, pixelSize);
+          ctx.fillStyle = '#111827';
+          modules.forEach((row, y) => {
+            row.forEach((cell, x) => {
+              if (cell) ctx.fillRect(offset + x * scale, offset + y * scale, scale, scale);
+            });
+          });
+          qrCanvas.hidden = false;
+          return true;
+        } catch (err) {
+          console.error('Failed to draw QR matrix', err);
+          return false;
+        }
+      }
+
+      function showError(message) {
+        if (!errorEl) return;
+        errorEl.textContent = message;
+        errorEl.hidden = false;
+        if (labelEl) labelEl.hidden = true;
+      }
+
+      function render(payload) {
+        if (!payload || typeof payload !== 'object') {
+          showError('Kein gültiger Payload vorhanden.');
+          return;
+        }
+        try {
+          const itemId = payload.labelText || payload.itemId || payload.id;
+          const itemUuid = payload.instanceUuid || payload.uuid || payload.id || '';
+
+          if (itemIdEl) {
+            itemIdEl.textContent = itemId ? `${itemId}` : 'ITEM-UNKNOWN';
+          }
+          if (itemUuidEl) {
+            itemUuidEl.textContent = itemUuid ? `${itemUuid}` : 'UUID-UNKNOWN';
+          }
+
+          const hasDataUri = typeof payload.qrDataUri === 'string' && payload.qrDataUri.startsWith('data:image/');
+          if (qrImage) {
+            if (hasDataUri) {
+              qrImage.src = payload.qrDataUri;
+              qrImage.hidden = false;
+            } else {
+              qrImage.hidden = true;
+            }
+          }
+
+          let fallbackRendered = false;
+          if (!hasDataUri && Array.isArray(payload.qrModules)) {
+            fallbackRendered = drawMatrix(payload.qrModules, payload.qrMargin);
+          }
+          if (qrCanvas) {
+            qrCanvas.hidden = hasDataUri ? true : !fallbackRendered;
+          }
+
+          if (!hasDataUri && !fallbackRendered) {
+            console.warn('QR fallback rendering skipped: no modules available.');
+          }
+
+          if (labelEl) labelEl.hidden = false;
+          state.payload = payload;
+        } catch (err) {
+          console.error('Render error in 62x29 label', err);
+          showError('Vorlage konnte nicht gerendert werden.');
+        }
+      }
+
+      function tryFromStorage(key) {
+        if (!key) return false;
+        try {
+          const raw = sessionStorage.getItem(key);
+          if (!raw) {
+            showError('Kein zwischengespeicherter Payload gefunden.');
+            return true;
+          }
+          const payload = JSON.parse(raw);
+          sessionStorage.removeItem(key);
+          render(payload);
+          return true;
+        } catch (err) {
+          console.error('Failed to load payload from storage', err);
+          showError('Payload konnte nicht gelesen werden.');
+          return true;
+        }
+      }
+
+      function tryInlinePayload() {
+        const inlinePayload = window.__LABEL_PAYLOAD__;
+        if (!inlinePayload) return false;
+        try {
+          render(inlinePayload);
+          return true;
+        } catch (err) {
+          console.error('Failed to render inline payload', err);
+          showError('Eingebettete Druckdaten konnten nicht gelesen werden.');
+          return true;
+        }
+      }
+
+      function handleMessage(event) {
+        if (event.origin && event.origin !== window.location.origin) {
+          console.warn('Ignoring message from unexpected origin', event.origin);
+          return;
+        }
+        try {
+          const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+          if (data && data.payload) {
+            render(data.payload);
+          }
+        } catch (err) {
+          console.error('Failed to parse postMessage payload', err);
+          showError('Übertragene Daten ungültig.');
+        }
+      }
+
+      window.addEventListener('message', handleMessage, { once: true });
+
+      const params = new URLSearchParams(window.location.search);
+      const key = params.get('key');
+      if (!tryInlinePayload() && !tryFromStorage(key)) {
+        console.warn('Warte auf Payload via postMessage…');
+      }
+    })();
+  </script>
+</body>
+
+</html>
