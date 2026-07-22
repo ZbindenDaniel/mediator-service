@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
   AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_AUTO_APPROVED,
   AGENTIC_RUN_STATUS_CANCELLED,
   AGENTIC_RUN_STATUS_FAILED,
   AGENTIC_RUN_STATUS_NOT_STARTED,
@@ -14,6 +15,7 @@ import {
 } from '../../../models';
 import type { AgenticRun } from '../../../models';
 import { normalizeDetailValue } from '../lib/itemDetailFormatting';
+import { describeAgenticFailureReason } from '../lib/agentic';
 
 export type AgenticBadgeVariant = 'info' | 'success' | 'error' | 'pending' | 'warning';
 
@@ -218,23 +220,41 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
     case AGENTIC_RUN_STATUS_NOT_STARTED:
       base = { label: 'Nicht gestartet', description: 'Der KI Durchlauf wurde noch nicht gestartet.', variant: 'info', needsReviewBadge: false, isTerminal: true };
       break;
-    case AGENTIC_RUN_STATUS_FAILED:
-      base = { label: 'Fehlgeschlagen', description: 'Der KI Durchlauf ist fehlgeschlagen.', variant: 'error', needsReviewBadge: false, isTerminal: true };
+    case AGENTIC_RUN_STATUS_FAILED: {
+      // A pipeline error (distinct from a user cancel). Surface the reason from LastError.
+      const failReason = describeAgenticFailureReason(run.LastError);
+      base = {
+        label: 'Fehlgeschlagen',
+        description: failReason ? `Pipeline-Fehler: ${failReason}` : 'Der KI Durchlauf ist fehlgeschlagen.',
+        variant: 'error', needsReviewBadge: false, isTerminal: true
+      };
       break;
+    }
     case AGENTIC_RUN_STATUS_RUNNING:
       base = { label: 'In Arbeit', description: 'Der KI Durchlauf läuft derzeit.', variant: 'info', needsReviewBadge: false, isTerminal: false };
       break;
     case AGENTIC_RUN_STATUS_QUEUED:
       base = { label: 'Wartet', description: 'Der KI Durchlauf wartet auf Ausführung.', variant: 'pending', needsReviewBadge: false, isTerminal: false };
       break;
-    case AGENTIC_RUN_STATUS_CANCELLED:
-      base = { label: 'Abgebrochen', description: 'Der KI Durchlauf wurde abgebrochen.', variant: 'info', needsReviewBadge: false, isTerminal: true };
+    case AGENTIC_RUN_STATUS_CANCELLED: {
+      // Reserved for explicit user stops. LastError carries the user-provided reason, if any.
+      const cancelReason = describeAgenticFailureReason(run.LastError);
+      base = {
+        label: 'Abgebrochen',
+        description: cancelReason ? `Abgebrochen: ${cancelReason}` : 'Der KI Durchlauf wurde abgebrochen.',
+        variant: 'info', needsReviewBadge: false, isTerminal: true
+      };
       break;
+    }
     case AGENTIC_RUN_STATUS_REVIEW:
       base = { label: 'Review ausstehend', description: 'Das Ergebnis wartet auf Freigabe.', variant: 'pending', needsReviewBadge: true, isTerminal: false };
       break;
     case AGENTIC_RUN_STATUS_APPROVED:
       base = { label: 'Freigegeben', description: 'Das Ergebnis wurde freigegeben.', variant: 'success', needsReviewBadge: false, isTerminal: true };
+      break;
+    case AGENTIC_RUN_STATUS_AUTO_APPROVED:
+      // Machine-approved (clearly good). ERP-eligible; operators can still promote to full Freigegeben.
+      base = { label: 'Auto-freigegeben', description: 'Automatisch freigegeben (KI sehr sicher). Kann synchronisiert oder manuell freigegeben werden.', variant: 'warning', needsReviewBadge: false, isTerminal: true };
       break;
     case AGENTIC_RUN_STATUS_REJECTED:
       base = { label: 'Abgelehnt', description: 'Das Ergebnis wurde abgelehnt.', variant: 'error', needsReviewBadge: false, isTerminal: true };
@@ -248,6 +268,8 @@ export function agenticStatusDisplay(run: AgenticRun | null): AgenticStatusDispl
     finalMeta = { label: 'Review ausstehend', description: 'Das Ergebnis wartet auf Freigabe.', variant: 'pending', needsReviewBadge: true, isTerminal: false };
   } else if (normalizedReview === 'approved') {
     finalMeta = { label: 'Freigegeben', description: 'Das Ergebnis wurde freigegeben.', variant: 'success', needsReviewBadge: false, isTerminal: true };
+  } else if (normalizedReview === 'auto_approved') {
+    finalMeta = { label: 'Auto-freigegeben', description: 'Automatisch freigegeben (KI sehr sicher). Kann synchronisiert oder manuell freigegeben werden.', variant: 'warning', needsReviewBadge: false, isTerminal: true };
   } else if (normalizedReview === 'rejected') {
     finalMeta = { label: 'Abgelehnt', description: 'Das Ergebnis wurde abgelehnt.', variant: 'error', needsReviewBadge: false, isTerminal: true };
   }

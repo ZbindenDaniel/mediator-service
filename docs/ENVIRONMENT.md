@@ -193,6 +193,8 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 | `SEARCH_MAX_AGENT_QUERIES_PER_REQUEST` | `1` | Max agentic search queries per request. |
 | `SEARCH_WEB_ALLOWED_ENGINES` | `google,duckduckgo,brave` | Allowed search engines for agentic search adapters. |
 | `AGENT_ACTOR_ID` | `item-flow-service` | Overrides the actor ID used in agentic logs. |
+| `AUTO_APPROVE` | `false` | When true, a run whose extraction is clearly good (supervisor PASS + confidence ≥ `AUTO_APPROVE_MIN_CONFIDENCE` + no missing-required spec fields + no ambiguous fields) is finalized as `auto_approved` instead of waiting for manual review. `auto_approved` items are ERP-eligible; operators sort by state and decide what to sync, and `Abschliessen` promotes them to full `approved`. |
+| `AUTO_APPROVE_MIN_CONFIDENCE` | `0.8` | Minimum extraction confidence (0–1) required for auto-approval. Ignored unless `AUTO_APPROVE` is true. |
 
 ## Shopware integration
 

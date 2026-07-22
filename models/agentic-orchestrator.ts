@@ -125,4 +125,10 @@ export interface AgenticResultPayload extends Record<string, unknown> {
   reviewedBy: string | null;
   actor: string;
   item: Record<string, unknown> & { Artikel_Nummer?: string };
+  /**
+   * True when the flow judged the extraction "clearly good" (supervisor PASS + confidence ≥ threshold
+   * + no missing-required + no ambiguous fields). The result handler may finalize such runs as
+   * `auto_approved` instead of manual review when AUTO_APPROVE is enabled.
+   */
+  autoApprovable?: boolean;
 }

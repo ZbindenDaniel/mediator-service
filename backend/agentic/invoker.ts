@@ -708,7 +708,7 @@ export class AgenticModelInvoker {
         this.logger.warn?.({ err, msg: 'failed to normalize review metadata for agentic invocation', itemId: trimmedItemId });
       }
 
-      const skipSearch = Boolean(input.skipSearch);
+      const requestedSkipSearch = Boolean(input.skipSearch);
 
       const { target: loadedTarget, instanceSpecs } = await this.loadItemTarget(trimmedItemId);
       let target = loadedTarget;
@@ -767,7 +767,7 @@ export class AgenticModelInvoker {
       }
 
       let storedSources: SearchSource[] | undefined;
-      if (skipSearch) {
+      if (requestedSkipSearch) {
         try {
           const existingRun = await getAgenticRun(trimmedItemId);
           if (existingRun?.LastSearchLinksJson) {
@@ -779,6 +779,16 @@ export class AgenticModelInvoker {
         } catch (err) {
           this.logger.warn?.({ err, msg: 'failed to load stored search sources for skipSearch run', itemId: trimmedItemId });
         }
+      }
+
+      // Only honour skipSearch when there is actually a stored search to reuse. Otherwise a skip would
+      // extract with zero evidence and no fallback — so we downgrade to a normal live search.
+      const skipSearch = requestedSkipSearch && Array.isArray(storedSources) && storedSources.length > 0;
+      if (requestedSkipSearch && !skipSearch) {
+        this.logger.info?.({
+          msg: 'skipSearch requested but no stored search found; falling back to live search',
+          itemId: trimmedItemId
+        });
       }
 
       const payload = await runItemFlow(

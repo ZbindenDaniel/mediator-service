@@ -81,8 +81,9 @@
 ## No-search enforcement behavior (current state)
 - Initial search collection is gated by `finalShouldSearch = !skipSearch && plannerShouldSearch`.
 - Reviewer no-search instructions can therefore block planner-driven initial search collection.
-- Follow-up `__searchQueries` emitted by extraction currently still run through iteration search expansion; this is not yet hard-blocked by `skipSearch` in the extraction dispatcher path.
-- Operators should treat no-search as **initial-gate enforced** and **follow-up hard block pending** until dispatcher-level enforcement is introduced.
+- Follow-up `__searchQueries` emitted by extraction **are hard-blocked** when `skipSearch` is set: the guard in `item-flow-extraction.ts` converts a `needs_more_search` outcome into a retry (no new Tavily call) whenever `searchSkipped` is true.
+- `skipSearch` is only honoured when a stored search actually exists. The invoker downgrades `skipSearch → false` when `LastSearchLinksJson` is empty/absent, so a skip never produces a zero-evidence extraction — it falls back to a normal live search instead.
+- Operators can treat no-search as **fully enforced** (both the initial gate and follow-up expansion), with an automatic live-search fallback when there is nothing stored to reuse.
 
 ## Troubleshooting
 ### Why did a rerun still search?

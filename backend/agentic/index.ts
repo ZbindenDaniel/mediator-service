@@ -874,14 +874,16 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
         const lastAttemptAt = existingRun?.LastAttemptAt ?? cancelTimestamp;
         const lastError = message ?? reason;
 
-        // Re-queue with backoff instead of permanently cancelling so transient failures recover automatically.
-        // Once MAX_AUTO_RETRIES is exhausted, fall back to CANCELLED so the user knows it truly gave up.
+        // Re-queue with backoff instead of permanently failing so transient failures recover automatically.
+        // Once MAX_AUTO_RETRIES is exhausted, land in FAILED (a pipeline error) — NOT cancelled, which is
+        // reserved for explicit user stops. The reason lives in LastError; Status now disambiguates
+        // user-cancel (cancelled) from give-up-after-error (failed).
         const willRetry = retryCount < MAX_AUTO_RETRIES;
         const backoffMinutes = RETRY_BACKOFF_MINUTES[Math.min(retryCount, RETRY_BACKOFF_MINUTES.length - 1)];
         const nextRetryAt = willRetry
           ? new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString()
           : null;
-        const recoveryStatus = willRetry ? AGENTIC_RUN_STATUS_QUEUED : AGENTIC_RUN_STATUS_CANCELLED;
+        const recoveryStatus = willRetry ? AGENTIC_RUN_STATUS_QUEUED : AGENTIC_RUN_STATUS_FAILED;
 
         try {
           const updateResult = await deps.updateAgenticRunStatus(
@@ -931,14 +933,15 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
         }
 
         try {
+          // Retry attempts are re-queues, not cancellations; only the exhausted give-up is a failure.
           await deps.logEvent({
             Actor: 'agentic-service',
             EntityType: 'Item',
             EntityId: payload.artikelNummer,
-            Event: 'AgenticRunCancelled',
+            Event: willRetry ? 'AgenticRunRequeued' : 'AgenticRunFailed',
             Meta: JSON.stringify({
               previousStatus: existingRun?.Status ?? null,
-              cancelledAt: cancelTimestamp,
+              [willRetry ? 'requeuedAt' : 'failedAt']: cancelTimestamp,
               reason,
               error: message
             })

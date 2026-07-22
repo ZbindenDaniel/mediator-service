@@ -18,6 +18,12 @@ const AGENTIC_FAILURE_REASON_DESCRIPTIONS: Record<string, string> = {
   'request-log-load-failed': 'KI-Anfragelog konnte nicht geladen werden',
   'response-not-ok': 'Unerwartete Antwort vom KI-Dienst',
   'network-error': 'Netzwerkfehler',
+  // Pipeline failure reasons written to agentic_runs.LastError by the backend orchestrator.
+  'invocation-result-not-ok': 'KI-Dienst lieferte kein Ergebnis',
+  'invocation-dispatch-error': 'Fehler beim Aufruf des KI-Dienstes',
+  'stale-run-auto-cancelled': 'Zeitüberschreitung – Lauf blieb hängen',
+  'over-cap-cancelled': 'Kapazitätsgrenze erreicht',
+  'agentic model invocation unavailable': 'KI-Dienst nicht verfügbar',
 };
 
 export function extractAgenticFailureReason(details: unknown): string | null {

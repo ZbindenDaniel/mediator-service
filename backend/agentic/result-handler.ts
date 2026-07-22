@@ -9,6 +9,7 @@ import {
   AGENTIC_RUN_ACTIVE_STATUSES,
   AGENTIC_RUN_RESTARTABLE_STATUSES,
   AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_AUTO_APPROVED,
   AGENTIC_RUN_STATUS_CANCELLED,
   AGENTIC_RUN_STATUS_FAILED,
   AGENTIC_RUN_STATUS_REJECTED,
@@ -27,6 +28,7 @@ import {
   recordAgenticRequestLogUpdate
 } from '../agentic';
 import { resolveAgenticRequestContext } from '../actions/agentic-request-context';
+import { autoApproveConfig } from './config';
 
 export type { AgenticResultPayload };
 
@@ -529,14 +531,28 @@ export async function handleAgenticResult(
   const supervisorAttemptedApproval =
     normalizedDecision === 'approved' && (!normalizedReviewer || normalizedReviewer.includes('supervisor'));
   if (supervisorAttemptedApproval) {
-    logger.info?.('Supervisor approval requires manual user confirmation', {
-      artikelNummer,
-      reviewedBy: reviewedByInput ?? null
-    });
-    normalizedDecision = null;
-    reviewDecisionForPersistence = null;
-    needsReview = true;
-    statusForPersistence = AGENTIC_RUN_STATUS_REVIEW;
+    const autoApprovable = (payload as { autoApprovable?: unknown }).autoApprovable === true;
+    if (autoApproveConfig.enabled && autoApprovable) {
+      // Clearly-good data: finalize as auto_approved (a distinct, ERP-eligible settled state) instead
+      // of forcing manual review. Operators can still sort by state and promote to full `approved`.
+      logger.info?.('Auto-approving clearly-good agentic result', { artikelNummer });
+      normalizedDecision = null;
+      reviewDecisionForPersistence = null;
+      needsReview = false;
+      statusForPersistence = AGENTIC_RUN_STATUS_AUTO_APPROVED;
+    } else {
+      // Supervisor approval alone still requires manual user confirmation.
+      logger.info?.('Supervisor approval requires manual user confirmation', {
+        artikelNummer,
+        reviewedBy: reviewedByInput ?? null,
+        autoApprovable,
+        autoApproveEnabled: autoApproveConfig.enabled
+      });
+      normalizedDecision = null;
+      reviewDecisionForPersistence = null;
+      needsReview = true;
+      statusForPersistence = AGENTIC_RUN_STATUS_REVIEW;
+    }
   }
 
   if (AGENTIC_RUN_ACTIVE_STATUSES.has(statusForPersistence)) {
@@ -637,9 +653,11 @@ export async function handleAgenticResult(
           ? 'pending'
           : status === AGENTIC_RUN_STATUS_APPROVED
             ? 'approved'
-            : status === AGENTIC_RUN_STATUS_REJECTED
-              ? 'rejected'
-              : 'not_required';
+            : status === AGENTIC_RUN_STATUS_AUTO_APPROVED
+              ? 'auto_approved'
+              : status === AGENTIC_RUN_STATUS_REJECTED
+                ? 'rejected'
+                : 'not_required';
       // TODO(agentic-review-handoff-observability): Keep pending-review metadata reset logging aligned with restart/retrigger lifecycle semantics.
       let effectiveReviewedBy: string | null = null;
       let normalizedReviewDecision: string | null = null;

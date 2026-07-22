@@ -37,13 +37,13 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+888. ✅ Auto-approve clearly-good agentic runs to a new ERP-eligible `auto_approved` state (supervisor PASS + confidence + no missing-required + no ambiguity), behind AUTO_APPROVE flag (default off) → [agentic]
+887. ✅ Clarify run states: `cancelled` = user stops only; exhausted pipeline errors now terminate in `failed` with a reason surfaced in the UI → [agentic]
+886. ✅ Skip-search hardening: honour skipSearch only when a stored search exists (else live-search fallback); thread the flag through bulk start + a bulk UI toggle → [agentic]
+885. ✅ Fix spec field naming: canonicalize variant spec keys (CPU→Prozessor) onto the contract key so a present field is never reported missing and no duplicate sibling is stored → [agentic]
 884. ✅ Intake reference step: bootable-only categories, auto-fill description from scanned model, drop redundant "funktionsfähig?" question → [intake]
 883. ✅ Hardware barcode scanners no longer submit forms: global capture-phase keystroke-timing guard swallows the scanner's trailing Enter (human Enter-to-submit preserved) → [scanning]
 882. ✅ Add 62x29 label template with inline QR rendering and instance UUID support → [printing]
 881. ✅ Fix production initDb crash-loop: move premature item_attachments("Artikel_Nummer") index after the ALTER that adds the column (unblocks Confidence migration too) → [docs-infra]
 880. ✅ Remove hardcoded ERP sync credentials; read from env + fail fast (503) when unconfigured → [erp-sync]
 879. ✅ Gate ERP export/sync to approved items only (configurable via ERP_SYNC_REQUIRE_APPROVAL, default on) → [erp-sync]
-878. ✅ Fix "container mediator is unhealthy": guard events.Meta→jsonb migration so legacy non-JSON rows can't abort initDb startup → [docs-infra]
-877. ✅ Route product-level attachments (Scope/Artikel_Nummer) so all instances of a product see them → [media]
-876. ✅ Fix agentic Abschliessen (always Freigegeben, drop numeric-only Artikel_Nummer guard) + delete now sticks (clear SearchQuery so idle-fill can't re-promote) → [agentic]
-875. ✅ Reuse JSON-correction agent to salvage schema-drifted extractions; plain-language retry hints → [agentic]
