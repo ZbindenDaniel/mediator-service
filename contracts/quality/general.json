@@ -14,12 +14,6 @@
         "Gebrauchsspuren": 3,
         "Beschädigt": 2
       }
-    },
-    {
-      "id": "is_functional",
-      "type": "boolean",
-      "question": "Ist der Artikel funktionsfähig?",
-      "qualityImpact": { "true": 5, "false": 1 }
     }
   ]
 }

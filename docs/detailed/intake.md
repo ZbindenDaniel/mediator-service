@@ -32,12 +32,14 @@ No serial + no MAC → 422 error. The key is stable across reboots and station s
 
 ### `GET /api/intake/categories`
 
-Returns selectable device categories for the TUI dropdown.
+Returns selectable device categories for the TUI dropdown. Only **bootable** devices
+are listed (a device must boot the netboot image to reach this step), so monitors and
+external screens are excluded. `hauptkategorienA` follows the canonical taxonomy (10/20/…).
 
 ```json
 {
   "categories": [
-    { "hauptkategorienA": 2, "unterkategorienA": 201, "label": "Laptop" },
+    { "hauptkategorienA": 20, "unterkategorienA": 201, "label": "Laptop" },
     ...
   ]
 }
@@ -52,6 +54,9 @@ State machine router. Body: `IntakeScanPayload` + `serial`/`mac`.
   "cpu": "Intel i5-8350U", "ramMb": 8192, "disks": [{ "name": "nvme0n1", "sizeGb": 256, "type": "nvme" }],
   "batteryPercent": 87 }
 ```
+
+The `select_ref` response echoes the scanned identity as `scan: { vendor, model }` so the
+TUI can pre-fill the new-reference fields from what was already scanned.
 
 ### `POST /api/intake/{intakeKey}/answer`
 
@@ -75,12 +80,15 @@ Or create a new reference:
   "newRef": {
     "Hersteller": "HP",
     "Kurzbeschreibung": "EliteBook 840 G5",
-    "Hauptkategorien_A": 2,
+    "Hauptkategorien_A": 20,
     "Unterkategorien_A": 201
   },
   "scanPayload": { ... }
 }
 ```
+
+`Kurzbeschreibung` is the model name and is **optional** — when omitted it defaults to
+`scanPayload.model`. `Artikelbeschreibung` is composed as `Hersteller + Kurzbeschreibung`.
 
 Response: `{ nextStep: 'quality', itemUUID, qualityQuestions: [...] }`
 
