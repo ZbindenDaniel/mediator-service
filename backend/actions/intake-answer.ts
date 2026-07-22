@@ -31,7 +31,8 @@ function parseIntakeKey(key: string): { serial: string | null; mac: string | nul
 
 async function findOrCreateRef(
   artikelNummer: string | undefined,
-  newRef: { Hersteller: string; Kurzbeschreibung: string; Hauptkategorien_A: number; Unterkategorien_A: number } | undefined
+  newRef: { Hersteller: string; Kurzbeschreibung?: string; Hauptkategorien_A: number; Unterkategorien_A: number } | undefined,
+  scannedModel?: string | null
 ): Promise<{ artikelNummer: string; unterkategorienA: number | null; hersteller: string | null; kurzbeschreibung: string | null } | null> {
   if (artikelNummer) {
     const row = await queryOne<{
@@ -55,7 +56,10 @@ async function findOrCreateRef(
   const maxArtikel = await getMaxArtikelNummer();
   const nextArtikelNummer = String((maxArtikel ? parseInt(maxArtikel, 10) : 0) + 1);
 
-  const artikelbeschreibung = [newRef.Hersteller, newRef.Kurzbeschreibung].filter(Boolean).join(' ');
+  // Kurzbeschreibung is the model name; default it to the scanned model so the operator
+  // doesn't have to re-type what the station already scanned.
+  const kurzbeschreibung = (newRef.Kurzbeschreibung ?? '').trim() || (scannedModel ?? '').trim();
+  const artikelbeschreibung = [newRef.Hersteller, kurzbeschreibung].filter(Boolean).join(' ');
   if (!artikelbeschreibung.trim()) {
     throw new Error('Hersteller and Kurzbeschreibung cannot both be empty');
   }
@@ -63,7 +67,7 @@ async function findOrCreateRef(
     Artikel_Nummer: nextArtikelNummer,
     Artikelbeschreibung: artikelbeschreibung,
     Hersteller: newRef.Hersteller,
-    Kurzbeschreibung: newRef.Kurzbeschreibung,
+    Kurzbeschreibung: kurzbeschreibung,
     Hauptkategorien_A: newRef.Hauptkategorien_A,
     Unterkategorien_A: newRef.Unterkategorien_A,
     Suchbegriff: artikelbeschreibung,
@@ -73,7 +77,7 @@ async function findOrCreateRef(
     artikelNummer: nextArtikelNummer,
     unterkategorienA: newRef.Unterkategorien_A ?? null,
     hersteller: newRef.Hersteller ?? null,
-    kurzbeschreibung: newRef.Kurzbeschreibung ?? null,
+    kurzbeschreibung: kurzbeschreibung || null,
   };
 }
 
@@ -155,7 +159,7 @@ const action = defineHttpAction({
       const refBody = body as any;
       const scan: IntakeScanPayload = refBody.scanPayload ?? { serial, mac };
 
-      const ref = await findOrCreateRef(refBody.artikelNummer, refBody.newRef);
+      const ref = await findOrCreateRef(refBody.artikelNummer, refBody.newRef, scan.model);
       if (!ref) {
         return sendJson(res, 422, { error: 'artikelNummer or newRef required' });
       }

@@ -37,6 +37,8 @@ export interface IntakeStartResponse {
   nextStep: IntakeNextStep;
   // select_ref
   candidates?: IntakeRefCandidate[];
+  // Scanned identity echoed back so the TUI can pre-fill the new-reference fields
+  scan?: { vendor: string | null; model: string | null };
   // quality
   itemUUID?: string;
   qualityQuestions?: IntakeQuestion[];
@@ -55,7 +57,8 @@ export interface IntakeAnswerRefBody {
   artikelNummer?: string;
   newRef?: {
     Hersteller: string;
-    Kurzbeschreibung: string;
+    // Optional: defaults to the scanned model (scanPayload.model), which is the model name
+    Kurzbeschreibung?: string;
     Hauptkategorien_A: number;
     Unterkategorien_A: number;
   };

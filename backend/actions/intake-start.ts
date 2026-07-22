@@ -141,7 +141,13 @@ const action = defineHttpAction({
     if (!item) {
       // Step 1: unknown device — find ref candidates
       const candidates = await findRefCandidates(scan.vendor, scan.model);
-      const response: IntakeStartResponse = { intakeKey, nextStep: 'select_ref', candidates };
+      const response: IntakeStartResponse = {
+        intakeKey,
+        nextStep: 'select_ref',
+        candidates,
+        // Echo scanned identity so the TUI can pre-fill Hersteller/Kurzbeschreibung
+        scan: { vendor: scan.vendor ?? null, model: scan.model ?? null },
+      };
       return sendJson(res, 200, response);
     }
 
