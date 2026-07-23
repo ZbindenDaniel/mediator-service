@@ -710,6 +710,16 @@ export class AgenticModelInvoker {
 
       const requestedSkipSearch = Boolean(input.skipSearch);
 
+      // Targeted rework: keys to regenerate + operator instruction. When present the flow runs in
+      // rework mode (partial update — only these keys change; categorizer/pricing skipped).
+      const reworkSpecFields = Array.isArray(input.reworkSpecFields)
+        ? input.reworkSpecFields.map((k) => String(k).trim()).filter((k) => k.length > 0)
+        : [];
+      const reworkInstructions =
+        typeof input.reworkInstructions === 'string' && input.reworkInstructions.trim()
+          ? input.reworkInstructions.trim()
+          : null;
+
       const { target: loadedTarget, instanceSpecs } = await this.loadItemTarget(trimmedItemId);
       let target = loadedTarget;
       // TODO(agent): Confirm target Artikel_Nummer normalization rules once identifier formatting is centralized.
@@ -799,6 +809,8 @@ export class AgenticModelInvoker {
           reviewNotes: normalizedReviewNotes,
           missingSpecFields: normalizedMissingSpecFields,
           unneededSpecFields: normalizedUnneededSpecFields,
+          reworkSpecFields,
+          reworkInstructions,
           skipSearch,
           storedSources,
           exampleItemBlock,

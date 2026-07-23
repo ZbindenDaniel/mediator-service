@@ -41,6 +41,14 @@ export interface AgenticRunStartInput {
   request?: AgenticRequestContext | null;
   imageData?: string | null;
   skipSearch?: boolean;
+  /**
+   * Targeted rework: the spec/field keys to regenerate. When set, the flow runs in "rework mode" —
+   * only these keys are accepted from the model's output (all other fields keep their original
+   * values), and the categorizer/pricing stages are skipped.
+   */
+  reworkSpecFields?: string[] | null;
+  /** Free-text operator instruction for a rework (e.g. "translate these to German"). */
+  reworkInstructions?: string | null;
 }
 
 export interface AgenticRunStartResult {
@@ -105,6 +113,8 @@ export interface AgenticModelInvocationInput {
   requestId?: string | null;
   imageData?: string | null;
   skipSearch?: boolean;
+  reworkSpecFields?: string[] | null;
+  reworkInstructions?: string | null;
 }
 
 export interface AgenticModelInvocationResult {

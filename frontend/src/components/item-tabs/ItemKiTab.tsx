@@ -37,6 +37,10 @@ interface Props {
   contractFieldModalState?: ContractFieldModalState | null;
   onContractFieldModalClose?: () => void;
   onContractFieldModalConfirm?: (result: AgenticContractFieldReviewResult) => void;
+  // Targeted rework ("KI Überarbeitung"): selectable fields + a submit handler. Kept local to this tab
+  // so it doesn't perturb the review-modal state machine in ItemDetail.
+  reworkFieldOptions?: AgenticSpecFieldOption[];
+  onReworkSubmit?: (result: AgenticSpecFieldReviewResult) => void | Promise<void>;
   canClose: boolean;
   onClose?: () => void | Promise<void>;
   canDelete: boolean;
@@ -52,6 +56,8 @@ export default function ItemKiTab({
   contractFieldModalState,
   onContractFieldModalClose,
   onContractFieldModalConfirm,
+  reworkFieldOptions,
+  onReworkSubmit,
   canClose,
   onClose,
   canDelete,
@@ -62,7 +68,10 @@ export default function ItemKiTab({
   const startHandler = onStart ?? onRestart;
   const startText = typeof startLabel === 'string' && startLabel.trim() ? startLabel : 'Starten';
 
-  const hasActions = canStart || canRestart || canCancel || needsReview || canClose || canDelete;
+  const [reworkOpen, setReworkOpen] = React.useState(false);
+  const canRework = !needsReview && Boolean(onReworkSubmit) && (reworkFieldOptions?.length ?? 0) > 0;
+
+  const hasActions = canStart || canRestart || canCancel || needsReview || canClose || canDelete || canRework;
 
   return (
     <>
@@ -76,6 +85,11 @@ export default function ItemKiTab({
           {!needsReview && canRestart && (
             <button type="button" className="btn" disabled={actionPending} onClick={() => void onRestart()}>
               Wiederholen
+            </button>
+          )}
+          {canRework && (
+            <button type="button" className="btn" disabled={actionPending} onClick={() => setReworkOpen(true)}>
+              KI Überarbeitung
             </button>
           )}
           {needsReview && !reviewIntent && (
@@ -115,6 +129,18 @@ export default function ItemKiTab({
           secondaryAdditionalInputPlaceholder={specFieldModalState.secondaryAdditionalInputPlaceholder}
           onCancel={onSpecFieldModalClose}
           onConfirm={onSpecFieldModalConfirm}
+        />,
+        document.body
+      ) : null}
+      {reworkOpen && onReworkSubmit ? ReactDOM.createPortal(
+        <AgenticSpecFieldReviewModal
+          title="KI Überarbeitung"
+          description="Wähle die Felder, die überarbeitet werden sollen, und beschreibe die gewünschte Änderung (z. B. „ins Deutsche übersetzen“). Alle anderen Felder bleiben unverändert."
+          fieldOptions={reworkFieldOptions ?? []}
+          includeAdditionalInput
+          additionalInputPlaceholder="Anweisung für die Überarbeitung"
+          onCancel={() => setReworkOpen(false)}
+          onConfirm={(result) => { setReworkOpen(false); void onReworkSubmit(result); }}
         />,
         document.body
       ) : null}

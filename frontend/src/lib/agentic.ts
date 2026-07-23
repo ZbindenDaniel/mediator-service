@@ -474,6 +474,10 @@ export interface AgenticRestartRequestInput {
   reviewNotes?: string | null;
   reviewedBy?: string | null;
   skipSearch?: boolean;
+  /** Targeted rework: keys to regenerate (partial update; skips categorization/pricing). */
+  reworkSpecFields?: string[] | null;
+  /** Free-text operator instruction for the rework (e.g. "translate to German"). */
+  reworkInstructions?: string | null;
 }
 
 export function buildAgenticRestartRequestPayload({
@@ -482,7 +486,9 @@ export function buildAgenticRestartRequestPayload({
   reviewDecision,
   reviewNotes,
   reviewedBy,
-  skipSearch
+  skipSearch,
+  reworkSpecFields,
+  reworkInstructions
 }: AgenticRestartRequestInput): Record<string, unknown> {
   const trimmedActor = actor.trim();
   const trimmedSearch = (search ?? '').trim();
@@ -492,6 +498,17 @@ export function buildAgenticRestartRequestPayload({
   };
   if (skipSearch) {
     payload.skipSearch = true;
+  }
+
+  const normalizedReworkFields = Array.isArray(reworkSpecFields)
+    ? reworkSpecFields.map((k) => (typeof k === 'string' ? k.trim() : '')).filter((k) => k.length > 0)
+    : [];
+  if (normalizedReworkFields.length > 0) {
+    payload.reworkSpecFields = normalizedReworkFields;
+    const trimmedInstructions = reworkInstructions && reworkInstructions.trim() ? reworkInstructions.trim() : null;
+    if (trimmedInstructions) {
+      payload.reworkInstructions = trimmedInstructions;
+    }
   }
 
   const decisionNormalized = reviewDecision && reviewDecision.trim() ? reviewDecision.trim().toLowerCase() : null;

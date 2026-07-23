@@ -103,6 +103,9 @@ export interface RunItemFlowInput {
   reviewNotes?: string | null;
   missingSpecFields?: string[];
   unneededSpecFields?: string[];
+  // Targeted rework: keys to regenerate. Non-empty ⇒ rework mode (partial update; skip cat/pricing).
+  reworkSpecFields?: string[];
+  reworkInstructions?: string | null;
   skipSearch?: boolean;
   storedSources?: SearchSource[];
   maxAttempts?: number;
@@ -285,6 +288,40 @@ function buildCallbackPayload({
   };
 }
 
+// Builds the final item for a targeted rework: keeps every original value and overlays the model's
+// output ONLY for the selected keys (a selected key may be a top-level field like Artikelbeschreibung
+// or a Langtext spec sub-key). Deterministic preservation — the model cannot alter unselected fields.
+// Exported for unit testing of the preservation guarantee.
+export function applyReworkPartialUpdate(
+  target: Record<string, unknown>,
+  modelData: Record<string, unknown> | null | undefined,
+  reworkSpecFields: string[],
+  itemId: string
+): AgenticTarget {
+  const result: Record<string, unknown> = { ...target, Artikel_Nummer: itemId };
+  const model = (modelData && typeof modelData === 'object') ? (modelData as Record<string, unknown>) : {};
+  const originalLangtext = target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)
+    ? { ...(target.Langtext as Record<string, unknown>) }
+    : {};
+  const modelLangtext = model.Langtext && typeof model.Langtext === 'object' && !Array.isArray(model.Langtext)
+    ? (model.Langtext as Record<string, unknown>)
+    : {};
+  const mergedLangtext: Record<string, unknown> = { ...originalLangtext };
+  for (const key of reworkSpecFields) {
+    // Top-level field selected (e.g. Artikelbeschreibung, Kurzbeschreibung) — Langtext itself is
+    // handled via mergedLangtext below, so it is excluded here.
+    if (key !== 'Langtext' && key !== 'Spezifikationen' && Object.prototype.hasOwnProperty.call(model, key)) {
+      result[key] = model[key];
+    }
+    // Langtext spec key selected — overlay the model's value for that key only when present.
+    if (Object.prototype.hasOwnProperty.call(modelLangtext, key)) {
+      mergedLangtext[key] = modelLangtext[key];
+    }
+  }
+  result.Langtext = mergedLangtext;
+  return result as AgenticTarget;
+}
+
 export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDependencies): Promise<AgenticResultPayload> {
   const logger = deps.logger ?? console;
   let resolvedItemId: string | null = null;
@@ -299,6 +336,16 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     ? input.reviewNotes.trim()
     : null;
   const skipSearch = Boolean(input.skipSearch);
+
+  // Targeted rework: when set, only these keys are accepted from the model output (all other fields
+  // keep their originals) and the categorizer/pricing stages are skipped.
+  const reworkSpecFields = Array.isArray(input.reworkSpecFields)
+    ? input.reworkSpecFields.map((k) => String(k).trim()).filter((k) => k.length > 0)
+    : [];
+  const reworkMode = reworkSpecFields.length > 0;
+  const reworkInstructions = typeof input.reworkInstructions === 'string' && input.reworkInstructions.trim()
+    ? input.reworkInstructions.trim()
+    : null;
 
   try {
     const context = prepareItemContext(input, logger);
@@ -567,6 +614,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       ambiguousFields: specCtx.ambiguousFields,
       missingSpecFieldDescriptions: specCtx.missingFieldDescriptions,
       unneededSpecFields: Array.isArray(input.unneededSpecFields) ? input.unneededSpecFields : [],
+      reworkSpecFields,
+      reworkInstructions,
       skipSearch,
       exampleItemBlock: input.exampleItemBlock ?? null,
       correctionModel: deps.correctionLlm,
@@ -575,7 +624,12 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     checkCancellation();
 
-    const finalData: AgenticTarget = { ...target, ...extractionResult.data, Artikel_Nummer: itemId };
+    // In rework mode, produce a partial update deterministically: start from the ORIGINAL item and
+    // accept the model's output ONLY for the selected keys. This preserves every other field
+    // regardless of what the model returned — no reliance on the model honouring "locked" fields.
+    const finalData: AgenticTarget = reworkMode
+      ? applyReworkPartialUpdate(target, extractionResult.data, reworkSpecFields, itemId)
+      : { ...target, ...extractionResult.data, Artikel_Nummer: itemId };
     // Canonicalize spec keys on the final output so any variant the model emitted (e.g. "CPU") is
     // folded onto the canonical contract key ("Prozessor") before persistence — one name, no dupes.
     if (finalData.Langtext && typeof finalData.Langtext === 'object' && !Array.isArray(finalData.Langtext)) {

@@ -100,6 +100,11 @@ const pendingOcrImageData = new Map<string, string>();
 // Same transience caveat as pendingOcrImageData — lost on restart, which is fine.
 const pendingSkipSearch = new Set<string>();
 
+// Tracks targeted-rework parameters for a queued run so the dispatcher can pass them to the invoker.
+// Same transience caveat as pendingOcrImageData — lost on restart (the run then falls back to a
+// normal full re-run, which is safe).
+const pendingRework = new Map<string, { fields: string[]; instructions: string | null }>();
+
 // TODO(agentic-flag-normalization): Fold boolean-to-integer coercion into the shared DB layer
 // once SQLite bindings accept native booleans in our migration plan.
 type AgenticRunStatusFlag =
@@ -705,6 +710,8 @@ interface BackgroundInvocationPayload {
   logger: AgenticServiceLogger;
   imageData?: string | null;
   skipSearch?: boolean;
+  reworkSpecFields?: string[] | null;
+  reworkInstructions?: string | null;
 }
 
 async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPayload): Promise<void> {
@@ -970,7 +977,9 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
         review: payload.review,
         requestId: payload.request?.id ?? null,
         imageData: payload.imageData ?? null,
-        skipSearch: payload.skipSearch ?? false
+        skipSearch: payload.skipSearch ?? false,
+        reworkSpecFields: payload.reworkSpecFields ?? null,
+        reworkInstructions: payload.reworkInstructions ?? null
       });
       if (!result?.ok) {
         const failureMessage = typeof result?.message === 'string' ? result.message : null;
@@ -1211,6 +1220,10 @@ export async function dispatchQueuedAgenticRuns(
       if (skipSearch) {
         pendingSkipSearch.delete(artikelNummer);
       }
+      const rework = pendingRework.get(artikelNummer) ?? null;
+      if (rework) {
+        pendingRework.delete(artikelNummer);
+      }
       void scheduleAgenticModelInvocation({
         artikelNummer,
         searchQuery,
@@ -1219,6 +1232,8 @@ export async function dispatchQueuedAgenticRuns(
         request: null,
         imageData,
         skipSearch,
+        reworkSpecFields: rework?.fields ?? null,
+        reworkInstructions: rework?.instructions ?? null,
         deps,
         logger
       });
@@ -1398,6 +1413,13 @@ export async function startAgenticRun(
 
     if (input.skipSearch) {
       pendingSkipSearch.add(artikelNummer);
+    }
+
+    if (Array.isArray(input.reworkSpecFields) && input.reworkSpecFields.length > 0) {
+      pendingRework.set(artikelNummer, {
+        fields: input.reworkSpecFields,
+        instructions: typeof input.reworkInstructions === 'string' ? input.reworkInstructions : null
+      });
     }
 
     // Run is now queued. The background dispatcher (dispatchQueuedAgenticRuns,
@@ -1869,6 +1891,13 @@ export async function restartAgenticRun(
 
   if (input.skipSearch) {
     pendingSkipSearch.add(artikelNummer);
+  }
+
+  if (Array.isArray(input.reworkSpecFields) && input.reworkSpecFields.length > 0) {
+    pendingRework.set(artikelNummer, {
+      fields: input.reworkSpecFields,
+      instructions: typeof input.reworkInstructions === 'string' ? input.reworkInstructions : null
+    });
   }
 
   // Run is now queued. The background dispatcher will pick it up and
