@@ -109,6 +109,26 @@ Scan B-042 → GET /api/boxes/:boxId → box.LocationId !== targetId
 → auto-navigate to scanner for next scan
 ```
 
+### Flow E: Exit reconciliation (items mode)
+
+Triggered either by "Fertig" on the placement view, or by "✕ Schliessen" on the scanner itself
+(the scanner sends a `{ qrReturn: { intent: 'placement-scan', finish: true } }` signal so the loop
+ends in reconciliation instead of bouncing back to the camera).
+
+```
+Operator taps "Fertig" (placement view) or "Schliessen" (scanner)
+→ GET /api/boxes/:targetId → items[]
+→ unscanned = items where ItemUUID ∉ scanned-this-session
+→ if none: navigate back (unchanged behaviour)
+→ else show reconciliation list; per item (or "für alle"):
+    [Bestand entfernen]  → POST /api/items/:itemUUID/remove          { actor }
+    [Standort entfernen] → POST /api/items/:itemUUID/clear-location  { actor }
+→ untouched items keep their assignment; "Fertig" closes → BoxDetail reload
+```
+
+"Scanned this session" = items moved in via Flow B **or** already in the box via Flow A. Skipped
+items (Flow B "Überspringen") are not counted as present.
+
 ---
 
 ## API Endpoints Used
@@ -149,8 +169,13 @@ New route `/placement/:targetId` registered.
 
 ## Resolved Decisions
 
-1. **Additive only** — unscanned records are not changed. Operator scans only what they want to
-   update; nothing is implicitly moved or removed.
+1. **Additive during the loop, reconciled on exit** — *(updated, see storage changelog #885)*.
+   During scanning the flow is still additive (nothing is implicitly moved or removed). On **exit**
+   (`items` mode only), the operator is offered an optional reconciliation of items recorded in the
+   box that were **not** scanned this session — either **Bestand entfernen** (withdraw stock) or
+   **Standort entfernen** (clear the box assignment, keep stock). Items left untouched keep their
+   assignment. The previous "unscanned records are never changed" rule is superseded by this
+   explicit, operator-driven exit step.
 
 2. **Always warn** — if an entity is currently assigned elsewhere, always show a confirmation
    before moving. Never silently relocate.
@@ -161,7 +186,10 @@ New route `/placement/:targetId` registered.
 4. **No sessionStorage** — URL params carry target context; `location.state` carries each scan
    result. Closing and reopening the page starts fresh (expected behaviour).
 
-5. **No new backend endpoints** — existing move and detail endpoints cover all operations.
+5. **Backend endpoints** — the scan loop uses only existing move/detail endpoints. The exit-route
+   reconciliation (decision #1) adds one new endpoint, `POST /api/items/:uuid/clear-location`
+   (`clear-item-location.ts` + `clearItemLocation` db helper), for the "clear location, keep stock"
+   case; "remove stock" reuses the existing `POST /api/items/:uuid/remove`.
 
 6. **Boxes mode entry point** — only exposed on shelf entities (`isShelf = true`), because moving
    boxes to a non-shelf box would create nested-box ambiguity.
