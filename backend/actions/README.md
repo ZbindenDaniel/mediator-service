@@ -17,6 +17,7 @@ HTTP action handlers — one file per API endpoint. The action boundary between 
 - `create-box.ts`, `box-detail.ts`, `list-boxes.ts`, `move-box.ts` — box management
 - `create-stub.ts`, `list-stubs.ts` — uncatalogued shelf stubs
 - `move-item.ts` — relocate items between boxes
+- `clear-item-location.ts` — clear an item's box assignment while keeping its stock (inventory scan exit route)
 
 **Agentic pipeline**
 - `agentic-trigger.ts`, `agentic-cancel.ts`, `agentic-restart.ts`, `agentic-delete.ts` — run lifecycle

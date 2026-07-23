@@ -3472,6 +3472,58 @@ button:focus {
     margin: 0;
 }
 
+.placement-scan__reconcile {
+    margin: 8px 16px;
+    padding: 12px;
+    border-radius: var(--radius, 8px);
+    background: var(--warning-bg, #fff3cd);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.placement-scan__reconcile > p {
+    margin: 0;
+}
+
+.placement-scan__reconcile-bulk {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.placement-scan__reconcile-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.placement-scan__reconcile-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px;
+    border-radius: var(--radius, 8px);
+    background: var(--surface, #fff);
+    flex-wrap: wrap;
+}
+
+.placement-scan__reconcile-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.placement-scan__reconcile-done {
+    color: var(--success, #2e7d32);
+    font-size: 0.9rem;
+}
+
 /* Hilfe page */
 .list-container.hilfe {
     border-color: $overview-color;

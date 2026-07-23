@@ -10,6 +10,45 @@ type PendingWarning = {
   currentLocation: string;
 };
 
+type UnscannedItem = {
+  itemUUID: string;
+  label: string;
+  count: number;
+  resolution: 'stock' | 'location' | null;
+};
+
+// The view remounts on every scan round-trip through /scan, so the set of items confirmed
+// present this session can't live in component state — persist it in sessionStorage per box.
+const scannedKey = (targetId: string) => `placement:scanned:${targetId}`;
+
+function addScanned(targetId: string, uuid: string): void {
+  try {
+    const raw = sessionStorage.getItem(scannedKey(targetId));
+    const set = new Set<string>(raw ? JSON.parse(raw) : []);
+    set.add(uuid);
+    sessionStorage.setItem(scannedKey(targetId), JSON.stringify([...set]));
+  } catch {
+    /* sessionStorage unavailable → reconciliation simply sees fewer confirmed items */
+  }
+}
+
+function getScanned(targetId: string): Set<string> {
+  try {
+    const raw = sessionStorage.getItem(scannedKey(targetId));
+    return new Set<string>(raw ? JSON.parse(raw) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function clearScanned(targetId: string): void {
+  try {
+    sessionStorage.removeItem(scannedKey(targetId));
+  } catch {
+    /* no-op */
+  }
+}
+
 export default function PlacementScanView() {
   const { targetId } = useParams<{ targetId: string }>();
   const [searchParams] = useSearchParams();
@@ -22,6 +61,20 @@ export default function PlacementScanView() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   // prevents double-processing the same qrReturn payload on StrictMode double-invoke
   const handledQrRef = useRef<string | null>(null);
+  // exit-route reconciliation: box items that were never scanned this session
+  const [reconcile, setReconcile] = useState<UnscannedItem[] | null>(null);
+  const didInitRef = useRef(false);
+
+  // A mount without a qrReturn is a fresh open (from BoxDetail), not a scan-loop return:
+  // start the confirmed-present set clean so a previous session doesn't leak in.
+  useEffect(() => {
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+    const hasQr = !!(location.state as { qrReturn?: unknown } | null)?.qrReturn;
+    if (!hasQr && targetId && mode === 'items') {
+      clearScanned(targetId);
+    }
+  }, [location.state, targetId, mode]);
 
   const navigateToScanner = useCallback(() => {
     if (!targetId) return;
@@ -50,6 +103,8 @@ export default function PlacementScanView() {
         const currentBoxId = data.item?.BoxID ?? null;
         const label = data.item?.Artikel_Nummer ?? qrReturn.id;
         if (currentBoxId === targetId) {
+          // already in this box → count as confirmed present for the exit reconciliation
+          addScanned(targetId, uuid);
           setProcessing(false);
           navigateToScanner();
           return;
@@ -102,11 +157,11 @@ export default function PlacementScanView() {
   useEffect(() => {
     const state = location.state as { qrReturn?: unknown } | null;
     if (state?.qrReturn) return; // being handled by the other effect
-    if (pendingWarning || processing) return;
+    if (pendingWarning || processing || reconcile) return;
     if (handledQrRef.current !== null) return; // already looping; wait for warning resolution
     const timer = setTimeout(navigateToScanner, 300);
     return () => clearTimeout(timer);
-  }, [pendingWarning, processing, navigateToScanner, location.state]);
+  }, [pendingWarning, processing, reconcile, navigateToScanner, location.state]);
 
   const handleConfirm = async () => {
     if (!pendingWarning || !targetId) return;
@@ -138,6 +193,10 @@ export default function PlacementScanView() {
         setProcessing(false);
         return;
       }
+      if (mode === 'items' && targetId) {
+        // moved into the target box → confirmed present for the exit reconciliation
+        addScanned(targetId, pendingWarning.entityId);
+      }
     } catch (err) {
       logError('PlacementScanView: move failed', err);
       setStatusMessage('Verschieben fehlgeschlagen');
@@ -156,6 +215,97 @@ export default function PlacementScanView() {
     navigateToScanner();
   };
 
+  // Exit route: compare the box's recorded items against what was scanned this session.
+  // Items in the box that were never scanned are surfaced for removal (stock or location).
+  const finishInventory = async () => {
+    if (mode !== 'items' || !targetId) {
+      navigate(-1);
+      return;
+    }
+    setProcessing(true);
+    setStatusMessage(null);
+    try {
+      const res = await fetch(`/api/boxes/${encodeURIComponent(targetId)}`);
+      if (!res.ok) {
+        setStatusMessage(`Behälter nicht gefunden (${res.status})`);
+        setProcessing(false);
+        return;
+      }
+      const data = await res.json() as {
+        items?: Array<{ ItemUUID?: string; Artikel_Nummer?: string; Auf_Lager?: number | null }>;
+      };
+      const scanned = getScanned(targetId);
+      const unscanned: UnscannedItem[] = (data.items ?? [])
+        .filter((i) => typeof i.ItemUUID === 'string' && !scanned.has(i.ItemUUID))
+        .map((i) => ({
+          itemUUID: i.ItemUUID as string,
+          label: i.Artikel_Nummer ?? (i.ItemUUID as string),
+          count: typeof i.Auf_Lager === 'number' ? i.Auf_Lager : 0,
+          resolution: null,
+        }));
+      setProcessing(false);
+      if (unscanned.length === 0) {
+        clearScanned(targetId);
+        navigate(-1);
+        return;
+      }
+      setReconcile(unscanned);
+    } catch (err) {
+      logError('PlacementScanView: finishInventory failed', err);
+      setStatusMessage('Fehler beim Laden der Behälter-Artikel');
+      setProcessing(false);
+    }
+  };
+
+  const resolveUnscanned = async (itemUUID: string, action: 'stock' | 'location') => {
+    if (!reconcile) return;
+    setProcessing(true);
+    try {
+      const actor = await ensureUser();
+      if (!actor) {
+        setStatusMessage('Bitte zuerst oben den Benutzer setzen.');
+        setProcessing(false);
+        return;
+      }
+      const url = action === 'stock'
+        ? `/api/items/${encodeURIComponent(itemUUID)}/remove`
+        : `/api/items/${encodeURIComponent(itemUUID)}/clear-location`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        setStatusMessage('Fehler: ' + (body.error ?? res.status));
+        setProcessing(false);
+        return;
+      }
+      setReconcile((prev) =>
+        prev ? prev.map((u) => (u.itemUUID === itemUUID ? { ...u, resolution: action } : u)) : prev
+      );
+    } catch (err) {
+      logError('PlacementScanView: resolveUnscanned failed', err);
+      setStatusMessage('Aktion fehlgeschlagen');
+    }
+    setProcessing(false);
+  };
+
+  const resolveAllUnscanned = async (action: 'stock' | 'location') => {
+    if (!reconcile) return;
+    for (const item of reconcile) {
+      if (item.resolution === null) {
+        // sequential to keep actor resolution + error surfacing simple
+        await resolveUnscanned(item.itemUUID, action);
+      }
+    }
+  };
+
+  const closeReconcile = () => {
+    if (targetId) clearScanned(targetId);
+    navigate(-1);
+  };
+
   const title = mode === 'items'
     ? `Artikel einscannen → ${targetId ?? ''}`
     : `Behälter einlagern → ${targetId ?? ''}`;
@@ -167,7 +317,11 @@ export default function PlacementScanView() {
           Abbrechen
         </button>
         <h2>{title}</h2>
-        <button type="button" className="btn btn--primary" onClick={() => navigate(-1)}>
+        <button
+          type="button"
+          className="btn btn--primary"
+          onClick={() => (reconcile ? closeReconcile() : void finishInventory())}
+        >
           Fertig
         </button>
       </div>
@@ -204,7 +358,73 @@ export default function PlacementScanView() {
         </div>
       )}
 
-      {!pendingWarning && !processing && !statusMessage && (
+      {reconcile && (
+        <div className="placement-scan__reconcile">
+          <p>
+            <strong>{reconcile.length}</strong>{' '}
+            {reconcile.length === 1 ? 'Artikel wurde' : 'Artikel wurden'} nicht gescannt. Sind sie
+            noch vorhanden?
+          </p>
+          <div className="placement-scan__reconcile-bulk">
+            <span>Für alle:</span>
+            <button
+              type="button"
+              className="btn"
+              disabled={processing}
+              onClick={() => void resolveAllUnscanned('stock')}
+            >
+              Bestand entfernen
+            </button>
+            <button
+              type="button"
+              className="btn"
+              disabled={processing}
+              onClick={() => void resolveAllUnscanned('location')}
+            >
+              Standort entfernen
+            </button>
+          </div>
+          <ul className="placement-scan__reconcile-list">
+            {reconcile.map((item) => (
+              <li key={item.itemUUID} className="placement-scan__reconcile-row">
+                <span className="placement-scan__reconcile-label">
+                  {item.label}
+                  {item.count > 1 ? ` (${item.count})` : ''}
+                </span>
+                {item.resolution ? (
+                  <span className="placement-scan__reconcile-done">
+                    {item.resolution === 'stock' ? '✓ Bestand entfernt' : '✓ Standort entfernt'}
+                  </span>
+                ) : (
+                  <span className="placement-scan__reconcile-actions">
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      disabled={processing}
+                      onClick={() => void resolveUnscanned(item.itemUUID, 'stock')}
+                    >
+                      Bestand entfernen
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--small"
+                      disabled={processing}
+                      onClick={() => void resolveUnscanned(item.itemUUID, 'location')}
+                    >
+                      Standort entfernen
+                    </button>
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="btn btn--primary" onClick={closeReconcile}>
+            Fertig
+          </button>
+        </div>
+      )}
+
+      {!pendingWarning && !processing && !statusMessage && !reconcile && (
         <div className="placement-scan__start">
           <button type="button" className="btn btn--primary" onClick={navigateToScanner}>
             ▶ Scannen starten
