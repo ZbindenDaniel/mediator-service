@@ -30,6 +30,8 @@
   { "key": "AttachmentAdded", "label": "Datei angehängt", "level": "info", "topic": "data" },
   { "key": "AttachmentRemoved", "label": "Datei entfernt", "level": "info", "topic": "data" },
   { "key": "InstanceUpdated", "label": "Instanz aktualisiert", "level": "info", "topic": "data" },
+  { "key": "QualityAssessed", "label": "Qualität bewertet", "level": "info", "topic": "data" },
+  { "key": "StubCreated", "label": "Platzhalter erstellt", "level": "info", "topic": "logistics" },
   { "key": "RemovedFromDevice", "label": "Vom Gerät entfernt", "level": "important", "topic": "logistics" },
   { "key": "ShopStatusUpdated", "label": "Shop-Status aktualisiert", "level": "info", "topic": "export" },
   { "key": "SparePartCataloged", "label": "Ersatzteil katalogisiert", "level": "info", "topic": "logistics" },

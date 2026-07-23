@@ -123,7 +123,8 @@ export interface ItemListComputationOptions {
   normalizedSubcategoryFilter: string;
   normalizedBoxFilter: string;
   stockFilter: 'any' | 'instock' | 'outofstock';
-  normalizedAgenticFilter: AgenticRunStatus | null;
+  // null = no filter (show all); array = the set of statuses to show (empty = show none).
+  normalizedAgenticFilter: AgenticRunStatus[] | null;
   shopPublicationFilter: ItemListFilters['shopPublicationFilter'];
   imageFilter: ItemListFilters['imageFilter'];
   sortKey: ItemListSortKey;
@@ -263,8 +264,9 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
           ? stockValue <= 0
           : true;
     const agenticStatus = group.agenticStatusSummary ?? AGENTIC_RUN_STATUS_NOT_STARTED;
+    // null = no filter; otherwise the status must be in the selected set (empty set → matches none).
     const matchesAgenticStatus = normalizedAgenticFilter
-      ? agenticStatus === normalizedAgenticFilter
+      ? normalizedAgenticFilter.includes(agenticStatus)
       : true;
     const matchesShopPublication = matchesShopPublicationFilter(group, shopPublicationFilter);
     const groupQuality = group.summary.Quality ?? representative?.Quality;
@@ -421,7 +423,7 @@ export default function ItemListPage() {
   const [stockFilter, setStockFilter] = useState<'any' | 'instock' | 'outofstock'>('any');
   const [boxFilter, setBoxFilter] = useState(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
   const [boxInput, setBoxInput] = useState(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
-  const [agenticStatusFilter, setAgenticStatusFilter] = useState<'any' | AgenticRunStatus>(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
+  const [agenticStatusFilter, setAgenticStatusFilter] = useState<AgenticRunStatus[]>(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
   // TODO(shop-publication-filter-ui): Consider replacing dropdown with segmented quick filter if additional states are introduced.
   const [shopPublicationFilter, setShopPublicationFilter] = useState<ItemListFilters['shopPublicationFilter']>(ITEM_LIST_DEFAULT_FILTERS.shopPublicationFilter);
   const [entityFilter, setEntityFilter] = useState<ItemListFilters['entityFilter']>(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
@@ -635,7 +637,11 @@ export default function ItemListPage() {
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const normalizedSubcategoryFilter = subcategoryFilter.trim().toLowerCase();
   const normalizedBoxFilter = boxFilter.trim().toLowerCase();
-  const normalizedAgenticFilter = agenticStatusFilter === 'any' ? null : agenticStatusFilter;
+  // All statuses selected = no filtering (null); memoized so the filter recompute stays stable.
+  const normalizedAgenticFilter = useMemo<AgenticRunStatus[] | null>(
+    () => (agenticStatusFilter.length === AGENTIC_RUN_STATUSES.length ? null : agenticStatusFilter),
+    [agenticStatusFilter]
+  );
 
   const subcategoryOptions = useMemo<SubcategoryOption[]>(() => {
     try {
@@ -813,13 +819,18 @@ export default function ItemListPage() {
     });
     return Array.from(ids);
   }, [filtered]);
-  const agenticStatusOptions = useMemo(() => [
-    { value: 'any', label: 'Alle' as const } as const,
-    ...AGENTIC_RUN_STATUSES.map((status) => ({
-      value: status,
-      label: describeAgenticStatus(status)
-    }))
-  ], [AGENTIC_RUN_STATUSES, describeAgenticStatus]);
+  const agenticStatusOptions = useMemo(
+    () => AGENTIC_RUN_STATUSES.map((status) => ({ value: status, label: describeAgenticStatus(status) })),
+    []
+  );
+  const agenticStatusSummaryLabel = useMemo(() => {
+    if (agenticStatusFilter.length === 0) return 'Keine';
+    if (agenticStatusFilter.length === AGENTIC_RUN_STATUSES.length) return 'Alle';
+    if (agenticStatusFilter.length <= 2) {
+      return agenticStatusFilter.map(describeAgenticStatus).join(', ');
+    }
+    return `${agenticStatusFilter.length} ausgewählt`;
+  }, [agenticStatusFilter]);
   const allVisibleSelected = useMemo(() => (
     visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id))
   ), [selectedIds, visibleIds]);
@@ -909,14 +920,23 @@ export default function ItemListPage() {
     };
   }, [clearMultiSelection, setBulkSelection]);
 
-  const handleAgenticStatusFilterChange = useCallback((value: string) => {
-    const nextValue = value as AgenticRunStatus | 'any';
-    if (nextValue === 'any' || AGENTIC_RUN_STATUSES.includes(nextValue as AgenticRunStatus)) {
-      setAgenticStatusFilter(nextValue);
-      return;
-    }
-    console.warn('Ignoring unknown agentic status filter value', value);
-    setAgenticStatusFilter('any');
+  const handleAgenticStatusToggle = useCallback((status: AgenticRunStatus, checked: boolean) => {
+    setAgenticStatusFilter((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(status);
+      } else {
+        next.delete(status);
+      }
+      // Preserve canonical status order regardless of toggle sequence.
+      return AGENTIC_RUN_STATUSES.filter((candidate) => next.has(candidate));
+    });
+  }, []);
+  const handleAgenticStatusSelectAll = useCallback(() => {
+    setAgenticStatusFilter([...AGENTIC_RUN_STATUSES]);
+  }, []);
+  const handleAgenticStatusSelectNone = useCallback(() => {
+    setAgenticStatusFilter([]);
   }, []);
 
   const handleClearFiltersClick = useCallback(() => {
@@ -1077,18 +1097,28 @@ export default function ItemListPage() {
             </label>
           </div> */}
               <div className="filter-grid__item">
-                <label className="filter-control">
+                <div className="filter-control">
                   <span>Ki-Status</span>
-                  <select
-                    aria-label="Ki-Status filtern"
-                    onChange={(event) => handleAgenticStatusFilterChange(event.target.value)}
-                    value={agenticStatusFilter}
-                  >
-                    {agenticStatusOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                </label>
+                  <details className="filter-multiselect">
+                    <summary aria-label="Ki-Status filtern">{agenticStatusSummaryLabel}</summary>
+                    <div className="filter-multiselect__panel" role="group" aria-label="Ki-Status Auswahl">
+                      <div className="filter-multiselect__actions">
+                        <button type="button" onClick={handleAgenticStatusSelectAll}>Alle</button>
+                        <button type="button" onClick={handleAgenticStatusSelectNone}>Keine</button>
+                      </div>
+                      {agenticStatusOptions.map((option) => (
+                        <label key={option.value} className="filter-multiselect__option">
+                          <input
+                            type="checkbox"
+                            checked={agenticStatusFilter.includes(option.value)}
+                            onChange={(event) => handleAgenticStatusToggle(option.value, event.target.checked)}
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </details>
+                </div>
               </div>
 
               <div className="filter-grid__item">

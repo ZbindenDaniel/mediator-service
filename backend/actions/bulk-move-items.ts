@@ -78,7 +78,9 @@ const action = defineHttpAction({
 
       let results: BulkMoveResult[] = [];
       try {
-        results = ctx.bulkMoveItems(validItemIds, toBoxId, actor, normalizedLocation ?? null);
+        // bulkMoveItems is async (runs a transaction + logs Moved per item); must be awaited or
+        // `results` is a pending Promise and results.map below throws.
+        results = await ctx.bulkMoveItems(validItemIds, toBoxId, actor, normalizedLocation ?? null);
       } catch (dbErr) {
         console.error('[bulk-move-items] Database transaction failed', dbErr);
         return sendJson(res, 500, { error: (dbErr as Error).message });

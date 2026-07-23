@@ -17,7 +17,8 @@ type ItemListFilterParams = {
   searchTerm: string;
   subcategoryFilter: string;
   boxFilter: string;
-  agenticStatusFilter: AgenticRunStatus | 'any';
+  // null = no agentic-status filter (show all). Array = statuses to show (empty = show none).
+  agenticStatuses: AgenticRunStatus[] | null;
   showUnplaced: boolean;
   entityFilter: ItemEntityFilter;
 };
@@ -26,7 +27,7 @@ const DEFAULT_FILTERS: ItemListFilterParams = {
   searchTerm: '',
   subcategoryFilter: '',
   boxFilter: '',
-  agenticStatusFilter: 'any',
+  agenticStatuses: null,
   showUnplaced: false,
   entityFilter: 'instances'
 };
@@ -43,11 +44,17 @@ function parseItemListFilters(req: IncomingMessage): ItemListFilterParams {
     }
     const subcategoryFilter = (rawSubcategory || '').trim();
     const boxFilter = (searchParams.get('box') || searchParams.get('boxFilter') || '').trim();
-    const requestedAgentic = (searchParams.get('agenticStatus') || '').trim();
-    const agenticStatusFilter =
-      requestedAgentic && AGENTIC_RUN_STATUSES.includes(requestedAgentic as AgenticRunStatus)
-        ? (requestedAgentic as AgenticRunStatus)
-        : 'any';
+    // Multi-select: repeated agenticStatus params. Absent param → null (no filter). Any present
+    // value that isn't a known status (e.g. the '__none__' sentinel) drops out, so an explicit
+    // empty selection yields [] → "match nothing".
+    const rawAgenticStatuses = searchParams.getAll('agenticStatus');
+    const agenticStatuses: AgenticRunStatus[] | null =
+      rawAgenticStatuses.length === 0
+        ? null
+        : rawAgenticStatuses
+            .map((value) => value.trim())
+            .filter((value): value is AgenticRunStatus =>
+              AGENTIC_RUN_STATUSES.includes(value as AgenticRunStatus));
     const showUnplacedRaw = (searchParams.get('showUnplaced') || '').toLowerCase();
     const showUnplaced = ['1', 'true', 'yes'].includes(showUnplacedRaw);
     const entityFilterRaw = (searchParams.get('entityFilter') || '').toLowerCase();
@@ -59,7 +66,7 @@ function parseItemListFilters(req: IncomingMessage): ItemListFilterParams {
       searchTerm,
       subcategoryFilter,
       boxFilter,
-      agenticStatusFilter,
+      agenticStatuses,
       showUnplaced,
       entityFilter
     };
@@ -92,12 +99,11 @@ const action = defineHttpAction({
         ? `%${filters.subcategoryFilter.toLowerCase()}%`
         : null;
       const boxFilter = filters.boxFilter ? `%${filters.boxFilter.toLowerCase()}%` : null;
-      const agenticStatus = filters.agenticStatusFilter === 'any' ? null : filters.agenticStatusFilter;
       const bindings = {
         searchTerm,
         subcategoryFilter,
         boxFilter,
-        agenticStatus,
+        agenticStatuses: filters.agenticStatuses,
         unplacedOnly: filters.showUnplaced ? 1 : 0
       };
 
@@ -126,7 +132,7 @@ const action = defineHttpAction({
         groupedCount: groupedItems.length,
         filters: {
           ...filters,
-          agenticStatusFilter: agenticStatus || 'any'
+          agenticStatuses: filters.agenticStatuses ?? 'any'
         }
       });
       sendJson(res, 200, { items, groupedItems });

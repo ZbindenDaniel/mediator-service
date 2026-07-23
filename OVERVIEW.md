@@ -37,6 +37,8 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+886. ✅ Close event-log coverage gaps: intake, CSV import, import-time box upsert, and stubs now emit lifecycle events; agentic events surface on item history (keying fix) → [item-lifecycle]
+885. ✅ Item list Ki-Status filter is now a multi-select (checkbox popover; default = all except Freigegeben) → [ui]
 884. ✅ Intake reference step: bootable-only categories, auto-fill description from scanned model, drop redundant "funktionsfähig?" question → [intake]
 883. ✅ Hardware barcode scanners no longer submit forms: global capture-phase keystroke-timing guard swallows the scanner's trailing Enter (human Enter-to-submit preserved) → [scanning]
 882. ✅ Add 62x29 label template with inline QR rendering and instance UUID support → [printing]
@@ -45,5 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 879. ✅ Gate ERP export/sync to approved items only (configurable via ERP_SYNC_REQUIRE_APPROVAL, default on) → [erp-sync]
 878. ✅ Fix "container mediator is unhealthy": guard events.Meta→jsonb migration so legacy non-JSON rows can't abort initDb startup → [docs-infra]
 877. ✅ Route product-level attachments (Scope/Artikel_Nummer) so all instances of a product see them → [media]
-876. ✅ Fix agentic Abschliessen (always Freigegeben, drop numeric-only Artikel_Nummer guard) + delete now sticks (clear SearchQuery so idle-fill can't re-promote) → [agentic]
-875. ✅ Reuse JSON-correction agent to salvage schema-drifted extractions; plain-language retry hints → [agentic]
