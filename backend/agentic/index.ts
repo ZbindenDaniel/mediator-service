@@ -39,10 +39,16 @@ import {
   fetchIdleFillAgenticRuns,
   updateQueuedAgenticRunQueueState,
   listAgenticRunReviewHistory,
+  listContractAuditCandidates,
+  stampAgenticRunContractVersion,
   type AgenticRunQueueUpdate,
   type LogEventPayload
 } from '../db';
 import { locateTranscript } from './flow/transcript';
+import { autoReworkConfig } from './config';
+import { getSpecContract } from '../contracts/registry';
+import { checkSpecGap } from '../../models/spec-contract';
+import { parseLangtext } from '../lib/langtext';
 
 export interface AgenticServiceLogger {
   info?: Console['info'];
@@ -1299,7 +1305,117 @@ export async function dispatchQueuedAgenticRuns(
     }
   }
 
+  // Idle contract-audit sweeper (default off): only when otherwise idle, re-apply the current spec
+  // contract to the oldest stale item — re-stamp if already complete, else enqueue a targeted rework.
+  if (autoReworkConfig.enabled && remainingSlots > 0) {
+    await sweepContractRework(deps, logger);
+  }
+
   return { scheduled, skipped, failed };
+}
+
+// Pure decision for the idle contract-audit sweep (no DB/LLM) — exported for unit testing.
+//  - `skip`    : the item's stored contract version is current (not stale).
+//  - `rework`  : stale AND now missing required field(s) → enqueue a targeted rework for those keys.
+//  - `restamp` : stale but already complete under the new contract → just re-stamp the version.
+export function decideContractAuditAction(
+  storedVersion: number | null,
+  contractVersion: number,
+  gapMissingRequired: string[]
+): { action: 'skip' } | { action: 'restamp' } | { action: 'rework'; fields: string[] } {
+  if (storedVersion != null && storedVersion >= contractVersion) {
+    return { action: 'skip' };
+  }
+  if (gapMissingRequired.length > 0) {
+    return { action: 'rework', fields: gapMissingRequired };
+  }
+  return { action: 'restamp' };
+}
+
+// Deterministic idle sweeper for the AUTO_REWORK feature. Finds the oldest settled item enriched
+// against an outdated spec contract version and either re-stamps it (already complete) or enqueues a
+// targeted rework for the now-missing required fields. No LLM in the decision — pure gap check.
+async function sweepContractRework(
+  deps: AgenticServiceDependencies,
+  logger: AgenticServiceLogger
+): Promise<void> {
+  let candidates: Awaited<ReturnType<typeof listContractAuditCandidates>> = [];
+  try {
+    candidates = await listContractAuditCandidates(20);
+  } catch (err) {
+    logger.error?.('[agentic-service] Contract-audit sweep failed to load candidates', { error: toErrorMessage(err) });
+    return;
+  }
+
+  for (const candidate of candidates) {
+    if (candidate.SubCategory == null) continue;
+    const contract = getSpecContract(candidate.SubCategory);
+    if (!contract) continue;
+    const stored = typeof candidate.SpecContractVersion === 'number' ? candidate.SpecContractVersion : null;
+    if (stored != null && stored >= contract.version) continue; // already current — not stale (fast path)
+
+    let langtextObj: Record<string, unknown> = {};
+    try {
+      const parsed = parseLangtext(candidate.Langtext, { context: 'contract-audit' });
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        langtextObj = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Treat unparseable Langtext as empty — the gap check will flag required fields.
+    }
+    const gap = checkSpecGap(contract, langtextObj);
+    const decision = decideContractAuditAction(stored, contract.version, gap.missingRequired);
+    if (decision.action === 'skip') continue;
+
+    if (decision.action === 'rework') {
+      // Enqueue a targeted rework; the completed run stamps the new contract version so this item is
+      // not re-selected (self-limiting). One enqueue per idle tick keeps the sweep gentle.
+      pendingRework.set(candidate.Artikel_Nummer, { fields: decision.fields, instructions: null });
+      const nowIso = resolveNow(deps).toISOString();
+      try {
+        await deps.updateAgenticRunStatus(normalizeAgenticStatusUpdate({
+          Artikel_Nummer: candidate.Artikel_Nummer,
+          Status: AGENTIC_RUN_STATUS_QUEUED,
+          SearchQuery: candidate.Artikelbeschreibung ?? candidate.Artikel_Nummer,
+          LastModified: nowIso,
+          ReviewState: 'not_required',
+          ReviewedBy: null,
+          ReviewedByIsSet: true,
+          RetryCount: 0,
+          RetryCountIsSet: true,
+          NextRetryAt: null,
+          NextRetryAtIsSet: true,
+          LastError: null,
+          LastErrorIsSet: true,
+          LastAttemptAt: null,
+          LastAttemptAtIsSet: true
+        }));
+        logger.info?.('[agentic-service] Contract-audit enqueued rework', {
+          artikelNummer: candidate.Artikel_Nummer,
+          missingRequired: decision.fields,
+          fromVersion: stored,
+          toVersion: contract.version
+        });
+      } catch (err) {
+        pendingRework.delete(candidate.Artikel_Nummer);
+        logger.error?.('[agentic-service] Contract-audit failed to enqueue rework', {
+          artikelNummer: candidate.Artikel_Nummer,
+          error: toErrorMessage(err)
+        });
+      }
+      return; // one enqueue per idle tick
+    }
+
+    // Stale but already complete under the new contract → cheap re-stamp, no rerun.
+    try {
+      await stampAgenticRunContractVersion(candidate.Artikel_Nummer, contract.version);
+    } catch (err) {
+      logger.warn?.('[agentic-service] Contract-audit failed to re-stamp item', {
+        artikelNummer: candidate.Artikel_Nummer,
+        error: toErrorMessage(err)
+      });
+    }
+  }
 }
 
 function validateDependencies(deps: AgenticServiceDependencies): void {

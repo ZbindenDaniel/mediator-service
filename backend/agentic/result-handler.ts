@@ -728,6 +728,11 @@ export async function handleAgenticResult(
           LastSearchLinksJson: lastSearchLinksJson,
           LastSearchLinksJsonIsSet: true,
           Confidence: confidence,
+          // Stamp the spec contract version this run ran against (null on paths that don't carry it →
+          // COALESCE keeps the prior value). Enables the idle sweep to detect outdated enrichments.
+          SpecContractVersion: typeof (payload as { specContractVersion?: unknown }).specContractVersion === 'number'
+            ? (payload as { specContractVersion: number }).specContractVersion
+            : null,
           Status: status,
           LastModified: now,
           ReviewState: effectiveReviewState,

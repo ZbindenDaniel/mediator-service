@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+890. ✅ Idle contract-audit sweeper (AUTO_REWORK, default off): stamps `SpecContractVersion` per run (#46) and, only while idle, re-applies the current spec contract to the oldest stale item — re-stamp if complete, else enqueue a targeted rework for now-missing required fields (deterministic, no LLM) → [agentic]
 889. ✅ Targeted "KI Überarbeitung" rework: reuse the main pipeline to regenerate only operator-selected fields (partial update preserves the rest, categorizer/pricing skipped), driven by a field-picker + instruction modal → [agentic]
 888. ✅ Auto-approve clearly-good agentic runs to a new ERP-eligible `auto_approved` state (supervisor PASS + confidence + no missing-required + no ambiguity), behind AUTO_APPROVE flag (default off) → [agentic]
 887. ✅ Clarify run states: `cancelled` = user stops only; exhausted pipeline errors now terminate in `failed` with a reason surfaced in the UI → [agentic]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 883. ✅ Hardware barcode scanners no longer submit forms: global capture-phase keystroke-timing guard swallows the scanner's trailing Enter (human Enter-to-submit preserved) → [scanning]
 882. ✅ Add 62x29 label template with inline QR rendering and instance UUID support → [printing]
 881. ✅ Fix production initDb crash-loop: move premature item_attachments("Artikel_Nummer") index after the ALTER that adds the column (unblocks Confidence migration too) → [docs-infra]
-880. ✅ Remove hardcoded ERP sync credentials; read from env + fail fast (503) when unconfigured → [erp-sync]

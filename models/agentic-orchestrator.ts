@@ -141,4 +141,6 @@ export interface AgenticResultPayload extends Record<string, unknown> {
    * `auto_approved` instead of manual review when AUTO_APPROVE is enabled.
    */
   autoApprovable?: boolean;
+  /** Spec contract version this run completed against — stamped on the run for staleness detection. */
+  specContractVersion?: number | null;
 }

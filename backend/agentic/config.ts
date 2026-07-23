@@ -315,3 +315,11 @@ export const autoApproveConfig: { enabled: boolean; minConfidence: number } = {
   enabled: resolveBooleanFlag('AUTO_APPROVE'),
   minConfidence: resolveUnitInterval(0.8, 'AUTO_APPROVE_MIN_CONFIDENCE')
 };
+
+// Idle-time deterministic rework sweeper: when enabled, the dispatcher (only while otherwise idle)
+// re-applies the current spec contract to the oldest item enriched against an older contract version —
+// re-stamping items already complete, or enqueuing a targeted rework for items now missing a required
+// field. Default OFF. No LLM involved (deterministic gap check only).
+export const autoReworkConfig: { enabled: boolean } = {
+  enabled: resolveBooleanFlag('AUTO_REWORK')
+};

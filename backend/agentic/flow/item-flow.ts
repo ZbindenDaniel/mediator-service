@@ -238,7 +238,8 @@ function buildCallbackPayload({
   error,
   sources,
   actor,
-  autoApprovable
+  autoApprovable,
+  specContractVersion
 }: {
   artikelNummer: string;
   itemData: AgenticTarget;
@@ -253,6 +254,7 @@ function buildCallbackPayload({
   sources?: unknown;
   actor?: string | null;
   autoApprovable?: boolean;
+  specContractVersion?: number | null;
 }): AgenticResultPayload {
   const resolvedStatus = status ?? (needsReview ? 'needs_review' : 'completed');
   const resolvedNeedsReview = typeof needsReview === 'boolean' ? needsReview : resolvedStatus !== 'completed';
@@ -284,7 +286,8 @@ function buildCallbackPayload({
     reviewedBy: resolvedReviewedBy,
     actor: resolvedActor,
     item: itemPayload,
-    autoApprovable: autoApprovable === true
+    autoApprovable: autoApprovable === true,
+    specContractVersion: specContractVersion ?? null
   };
 }
 
@@ -497,6 +500,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     const subcategoryCode = typeof target.Unterkategorien_A === 'number' ? target.Unterkategorien_A : null;
     const instanceSpecs = input.instanceSpecs && typeof input.instanceSpecs === 'object' ? input.instanceSpecs : null;
+    // Spec contract version this run runs against — stamped on the run so an idle sweep can later detect
+    // items enriched against an outdated contract (getSpecContract is cached, so this is cheap).
+    const specContractVersion = subcategoryCode ? (getSpecContract(subcategoryCode)?.version ?? null) : null;
     const specCtx = buildSpecContext(target, subcategoryCode, instanceSpecs);
     logger.debug?.({ msg: 'spec context built', itemId, subcategoryCode, missingRequired: specCtx.missingRequired, missingDesired: specCtx.missingDesired, ambiguousCount: Object.keys(specCtx.ambiguousFields).length });
 
@@ -666,7 +672,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       reviewedBy: 'supervisor-agent',
       error: extractionResult.success ? null : 'Supervisor flagged issues',
       sources: extractionResult.sources,
-      autoApprovable
+      autoApprovable,
+      specContractVersion
     });
 
     await dispatchAgenticResult({
