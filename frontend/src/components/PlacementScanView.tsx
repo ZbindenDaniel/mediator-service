@@ -64,6 +64,8 @@ export default function PlacementScanView() {
   // exit-route reconciliation: box items that were never scanned this session
   const [reconcile, setReconcile] = useState<UnscannedItem[] | null>(null);
   const didInitRef = useRef(false);
+  // late-bound so the scan-return effect (declared above finishInventory) can call it
+  const finishInventoryRef = useRef<(() => void) | null>(null);
 
   // A mount without a qrReturn is a fresh open (from BoxDetail), not a scan-loop return:
   // start the confirmed-present set clean so a previous session doesn't leak in.
@@ -138,12 +140,21 @@ export default function PlacementScanView() {
   }, [targetId, mode, navigateToScanner]);
 
   useEffect(() => {
-    const state = location.state as { qrReturn?: { id?: unknown; itemUUID?: unknown; rawPayload?: unknown; intent?: unknown } } | null;
+    const state = location.state as { qrReturn?: { id?: unknown; itemUUID?: unknown; rawPayload?: unknown; intent?: unknown; finish?: unknown } } | null;
     const qr = state?.qrReturn;
     if (!qr) return;
-    const id = typeof qr.id === 'string' ? qr.id.trim() : '';
     const intent = typeof qr.intent === 'string' ? qr.intent : '';
-    if (!id || intent !== 'placement-scan') return;
+    if (intent !== 'placement-scan') return;
+    // scanner "Schliessen" in the placement loop → run the exit reconciliation, don't loop back
+    if (qr.finish) {
+      if (handledQrRef.current === '__finish__') return;
+      handledQrRef.current = '__finish__';
+      navigate(location.pathname + location.search, { replace: true, state: {} });
+      finishInventoryRef.current?.();
+      return;
+    }
+    const id = typeof qr.id === 'string' ? qr.id.trim() : '';
+    if (!id) return;
     if (handledQrRef.current === id) return;
     handledQrRef.current = id;
     const itemUUID = typeof qr.itemUUID === 'string' ? qr.itemUUID.trim() : undefined;
@@ -256,6 +267,7 @@ export default function PlacementScanView() {
       setProcessing(false);
     }
   };
+  finishInventoryRef.current = finishInventory;
 
   const resolveUnscanned = async (itemUUID: string, action: 'stock' | 'location') => {
     if (!reconcile) return;

@@ -111,8 +111,12 @@ Scan B-042 → GET /api/boxes/:boxId → box.LocationId !== targetId
 
 ### Flow E: Exit reconciliation (items mode)
 
+Triggered either by "Fertig" on the placement view, or by "✕ Schliessen" on the scanner itself
+(the scanner sends a `{ qrReturn: { intent: 'placement-scan', finish: true } }` signal so the loop
+ends in reconciliation instead of bouncing back to the camera).
+
 ```
-Operator taps "Fertig"
+Operator taps "Fertig" (placement view) or "Schliessen" (scanner)
 → GET /api/boxes/:targetId → items[]
 → unscanned = items where ItemUUID ∉ scanned-this-session
 → if none: navigate back (unchanged behaviour)
