@@ -142,6 +142,9 @@ export async function forwardAgenticTrigger(
   const actor = typeof payload.actor === 'string' && payload.actor.trim() ? payload.actor.trim() : null;
   const review = normalizeReviewMetadata(payload.review);
   const imageData = typeof payload.imageData === 'string' && payload.imageData ? payload.imageData : null;
+  // Forward skipSearch so callers (including bulk start) can reuse a stored search; previously this
+  // was silently dropped here, so only the single-item restart path honoured it.
+  const skipSearch = (payload as { skipSearch?: unknown }).skipSearch === true;
   if (!serviceDeps) {
     throw new Error('Agentic service dependencies are required');
   }
@@ -155,7 +158,8 @@ export async function forwardAgenticTrigger(
         review,
         context,
         request: requestContext,
-        imageData
+        imageData,
+        skipSearch
       },
       {
         ...serviceDeps,

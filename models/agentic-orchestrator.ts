@@ -41,6 +41,14 @@ export interface AgenticRunStartInput {
   request?: AgenticRequestContext | null;
   imageData?: string | null;
   skipSearch?: boolean;
+  /**
+   * Targeted rework: the spec/field keys to regenerate. When set, the flow runs in "rework mode" —
+   * only these keys are accepted from the model's output (all other fields keep their original
+   * values), and the categorizer/pricing stages are skipped.
+   */
+  reworkSpecFields?: string[] | null;
+  /** Free-text operator instruction for a rework (e.g. "translate these to German"). */
+  reworkInstructions?: string | null;
 }
 
 export interface AgenticRunStartResult {
@@ -105,6 +113,8 @@ export interface AgenticModelInvocationInput {
   requestId?: string | null;
   imageData?: string | null;
   skipSearch?: boolean;
+  reworkSpecFields?: string[] | null;
+  reworkInstructions?: string | null;
 }
 
 export interface AgenticModelInvocationResult {
@@ -125,4 +135,12 @@ export interface AgenticResultPayload extends Record<string, unknown> {
   reviewedBy: string | null;
   actor: string;
   item: Record<string, unknown> & { Artikel_Nummer?: string };
+  /**
+   * True when the flow judged the extraction "clearly good" (supervisor PASS + confidence ≥ threshold
+   * + no missing-required + no ambiguous fields). The result handler may finalize such runs as
+   * `auto_approved` instead of manual review when AUTO_APPROVE is enabled.
+   */
+  autoApprovable?: boolean;
+  /** Spec contract version this run completed against — stamped on the run for staleness detection. */
+  specContractVersion?: number | null;
 }

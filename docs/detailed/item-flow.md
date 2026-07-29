@@ -81,8 +81,16 @@
 ## No-search enforcement behavior (current state)
 - Initial search collection is gated by `finalShouldSearch = !skipSearch && plannerShouldSearch`.
 - Reviewer no-search instructions can therefore block planner-driven initial search collection.
-- Follow-up `__searchQueries` emitted by extraction currently still run through iteration search expansion; this is not yet hard-blocked by `skipSearch` in the extraction dispatcher path.
-- Operators should treat no-search as **initial-gate enforced** and **follow-up hard block pending** until dispatcher-level enforcement is introduced.
+- Follow-up `__searchQueries` emitted by extraction **are hard-blocked** when `skipSearch` is set: the guard in `item-flow-extraction.ts` converts a `needs_more_search` outcome into a retry (no new Tavily call) whenever `searchSkipped` is true.
+- `skipSearch` is only honoured when a stored search actually exists. The invoker downgrades `skipSearch → false` when `LastSearchLinksJson` is empty/absent, so a skip never produces a zero-evidence extraction — it falls back to a normal live search instead.
+- Operators can treat no-search as **fully enforced** (both the initial gate and follow-up expansion), with an automatic live-search fallback when there is nothing stored to reuse.
+
+## Rework mode (targeted partial updates)
+- Triggered when `reworkSpecFields` is non-empty (from the "KI Überarbeitung" UI → `/agentic/restart`). `reworkInstructions` carries the operator's free-text directive.
+- **Partial update is deterministic:** `applyReworkPartialUpdate` (`item-flow.ts`) builds the final item from the ORIGINAL target and overlays the model output ONLY for the selected keys (top-level field or `Langtext` sub-key). Unselected fields cannot be changed by the model — no reliance on prompt-level "locking", and `result-handler`'s whole-object Langtext overwrite stays correct because the payload Langtext is complete.
+- **Skipped stages:** categorizer and pricing are skipped in rework mode (a text/spec fix must not re-categorize or re-price; also avoids the failure-prone categorizer aborting a simple rework). The supervisor still runs.
+- **Instruction injection:** an imperative rework directive is prepended to the reviewer-notes injection path (`{{EXTRACTION_REVIEW}}` + per-attempt reviewer block) — no new placeholder.
+- **Search:** rework defaults to `skipSearch:true` (reuse stored sources); if no stored search exists the invoker downgrades to a live search (same guard as skip-search).
 
 ## Troubleshooting
 ### Why did a rerun still search?

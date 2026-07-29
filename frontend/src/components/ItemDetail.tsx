@@ -579,6 +579,24 @@ export default function ItemDetail({ itemId }: Props) {
     return [];
   }, [item?.InstanceSpecs]);
 
+  // Field options for the "KI Überarbeitung" (targeted rework) modal: the two description texts plus
+  // every Langtext spec key. The operator ticks which ones to rework.
+  const reworkFieldOptions = useMemo<{ value: string; label: string }[]>(() => {
+    const options: { value: string; label: string }[] = [
+      { value: 'Artikelbeschreibung', label: 'Artikelbeschreibung' },
+      { value: 'Kurzbeschreibung', label: 'Kurzbeschreibung' }
+    ];
+    const parsed = parseLangtext(item?.Langtext ?? '');
+    if (parsed.kind === 'json') {
+      for (const entry of parsed.entries) {
+        if (entry.key && entry.key.trim()) {
+          options.push({ value: entry.key, label: entry.key });
+        }
+      }
+    }
+    return options;
+  }, [item?.Langtext]);
+
   const handleNeighborNavigation = useCallback(
     (direction: 'previous' | 'next') => {
       const targetId = direction === 'previous' ? neighborIds.previousId : neighborIds.nextId;
@@ -2175,6 +2193,68 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }
 
+  async function handleReworkSubmit(result: AgenticSpecFieldReviewResult) {
+    if (!item) return;
+    const referenceId = item.Artikel_Nummer?.trim() || '';
+    if (!referenceId) {
+      setAgenticError('Artikelnummer fehlt für die KI Überarbeitung.');
+      return;
+    }
+    const fields = (result.selectedFields ?? []).map((f) => f.trim()).filter((f) => f.length > 0);
+    if (fields.length === 0) {
+      setAgenticError('Bitte mindestens ein Feld für die Überarbeitung auswählen.');
+      return;
+    }
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({ title: 'Aktion nicht möglich', message: 'Bitte zuerst oben den Benutzer setzen.' });
+      } catch (error) {
+        console.error('Failed to display rework user alert', error);
+      }
+      return;
+    }
+    // Rework reuses the stored search (a targeted text/spec fix needs no new web search).
+    const baseSearchTerm = getNormalizedAgenticSearchTerm() || item.Artikelbeschreibung || referenceId;
+    const payload = buildAgenticRestartRequestPayload({
+      actor,
+      search: baseSearchTerm,
+      skipSearch: true,
+      reworkSpecFields: fields,
+      reworkInstructions: result.additionalInput ?? null
+    });
+
+    setAgenticActionPending(true);
+    setAgenticError(null);
+    try {
+      const res = await fetch(buildAgenticItemRefPath(referenceId, 'restart'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      let body: any = null;
+      try {
+        body = await res.json();
+      } catch (err) {
+        console.error('Failed to parse rework restart response', err);
+      }
+      const refreshedRun: AgenticRun | null = body?.agentic ?? null;
+      const reason = typeof body?.reason === 'string' ? body.reason.trim().toLowerCase() : '';
+      if (!res.ok && reason !== 'already-exists') {
+        setAgenticError('KI Überarbeitung fehlgeschlagen.');
+        return;
+      }
+      if (refreshedRun) {
+        setAgentic({ ...refreshedRun, SearchQuery: baseSearchTerm });
+      }
+    } catch (err) {
+      logError('ItemDetail: rework submit failed', err, { referenceId });
+      setAgenticError('KI Überarbeitung fehlgeschlagen.');
+    } finally {
+      setAgenticActionPending(false);
+    }
+  }
+
   async function handleAgenticRestart() {
     if (!item) {
       console.warn('Agentic restart requested without loaded item data');
@@ -2935,6 +3015,8 @@ export default function ItemDetail({ itemId }: Props) {
             contractFieldModalState={contractFieldModalData}
             onContractFieldModalClose={handleContractFieldModalClose}
             onContractFieldModalConfirm={handleContractFieldModalConfirm}
+            reworkFieldOptions={reworkFieldOptions}
+            onReworkSubmit={handleReworkSubmit}
             canClose={agenticCanClose}
             onClose={agenticCanClose ? handleAgenticClose : undefined}
             canDelete={agenticCanDelete}

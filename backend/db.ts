@@ -433,6 +433,7 @@ ALTER TABLE item_refs ADD COLUMN IF NOT EXISTS "LastSyncedAt" TEXT;
 ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedAt" TEXT;
 ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedBy" TEXT;
 ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "Confidence" FLOAT;
+ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "SpecContractVersion" INTEGER;
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Scope" TEXT NOT NULL DEFAULT 'instance';
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Artikel_Nummer" TEXT;
 CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
@@ -1853,10 +1854,11 @@ export async function upsertAgenticRun(params: {
   LastReviewDecision?: string | null;
   LastReviewNotes?: string | null;
   Confidence?: number | null;
+  SpecContractVersion?: number | null;
 }): Promise<void> {
   await execute(
-    `INSERT INTO agentic_runs ("Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy","LastReviewDecision","LastReviewNotes","Confidence")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    `INSERT INTO agentic_runs ("Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy","LastReviewDecision","LastReviewNotes","Confidence","SpecContractVersion")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      ON CONFLICT("Artikel_Nummer") DO UPDATE SET
        "SearchQuery"=COALESCE(EXCLUDED."SearchQuery",agentic_runs."SearchQuery"),
        "LastSearchLinksJson"=COALESCE(EXCLUDED."LastSearchLinksJson",agentic_runs."LastSearchLinksJson"),
@@ -1867,20 +1869,52 @@ export async function upsertAgenticRun(params: {
        "LastReviewDecision"=COALESCE(EXCLUDED."LastReviewDecision",agentic_runs."LastReviewDecision"),
        "LastReviewNotes"=COALESCE(EXCLUDED."LastReviewNotes",agentic_runs."LastReviewNotes"),
        "Confidence"=COALESCE(EXCLUDED."Confidence",agentic_runs."Confidence"),
+       "SpecContractVersion"=COALESCE(EXCLUDED."SpecContractVersion",agentic_runs."SpecContractVersion"),
        "RetryCount"=CASE WHEN EXCLUDED."Status"='queued' THEN 0 ELSE agentic_runs."RetryCount" END,
        "NextRetryAt"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."NextRetryAt" END,
        "LastError"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."LastError" END,
        "LastAttemptAt"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."LastAttemptAt" END`,
-    [params.Artikel_Nummer, params.SearchQuery ?? null, params.LastSearchLinksJson ?? null, params.Status, params.LastModified, params.ReviewState, params.ReviewedBy ?? null, params.LastReviewDecision ?? null, params.LastReviewNotes ?? null, params.Confidence ?? null]
+    [params.Artikel_Nummer, params.SearchQuery ?? null, params.LastSearchLinksJson ?? null, params.Status, params.LastModified, params.ReviewState, params.ReviewedBy ?? null, params.LastReviewDecision ?? null, params.LastReviewNotes ?? null, params.Confidence ?? null, params.SpecContractVersion ?? null]
   );
 }
 
 export async function getAgenticRun(artikelNummer: string): Promise<AgenticRun | null> {
   return queryOne<AgenticRun>(
     `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
-            "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt","Confidence"
+            "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt","Confidence","SpecContractVersion"
      FROM agentic_runs WHERE "Artikel_Nummer"=$1`,
     [artikelNummer]
+  );
+}
+
+// Idle contract-audit sweeper: settled runs joined to their item ref, oldest-first, with the stored
+// contract version + the data needed to compute the gap in code (contract versions live in JSON, not SQL).
+export async function listContractAuditCandidates(limit: number): Promise<Array<{
+  Artikel_Nummer: string;
+  SpecContractVersion: number | null;
+  Langtext: string | null;
+  SubCategory: number | null;
+  Artikelbeschreibung: string | null;
+}>> {
+  return query(
+    `SELECT r."Artikel_Nummer", r."SpecContractVersion",
+            i."Langtext", CAST(i."Unterkategorien_A" AS INTEGER) AS "SubCategory",
+            i."Artikelbeschreibung"
+     FROM agentic_runs r
+     JOIN item_refs i ON i."Artikel_Nummer" = r."Artikel_Nummer"
+     WHERE r."Status" IN ('approved','auto_approved')
+       AND i."Unterkategorien_A" IS NOT NULL
+     ORDER BY r."LastModified" ASC
+     LIMIT $1`,
+    [limit]
+  );
+}
+
+// Cheap re-stamp when an item is already complete under the new contract (no rerun needed).
+export async function stampAgenticRunContractVersion(artikelNummer: string, version: number): Promise<void> {
+  await execute(
+    `UPDATE agentic_runs SET "SpecContractVersion"=$1 WHERE "Artikel_Nummer"=$2`,
+    [version, artikelNummer]
   );
 }
 

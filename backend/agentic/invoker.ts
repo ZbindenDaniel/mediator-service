@@ -708,7 +708,17 @@ export class AgenticModelInvoker {
         this.logger.warn?.({ err, msg: 'failed to normalize review metadata for agentic invocation', itemId: trimmedItemId });
       }
 
-      const skipSearch = Boolean(input.skipSearch);
+      const requestedSkipSearch = Boolean(input.skipSearch);
+
+      // Targeted rework: keys to regenerate + operator instruction. When present the flow runs in
+      // rework mode (partial update — only these keys change; categorizer/pricing skipped).
+      const reworkSpecFields = Array.isArray(input.reworkSpecFields)
+        ? input.reworkSpecFields.map((k) => String(k).trim()).filter((k) => k.length > 0)
+        : [];
+      const reworkInstructions =
+        typeof input.reworkInstructions === 'string' && input.reworkInstructions.trim()
+          ? input.reworkInstructions.trim()
+          : null;
 
       const { target: loadedTarget, instanceSpecs } = await this.loadItemTarget(trimmedItemId);
       let target = loadedTarget;
@@ -767,7 +777,7 @@ export class AgenticModelInvoker {
       }
 
       let storedSources: SearchSource[] | undefined;
-      if (skipSearch) {
+      if (requestedSkipSearch) {
         try {
           const existingRun = await getAgenticRun(trimmedItemId);
           if (existingRun?.LastSearchLinksJson) {
@@ -781,6 +791,16 @@ export class AgenticModelInvoker {
         }
       }
 
+      // Only honour skipSearch when there is actually a stored search to reuse. Otherwise a skip would
+      // extract with zero evidence and no fallback — so we downgrade to a normal live search.
+      const skipSearch = requestedSkipSearch && Array.isArray(storedSources) && storedSources.length > 0;
+      if (requestedSkipSearch && !skipSearch) {
+        this.logger.info?.({
+          msg: 'skipSearch requested but no stored search found; falling back to live search',
+          itemId: trimmedItemId
+        });
+      }
+
       const payload = await runItemFlow(
         {
           target: typedTarget,
@@ -789,6 +809,8 @@ export class AgenticModelInvoker {
           reviewNotes: normalizedReviewNotes,
           missingSpecFields: normalizedMissingSpecFields,
           unneededSpecFields: normalizedUnneededSpecFields,
+          reworkSpecFields,
+          reworkInstructions,
           skipSearch,
           storedSources,
           exampleItemBlock,

@@ -57,6 +57,10 @@ export interface RunExtractionOptions {
   missingSpecFieldDescriptions?: Record<string, string>;
   ambiguousFields?: Record<string, { itemValue: string; intakeValue: string }>;
   unneededSpecFields?: string[];
+  // Targeted rework: keys to regenerate + operator instruction. Non-empty ⇒ rework mode — the prompt
+  // gets an imperative rework directive and the categorizer/pricing stages are skipped.
+  reworkSpecFields?: string[];
+  reworkInstructions?: string | null;
   skipSearch?: boolean;
   exampleItemBlock?: string | null;
   transcriptWriter?: AgentTranscriptWriter | null;
@@ -805,10 +809,25 @@ export async function runExtractionAttempts({
   missingSpecFieldDescriptions,
   ambiguousFields,
   unneededSpecFields,
+  reworkSpecFields,
+  reworkInstructions,
   skipSearch,
   exampleItemBlock,
   transcriptWriter
 }: RunExtractionOptions): Promise<ExtractionResult> {
+  const reworkFields = Array.isArray(reworkSpecFields)
+    ? reworkSpecFields.map((k) => String(k).trim()).filter((k) => k.length > 0)
+    : [];
+  const reworkMode = reworkFields.length > 0;
+  // Imperative directive (not soft guidance): the deterministic partial-merge in item-flow guarantees
+  // other fields are preserved, but this steers the model to produce good values for the target keys.
+  const reworkDirective = reworkMode
+    ? `REWORK TASK — highest priority. Regenerate ONLY these field(s): ${reworkFields.join(', ')}.`
+      + (typeof reworkInstructions === 'string' && reworkInstructions.trim()
+        ? ` Apply this instruction to them: ${reworkInstructions.trim()}.`
+        : '')
+      + ` Keep every other field exactly as given — do NOT alter, translate, reorder, or drop any other key.`
+    : '';
   let lastRaw = '';
   let lastValidated: { success: true; data: AgenticOutput } | null = null;
   let lastSupervision = '';
@@ -864,7 +883,12 @@ export async function runExtractionAttempts({
   } catch (err) {
     logger?.warn?.({ err, msg: 'failed to log resolved agent search limit', itemId });
   }
-  const sanitizedReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
+  const baseReviewerNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
+  // In rework mode the directive rides in front of any reviewer notes through the existing
+  // {{EXTRACTION_REVIEW}}/reviewer-block injection path (no new placeholder needed).
+  const sanitizedReviewerNotes = reworkMode
+    ? [reworkDirective, baseReviewerNotes].filter((s) => s.length > 0).join('\n\n')
+    : baseReviewerNotes;
   const adjustedTargetSchemaFormat = deriveReviewAdjustedTargetSchemaFormat({
     targetFormat,
     missingSpecFields,
@@ -1900,7 +1924,9 @@ export async function runExtractionAttempts({
     const validated = { success: true as const, data: extractionAccumulator };
 
     let enrichedValidated = validated;
-    try {
+    // Rework is a targeted field update — it must not re-categorize the item. Skipping also avoids the
+    // heaviest/most failure-prone stage aborting a simple text rework.
+    if (!reworkMode) try {
       const assembledCategorizerPrompt = resolvePromptPlaceholders({
         template: categorizerPrompt,
         fragments: basePromptFragments,
@@ -1945,7 +1971,10 @@ export async function runExtractionAttempts({
 
     let pricedValidated = enrichedValidated;
     const hasPrice = isUsablePrice(enrichedValidated.data.Verkaufspreis);
-    if (hasPrice) {
+    if (reworkMode) {
+      // Rework must not re-price the item.
+      logger?.info?.({ msg: 'pricing stage skipped - rework mode', attempt, itemId });
+    } else if (hasPrice) {
       logger?.info?.({ msg: 'pricing stage skipped - price already present', attempt, itemId });
     } else {
       let searchSummary: string | null = null;
