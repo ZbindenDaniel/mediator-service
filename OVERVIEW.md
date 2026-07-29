@@ -37,6 +37,8 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+888. ✅ Close event-log coverage gaps: intake, CSV import, import-time box upsert, and stubs now emit lifecycle events; agentic events surface on item history (keying fix) → [item-lifecycle]
+887. ✅ Item list Ki-Status filter is now a multi-select (checkbox popover; default = all except Freigegeben) → [ui]
 886. ✅ Scanner UX: full-frame visual scan feedback (green ✓ / red ✗) + explicit "Schliessen" exit that routes the placement loop into inventory reconciliation → [scanning]
 885. ✅ Inventory scan gets an exit route: unscanned box items can be stock-removed or location-cleared → [storage]
 884. ✅ Intake reference step: bootable-only categories, auto-fill description from scanned model, drop redundant "funktionsfähig?" question → [intake]
@@ -45,5 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 881. ✅ Fix production initDb crash-loop: move premature item_attachments("Artikel_Nummer") index after the ALTER that adds the column (unblocks Confidence migration too) → [docs-infra]
 880. ✅ Remove hardcoded ERP sync credentials; read from env + fail fast (503) when unconfigured → [erp-sync]
 879. ✅ Gate ERP export/sync to approved items only (configurable via ERP_SYNC_REQUIRE_APPROVAL, default on) → [erp-sync]
-878. ✅ Fix "container mediator is unhealthy": guard events.Meta→jsonb migration so legacy non-JSON rows can't abort initDb startup → [docs-infra]
-877. ✅ Route product-level attachments (Scope/Artikel_Nummer) so all instances of a product see them → [media]

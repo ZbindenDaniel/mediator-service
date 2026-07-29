@@ -141,7 +141,7 @@
 
 11. **Agentic: assure category then start extraction with review info.** Enforce category confirmation before starting extraction and pass review context into the flow.
 
-12. **Multiselect agent states.** Allow filtering the agent queue by multiple states (default: everything except 'Freigegeben').
+12. ✅ **Multiselect agent states.** Item-list Ki-Status filter is now a checkbox multi-select (default: every status except 'Freigegeben'). Legacy single-value localStorage/URL shape is migrated on load; empty selection = show none via `__none__` sentinel; backend filters via `= ANY($4::TEXT[])`. See ui changelog #887.
 
 13. **Filter and sort boxes/shelves.** Add filter options (boxes only / shelves only, location dropdown) and sorting to the box/shelf list.
 
@@ -192,6 +192,8 @@
 24. **Track total search queries per run.** Persist or compute a per-run count with minimal schema impact and clear log fields.
 
 25. **Improve event log.** Make event log more useful and easier to navigate.
+   - ✅ **Coverage gap fixed:** items/boxes often had zero events because device intake and the CSV importer (the two biggest creation sources) never called `logEvent`, and boxes created via `import-item`'s `runUpsertBox` + stubs logged nothing. Intake now logs Item `Created` + `QualityAssessed`; CSV import logs `Created`/`Updated` per instance; import-time box upsert logs Box `Created`; `create-stub` logs `StubCreated`; `quality-review` logs `QualityAssessed`. Reference-level agentic events (keyed by Artikel_Nummer) now surface on item history via `listEventsForItem(itemId, artikelNummer)`. Also fixed `bulk-move-items` calling async `bulkMoveItems` without `await`. See item-lifecycle changelog #888.
+   - **Still unlogged (deferred):** successful prints (only `PrintFailed` logs), ERP sync, stub close, a distinct reference-created event. No history backfill for pre-existing items/boxes.
 
 26. **Inconsistent locationTag display.** Audit and fix locationTag rendering across views so it is displayed consistently. Note: box links in ItemDetail now navigate via the panel shell (Steps 8–9) rather than hard-navigating; other views may still use plain `<Link>` to `/boxes/:id`.
 

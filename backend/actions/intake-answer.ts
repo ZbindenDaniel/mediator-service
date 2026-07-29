@@ -9,6 +9,7 @@ import {
   updateItemInstanceSpecs,
   getMaxArtikelNummer,
   getMaxItemId,
+  logEvent,
 } from '../db';
 import { queryOne } from '../db-client';
 import { generateItemUUID } from '../lib/itemIds';
@@ -112,6 +113,15 @@ async function ensureItem(
     Auf_Lager: 1,
     SerialNumber: serial ?? undefined,
     MacAddress: mac ?? undefined,
+  });
+
+  // Intake was creating items with no event, so intaked devices had empty histories (bug fix).
+  await logEvent({
+    Actor: 'intake-station',
+    EntityType: 'Item',
+    EntityId: itemUUID,
+    Event: 'Created',
+    Meta: JSON.stringify({ source: 'intake', artikelNummer, serial: serial ?? null, mac: mac ?? null }),
   });
 
   return itemUUID;
@@ -228,6 +238,18 @@ const action = defineHttpAction({
 
       const id = await insertQualityAssessment(assessment);
       await updateItemQualityAssessment(itemRow.ItemUUID, id, checkResponse.qualityValue);
+
+      await logEvent({
+        Actor: 'intake-station',
+        EntityType: 'Item',
+        EntityId: itemRow.ItemUUID,
+        Event: 'QualityAssessed',
+        Meta: JSON.stringify({
+          source: 'intake',
+          quality: checkResponse.qualityValue,
+          qualityTag: checkResponse.qualityTag ?? null,
+        }),
+      });
 
       const mergedSpecs = { ...checkResponse.derivedSpecs, ...(instanceSpecs ?? {}) };
       if (Object.keys(mergedSpecs).length > 0) {

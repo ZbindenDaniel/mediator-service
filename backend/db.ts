@@ -1158,7 +1158,8 @@ export async function listItemsWithFilters(filters: {
   searchTerm: string | null;
   subcategoryFilter: string | null;
   boxFilter: string | null;
-  agenticStatus: string | null;
+  // null = no agentic-status filter; array = statuses to include (empty array → match nothing).
+  agenticStatuses: string[] | null;
   unplacedOnly: number | null;
 }): Promise<any[]> {
   const rows = await query(
@@ -1172,10 +1173,10 @@ export async function listItemsWithFilters(filters: {
           OR LOWER(COALESCE(i."Artikel_Nummer",'')) LIKE $1 OR LOWER(COALESCE(i."ItemUUID",'')) LIKE $1)
      AND ($2::TEXT IS NULL OR $2 = '' OR LOWER(COALESCE(CAST(r."Unterkategorien_A" AS TEXT),'')) LIKE $2)
      AND ($3::TEXT IS NULL OR $3 = '' OR LOWER(COALESCE(i."BoxID",'')) LIKE $3)
-     AND ($4::TEXT IS NULL OR $4 = '' OR COALESCE(ar."Status",'notStarted') = $4)
+     AND ($4::TEXT[] IS NULL OR COALESCE(ar."Status",'notStarted') = ANY($4))
      AND ($5::INTEGER IS NULL OR $5 = 0 OR i."BoxID" IS NULL)
      ORDER BY i."ItemUUID"`,
-    [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatus, filters.unplacedOnly]
+    [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatuses, filters.unplacedOnly]
   );
   return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsWithFilters');
 }
@@ -1184,7 +1185,8 @@ export async function listItemReferencesWithFilters(filters: {
   searchTerm: string | null;
   subcategoryFilter: string | null;
   boxFilter: string | null;
-  agenticStatus: string | null;
+  // null = no agentic-status filter; array = statuses to include (empty array → match nothing).
+  agenticStatuses: string[] | null;
   unplacedOnly: number | null;
 }): Promise<any[]> {
   const rows = await query(
@@ -1213,10 +1215,10 @@ export async function listItemReferencesWithFilters(filters: {
           OR LOWER(COALESCE(r."Artikel_Nummer",'')) LIKE $1 OR LOWER(COALESCE(i."ItemUUID",'')) LIKE $1)
      AND ($2::TEXT IS NULL OR $2 = '' OR LOWER(COALESCE(CAST(r."Unterkategorien_A" AS TEXT),'')) LIKE $2)
      AND ($3::TEXT IS NULL OR $3 = '' OR LOWER(COALESCE(i."BoxID",'')) LIKE $3)
-     AND ($4::TEXT IS NULL OR $4 = '' OR COALESCE(ar."Status",'notStarted') = $4)
+     AND ($4::TEXT[] IS NULL OR COALESCE(ar."Status",'notStarted') = ANY($4))
      AND ($5::INTEGER IS NULL OR $5 = 0 OR i."BoxID" IS NULL)
      ORDER BY COALESCE(NULLIF(r."Artikel_Nummer",''), i."ItemUUID")`,
-    [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatus, filters.unplacedOnly]
+    [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatuses, filters.unplacedOnly]
   );
   return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemReferencesWithFilters');
 }
@@ -1651,12 +1653,16 @@ export async function listEventsForBox(boxId: string): Promise<EventLog[]> {
   );
 }
 
-export async function listEventsForItem(itemId: string): Promise<EventLog[]> {
+export async function listEventsForItem(itemId: string, artikelNummer?: string | null): Promise<EventLog[]> {
+  // Also surface reference-level events keyed by Artikel_Nummer (e.g. AgenticSearchQueued),
+  // which apply to every instance of the reference; otherwise they never show on item history.
+  const ref = (artikelNummer ?? '').trim();
   return query<EventLog>(
-    `SELECT * FROM events WHERE "EntityType"='Item' AND "EntityId"=$1
+    `SELECT * FROM events WHERE "EntityType"='Item'
+       AND ("EntityId"=$1 OR ($2 <> '' AND "EntityId"=$2))
      AND ${levelFilterExpression()} AND ${topicFilterExpression()}
      ORDER BY "Id" DESC LIMIT 200`,
-    [itemId]
+    [itemId, ref]
   );
 }
 
