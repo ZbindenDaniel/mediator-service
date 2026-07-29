@@ -1150,11 +1150,29 @@ div {
     gap: 12px;
 }
 
+.qr-scanner__toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.qr-scanner__toolbar h1 {
+    margin: 0;
+}
+
+.qr-scanner__close {
+    flex-shrink: 0;
+}
+
 .qr-scanner .video-frame {
+    position: relative;
     background: #000;
     border-radius: var(--radius);
     overflow: hidden;
     min-height: 220px;
+    border: 3px solid transparent;
+    transition: border-color 0.15s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1169,6 +1187,53 @@ div {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
+}
+
+.qr-scanner .video-frame--success {
+    border-color: #0f9d58;
+}
+
+.qr-scanner .video-frame--error {
+    border-color: #c5221f;
+}
+
+.qr-flash {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    animation: qr-flash-fade 0.6s ease-out forwards;
+}
+
+.qr-flash--success {
+    background: rgba(15, 157, 88, 0.35);
+}
+
+.qr-flash--error {
+    background: rgba(197, 34, 31, 0.35);
+}
+
+.qr-flash__icon {
+    font-size: 5rem;
+    line-height: 1;
+    color: #fff;
+    font-weight: 700;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    animation: qr-flash-pop 0.4s ease-out;
+}
+
+@keyframes qr-flash-fade {
+    0% { opacity: 1; }
+    70% { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+@keyframes qr-flash-pop {
+    0% { transform: scale(0.4); opacity: 0; }
+    50% { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(1); opacity: 1; }
 }
 
 /* Dialog */
@@ -3550,6 +3615,58 @@ button:focus {
 
 .placement-scan__status p {
     margin: 0;
+}
+
+.placement-scan__reconcile {
+    margin: 8px 16px;
+    padding: 12px;
+    border-radius: var(--radius, 8px);
+    background: var(--warning-bg, #fff3cd);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.placement-scan__reconcile > p {
+    margin: 0;
+}
+
+.placement-scan__reconcile-bulk {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.placement-scan__reconcile-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.placement-scan__reconcile-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px;
+    border-radius: var(--radius, 8px);
+    background: var(--surface, #fff);
+    flex-wrap: wrap;
+}
+
+.placement-scan__reconcile-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.placement-scan__reconcile-done {
+    color: var(--success, #2e7d32);
+    font-size: 0.9rem;
 }
 
 /* Hilfe page */

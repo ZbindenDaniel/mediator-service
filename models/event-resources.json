@@ -6,6 +6,7 @@
   { "key": "Updated", "label": "Aktualisiert", "level": "info", "topic": "data" },
   { "key": "Moved", "label": "Verschoben", "level": "important", "topic": "logistics" },
   { "key": "Removed", "label": "Entnommen", "level": "important", "topic": "logistics" },
+  { "key": "LocationCleared", "label": "Standort entfernt", "level": "important", "topic": "logistics" },
   { "key": "Deleted", "label": "Gelöscht", "level": "important", "topic": "data" },
   { "key": "Exported", "label": "Exportiert", "level": "info", "topic": "export" },
   { "key": "Note", "label": "Notiz", "level": "info", "topic": "data" },

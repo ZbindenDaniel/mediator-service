@@ -141,7 +141,7 @@
 
 11. **Agentic: assure category then start extraction with review info.** Enforce category confirmation before starting extraction and pass review context into the flow.
 
-12. ✅ **Multiselect agent states.** Item-list Ki-Status filter is now a checkbox multi-select (default: every status except 'Freigegeben'). Legacy single-value localStorage/URL shape is migrated on load; empty selection = show none via `__none__` sentinel; backend filters via `= ANY($4::TEXT[])`. See ui changelog #885.
+12. ✅ **Multiselect agent states.** Item-list Ki-Status filter is now a checkbox multi-select (default: every status except 'Freigegeben'). Legacy single-value localStorage/URL shape is migrated on load; empty selection = show none via `__none__` sentinel; backend filters via `= ANY($4::TEXT[])`. See ui changelog #887.
 
 13. **Filter and sort boxes/shelves.** Add filter options (boxes only / shelves only, location dropdown) and sorting to the box/shelf list.
 
@@ -158,6 +158,7 @@
 19a. **Implement stub boxes.** Planning document at `docs/PLANNING_STUB_BOXES.md`. Phase 1: `box_stubs` DB table + migration (incl. `PhotoPath` column), create/list/patch API actions, ShelfDetail `HasActiveStubs` badge + stub list section. Phase 2: dedicated Stub Management nav page (grouped by shelf with color distinction, photo thumbnail); stub detail includes "Transport erstellen" button pre-filling `SourceId = stub.ShelfId` (identical to shelf detail flow). Stub auto-resolve is handled by transport completion (item #18), not a separate action.
 
 19b. **Implement inventory feature (passive cycle).** Planning document at `docs/PLANNING_INVENTORY.md`. Phase 1: `LastInventoryDate` on boxes, `MissingAt` on items, `inventory_sessions` table, `INVENTORY_CYCLE_DAYS` config, `inventoryPending` filter on box list. Phase 2: `/api/inventory/start|scan|complete|cancel`, `InventoryCheckView` with checklist + scan zone + Menge count inputs + acoustic feedback. Phase 3: passive trigger hook in `qr-scan` + interstitial prompt. Phase 4: missing items view, `InventoryFound` flow, session export. Active Inventory Day (UC-1) is deferred — not part of current scope.
+   - **Note (storage #885):** A lightweight reconciliation *exit route* now exists on the placement scan flow (`PlacementScanView`): finishing a box scan surfaces unscanned recorded items and lets the operator remove their stock or clear their location. This is distinct from the full passive-cycle verification feature above (no sessions/`MissingAt`/passive triggers) but covers the "remove items that no longer exist" need for the scan-into-box workflow.
 
 19. ✅ **Add instance specification fields (RAM, SSD, OS).** Now driven by quality contracts: `specField`/`specValue` in each question contributes to Langtext automatically after quality review. Subcategory contract 201 (Laptop) covers keyboard layout, RAM, storage, battery.
 
@@ -191,7 +192,7 @@
 24. **Track total search queries per run.** Persist or compute a per-run count with minimal schema impact and clear log fields.
 
 25. **Improve event log.** Make event log more useful and easier to navigate.
-   - ✅ **Coverage gap fixed:** items/boxes often had zero events because device intake and the CSV importer (the two biggest creation sources) never called `logEvent`, and boxes created via `import-item`'s `runUpsertBox` + stubs logged nothing. Intake now logs Item `Created` + `QualityAssessed`; CSV import logs `Created`/`Updated` per instance; import-time box upsert logs Box `Created`; `create-stub` logs `StubCreated`; `quality-review` logs `QualityAssessed`. Reference-level agentic events (keyed by Artikel_Nummer) now surface on item history via `listEventsForItem(itemId, artikelNummer)`. Also fixed `bulk-move-items` calling async `bulkMoveItems` without `await`. See item-lifecycle changelog #886.
+   - ✅ **Coverage gap fixed:** items/boxes often had zero events because device intake and the CSV importer (the two biggest creation sources) never called `logEvent`, and boxes created via `import-item`'s `runUpsertBox` + stubs logged nothing. Intake now logs Item `Created` + `QualityAssessed`; CSV import logs `Created`/`Updated` per instance; import-time box upsert logs Box `Created`; `create-stub` logs `StubCreated`; `quality-review` logs `QualityAssessed`. Reference-level agentic events (keyed by Artikel_Nummer) now surface on item history via `listEventsForItem(itemId, artikelNummer)`. Also fixed `bulk-move-items` calling async `bulkMoveItems` without `await`. See item-lifecycle changelog #888.
    - **Still unlogged (deferred):** successful prints (only `PrintFailed` logs), ERP sync, stub close, a distinct reference-created event. No history backfill for pre-existing items/boxes.
 
 26. **Inconsistent locationTag display.** Audit and fix locationTag rendering across views so it is displayed consistently. Note: box links in ItemDetail now navigate via the panel shell (Steps 8–9) rather than hard-navigating; other views may still use plain `<Link>` to `/boxes/:id`.

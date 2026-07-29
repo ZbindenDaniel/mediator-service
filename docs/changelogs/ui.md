@@ -4,7 +4,7 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
-## 885. ✅ Item list Ki-Status filter is now a multi-select (default: all except Freigegeben)
+## 887. ✅ Item list Ki-Status filter is now a multi-select (default: all except Freigegeben)
 **Why:** The agentic-status filter was a single `<select>` (`'any'` or one status), so operators couldn't, e.g., watch every state still needing attention at once (todo #12). Converted `agenticStatusFilter` to an `AgenticRunStatus[]` throughout: `itemListFiltersStorage.ts` (type, default, `buildItemListQueryParams` now appends one `agenticStatus` param per selected status, `sameAgenticStatusSelection` set-equality helper, and load-time migration of the legacy single-value/`'any'` shape), a checkbox-popover UI (`<details>` + `.filter-multiselect` SCSS) in `ItemListPage.tsx` with Alle/Keine shortcuts, and the client-side match switched to `.includes`. Default selection is every status **except** `approved` per todo #12 (new `AGENTIC_RUN_DEFAULT_VISIBLE_STATUSES` in `models/agentic-statuses.ts`). Backend: `list-items.ts` reads `getAll('agenticStatus')`; `listItemsWithFilters`/`listItemReferencesWithFilters` changed the `= $4` clause to `= ANY($4::TEXT[])` (null = no filter). An explicit empty selection sends an `__none__` sentinel (`AGENTIC_STATUS_FILTER_NONE`) so the backend can tell "show none" from "no filter".
 **Deferred:** No new reusable multi-select component — the checkbox popover is local to the item list; extract it if a second filter needs the same pattern.
 

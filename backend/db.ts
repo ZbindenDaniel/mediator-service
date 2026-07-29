@@ -1304,6 +1304,15 @@ export async function zeroItemStock(itemUUID: string): Promise<number> {
   );
 }
 
+// Clears the box assignment only — unlike zeroItemStock, stock stays intact so an
+// unscanned-but-still-owned item (inventory reconciliation) isn't dropped from inventory.
+export async function clearItemLocation(itemUUID: string): Promise<number> {
+  return execute(
+    `UPDATE items SET "BoxID"=NULL,"Location"=NULL,"UpdatedAt"=$2 WHERE "ItemUUID"=$1`,
+    [itemUUID, new Date().toISOString()]
+  );
+}
+
 export async function deleteItem(itemUUID: string): Promise<number> {
   return execute(`DELETE FROM items WHERE "ItemUUID"=$1`, [itemUUID]);
 }
