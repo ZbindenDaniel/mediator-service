@@ -92,6 +92,24 @@ const action = defineHttpAction({
         return sendJson(res, 500, { error: 'Failed to link quality assessment to item' });
       }
 
+      // Quality review is a meaningful lifecycle action but previously logged no event.
+      try {
+        await ctx.logEvent?.({
+          Actor: reviewed_by || null,
+          EntityType: 'Item',
+          EntityId: itemUUID,
+          Event: 'QualityAssessed',
+          Meta: JSON.stringify({
+            source: 'quality-review',
+            value: checkResponse.qualityValue,
+            tag: checkResponse.qualityTag ?? null,
+            subCategory: subCategory ?? null,
+          }),
+        });
+      } catch (logErr) {
+        console.error('[quality-review] Failed to log QualityAssessed event', { itemUUID, error: logErr });
+      }
+
       if (Object.keys(checkResponse.derivedSpecs).length > 0) {
         try {
           await updateItemInstanceSpecs(itemUUID, checkResponse.derivedSpecs);

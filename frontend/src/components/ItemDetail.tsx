@@ -433,7 +433,7 @@ export default function ItemDetail({ itemId }: Props) {
           normalizedSubcategoryFilter: effectiveFilters.subcategoryFilter.trim().toLowerCase(),
           normalizedBoxFilter: effectiveFilters.boxFilter.trim().toLowerCase(),
           stockFilter: 'any',
-          normalizedAgenticFilter: effectiveFilters.agenticStatusFilter === 'any'
+          normalizedAgenticFilter: effectiveFilters.agenticStatusFilter.length === AGENTIC_RUN_STATUSES.length
             ? null
             : effectiveFilters.agenticStatusFilter,
           // TODO(shop-publication-neighbors): Revisit adjacent navigation semantics if detail page gets independent shop-status controls.

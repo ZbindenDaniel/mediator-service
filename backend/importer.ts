@@ -26,6 +26,7 @@ import {
   findByMaterial,
   getMaxArtikelNummer,
   insertEventLogEntry,
+  logEvent,
   hasItemReferenceByArtikelNummer
 } from './db';
 import { IMPORTER_FORCE_ZERO_STOCK } from './config';
@@ -1698,6 +1699,20 @@ export async function ingestCsvFile(
           UpdatedAt: nowDate
         });
         existingItemUUIDs.add(item.ItemUUID);
+
+        // CSV-imported items previously got no lifecycle event (only events.csv rows were
+        // replayed), leaving them with empty histories. Emit Created/Updated per instance.
+        await logEvent({
+          Actor: 'csv-import',
+          EntityType: 'Item',
+          EntityId: item.ItemUUID,
+          Event: instanceAction === 'updated' ? 'Updated' : 'Created',
+          Meta: JSON.stringify({
+            source: 'csv-import',
+            artikelNummer: artikelNummer || null,
+            boxId: normalizedBoxId || null,
+          }),
+        });
 
         console.info('[importer] Item instance persistence decision', {
           rowNumber,

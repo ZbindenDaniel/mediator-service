@@ -25,6 +25,15 @@ export const AGENTIC_RUN_STATUSES = [
 
 export type AgenticRunStatus = (typeof AGENTIC_RUN_STATUSES)[number];
 
+// Default selection for the item-list Ki-Status multi-select: everything except
+// approved ("Freigegeben"), so completed items don't clutter the working list (todo #12).
+export const AGENTIC_RUN_DEFAULT_VISIBLE_STATUSES: readonly AgenticRunStatus[] =
+  AGENTIC_RUN_STATUSES.filter((status) => status !== AGENTIC_RUN_STATUS_APPROVED);
+
+// Sentinel query value meaning "an explicit empty selection" (match nothing) so the
+// backend can distinguish it from an absent param (no filter → match everything).
+export const AGENTIC_STATUS_FILTER_NONE = '__none__' as const;
+
 const STATUS_NORMALIZATION_MAP = new Map<string, AgenticRunStatus>([
   [AGENTIC_RUN_STATUS_QUEUED, AGENTIC_RUN_STATUS_QUEUED],
   ['queue', AGENTIC_RUN_STATUS_QUEUED],

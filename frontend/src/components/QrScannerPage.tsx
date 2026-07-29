@@ -26,6 +26,8 @@ type QrTarget = {
 type QrCallback = 'NavigateToEntity';
 type QrScanIntent = 'add-item' | 'relocate-box' | 'shelf-add-box' | 'placement-scan' | 'search';
 
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 function triggerSuccessFeedback() {
   try { navigator.vibrate?.([200]); } catch { /* vibration unsupported */ }
   try {
@@ -71,9 +73,32 @@ export default function QrScannerPage() {
   const [showRawDetails, setShowRawDetails] = useState(false);
   const [logErrorMessage, setLogErrorMessage] = useState<string | null>(null);
   const [mismatchToast, setMismatchToast] = useState(false);
+  // Full-frame visual confirmation on scan (green ✓ / red ✗) to back up the audio + haptic cues.
+  const [flash, setFlash] = useState<null | 'success' | 'error'>(null);
+  const flashTimerRef = useRef<number | null>(null);
   // Blocks the detection interval for 1.5 s after a mismatch so the same wrong code isn't re-triggered while still in frame.
   const skipDetectionRef = useRef(false);
   const navigate = useNavigate();
+
+  const showFlash = useCallback((kind: 'success' | 'error') => {
+    setFlash(kind);
+    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = window.setTimeout(() => setFlash(null), 600);
+  }, []);
+
+  const signalSuccess = useCallback(() => {
+    triggerSuccessFeedback();
+    showFlash('success');
+  }, [showFlash]);
+
+  const signalMismatch = useCallback(() => {
+    triggerMismatchFeedback();
+    showFlash('error');
+  }, [showFlash]);
+
+  useEffect(() => () => {
+    if (flashTimerRef.current !== null) window.clearTimeout(flashTimerRef.current);
+  }, []);
   const location = useLocation();
   const returnTo = (() => {
     try {
@@ -262,13 +287,14 @@ export default function QrScannerPage() {
 
       if (searchTarget) {
         if (id === searchTarget) {
-          triggerSuccessFeedback();
+          signalSuccess();
           setPayload(normalized);
           setStatus('success');
           stopCamera();
           setMessage('Gefunden!');
           logger.info?.('QR search match found', { id, searchTarget, returnTo });
           await logScan(normalized);
+          await delay(280);
           if (returnTo) {
             navigateToReturn(returnTo, minimalReturnPayload);
           } else {
@@ -277,7 +303,7 @@ export default function QrScannerPage() {
             navigateToTarget(nextTarget);
           }
         } else {
-          triggerMismatchFeedback();
+          signalMismatch();
           setMismatchToast(true);
           skipDetectionRef.current = true;
           window.setTimeout(() => {
@@ -288,6 +314,7 @@ export default function QrScannerPage() {
         return;
       }
 
+      signalSuccess();
       setPayload(normalized);
       setStatus('success');
       stopCamera();
@@ -298,6 +325,7 @@ export default function QrScannerPage() {
           setMessage(`${nextTarget.label} erkannt. Weiterleitung läuft…`);
           logger.info?.('QR scan resolved via callback navigation', { id, callback, path: nextTarget.path, returnTo, intent, prefix: id.slice(0, 2).toUpperCase() });
           await logScan(normalized);
+          await delay(280);
           navigateToTarget(nextTarget);
           return;
         }
@@ -305,6 +333,7 @@ export default function QrScannerPage() {
         setMessage('QR-Code erkannt. Rückkehr läuft…');
         logger.info?.('QR scan resolved for return navigation', { id, returnTo, callback, intent, prefix: id.slice(0, 2).toUpperCase() });
         await logScan(normalized);
+        await delay(280);
         navigateToReturn(returnTo, minimalReturnPayload);
         return;
       }
@@ -313,15 +342,17 @@ export default function QrScannerPage() {
       setMessage(`${nextTarget.label} erkannt. Weiterleitung läuft…`);
       logger.info?.('QR scan resolved', { id, path: nextTarget.path, intent, prefix: id.slice(0, 2).toUpperCase() });
       await logScan(normalized);
+      await delay(280);
       navigateToTarget(nextTarget);
     } catch (err) {
       logError('QR payload validation failed', err);
+      signalMismatch();
       stopCamera();
       setTarget(null);
       setStatus('error');
       setMessage(err instanceof Error ? err.message : 'Unbekannter Fehler beim Lesen des QR-Codes.');
     }
-  }, [callback, intent, logScan, navigateToReturn, navigateToTarget, resolveTarget, returnTo, searchTarget, stopCamera]);
+  }, [callback, intent, logScan, navigateToReturn, navigateToTarget, resolveTarget, returnTo, searchTarget, signalSuccess, signalMismatch, stopCamera]);
 
   const startScanner = useCallback(async () => {
     stopCamera();
@@ -405,6 +436,18 @@ export default function QrScannerPage() {
     void startScanner();
   }, [startScanner]);
 
+  // Explicit exit so the user never has to rely on browser-back to leave the camera.
+  // In the placement loop, signal the placement view to finish (→ inventory reconciliation)
+  // instead of bouncing straight back into the scanner.
+  const handleClose = useCallback(() => {
+    stopCamera();
+    if (intent === 'placement-scan' && returnTo) {
+      navigate(returnTo, { state: { qrReturn: { intent: 'placement-scan', finish: true } } });
+      return;
+    }
+    navigate(-1);
+  }, [intent, returnTo, navigate, stopCamera]);
+
   const handleNavigate = useCallback(() => {
     if (!target) {
       return;
@@ -420,15 +463,25 @@ export default function QrScannerPage() {
 
   return (
     <div className="container qr-scanner">
-      <h1>QR-Scanner</h1>
+      <div className="qr-scanner__toolbar">
+        <h1>QR-Scanner</h1>
+        <button type="button" className="btn btn--ghost qr-scanner__close" onClick={handleClose}>
+          ✕ Schliessen
+        </button>
+      </div>
       <div className="card">
         {searchTarget && (
           <p className="search-target-hint">
             Suche: <strong>{searchLabel ?? searchTarget}</strong>
           </p>
         )}
-        <div className="video-frame">
+        <div className={`video-frame${flash ? ` video-frame--${flash}` : ''}`}>
           <video ref={videoRef} className="qr-video" autoPlay playsInline muted />
+          {flash && (
+            <div className={`qr-flash qr-flash--${flash}`} aria-hidden="true">
+              <span className="qr-flash__icon">{flash === 'success' ? '✓' : '✕'}</span>
+            </div>
+          )}
         </div>
         <p className={`status ${status}`}>{message}</p>
         {mismatchToast && (

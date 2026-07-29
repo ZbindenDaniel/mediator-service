@@ -14,6 +14,7 @@ jest.mock('../backend/db', () => ({
   findByMaterial: jest.fn(async () => null),
   getMaxArtikelNummer: jest.fn(async () => null),
   insertEventLogEntry: jest.fn(async () => undefined),
+  logEvent: jest.fn(async () => undefined),
   hasItemReferenceByArtikelNummer: jest.fn(async () => false),
 }));
 

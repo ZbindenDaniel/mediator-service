@@ -1,5 +1,5 @@
 import type { AgenticRunStatus } from 'models';
-import { AGENTIC_RUN_STATUSES } from 'models';
+import { AGENTIC_RUN_DEFAULT_VISIBLE_STATUSES, AGENTIC_RUN_STATUSES, AGENTIC_STATUS_FILTER_NONE } from 'models';
 import { normalizeQuality, QUALITY_LABELS, QUALITY_MIN } from 'models/quality';
 import { describeAgenticStatus } from './agenticStatusLabels';
 
@@ -26,7 +26,8 @@ export type ItemListFilters = {
   searchTerm: string;
   subcategoryFilter: string;
   boxFilter: string;
-  agenticStatusFilter: AgenticRunStatus | 'any';
+  // Multi-select: the set of Ki-Status values to show. Empty = show none; all statuses = no filter.
+  agenticStatusFilter: AgenticRunStatus[];
   shopPublicationFilter: 'all' | 'inShop' | 'notPublished' | 'noShopArticle';
   placementFilter: 'all' | 'unplaced' | 'placed';
   imageFilter: 'all' | 'noImages' | 'hasImages';
@@ -65,7 +66,7 @@ const DEFAULT_FILTERS: ItemListFilters = {
   searchTerm: '',
   subcategoryFilter: '',
   boxFilter: '',
-  agenticStatusFilter: 'any',
+  agenticStatusFilter: [...AGENTIC_RUN_DEFAULT_VISIBLE_STATUSES],
   // TODO(shop-publication-filter): Revisit labels/states if ERP introduces additional publication combinations.
   shopPublicationFilter: 'all',
   // TODO(placement-filter): Revisit placement filter states if shelf-level placement state is introduced.
@@ -80,7 +81,20 @@ const DEFAULT_FILTERS: ItemListFilters = {
 };
 
 export function getDefaultItemListFilters(): ItemListFilters {
-  return { ...DEFAULT_FILTERS };
+  // Clone the array so callers can't mutate the shared default selection.
+  return { ...DEFAULT_FILTERS, agenticStatusFilter: [...DEFAULT_FILTERS.agenticStatusFilter] };
+}
+
+// Compare two agentic-status selections as unordered sets.
+export function sameAgenticStatusSelection(
+  a: readonly AgenticRunStatus[],
+  b: readonly AgenticRunStatus[]
+): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  const other = new Set(b);
+  return a.every((status) => other.has(status));
 }
 
 export function hasNonDefaultFilters(
@@ -91,7 +105,7 @@ export function hasNonDefaultFilters(
     filters.searchTerm !== defaults.searchTerm
     || filters.subcategoryFilter !== defaults.subcategoryFilter
     || filters.boxFilter !== defaults.boxFilter
-    || filters.agenticStatusFilter !== defaults.agenticStatusFilter
+    || !sameAgenticStatusSelection(filters.agenticStatusFilter, defaults.agenticStatusFilter)
     || filters.shopPublicationFilter !== defaults.shopPublicationFilter
     || filters.placementFilter !== defaults.placementFilter
     || filters.imageFilter !== defaults.imageFilter
@@ -118,10 +132,12 @@ export function getActiveFilterDescriptions(
   if (filters.boxFilter.trim()) {
     active.push(`Behälter: ${filters.boxFilter.trim()}`);
   }
-  if (filters.agenticStatusFilter !== defaults.agenticStatusFilter) {
-    const statusLabel = filters.agenticStatusFilter === 'any'
-      ? 'Alle Ki-Status'
-      : describeAgenticStatus(filters.agenticStatusFilter);
+  if (!sameAgenticStatusSelection(filters.agenticStatusFilter, defaults.agenticStatusFilter)) {
+    const statusLabel = filters.agenticStatusFilter.length === 0
+      ? 'Keine'
+      : filters.agenticStatusFilter.length === AGENTIC_RUN_STATUSES.length
+        ? 'Alle'
+        : filters.agenticStatusFilter.map(describeAgenticStatus).join(', ');
     active.push(`Ki: ${statusLabel}`);
   }
   if (filters.shopPublicationFilter !== defaults.shopPublicationFilter) {
@@ -192,8 +208,16 @@ export function buildItemListQueryParams(filters: ItemListFilters): URLSearchPar
     if (filters.boxFilter.trim()) {
       query.set('box', filters.boxFilter.trim());
     }
-    if (filters.agenticStatusFilter !== 'any') {
-      query.set('agenticStatus', filters.agenticStatusFilter);
+    // All statuses selected = no filter (omit param). Empty selection = match nothing
+    // (explicit sentinel). Otherwise send one param per selected status.
+    if (filters.agenticStatusFilter.length !== AGENTIC_RUN_STATUSES.length) {
+      if (filters.agenticStatusFilter.length === 0) {
+        query.set('agenticStatus', AGENTIC_STATUS_FILTER_NONE);
+      } else {
+        for (const status of filters.agenticStatusFilter) {
+          query.append('agenticStatus', status);
+        }
+      }
     }
     if (filters.shopPublicationFilter !== 'all') {
       query.set('shopPublicationFilter', filters.shopPublicationFilter);
@@ -258,10 +282,21 @@ export function loadItemListFilters(
       logger.warn?.('Ignoring invalid stored quality filter', (parsed as Record<string, unknown>).qualityFilter);
     }
 
-    if (parsed.agenticStatusFilter === 'any' || AGENTIC_RUN_STATUSES.includes(parsed.agenticStatusFilter as AgenticRunStatus)) {
-      merged.agenticStatusFilter = parsed.agenticStatusFilter as ItemListFilters['agenticStatusFilter'];
-    } else if (parsed.agenticStatusFilter !== undefined) {
-      logger.warn?.('Ignoring invalid stored agentic status filter', parsed.agenticStatusFilter);
+    const rawAgenticStatus = (parsed as Record<string, unknown>).agenticStatusFilter;
+    if (Array.isArray(rawAgenticStatus)) {
+      const valid = rawAgenticStatus.filter(
+        (status): status is AgenticRunStatus =>
+          typeof status === 'string' && AGENTIC_RUN_STATUSES.includes(status as AgenticRunStatus)
+      );
+      merged.agenticStatusFilter = Array.from(new Set(valid));
+    } else if (rawAgenticStatus === 'any') {
+      // Migrate legacy single-value 'any' → all statuses selected (no filter).
+      merged.agenticStatusFilter = [...AGENTIC_RUN_STATUSES];
+    } else if (typeof rawAgenticStatus === 'string' && AGENTIC_RUN_STATUSES.includes(rawAgenticStatus as AgenticRunStatus)) {
+      // Migrate legacy single-status string → single-item selection.
+      merged.agenticStatusFilter = [rawAgenticStatus as AgenticRunStatus];
+    } else if (rawAgenticStatus !== undefined) {
+      logger.warn?.('Ignoring invalid stored agentic status filter', rawAgenticStatus);
     }
 
     if (
