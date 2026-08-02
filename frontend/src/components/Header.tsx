@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getUser, setUser as persistUser } from '../lib/user';
-import { useDialog } from './dialog';
+import { getSimpleMode, setSimpleMode } from '../lib/simpleMode';
+import UserSettingsDialog from './UserSettingsDialog';
 import { GoArchive, GoListUnordered, GoPlus, GoLog, GoSearch, GoGift, GoHash, GoTools, GoQuestion } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
@@ -24,7 +25,6 @@ function resolveDirectTarget(term: string): { type: 'item' | 'box'; id: string }
 // TODO(filter-indicator): Surface stored filter state changes in the header and allow quick reset.
 // TODO(filter-indicator-accessibility): Validate whether deep-link filter color needs a text label for screen-reader parity.
 export default function Header() {
-  const dialog = useDialog();
   const navigate = useNavigate();
   const { setCreateMode, setEntity, setMobileShowDetail } = usePanelContext();
   const [searchQuery, setSearchQuery] = useState('');
@@ -33,6 +33,7 @@ export default function Header() {
   const [isSearching, setIsSearching] = useState(false);
   const searchFormRef = useRef<HTMLFormElement | null>(null);
   const [user, setUserState] = useState(() => getUser().trim());
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
 
@@ -137,23 +138,18 @@ export default function Header() {
     }
   }, [navigate, setEntity]);
 
-  const handleUserDoubleClick = useCallback(async () => {
-    try {
-      const result = await dialog.prompt({
-        title: 'Benutzername bearbeiten',
-        message: 'Bitte geben Sie einen neuen Benutzernamen ein:',
-        defaultValue: user,
-        confirmLabel: 'Speichern',
-        cancelLabel: 'Abbrechen'
-      });
-      const trimmed = (result ?? '').trim();
-      if (!trimmed || trimmed === user) return;
-      persistUser(trimmed);
-      setUserState(trimmed);
-    } catch (err) {
-      console.error('Failed to update username through dialog', err);
+  const handleUserDoubleClick = useCallback(() => {
+    setSettingsOpen(true);
+  }, []);
+
+  const handleSettingsSave = useCallback((username: string, simpleMode: boolean) => {
+    if (username && username !== user) {
+      persistUser(username);
+      setUserState(username);
     }
-  }, [dialog, user]);
+    setSimpleMode(simpleMode);
+    setSettingsOpen(false);
+  }, [user]);
 
   return (
     <header className="header">
@@ -192,10 +188,10 @@ export default function Header() {
             <Link to="/activities" aria-label="Aktivitäten" title="Aktivitäten" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoLog aria-hidden="true" />
             </Link>
-            <Link to="/stubs" aria-label="Fundsachen" title="Fundsachen" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+            <Link to="/stubs" className="nav-stubs" aria-label="Fundsachen" title="Fundsachen" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoGift aria-hidden="true" />
             </Link>
-            <Link to="/admin" aria-label="Administration" title="Administration" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+            <Link to="/admin" className="nav-admin" aria-label="Administration" title="Administration" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoTools aria-hidden="true" />
             </Link>
             <Link to="/hilfe" aria-label="Hilfe" title="Hilfe" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
@@ -273,6 +269,14 @@ export default function Header() {
           {user}
         </div>
       </div>
+      {settingsOpen && (
+        <UserSettingsDialog
+          currentUser={user}
+          currentSimpleMode={getSimpleMode()}
+          onSave={handleSettingsSave}
+          onCancel={() => setSettingsOpen(false)}
+        />
+      )}
     </header>
   );
 }

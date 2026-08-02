@@ -20,6 +20,7 @@ import PlacementScanView from './PlacementScanView';
 import StubListPage from './StubListPage';
 import HilfePage from './HilfePage';
 import { createScanDetector } from '../utils/scannerDetection';
+import { applySimpleModeClass } from '../lib/simpleMode';
 
 // TODO(agent): Confirm admin-only shelf create route visibility expectations with product.
 
@@ -81,6 +82,11 @@ export function AppRoutes() {
 }
 
 export default function App() {
+  // Apply the stored simple-mode preference to <body> once on load; all hiding is CSS-driven.
+  useEffect(() => {
+    applySimpleModeClass();
+  }, []);
+
   useEffect(() => {
     const detector = createScanDetector();
     const onKeyDown = (event: KeyboardEvent) => {

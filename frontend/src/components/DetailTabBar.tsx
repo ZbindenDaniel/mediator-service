@@ -112,6 +112,7 @@ export default function DetailTabBar({ agenticNeedsReview = false, isMarked = fa
         <button
           key={tab.id}
           type="button"
+          data-tab-id={tab.id}
           className={`detail-tab-bar__tab${effective === tab.id ? ' is-active' : ''}`}
           onClick={() => setTab(tab.id)}
           aria-current={effective === tab.id ? 'page' : undefined}
