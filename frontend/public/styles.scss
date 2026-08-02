@@ -3935,13 +3935,15 @@ button:focus {
 
 // Simple/minimalistic mode: hide surfaces that overwhelm some operators.
 // Toggled via a `simple-mode` class on <body> (see lib/simpleMode.ts).
-// Hiding is purely visual here; routes and tab content logic are untouched.
+//
+// Opt-out model: simple mode hides by DEFAULT. A nav item or detail tab stays
+// visible only if it is explicitly marked to keep — nav items via a `simple-keep`
+// class (Header.tsx), detail tabs via `data-simple-keep` (DetailTabBar.tsx).
+// Any new nav item / tab is therefore hidden in simple mode until it opts in.
+// Hiding is purely visual; routes and tab content logic are untouched.
 body.simple-mode {
-    .nav-stubs,
-    .nav-admin,
-    .detail-tab-bar__tab[data-tab-id="ki"],
-    .detail-tab-bar__tab[data-tab-id="attachments"],
-    .detail-tab-bar__tab[data-tab-id="accessories"] {
+    .header-nav__items > *:not(.simple-keep),
+    .detail-tab-bar__tab:not([data-simple-keep]) {
         display: none;
     }
 }

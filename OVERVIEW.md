@@ -37,7 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
-887. ✅ Add opt-in "einfacher Modus" (simple mode): user-settings dialog toggle hides Fundsachen/Admin nav + KI/Anhänge/Zubehör item tabs via a body CSS class → [ui]
+887. ✅ Add opt-in "einfacher Modus" (simple mode): user-settings dialog toggle hides UI via a body CSS class — opt-out model, so every future nav item/tab is hidden by default unless marked `simple-keep` → [ui]
 886. ✅ Scanner UX: full-frame visual scan feedback (green ✓ / red ✗) + explicit "Schliessen" exit that routes the placement loop into inventory reconciliation → [scanning]
 885. ✅ Inventory scan gets an exit route: unscanned box items can be stock-removed or location-cleared → [storage]
 884. ✅ Intake reference step: bootable-only categories, auto-fill description from scanned model, drop redundant "funktionsfähig?" question → [intake]

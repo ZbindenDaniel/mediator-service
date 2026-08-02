@@ -203,7 +203,7 @@
 
 30. **Compact/collapsible flow cleanup for key views.** Target high-impact screens with reversible UI refinements to reduce visual weight on frequent operations.
 
-30b. **Simple mode: make the hidden set configurable / server-persisted.** A first cut shipped (ui #887): an "einfacher Modus" toggle in the user-settings dialog hides a fixed set (Fundsachen/Admin nav + KI/Anhänge/Zubehör tabs) via a body CSS class stored in `localStorage`. Follow-ups: let operators choose which surfaces to hide, and/or persist the preference server-side per username so it follows them across devices. Also optional: skip hidden tabs in `DetailTabBar` arrow-key navigation.
+30b. **Simple mode: make the kept set configurable / server-persisted.** A first cut shipped (ui #887): an "einfacher Modus" toggle in the user-settings dialog strips the UI to a curated essential set via a body CSS class stored in `localStorage`. It uses an opt-out model — new nav items/tabs are hidden by default unless marked `simple-keep`/`keepInSimple`. Follow-ups: let operators choose which surfaces to keep, and/or persist the preference server-side per username so it follows them across devices. Also optional: skip hidden tabs in `DetailTabBar` arrow-key navigation.
 
 31. **Unified shelf view: combined box + loose items via one reusable list model (including Behälter context).** Fragmented shelf views force context switching and duplicate logic. **Goal:** unify rendering through shared list components with explicit aggregation rules.
 

@@ -168,36 +168,39 @@ export default function Header() {
             <GoHash aria-hidden="true" />
           </button>
 
-          {/* Nav items — always visible on desktop, toggled on mobile */}
+          {/* Nav items — always visible on desktop, toggled on mobile.
+              simple-keep marks the items kept in simple mode; unmarked items
+              (Fundsachen, Administration) are hidden, and any future nav item
+              is hidden by default until it opts in with simple-keep. */}
           <div className={`header-nav__items${navOpen ? ' header-nav__items--open' : ''}`}>
             <button
               type="button"
-              className="header-nav__icon-btn"
+              className="header-nav__icon-btn simple-keep"
               aria-label="Artikel erfassen"
               title="Artikel erfassen"
               onClick={() => { setNavOpen(false); setCreateMode('item'); navigate('/items'); }}
             >
               <GoPlus aria-hidden="true" />
             </button>
-            <Link to="/items" aria-label="Artikelliste" title="Artikelliste" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+            <Link to="/items" className="simple-keep" aria-label="Artikelliste" title="Artikelliste" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoListUnordered aria-hidden="true" />
             </Link>
-            <Link to="/boxes" aria-label="Behälter" title="Behälterliste" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+            <Link to="/boxes" className="simple-keep" aria-label="Behälter" title="Behälterliste" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoArchive aria-hidden="true" />
             </Link>
-            <Link to="/activities" aria-label="Aktivitäten" title="Aktivitäten" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+            <Link to="/activities" className="simple-keep" aria-label="Aktivitäten" title="Aktivitäten" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoLog aria-hidden="true" />
             </Link>
-            <Link to="/stubs" className="nav-stubs" aria-label="Fundsachen" title="Fundsachen" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+            <Link to="/stubs" aria-label="Fundsachen" title="Fundsachen" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoGift aria-hidden="true" />
             </Link>
-            <Link to="/admin" className="nav-admin" aria-label="Administration" title="Administration" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+            <Link to="/admin" aria-label="Administration" title="Administration" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoTools aria-hidden="true" />
             </Link>
-            <Link to="/hilfe" aria-label="Hilfe" title="Hilfe" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+            <Link to="/hilfe" className="simple-keep" aria-label="Hilfe" title="Hilfe" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoQuestion aria-hidden="true" />
             </Link>
-            <QrScanButton callback="NavigateToEntity" className="header-nav__icon-btn" label="QR-Code scannen" />
+            <QrScanButton callback="NavigateToEntity" className="header-nav__icon-btn simple-keep" label="QR-Code scannen" />
           </div>
           <form
             className="header-search"

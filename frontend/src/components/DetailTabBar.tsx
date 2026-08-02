@@ -6,6 +6,12 @@ interface TabDef {
   id: string;
   label: string;
   icon: React.ReactElement;
+  /**
+   * Keep visible in simple mode. Simple mode hides by default: any tab without
+   * this flag disappears when simple mode is on, so new tabs are hidden unless
+   * explicitly opted in here. See lib/simpleMode.ts and styles.scss.
+   */
+  keepInSimple?: boolean;
 }
 
 interface Props {
@@ -15,25 +21,28 @@ interface Props {
   isMarked?: boolean;
 }
 
+// keepInSimple marks the tabs that stay visible in simple mode. The deliberately
+// hidden ones (ki/attachments/accessories) simply omit it; any future tab added
+// without it is hidden in simple mode by default.
 const ITEM_BASE_TABS: TabDef[] = [
-  { id: 'instance', label: 'Vorrat', icon: <GoCpu aria-hidden="true" /> },
-  { id: 'reference', label: 'Referenz', icon: <GoTag aria-hidden="true" /> },
+  { id: 'instance', label: 'Vorrat', icon: <GoCpu aria-hidden="true" />, keepInSimple: true },
+  { id: 'reference', label: 'Referenz', icon: <GoTag aria-hidden="true" />, keepInSimple: true },
   { id: 'ki', label: 'KI', icon: <GoDependabot aria-hidden="true" /> },
-  { id: 'images', label: 'Bilder', icon: <GoFileMedia aria-hidden="true" /> },
+  { id: 'images', label: 'Bilder', icon: <GoFileMedia aria-hidden="true" />, keepInSimple: true },
   { id: 'attachments', label: 'Anhänge', icon: <GoPaperclip aria-hidden="true" /> },
   { id: 'accessories', label: 'Zubehör', icon: <GoPlug aria-hidden="true" /> },
-  { id: 'events', label: 'Aktivitäten', icon: <GoLog aria-hidden="true" /> },
-  { id: 'markierung', label: 'Markierung', icon: <GoBookmark aria-hidden="true" /> },
+  { id: 'events', label: 'Aktivitäten', icon: <GoLog aria-hidden="true" />, keepInSimple: true },
+  { id: 'markierung', label: 'Markierung', icon: <GoBookmark aria-hidden="true" />, keepInSimple: true },
 ];
 
 const BOX_BASE_TABS: TabDef[] = [
-  { id: 'info', label: 'Info', icon: <GoInfo aria-hidden="true" /> },
-  { id: 'notizen', label: 'Notizen', icon: <GoPencil aria-hidden="true" /> },
-  { id: 'items', label: 'Artikel', icon: <GoCpu aria-hidden="true" /> },
-  { id: 'events', label: 'Aktivitäten', icon: <GoLog aria-hidden="true" /> },
+  { id: 'info', label: 'Info', icon: <GoInfo aria-hidden="true" />, keepInSimple: true },
+  { id: 'notizen', label: 'Notizen', icon: <GoPencil aria-hidden="true" />, keepInSimple: true },
+  { id: 'items', label: 'Artikel', icon: <GoCpu aria-hidden="true" />, keepInSimple: true },
+  { id: 'events', label: 'Aktivitäten', icon: <GoLog aria-hidden="true" />, keepInSimple: true },
 ];
 
-const STUBS_TAB: TabDef = { id: 'stubs', label: 'Fundsachen', icon: <GoTag aria-hidden="true" /> };
+const STUBS_TAB: TabDef = { id: 'stubs', label: 'Fundsachen', icon: <GoTag aria-hidden="true" />, keepInSimple: true };
 
 function isShelfId(boxId: string): boolean {
   try {
@@ -88,6 +97,7 @@ export default function DetailTabBar({ agenticNeedsReview = false, isMarked = fa
           <button
             key={tab.id}
             type="button"
+            data-simple-keep={tab.keepInSimple ? 'true' : undefined}
             className={`detail-tab-bar__tab${effective === tab.id ? ' is-active' : ''}`}
             onClick={() => setTab(tab.id)}
             aria-current={effective === tab.id ? 'page' : undefined}
@@ -112,7 +122,7 @@ export default function DetailTabBar({ agenticNeedsReview = false, isMarked = fa
         <button
           key={tab.id}
           type="button"
-          data-tab-id={tab.id}
+          data-simple-keep={tab.keepInSimple ? 'true' : undefined}
           className={`detail-tab-bar__tab${effective === tab.id ? ' is-active' : ''}`}
           onClick={() => setTab(tab.id)}
           aria-current={effective === tab.id ? 'page' : undefined}
