@@ -113,6 +113,27 @@ sudo ufw allow 443
 
 - If the personal access token expires, regenerate it and login again to the registry: echo THE_NEW_PAT | sudo docker login ghcr.io -u ZbindenDaniel --password-stdin
 
+## CI/CD — automated image builds
+
+A Gitea Actions workflow (`.gitea/workflows/docker-publish.yaml`) builds the root `Dockerfile` and
+publishes the app image to **this Gitea instance's built-in container registry** (repo → Packages).
+It runs on every push to `main`, on every `v*.*.*` release tag, and via manual dispatch.
+
+- **No PAT needed.** CI authenticates with the token Gitea injects into each run
+  (`secrets.GITHUB_TOKEN`), so the manual `docker login` above is only required for the legacy
+  ghcr.io images, not for CI builds.
+- **Image path:** `<gitea-host>/zbindendaniel/mediator-service`. Tags: `latest` (default branch),
+  the semver version (e.g. `3.0.1` and `3.0`) on release tags, `main`, and `sha-<commit>`.
+- **Pull on the VM:** `docker login <gitea-host>` (a read token/deploy user is enough), then
+  `docker pull <gitea-host>/zbindendaniel/mediator-service:latest`.
+- **Requirements:** an `act_runner` registered with an `ubuntu-latest` label, Docker available on the
+  runner, and the Packages/registry feature enabled on the instance. If the runner can't fetch the
+  `docker/*` actions from GitHub, the workflow ships a commented Docker-CLI-only fallback job.
+
+> The existing compose files (`docker-compose.prod.yaml`, `docker-compos-V2_2.yaml`) and
+> `scripts/reploy.sh` still reference `ghcr.io/zbindendaniel/mediator-service`. Repoint them at the
+> Gitea registry path when you cut over from the manual ghcr.io publish to CI builds.
+
 # Data recovery
 
 user@roti-fabrik ~> sudo cp -r /var/lib/docker/volumes/mediator-data/_data mediator/_data/

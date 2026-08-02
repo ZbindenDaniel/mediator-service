@@ -227,6 +227,8 @@
 
 39. **Periodic backup automation.** Missing regular backups raises data-loss risk. **Goal:** implement a lightweight scheduled backup flow with success/failure reporting.
 
+39b. **CD: auto-deploy from CI (follow-up to the Gitea build/publish workflow).** `.gitea/workflows/docker-publish.yaml` now builds and publishes the image to the Gitea registry, but deploy is still manual (`scripts/reploy.sh` / `docker compose -f docker-compose.prod.yaml`). Options researched: (1) SSH push-deploy — a deploy job that SSHes to the Docker-only LAN VM and runs `reploy.sh`/`compose pull && up -d` (needs `DEPLOY_SSH_HOST/USER/KEY` secrets + likely a self-hosted runner on the LAN; `reploy.sh` also hardcodes `ghcr.io`/`:latest` and would need a param); (2) pull-based (Watchtower / systemd timer on the VM, no inbound SSH). **Recommendation:** option 1 behind a manual-approval gate (deploy on tag, not every `main` push). **Open decisions:** SSH vs pull; deploy-on-tag vs deploy-on-main. Also decide the **ghcr.io → Gitea registry cutover** for `docker-compose.prod.yaml`, `docker-compos-V2_2.yaml`, and `scripts/reploy.sh`.
+
 40. ✅ **Postgres migration complete.** `DATABASE_URL` required; no SQLite fallback. Migration script: `scripts/migrate-sqlite-to-postgres.ts`. Multi-instance agentic safety (`SELECT FOR UPDATE SKIP LOCKED`) implemented in `claimQueuedAgenticRuns`.
 
 ---
