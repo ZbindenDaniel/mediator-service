@@ -130,9 +130,38 @@ It runs on every push to `main`, on every `v*.*.*` release tag, and via manual d
   runner, and the Packages/registry feature enabled on the instance. If the runner can't fetch the
   `docker/*` actions from GitHub, the workflow ships a commented Docker-CLI-only fallback job.
 
-> The existing compose files (`docker-compose.prod.yaml`, `docker-compos-V2_2.yaml`) and
-> `scripts/reploy.sh` still reference `ghcr.io/zbindendaniel/mediator-service`. Repoint them at the
-> Gitea registry path when you cut over from the manual ghcr.io publish to CI builds.
+> The `docker-compose.prod.yaml` image is now `${MEDIATOR_IMAGE:-ghcr.io/zbindendaniel/mediator-service:3.0}`
+> — manual `docker compose up` still uses the pinned ghcr image, while the deploy workflow overrides
+> `MEDIATOR_IMAGE` to the Gitea image. `docker-compos-V2_2.yaml` and `scripts/reploy.sh` still hardcode
+> `ghcr.io`; repoint them when you fully cut over.
+
+### Manual deploy workflow
+
+`.gitea/workflows/deploy.yaml` is a separate, **manually-triggered** (`workflow_dispatch`) deploy. It
+SSHes to the Docker host and rolls only the `mediator` service of `docker-compose.prod.yaml` onto a
+chosen image tag (postgres/cups are left running). The image must already be published by
+`docker-publish.yaml`.
+
+**Trigger** from the repo's Actions tab → *Deploy (manual)* → Run, with inputs:
+- `tag` — image tag to deploy (default `latest`; use a release version like `3.0.1` for a pinned deploy)
+- `deploy_dir` — host directory holding `docker-compose.prod.yaml` and `.env` (default `/opt/mediator`)
+- `ssh_port` — SSH port of the host (default `22`)
+
+**What it does on the host:** `scp`s the current `docker-compose.prod.yaml` into `deploy_dir`, logs in
+to the Gitea registry with the run's token, then `MEDIATOR_IMAGE=<gitea>/zbindendaniel/mediator-service:<tag>`
+`docker compose -f docker-compose.prod.yaml pull mediator && up -d mediator`.
+
+**Required Actions secrets** (repo → Settings → Actions → Secrets):
+- `DEPLOY_SSH_HOST` — host/IP of the Docker VM
+- `DEPLOY_SSH_USER` — SSH user (must be in the `docker` group)
+- `DEPLOY_SSH_KEY` — private key for that user (the matching public key in the host's `authorized_keys`)
+
+The registry pull uses the automatic `secrets.GITHUB_TOKEN`, so no separate registry credential is needed.
+`.env` (with `VM_IP` and runtime config) must already exist in `deploy_dir` — the workflow never touches it.
+
+> **Runner reachability:** the runner must be able to reach the host on `ssh_port`. For a LAN-only VM
+> that means running `act_runner` on the LAN (or a jump path). Host-key checking uses `accept-new` on
+> the ephemeral runner (trust-on-first-use); pre-seed a known_hosts entry if you need stricter checking.
 
 # Data recovery
 

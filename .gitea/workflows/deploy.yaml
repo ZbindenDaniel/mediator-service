@@ -1,0 +1,73 @@
+name: Deploy (manual)
+
+# Manually-triggered deploy: SSHes to the Docker host and rolls the `mediator`
+# service of the production compose stack onto a chosen image tag. The image is
+# expected to already exist in the registry (published by docker-publish.yaml).
+# Deliberately separate from the build workflow so deploys never happen on push.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy (from the Gitea registry)"
+        required: true
+        default: "latest"
+      deploy_dir:
+        description: "Directory on the host holding docker-compose.prod.yaml and .env"
+        required: true
+        default: "/opt/mediator"
+      ssh_port:
+        description: "SSH port of the Docker host"
+        required: true
+        default: "22"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve registry & image reference
+        run: |
+          REGISTRY="$(echo "${{ github.server_url }}" | sed -E 's~^https?://~~')"
+          REPO_LC="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          echo "REGISTRY=$REGISTRY" >> "$GITHUB_ENV"
+          echo "IMAGE_REF=$REGISTRY/$REPO_LC:${{ inputs.tag }}" >> "$GITHUB_ENV"
+
+      - name: Deploy to the Docker host over SSH
+        env:
+          SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          SSH_PORT: ${{ inputs.ssh_port }}
+          DEPLOY_DIR: ${{ inputs.deploy_dir }}
+          REG_USER: ${{ github.actor }}
+          REG_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_HOST" || { echo "::error::DEPLOY_SSH_HOST secret is not set"; exit 1; }
+          test -n "$SSH_USER" || { echo "::error::DEPLOY_SSH_USER secret is not set"; exit 1; }
+          test -n "$SSH_KEY"  || { echo "::error::DEPLOY_SSH_KEY secret is not set"; exit 1; }
+
+          install -d -m 700 "$HOME/.ssh"
+          printf '%s\n' "$SSH_KEY" > "$HOME/.ssh/id_deploy"
+          chmod 600 "$HOME/.ssh/id_deploy"
+          SSH_OPTS="-i $HOME/.ssh/id_deploy -p $SSH_PORT -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=$HOME/.ssh/known_hosts"
+
+          # Ship the current prod compose so the ${MEDIATOR_IMAGE} override is present on the host.
+          scp $SSH_OPTS docker-compose.prod.yaml "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/docker-compose.prod.yaml"
+
+          # Unquoted heredoc: values expand on the runner and travel over the encrypted
+          # SSH channel, so the registry token is never placed in the host's process args.
+          ssh $SSH_OPTS "$SSH_USER@$SSH_HOST" bash -s <<REMOTE
+          set -euo pipefail
+          cd "$DEPLOY_DIR"
+          echo "Deploying image: $IMAGE_REF"
+          echo "$REG_TOKEN" | docker login "$REGISTRY" -u "$REG_USER" --password-stdin
+          export MEDIATOR_IMAGE="$IMAGE_REF"
+          docker compose -f docker-compose.prod.yaml pull mediator
+          docker compose -f docker-compose.prod.yaml up -d mediator
+          docker logout "$REGISTRY" >/dev/null 2>&1 || true
+          docker image prune -f >/dev/null 2>&1 || true
+          docker compose -f docker-compose.prod.yaml ps
+          REMOTE
