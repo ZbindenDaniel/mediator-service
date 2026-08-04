@@ -784,6 +784,16 @@ function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
 const LOCATION_WITH_BOX_FALLBACK = `COALESCE(NULLIF(i."Location",''), NULLIF(b."Label",''))`;
 const ITEM_REFERENCE_JOIN_KEY = `COALESCE(NULLIF(i."Artikel_Nummer",''), i."ItemUUID")`;
 
+// An in-device component: a reference-less child still inside its parent (BoxID unset + a
+// Zerlegt_aus relation). It has no real Artikelnummer yet, so it must be excluded from any
+// path that would leak its placeholder id outward (ERP/Shopware export, agentic enrichment,
+// auto-print). Once it graduates it gets a BoxID and a real Artikelnummer and drops out of
+// this predicate. Kept as one string so the definition of "in-device" stays in one place.
+export const IN_DEVICE_COMPONENT_SQL =
+  `(i."BoxID" IS NULL AND EXISTS (` +
+  `SELECT 1 FROM item_relations ir_indev ` +
+  `WHERE ir_indev."ChildItemUUID" = i."ItemUUID" AND ir_indev."RelationType" = 'Zerlegt_aus'))`;
+
 const ITEM_JOIN_BASE = `
   FROM items i
   LEFT JOIN item_refs r ON r."Artikel_Nummer" = ${ITEM_REFERENCE_JOIN_KEY}
@@ -1290,7 +1300,9 @@ export async function listItemsForExport(filters: Partial<ListItemsForExportFilt
   ])}${ITEM_JOIN_WITH_BOX}
    LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
    WHERE ($1::TEXT IS NULL OR i."Datum_erfasst" >= $1)
-     AND ($2::TEXT IS NULL OR i."UpdatedAt" >= $2)`;
+     AND ($2::TEXT IS NULL OR i."UpdatedAt" >= $2)
+     -- Never export in-device components: their placeholder id must not reach ERP/Shopware.
+     AND NOT ${IN_DEVICE_COMPONENT_SQL}`;
 
   const params: unknown[] = [createdAfter, updatedAfter];
 
@@ -1591,6 +1603,17 @@ export async function hasItemReferenceByArtikelNummer(artikelNummer: string): Pr
 // ---------------------------------------------------------------------------
 
 export async function queueLabel(itemUUID: string): Promise<void> {
+  // Guard: a reference-less in-device component would print a blank/misleading label
+  // (null materialNumber, empty category). Never enqueue one — it graduates to a real
+  // Artikelnummer first. Cheap lookup; the label queue is low-volume.
+  const row = await queryOne<{ Artikel_Nummer: string | null }>(
+    `SELECT "Artikel_Nummer" FROM items WHERE "ItemUUID" = $1`,
+    [itemUUID]
+  );
+  if (row && (row.Artikel_Nummer == null || String(row.Artikel_Nummer).trim() === '')) {
+    console.warn('[label] Skipping label enqueue for reference-less item', { itemUUID });
+    return;
+  }
   await execute(
     `INSERT INTO label_queue ("ItemUUID","CreatedAt") VALUES ($1,$2)`,
     [itemUUID, new Date().toISOString()]
