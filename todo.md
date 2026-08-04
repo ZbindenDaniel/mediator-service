@@ -65,7 +65,7 @@
   - Categorizer `__locked` field behavior (`item-flow.md`: "Locked fields are preserved and not overwritten") is asserted nowhere in the test suite; only appears as fixture setup data.
   - `backend/actions/agentic-delete.ts` HTTP handler still has no direct test; the underlying `deleteAgenticRun` service is now covered by `test/agentic-delete-reset.test.ts` (reset clears SearchQuery; not-started decline).
   - No production telemetry yet confirms the pricing stage actually hits the same unrecognized-shape failure mode as the categorizer did — the hardening in #872/0y is defensive; revisit once pricing transcripts are reviewed to see how often it triggers.
-  - Follow-up `__searchQueries` not hard-blocked by `skipSearch` is a documented known gap in `item-flow.md` but no test pins the current inconsistent behavior to catch if it changes.
+  - ✅ Follow-up `__searchQueries` under `skipSearch`: confirmed hard-blocked at `item-flow-extraction.ts:891` (converts to retry); `item-flow.md` corrected (was stale). `skipSearch` now also downgrades to a live search when no stored search exists (see agentic changelog #890).
 
 0f. ✅ **Quality contracts missing in production build.** `scripts/build.js` now copies `contracts/` → `dist/contracts/` so the backend registry can find general and subcategory quality contracts at runtime.
 0g. ✅ **Attachments binding modal shown without purpose.** Modal now only appears when at least one writable external dir (ALT_DOC_DIRS) is available; without external dirs, files upload directly with no modal.
@@ -141,7 +141,7 @@
 
 11. **Agentic: assure category then start extraction with review info.** Enforce category confirmation before starting extraction and pass review context into the flow.
 
-12. **Multiselect agent states.** Allow filtering the agent queue by multiple states (default: everything except 'Freigegeben').
+12. ✅ **Multiselect agent states.** Item-list Ki-Status filter is now a checkbox multi-select (default: every status except 'Freigegeben'). Legacy single-value localStorage/URL shape is migrated on load; empty selection = show none via `__none__` sentinel; backend filters via `= ANY($4::TEXT[])`. See ui changelog #887.
 
 13. **Filter and sort boxes/shelves.** Add filter options (boxes only / shelves only, location dropdown) and sorting to the box/shelf list.
 
@@ -165,9 +165,22 @@
 40. ✅ **Quality contract: add remaining subcategory contracts.** Now covers: 102, 201, 301, 302, 401, 701, 103, 105, 204, 1802. Remaining low-volume subcategories (101/104/106/108 PC variants, 103 variants) deferred — 102 contract covers the same assessment pattern.
 44. ✅ **Spec contracts: add remaining subcategory contracts.** Now covers: 102, 103, 105, 201, 204, 301, 401, 601, 701. `Hersteller` omitted from all new contracts (first-class ItemRef field). Remaining niche subcategories (702, 1203, 1204, etc.) not added — low inventory volume.
 45. **Spec contracts: targeted enrich button in ItemKiTab.** When an item has missing required spec fields (visible as empty Langtext rows), add a "Gezielt anreichern" button in the KI tab that starts an agentic run pre-seeded with the missing field names as missingSpecFields. Requires fetching the spec contract client-side and computing the gap against the current Langtext.
-46. **Spec contracts: contract version stamping.** Add a specContractVersion nullable integer to agentic_runs to track which spec contract version was active when a run was completed. Enables detecting items that were enriched against an older contract version after the contract changes.
-47. **Spec pipeline: cpu persistence.** Intake `cpu` field is currently used only to pre-fill quality questions. Persisting it (e.g. to `items.InstanceSpecs`) would enable `Prozessor` coalescing in `buildSpecContext`. Deferred from the contract-informed pipeline implementation.
+46. ✅ **Spec contracts: contract version stamping.** `SpecContractVersion INTEGER` added to `agentic_runs` (additive), stamped on each completed run from `getSpecContract(sub).version`. Powers the idle contract-audit sweeper (#50 Phase 2a). See agentic changelog #894.
+47. **Spec pipeline: cpu persistence.** Intake `cpu` field is currently used only to pre-fill quality questions. Persisting it (e.g. to `items.InstanceSpecs`) would enable `Prozessor` coalescing from intake in `buildSpecContext`. Deferred from the contract-informed pipeline implementation. (Note: variant-key canonicalization now folds `CPU`→`Prozessor` in extraction/Langtext — agentic changelog #889 — but intake-value coalescing still needs the persisted field.)
 48. **Review Step 3: ambiguous fields display.** The backend now computes `ambiguousFields` in `buildSpecContext` and threads them to the pipeline, but the review modal currently shows only the item's Langtext value as `currentValue` with `intakeValue` from `InstanceSpecs`. The conflict detection in the modal is client-side — verify it surfaces correctly once real intake conflict data is available.
+
+49. **Persist skipSearch (and future rework mode) on `agentic_runs`.** The flag currently rides an in-memory `pendingSkipSearch` Set (`backend/agentic/index.ts`), lost on server restart and not restored by stale-resume/idle-fill. Add a `SkipSearch` column written at enqueue and read at dispatch so it survives restart; this column also becomes the backbone for the rework mechanism (#50). Deferred from agentic changelog #890 to keep that change reviewable.
+
+50. **Rework mechanism.**
+  - ✅ **Phase 1 — manual targeted rework (shipped).** "KI Überarbeitung" reuses the main pipeline to regenerate only operator-selected fields; `applyReworkPartialUpdate` preserves all other fields deterministically; categorizer/pricing skipped; UI is a field-picker + instruction modal in `ItemKiTab`. See agentic changelog #893.
+  - ✅ **Phase 2a — deterministic idle contract-audit sweeper (shipped).** `sweepContractRework` in `dispatchQueuedAgenticRuns` runs only while idle and only when `AUTO_REWORK` is on (default off): stale items (stored `SpecContractVersion < current`) are re-stamped if complete, else a targeted rework is enqueued for the missing required fields (decision in `decideContractAuditAction`, no LLM). Self-limiting via the version stamp. See agentic changelog #894.
+  - **Phase 2b — LLM standards auditor (planned, not built).** Add the language/style/wording audit as a one-shot LLM call guided by a runtime-editable `contracts/guidelines/standards.json` (read fresh, no redeploy); add a `LastAuditedAt` cursor for periodic re-checks (oldest-first, stamp every audit), a per-window budget cap, and an anti-thrash cap on consecutive auto-reworks per item.
+  - **Deferred behavior:** on a rework **failure**, discard the changes and keep the prior `approved` state (today a failed rework lands in `failed` like any run). Resolved policy: reworked items otherwise follow the normal review/auto_approve path, no special-casing.
+  - Row-level click-select + right-click on spec rows (nicer selection than the modal checkboxes) remain a follow-up.
+
+51. **Auto-approve follow-ups.** `AUTO_APPROVE` (default off) + `AUTO_APPROVE_MIN_CONFIDENCE` (default 0.8) added (agentic changelog #892). Follow-ups: per-subcategory confidence threshold instead of one global value; optional auto-reject counterpart; a bulk "promote auto_approved → approved" action (currently uses per-item Abschliessen); and extend the KI-queue state filter to select `auto_approved` (aligns with #12 multiselect agent states).
+
+52. **Pre-existing failing tests (not caused by the #889–894 work; documented for cleanup).** `schema-contract-compatibility.test.ts` asserts the supervisor prompt contains `schema-contract.md`, but the current `supervisor.md` was rewritten to a description-quality focus and no longer references it — the test expectation is stale. `test/agentic-direct-dispatch.test.ts` and `test/agentic-startup-resume.test.ts` fail in the local esbuild harness because the scheduled `invokeModel` isn't observed (`toHaveBeenCalledTimes(1)` → 0); verify against CI's Postgres/jest setup. All three fail identically on a clean tree.
 
 41. ✅ **Quality re-check from ItemDetail.** "Neu bewerten" button added to instance tab `tab-actions`; opens `QualityReviewModal` wrapping `QualityReviewStep`. Results stored in `items.InstanceSpecs` (per-instance) and `quality_assessments`.
 
@@ -192,6 +205,8 @@
 24. **Track total search queries per run.** Persist or compute a per-run count with minimal schema impact and clear log fields.
 
 25. **Improve event log.** Make event log more useful and easier to navigate.
+   - ✅ **Coverage gap fixed:** items/boxes often had zero events because device intake and the CSV importer (the two biggest creation sources) never called `logEvent`, and boxes created via `import-item`'s `runUpsertBox` + stubs logged nothing. Intake now logs Item `Created` + `QualityAssessed`; CSV import logs `Created`/`Updated` per instance; import-time box upsert logs Box `Created`; `create-stub` logs `StubCreated`; `quality-review` logs `QualityAssessed`. Reference-level agentic events (keyed by Artikel_Nummer) now surface on item history via `listEventsForItem(itemId, artikelNummer)`. Also fixed `bulk-move-items` calling async `bulkMoveItems` without `await`. See item-lifecycle changelog #888.
+   - **Still unlogged (deferred):** successful prints (only `PrintFailed` logs), ERP sync, stub close, a distinct reference-created event. No history backfill for pre-existing items/boxes.
 
 26. **Inconsistent locationTag display.** Audit and fix locationTag rendering across views so it is displayed consistently. Note: box links in ItemDetail now navigate via the panel shell (Steps 8–9) rather than hard-navigating; other views may still use plain `<Link>` to `/boxes/:id`.
 
@@ -203,7 +218,7 @@
 
 30. **Compact/collapsible flow cleanup for key views.** Target high-impact screens with reversible UI refinements to reduce visual weight on frequent operations.
 
-30b. **Simple mode: make the kept set configurable / server-persisted.** A first cut shipped (ui #887): an "einfacher Modus" toggle in the user-settings dialog strips the UI to a curated essential set via a body CSS class stored in `localStorage`. It uses an opt-out model — new nav items/tabs are hidden by default unless marked `simple-keep`/`keepInSimple`. Follow-ups: let operators choose which surfaces to keep, and/or persist the preference server-side per username so it follows them across devices. Also optional: skip hidden tabs in `DetailTabBar` arrow-key navigation.
+30b. **Simple mode: make the kept set configurable / server-persisted.** A first cut shipped (ui #897): an "einfacher Modus" toggle in the user-settings dialog strips the UI to a curated essential set via a body CSS class stored in `localStorage`. It uses an opt-out model — new nav items/tabs are hidden by default unless marked `simple-keep`/`keepInSimple`. Follow-ups: let operators choose which surfaces to keep, and/or persist the preference server-side per username so it follows them across devices. Also optional: skip hidden tabs in `DetailTabBar` arrow-key navigation.
 
 31. **Unified shelf view: combined box + loose items via one reusable list model (including Behälter context).** Fragmented shelf views force context switching and duplicate logic. **Goal:** unify rendering through shared list components with explicit aggregation rules.
 
@@ -229,6 +244,8 @@
 38. **Standardize relocation logs with explicit `from → to` semantics.** Ambiguous move logs hinder audits and incident reconstruction. **Goal:** unify event payload fields with minimal schema changes.
 
 39. **Periodic backup automation.** Missing regular backups raises data-loss risk. **Goal:** implement a lightweight scheduled backup flow with success/failure reporting.
+
+39b. ✅ **CD: manual deploy workflow.** `.gitea/workflows/deploy.yaml` (`workflow_dispatch`) SSHes to the Docker host and rolls the `mediator` compose service onto a chosen image tag (SSH push-deploy, option 1). `docker-compose.prod.yaml` image parametrized to `${MEDIATOR_IMAGE:-…}`. Needs `DEPLOY_SSH_HOST/USER/KEY` secrets and a runner that can reach the host on the SSH port (LAN VM → LAN-resident `act_runner`). See docs-infra changelog #896. **Still open:** (1) automatic deploy-on-tag behind an approval gate (kept manual for now by request); (2) rolling postgres/cups from CI (currently assumed pre-provisioned); (3) pinned known_hosts instead of TOFU `accept-new`; (4) full **ghcr.io → Gitea registry cutover** for `docker-compos-V2_2.yaml` and `scripts/reploy.sh` (both still hardcode `ghcr.io`).
 
 40. ✅ **Postgres migration complete.** `DATABASE_URL` required; no SQLite fallback. Migration script: `scripts/migrate-sqlite-to-postgres.ts`. Multi-instance agentic safety (`SELECT FOR UPDATE SKIP LOCKED`) implemented in `claimQueuedAgenticRuns`.
 

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import {
   AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_AUTO_APPROVED,
   AGENTIC_RUN_STATUS_CANCELLED,
   AGENTIC_RUN_STATUS_FAILED,
   AGENTIC_RUN_STATUS_NOT_STARTED,
@@ -45,6 +46,7 @@ const PIE_STATUS_ORDER: AgenticRunStatus[] = [
   AGENTIC_RUN_STATUS_QUEUED,
   AGENTIC_RUN_STATUS_REVIEW,
   AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_AUTO_APPROVED,
   AGENTIC_RUN_STATUS_CANCELLED,
   AGENTIC_RUN_STATUS_REJECTED,
   AGENTIC_RUN_STATUS_FAILED,
@@ -56,6 +58,7 @@ const PIE_COLORS: Record<AgenticRunStatus, string> = {
   queued: '#60a5fa',
   review: '#f59e0b',
   approved: '#10b981',
+  auto_approved: '#34d399',
   rejected: '#f97316',
   failed: '#ef4444',
   cancelled: '#6b7280',

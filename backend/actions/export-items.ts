@@ -692,9 +692,13 @@ export function resolveAgenticApproval(rawRow: Record<string, unknown>): {
 
   const agenticStatus = parseAgenticState(rawRow.AgenticStatus);
   const agenticReviewState = parseAgenticState(rawRow.AgenticReviewState);
+  // `auto_approved` counts as approved for export: operators sort by state and decide what to sync,
+  // and Abschliessen promotes it to full `approved`.
+  const isApprovedState = (state: string | null): boolean =>
+    state === 'approved' || state === 'auto_approved';
   const approved = agenticReviewState !== null
-    ? agenticReviewState === 'approved'
-    : agenticStatus === 'approved';
+    ? isApprovedState(agenticReviewState)
+    : isApprovedState(agenticStatus);
 
   return { approved, agenticStatus, agenticReviewState };
 }

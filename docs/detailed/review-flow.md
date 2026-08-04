@@ -24,7 +24,9 @@
 
 ## Core concepts
 - `Status` (`agentic_runs.Status`) tracks execution lifecycle (`queued`, `running`, `review`, terminal states).
-- `ReviewState` (`agentic_runs.ReviewState`) tracks review outcome semantics (`pending`, `approved`, `rejected`, `not_required`).
+- `ReviewState` (`agentic_runs.ReviewState`) tracks review outcome semantics (`pending`, `approved`, `auto_approved`, `rejected`, `not_required`).
+- `auto_approved` (status + review state): machine approval when the extraction is clearly good (supervisor PASS + confidence ≥ `AUTO_APPROVE_MIN_CONFIDENCE` + no missing-required + no ambiguous fields), gated by the `AUTO_APPROVE` flag (default off). Distinct from human `approved` so operators can sort/filter and choose what to sync; **ERP-eligible** (`resolveAgenticApproval` counts it as approved), and promotable to full `approved` via `Abschliessen`.
+- Terminal error taxonomy: `cancelled` is reserved for explicit user stops (`cancelAgenticRun`); pipeline errors that exhaust auto-retries terminate in `failed`. The reason lives in `LastError` and is surfaced in `AgenticStatusCard` via `describeAgenticFailureReason`.
 - Manual review uses checklist payload signals to derive or confirm final decisions.
 - Resolved reviews map to terminal run statuses (`approved` or `rejected`) and can be restarted via restart/retrigger paths.
 

@@ -1,6 +1,7 @@
 import type { AgenticRunStatus } from '../../../models';
 import {
   AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_AUTO_APPROVED,
   AGENTIC_RUN_STATUS_CANCELLED,
   AGENTIC_RUN_STATUS_FAILED,
   AGENTIC_RUN_STATUS_NOT_STARTED,
@@ -14,6 +15,7 @@ import {
 // TODO(agentic-status-labels): Keep queued label aligned with ItemDetail copy.
 const STATUS_LABELS: Record<AgenticRunStatus, string> = {
   [AGENTIC_RUN_STATUS_APPROVED]: 'Freigegeben',
+  [AGENTIC_RUN_STATUS_AUTO_APPROVED]: 'Auto-freigegeben',
   [AGENTIC_RUN_STATUS_CANCELLED]: 'Abgebrochen',
   [AGENTIC_RUN_STATUS_FAILED]: 'Fehlgeschlagen',
   [AGENTIC_RUN_STATUS_NOT_STARTED]: 'Nicht gestartet',

@@ -2856,6 +2856,86 @@ button:focus {
     min-height: 36px;
 }
 
+/* Multi-select filter popover (Ki-Status): a <details> whose panel floats over the grid. */
+.filter-multiselect {
+    position: relative;
+    width: 100%;
+}
+
+.filter-multiselect > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--bg, #fff);
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.filter-multiselect > summary::-webkit-details-marker {
+    display: none;
+}
+
+.filter-multiselect > summary::after {
+    content: '▾';
+    margin-left: 8px;
+    opacity: 0.6;
+}
+
+.filter-multiselect__panel {
+    position: absolute;
+    z-index: 20;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg, #fff);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    max-height: 280px;
+    overflow-y: auto;
+}
+
+.filter-multiselect__actions {
+    display: flex;
+    gap: 6px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--line);
+    margin-bottom: 4px;
+}
+
+.filter-multiselect__actions button {
+    flex: 1;
+    padding: 4px 6px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--bg-button, #f6f7f9);
+    cursor: pointer;
+    font-size: 0.85em;
+}
+
+.filter-multiselect__option {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    cursor: pointer;
+}
+
+.filter-multiselect__option input[type="checkbox"] {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+}
+
 .filter-control__input input,
 .sort-control__input input {
     border: none;

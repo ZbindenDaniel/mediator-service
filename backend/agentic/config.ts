@@ -285,3 +285,41 @@ export const shopwareConfig: ShopwareIntegrationConfig | null = resolvedShopware
 export const agentActorId: string = parsedEnv.AGENT_ACTOR_ID?.trim() || 'item-flow-service';
 
 export const nodeEnv = parsedEnv.NODE_ENV;
+
+function resolveBooleanFlag(...keys: Array<keyof NodeJS.ProcessEnv>): boolean {
+  const raw = resolveEnvValue(...keys);
+  if (raw === undefined) {
+    return false;
+  }
+  return ['1', 'true', 'yes', 'on'].includes(raw.trim().toLowerCase());
+}
+
+function resolveUnitInterval(fallback: number, ...keys: Array<keyof NodeJS.ProcessEnv>): number {
+  const raw = resolveEnvValue(...keys);
+  if (raw === undefined) {
+    return fallback;
+  }
+  const parsed = Number(raw.trim());
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    console.error?.({ msg: 'Invalid AUTO_APPROVE_MIN_CONFIDENCE; expected a number in [0,1]', raw });
+    return fallback;
+  }
+  return parsed;
+}
+
+// Auto-approval: when enabled, a run whose extraction is clearly good (supervisor PASS + confidence ≥
+// minConfidence + no missing-required fields + no ambiguous fields) is finalized as `auto_approved`
+// instead of forced into manual review. Default OFF — enabling it is a deliberate operator choice,
+// and `auto_approved` items are ERP-eligible (operators sort by state and decide what to sync).
+export const autoApproveConfig: { enabled: boolean; minConfidence: number } = {
+  enabled: resolveBooleanFlag('AUTO_APPROVE'),
+  minConfidence: resolveUnitInterval(0.8, 'AUTO_APPROVE_MIN_CONFIDENCE')
+};
+
+// Idle-time deterministic rework sweeper: when enabled, the dispatcher (only while otherwise idle)
+// re-applies the current spec contract to the oldest item enriched against an older contract version —
+// re-stamping items already complete, or enqueuing a targeted rework for items now missing a required
+// field. Default OFF. No LLM involved (deterministic gap check only).
+export const autoReworkConfig: { enabled: boolean } = {
+  enabled: resolveBooleanFlag('AUTO_REWORK')
+};

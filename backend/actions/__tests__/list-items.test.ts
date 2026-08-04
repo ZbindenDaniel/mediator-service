@@ -68,4 +68,49 @@ describe('list-items action', () => {
       })
     );
   });
+
+  it('passes multiple agenticStatus params through as an array', async () => {
+    const ctx = {
+      listItemsWithFilters: jest.fn(async () => []),
+      listItemReferencesWithFilters: jest.fn(async () => [])
+    };
+    const req = createRequest('/api/items?agenticStatus=queued&agenticStatus=running');
+    const { res } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(ctx.listItemsWithFilters).toHaveBeenCalledWith(
+      expect.objectContaining({ agenticStatuses: ['queued', 'running'] })
+    );
+  });
+
+  it('treats an absent agenticStatus param as no filter (null)', async () => {
+    const ctx = {
+      listItemsWithFilters: jest.fn(async () => []),
+      listItemReferencesWithFilters: jest.fn(async () => [])
+    };
+    const req = createRequest('/api/items?search=widget');
+    const { res } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(ctx.listItemsWithFilters).toHaveBeenCalledWith(
+      expect.objectContaining({ agenticStatuses: null })
+    );
+  });
+
+  it('maps the empty-selection sentinel to an empty array (match nothing)', async () => {
+    const ctx = {
+      listItemsWithFilters: jest.fn(async () => []),
+      listItemReferencesWithFilters: jest.fn(async () => [])
+    };
+    const req = createRequest('/api/items?agenticStatus=__none__');
+    const { res } = createMockResponse();
+
+    await action.handle(req, res, ctx);
+
+    expect(ctx.listItemsWithFilters).toHaveBeenCalledWith(
+      expect.objectContaining({ agenticStatuses: [] })
+    );
+  });
 });

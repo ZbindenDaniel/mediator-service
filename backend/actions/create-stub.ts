@@ -40,6 +40,20 @@ const action = defineHttpAction({
 
       await ctx.createStub({ id, shelfId, description, numberLooseItems, createdAt, createdBy, notes });
 
+      // Stub creation previously logged nothing; key the event to the shelf so it surfaces in the
+      // shelf's activity history (stubs have no dedicated detail-event view yet).
+      try {
+        await ctx.logEvent?.({
+          Actor: createdBy || null,
+          EntityType: 'Box',
+          EntityId: shelfId,
+          Event: 'StubCreated',
+          Meta: JSON.stringify({ stubId: id, description, numberLooseItems })
+        });
+      } catch (logErr) {
+        console.error('[create-stub] Failed to log StubCreated event', logErr);
+      }
+
       sendJson(res, 201, { id, shelfId, description, numberLooseItems, createdAt, createdBy, isActive: 1, notes });
     } catch (err) {
       console.error('create-stub failed', err);

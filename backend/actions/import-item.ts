@@ -1510,6 +1510,15 @@ const action = defineHttpAction({
 
           let agenticRunPersisted = false;
           if (boxId) {
+            // Check existence before upsert so boxes born via import get a Box "Created" event
+            // (previously only the explicit POST /api/boxes path logged box creation).
+            let boxExistedBeforeUpsert = false;
+            try {
+              const existingBox = ctx.getBox ? await ctx.getBox(boxId) : null;
+              boxExistedBeforeUpsert = Boolean(existingBox);
+            } catch (boxLookupErr) {
+              console.error('[import-item] Failed to check existing box state during event logging', boxLookupErr);
+            }
             await ctx.runUpsertBox({
               BoxID: boxId,
               LocationId: boxLocation,
@@ -1521,6 +1530,15 @@ const action = defineHttpAction({
               PlacedAt: null,
               UpdatedAt: now
             });
+            if (!boxExistedBeforeUpsert) {
+              await ctx.logEvent({
+                Actor: a,
+                EntityType: 'Box',
+                EntityId: boxId,
+                Event: 'Created',
+                Meta: JSON.stringify({ source: 'import' })
+              });
+            }
           } else {
             console.info('[import-item] Skipping box upsert because the item is unplaced', {
               ItemUUID: itemDataList[0]?.ItemUUID,

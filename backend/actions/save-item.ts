@@ -682,7 +682,8 @@ const action = defineHttpAction({
         }
 
         const box = await ctx.getBox(item.BoxID);
-        const events = await ctx.listEventsForItem(resolvedItemId);
+        const eventsArtikelNummer = typeof item.Artikel_Nummer === 'string' ? item.Artikel_Nummer : null;
+        const events = await ctx.listEventsForItem(resolvedItemId, eventsArtikelNummer);
         console.info('[save-item] GET detail identifier mode in use', {
           identifierMode,
           requestedIdentifier: itemId
