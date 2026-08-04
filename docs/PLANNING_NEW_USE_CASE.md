@@ -5,12 +5,16 @@
 refurbishment / revamp‑it) so a new use case can be scoped against it and gaps
 identified. This is the "list" to compare requirements against.
 
-> **Blocking input needed** — this document inventories *what is coupled*, but
-> the actual gap analysis needs two answers (see [§5](#5-open-questions--decisions-needed)):
-> 1. **What is the new use case?** (its category taxonomy + quality/spec requirements)
-> 2. **Coexist or replace?** Does it run *alongside* IT refurbishment (same
->    instance) or *replace* it? This single decision changes the effort by an
->    order of magnitude.
+> **Deployment decision (resolved):** the new use case runs as a **separate
+> instance / deployment** — not alongside IT refurbishment in one runtime. This
+> means the goal is **not** multi-use-case scoping inside a shared namespace, but
+> **externalizing the use-case-specific data so one codebase deploys with a
+> different taxonomy / contracts / branding without a code fork.** See
+> [§5](#5-decision--remaining-input).
+>
+> **Still needed:** *what the new use case actually is* — its category taxonomy
+> and quality/spec requirements — to fill in the requirements column and finish
+> the gap analysis.
 
 ---
 
@@ -105,37 +109,48 @@ is for*.
 
 ---
 
-## 5. Open questions / decisions needed
+## 5. Decision & remaining input
 
-These determine the whole approach and are needed before implementation:
+**Decided — separate instance / deployment.** The new use case is its own
+deployment of the same codebase. Consequences:
+- The coexist‑scoping gaps (G‑C2 / G‑K2) are **out of scope** — a single
+  deployment only ever serves one use case at a time, so a flat global namespace
+  is fine *within* an instance.
+- The problem shifts to **avoiding a code fork**: the use‑case‑specific data
+  (taxonomy, contracts, domain hardcodes, branding) should be **selectable per
+  deployment** — ideally mounted/loaded like `contracts/` already are, driven by
+  config — so both deployments track the same code and only their data differs.
+- This makes G‑C1 (single source of truth for the taxonomy) and G‑F1
+  (a config surface for use‑case data) the **critical path**, because a separate
+  deployment that still hardcodes the taxonomy in TS forces either a fork or a
+  rebuild‑per‑use‑case.
 
+**Still needed before the gap‑closure plan can be written:**
 1. **What is the new use case?** Its category taxonomy, quality questions, and
-   spec fields are the "requirements" this inventory is meant to be compared
-   against. Without them, only the touchpoint list (this doc) can be produced,
-   not the gap‑closure plan.
-2. **Coexist vs. replace** (the pivotal decision):
-   - **Replace** IT refurbishment → mostly *edits*: rewrite the 4 category
-     representations (§2), add new `contracts/*.json`, adjust domain hardcodes
-     (§4). No new architecture. Feasible now.
-   - **Coexist** on the same instance → requires a **use‑case dimension** that
-     scopes taxonomy + contracts (G‑C2, G‑K2, G‑F1/F2). This is new
-     architecture, not a config edit.
-3. **Does the new use case fit the numeric Haupt/Unterkategorie model?** If yes,
-   contracts are largely ready. If no, the contract keying (G‑K1) needs rework.
-4. **ERP/print/media integration:** does the new use case reuse kivitendo, the
-   CUPS label pipeline, and the media mounts, or does it need its own?
+   spec fields are the "requirements" to compare this inventory against.
+2. **Does it fit the numeric Haupt/Unterkategorie model?** If yes, contracts are
+   largely ready. If no, the contract keying (G‑K1) needs rework.
+3. **Integration reuse:** does it reuse kivitendo ERP, the CUPS label pipeline,
+   and the media mounts, or need its own? (Drives which §4 hardcodes must become
+   config.)
 
 ---
 
-## 6. Suggested next steps
+## 6. Suggested next steps (given "separate deployment")
 
-1. Answer §5.1 and §5.2 — that scopes everything below.
-2. If **replace**: draft the new `models/item-categories.ts`, regenerate
-   `docs/data_struct.md` + `INTAKE_CATEGORIES`, and author the new
-   `contracts/*.json` set. Close G‑C1 by adding a taxonomy→doc generator so the
-   four copies stop drifting.
-3. If **coexist**: design the use‑case dimension first (how taxonomy and
-   contracts get scoped/namespaced), then implement — this is a planning effort
-   of its own and should get its own phased doc.
-4. Regardless: fix the cheap doc‑drift item (G‑K3) and consider the
-   taxonomy‑generator (G‑C1) since it de‑risks *any* category change.
+The strategic aim is **one codebase, per‑deployment data** — move use‑case data
+out of code so a new deployment is a config/data change, not a fork.
+
+1. **Externalize the taxonomy (closes G‑C1 + enables per‑deployment swap).**
+   Make `models/item-categories.ts` load from a data file (or generate the TS,
+   `docs/data_struct.md`, and `INTAKE_CATEGORIES` from one source) so a
+   deployment supplies its own taxonomy without editing/rebuilding code. This is
+   the single highest‑leverage change for the separate‑deployment model.
+2. **Author the new use case's `contracts/*.json`** once its subcategories are
+   defined — this layer already supports per‑deployment data via mounted files.
+3. **Turn the remaining §4 domain hardcodes into config** as needed:
+   shelf locations, ERP booking group / import‑form fields, CO₂ scoring — only
+   those the new use case actually diverges on.
+4. **Cheap wins regardless:** fix the `disassembly/` vs `assembly/` doc drift
+   (G‑K3); add the taxonomy generator (step 1) since it de‑risks any category
+   change even for the existing deployment.
