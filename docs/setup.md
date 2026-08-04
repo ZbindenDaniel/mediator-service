@@ -64,6 +64,35 @@ sudo openssl req -x509 -nodes -days 365   -newkey rsa:2048   -keyout secrets/tls
 2. Restart the proxy container: `docker compose restart proxy`.
 3. Confirm the new credentials are required and audit the access log for expected logins.
 
+## Authentik (user management)
+
+`docker-compose.yml` bundles [Authentik](https://goauthentik.io/) as the user-management / SSO
+provider: `authentik-server`, `authentik-worker`, plus a dedicated `authentik-postgresql` and
+`authentik-redis` (separate from the mediator database). This is **Phase 1 — the services are stood
+up for an admin to configure, but nothing is enforced yet.** The nginx Basic Auth ingress is
+unchanged, and the backend does not yet read any Authentik identity. Wiring forward-auth (nginx
+`auth_request` / Traefik `forwardAuth` → the Authentik outpost, with the backend reading
+`X-authentik-username` / `X-authentik-groups` for admin-vs-user roles) is the deliberate follow-up
+tracked by the `# TODO(ingress-auth)` markers.
+
+1. Set the Authentik variables in `.env` (see `.env.example` / `docs/ENVIRONMENT.md`). At minimum:
+   - `AUTHENTIK_SECRET_KEY` — generate with `openssl rand -base64 60`.
+   - `AUTHENTIK_PG_PASSWORD` — a strong password for Authentik's own Postgres.
+   - `AUTHENTIK_BOOTSTRAP_PASSWORD` (and optionally `AUTHENTIK_BOOTSTRAP_EMAIL`) — the initial
+     `akadmin` login, applied only on first boot.
+   - Optionally pin `AUTHENTIK_TAG` to the current stable release.
+2. Start (or update) the stack: `docker compose up -d`. Confirm all four `authentik-*` containers
+   report healthy in `docker compose ps`; check `docker compose logs authentik-server` for a clean
+   startup with migrations applied.
+3. Open the admin UI at `http://<host>:${AUTHENTIK_PORT:-9000}/if/admin/` and log in as `akadmin`
+   with the bootstrap password. From here admins create users and assign groups.
+4. **Not yet wired:** the mediator app still authenticates via the existing proxy Basic Auth /
+   `ADMIN_SECRET`. Do not remove those until the forward-auth follow-up lands.
+
+> The manual deploy workflow (`.gitea/workflows/deploy.yaml`) only rolls the `mediator` service, so
+> it will **not** start these new Authentik services on the host — bring them up once with a manual
+> `docker compose up -d` (or extend the workflow) on the deployment host.
+
 ## Postgres rollout notes
 
 - These notes reflect the current Compose-driven workflow; managed database guidance has not been documented yet.
@@ -112,6 +141,56 @@ sudo ufw allow 443
 ## registry
 
 - If the personal access token expires, regenerate it and login again to the registry: echo THE_NEW_PAT | sudo docker login ghcr.io -u ZbindenDaniel --password-stdin
+
+## CI/CD — automated image builds
+
+A Gitea Actions workflow (`.gitea/workflows/docker-publish.yaml`) builds the root `Dockerfile` and
+publishes the app image to **this Gitea instance's built-in container registry** (repo → Packages).
+It runs on every push to `main`, on every `v*.*.*` release tag, and via manual dispatch.
+
+- **No PAT needed.** CI authenticates with the token Gitea injects into each run
+  (`secrets.GITHUB_TOKEN`), so the manual `docker login` above is only required for the legacy
+  ghcr.io images, not for CI builds.
+- **Image path:** `<gitea-host>/zbindendaniel/mediator-service`. Tags: `latest` (default branch),
+  the semver version (e.g. `3.0.1` and `3.0`) on release tags, `main`, and `sha-<commit>`.
+- **Pull on the VM:** `docker login <gitea-host>` (a read token/deploy user is enough), then
+  `docker pull <gitea-host>/zbindendaniel/mediator-service:latest`.
+- **Requirements:** an `act_runner` registered with an `ubuntu-latest` label, Docker available on the
+  runner, and the Packages/registry feature enabled on the instance. If the runner can't fetch the
+  `docker/*` actions from GitHub, the workflow ships a commented Docker-CLI-only fallback job.
+
+> The `docker-compose.prod.yaml` image is now `${MEDIATOR_IMAGE:-ghcr.io/zbindendaniel/mediator-service:3.0}`
+> — manual `docker compose up` still uses the pinned ghcr image, while the deploy workflow overrides
+> `MEDIATOR_IMAGE` to the Gitea image. `docker-compos-V2_2.yaml` and `scripts/reploy.sh` still hardcode
+> `ghcr.io`; repoint them when you fully cut over.
+
+### Manual deploy workflow
+
+`.gitea/workflows/deploy.yaml` is a separate, **manually-triggered** (`workflow_dispatch`) deploy. It
+SSHes to the Docker host and rolls only the `mediator` service of `docker-compose.prod.yaml` onto a
+chosen image tag (postgres/cups are left running). The image must already be published by
+`docker-publish.yaml`.
+
+**Trigger** from the repo's Actions tab → *Deploy (manual)* → Run, with inputs:
+- `tag` — image tag to deploy (default `latest`; use a release version like `3.0.1` for a pinned deploy)
+- `deploy_dir` — host directory holding `docker-compose.prod.yaml` and `.env` (default `/opt/mediator`)
+- `ssh_port` — SSH port of the host (default `22`)
+
+**What it does on the host:** `scp`s the current `docker-compose.prod.yaml` into `deploy_dir`, logs in
+to the Gitea registry with the run's token, then `MEDIATOR_IMAGE=<gitea>/zbindendaniel/mediator-service:<tag>`
+`docker compose -f docker-compose.prod.yaml pull mediator && up -d mediator`.
+
+**Required Actions secrets** (repo → Settings → Actions → Secrets):
+- `DEPLOY_SSH_HOST` — host/IP of the Docker VM
+- `DEPLOY_SSH_USER` — SSH user (must be in the `docker` group)
+- `DEPLOY_SSH_KEY` — private key for that user (the matching public key in the host's `authorized_keys`)
+
+The registry pull uses the automatic `secrets.GITHUB_TOKEN`, so no separate registry credential is needed.
+`.env` (with `VM_IP` and runtime config) must already exist in `deploy_dir` — the workflow never touches it.
+
+> **Runner reachability:** the runner must be able to reach the host on `ssh_port`. For a LAN-only VM
+> that means running `act_runner` on the LAN (or a jump path). Host-key checking uses `accept-new` on
+> the ephemeral runner (trust-on-first-use); pre-seed a known_hosts entry if you need stricter checking.
 
 # Data recovery
 

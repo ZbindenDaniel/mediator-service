@@ -37,7 +37,11 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
-895. ✅ Deferred-identity in-device components: intake materializes one reference-less component per scanned disk (serial-keyed reports, C- UUID), which graduates at Zerlegung via an atomic identity-set + UUID-swap; parent→Ersatzteil is now contract-gated, and components are excluded from export/print until extracted → [intake]
+899. ✅ Deferred-identity in-device components: intake materializes one reference-less component per scanned disk (serial-keyed reports, C- UUID), which graduates at Zerlegung via an atomic identity-set + UUID-swap; parent→Ersatzteil is now contract-gated, and components are excluded from export/print until extracted → [intake]
+898. ✅ Add Authentik (server + worker + own Postgres/Redis) to the docker-compose stack for user management; Phase 1 stands it up only — forward-auth enforcement (proxy + backend roles) deferred → [docs-infra]
+897. ✅ Add opt-in "einfacher Modus" (simple mode): user-settings dialog toggle hides UI via a body CSS class — opt-out model, so every future nav item/tab is hidden by default unless marked `simple-keep` → [ui]
+896. ✅ Add separate manually-triggered Gitea deploy workflow: SSHes to the Docker host and rolls the mediator compose service onto a chosen image tag → [docs-infra]
+895. ✅ Add Gitea Actions workflow to build & publish the Docker image to Gitea's own container registry (no PAT; runs on main/tags/dispatch) → [docs-infra]
 894. ✅ Idle contract-audit sweeper (AUTO_REWORK, default off): stamps `SpecContractVersion` per run (#46) and, only while idle, re-applies the current spec contract to the oldest stale item — re-stamp if complete, else enqueue a targeted rework for now-missing required fields (deterministic, no LLM) → [agentic]
 893. ✅ Targeted "KI Überarbeitung" rework: reuse the main pipeline to regenerate only operator-selected fields (partial update preserves the rest, categorizer/pricing skipped), driven by a field-picker + instruction modal → [agentic]
 892. ✅ Auto-approve clearly-good agentic runs to a new ERP-eligible `auto_approved` state (supervisor PASS + confidence + no missing-required + no ambiguity), behind AUTO_APPROVE flag (default off) → [agentic]

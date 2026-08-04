@@ -231,6 +231,8 @@
 
 30. **Compact/collapsible flow cleanup for key views.** Target high-impact screens with reversible UI refinements to reduce visual weight on frequent operations.
 
+30b. **Simple mode: make the kept set configurable / server-persisted.** A first cut shipped (ui #897): an "einfacher Modus" toggle in the user-settings dialog strips the UI to a curated essential set via a body CSS class stored in `localStorage`. It uses an opt-out model — new nav items/tabs are hidden by default unless marked `simple-keep`/`keepInSimple`. Follow-ups: let operators choose which surfaces to keep, and/or persist the preference server-side per username so it follows them across devices. Also optional: skip hidden tabs in `DetailTabBar` arrow-key navigation.
+
 31. **Unified shelf view: combined box + loose items via one reusable list model (including Behälter context).** Fragmented shelf views force context switching and duplicate logic. **Goal:** unify rendering through shared list components with explicit aggregation rules.
 
 32. **Add filtered activities view.** Unfiltered activity streams are hard to use for investigation. **Goal:** add focused filters using existing activity data paths.
@@ -242,6 +244,8 @@
 33. ✅ **Admin mode / admin page for operational controls.** `/admin` page with import, export, shelf creation, print queue, KI queue, and system status. Gear icon in header nav. Old `/admin/shelves/new` redirects to `/admin`.
 
 33b. ✅ **Admin page: add password protection via ADMIN_SECRET.** If `ADMIN_SECRET` env var is set, backend rejects all `/api/admin/*` requests without a matching `Authorization: Bearer <secret>` header. Frontend shows a password gate on `/admin` that stores the entered value in `sessionStorage` and threads it through admin API calls (`/api/admin/label-queue`, `/api/admin/config`). Existing non-admin endpoints (`/api/overview`, `/api/export/items`, etc.) stay unprotected.
+
+33c. **Wire Authentik forward-auth enforcement (follow-up to stack add, OVERVIEW 898).** Authentik now runs in the `docker-compose.yml` stack but nothing consumes it yet. Next: (1) proxy forward-auth — nginx `auth_request` against the Authentik outpost in `config/nginx/mediator.conf` (dev), Traefik `forwardAuth` middleware label in `docker-compose.prod.yaml` (prod), plus adding the Authentik services to the prod compose; drop nginx Basic Auth once it works. (2) Backend: a helper generalizing `backend/utils/admin-auth.ts` that resolves `{username, groups, role}` from `X-authentik-username`/`X-authentik-groups` into `ActionContext`; replace the `/api/admin/*` check with a `mediator-admin` group check (keep `ADMIN_SECRET` as break-glass fallback). Design the role check as a **config-driven group→capability map**, not a hardcoded binary, so extra roles (`intake`, `erp`, `readonly`, …) are a config line + an Authentik group. (3) Populate the free-text `Actor`/`Username` fields from the authenticated user. (4) In Authentik itself: create the Proxy Provider, the `mediator-admin` group (everyone-else authenticated = user), and the embedded outpost. Note the deploy workflow only rolls `mediator`, so bringing the Authentik services up on the host needs a manual `docker compose up -d` or a workflow change.
 
 34. **Add WebDAV folder for temporary media, transcripts, and service-related data.** Support the new transcript persistence location and other temporary media storage needs.
 34b. **Media health: periodic background check.** `/api/media/health` is currently on-demand (polled when admin page loads). A recurring server-side probe (e.g. every 5 min) that logs a warning when reachability drops would surface WebDAV failures without requiring an operator to open the admin page.
@@ -255,6 +259,8 @@
 38. **Standardize relocation logs with explicit `from → to` semantics.** Ambiguous move logs hinder audits and incident reconstruction. **Goal:** unify event payload fields with minimal schema changes.
 
 39. **Periodic backup automation.** Missing regular backups raises data-loss risk. **Goal:** implement a lightweight scheduled backup flow with success/failure reporting.
+
+39b. ✅ **CD: manual deploy workflow.** `.gitea/workflows/deploy.yaml` (`workflow_dispatch`) SSHes to the Docker host and rolls the `mediator` compose service onto a chosen image tag (SSH push-deploy, option 1). `docker-compose.prod.yaml` image parametrized to `${MEDIATOR_IMAGE:-…}`. Needs `DEPLOY_SSH_HOST/USER/KEY` secrets and a runner that can reach the host on the SSH port (LAN VM → LAN-resident `act_runner`). See docs-infra changelog #896. **Still open:** (1) automatic deploy-on-tag behind an approval gate (kept manual for now by request); (2) rolling postgres/cups from CI (currently assumed pre-provisioned); (3) pinned known_hosts instead of TOFU `accept-new`; (4) full **ghcr.io → Gitea registry cutover** for `docker-compos-V2_2.yaml` and `scripts/reploy.sh` (both still hardcode `ghcr.io`).
 
 40. ✅ **Postgres migration complete.** `DATABASE_URL` required; no SQLite fallback. Migration script: `scripts/migrate-sqlite-to-postgres.ts`. Multi-instance agentic safety (`SELECT FOR UPDATE SKIP LOCKED`) implemented in `claimQueuedAgenticRuns`.
 

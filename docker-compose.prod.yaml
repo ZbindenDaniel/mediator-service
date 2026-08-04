@@ -54,7 +54,9 @@ services:
       - erfassung_default
 
   mediator:
-    image: ghcr.io/zbindendaniel/mediator-service:3.0
+    # Overridable so the deploy workflow can point at a CI-built image (e.g. the
+    # Gitea registry) without editing this file; defaults to the pinned ghcr image.
+    image: ${MEDIATOR_IMAGE:-ghcr.io/zbindendaniel/mediator-service:3.0}
     env_file: .env
     environment:
       MEDIA_ROOT_DIR: /app/dist/backend/webDav

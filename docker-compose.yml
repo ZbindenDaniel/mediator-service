@@ -1,3 +1,17 @@
+# Shared Authentik env for both the server and worker containers (single source of truth).
+x-authentik-env: &authentik-env
+  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?set AUTHENTIK_SECRET_KEY in .env (openssl rand -base64 60)}
+  AUTHENTIK_REDIS__HOST: authentik-redis
+  AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+  AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER:-authentik}
+  AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB:-authentik}
+  AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASSWORD:?set AUTHENTIK_PG_PASSWORD in .env}
+  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+  # First-boot bootstrap of the initial akadmin account (ignored after the account exists).
+  AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
+  AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-}
+  AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -76,7 +90,7 @@ services:
       # Shared CUPS socket from the cups service — not :ro because lpadmin writes to socket
       - cups-socket:/run/cups
       - ./config/alt-doc-dirs.json:/etc/mediator/alt-doc-dirs.json:ro
-      - mediator-scans:/mnt/mediator-scans
+      - mediator-scans:/mnt/mediator-docs
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -119,6 +133,113 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # --- Authentik (user management / SSO) -------------------------------------------------
+  # Phase 1: stood up alongside the app for admins to configure. Nothing is enforced yet —
+  # wiring forward-auth into the proxy + backend role checks is a deliberate follow-up
+  # (see the ingress-auth TODO and docs/setup.md). Authentik requires its OWN Postgres +
+  # Redis; do not point these at the mediator database.
+  authentik-postgresql:
+    image: postgres:16-alpine
+    container_name: authentik-postgresql
+    environment:
+      POSTGRES_USER: ${AUTHENTIK_PG_USER:-authentik}
+      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASSWORD:?set AUTHENTIK_PG_PASSWORD in .env}
+      POSTGRES_DB: ${AUTHENTIK_PG_DB:-authentik}
+    volumes:
+      - authentik-postgresql:/var/lib/postgresql/data
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTHENTIK_PG_USER:-authentik} -d ${AUTHENTIK_PG_DB:-authentik}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  authentik-redis:
+    image: redis:7-alpine
+    container_name: authentik-redis
+    command: --save 60 1 --loglevel warning
+    volumes:
+      - authentik-redis:/data
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  authentik-server:
+    # Pin AUTHENTIK_TAG in .env to the current stable release (see https://goauthentik.io/docker-compose.yml).
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2024.12.3}
+    container_name: authentik-server
+    command: server
+    environment:
+      <<: *authentik-env
+    # Admin/login UI published directly for Phase 1 so an admin can configure Authentik
+    # before any proxy forward-auth routing exists.
+    ports:
+      - "${AUTHENTIK_PORT:-9000}:9000"
+    volumes:
+      - authentik-media:/media
+      - authentik-templates:/templates
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+
+  authentik-worker:
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2024.12.3}
+    container_name: authentik-worker
+    command: worker
+    environment:
+      <<: *authentik-env
+    # Worker runs as root and mounts the Docker socket to manage the embedded outpost —
+    # this is Authentik's standard compose topology.
+    user: root
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - authentik-media:/media
+      - authentik-templates:/templates
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+
 volumes:
   mediator-data:
     name: mediator-data
@@ -132,6 +253,14 @@ volumes:
     name: mediator-cups-socket
   mediator-scans:
     name: mediator-scans
+  authentik-postgresql:
+    name: authentik-postgresql
+  authentik-redis:
+    name: authentik-redis
+  authentik-media:
+    name: authentik-media
+  authentik-templates:
+    name: authentik-templates
 
 secrets:
   mediator_htpasswd:

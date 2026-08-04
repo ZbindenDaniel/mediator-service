@@ -1,10 +1,19 @@
 [
   {
     "name": "intake-scans",
-    "mountPath": "/mnt/mediator-scans",
+    "mountPath": "/mnt/mediator-docs/intake",
     "identifierType": "serialNumber",
     "normalize": "uppercase",
     "docType": "Intake-Scan",
+    "writable": true,
+    "deletable": true
+  },
+    {
+    "name": "wipe-reports",
+    "mountPath": "/mnt/mediator-docs/wipe-reports",
+    "identifierType": "serialNumber",
+    "normalize": "uppercase",
+    "docType": "Löschprotokoll",
     "writable": true,
     "deletable": false
   }

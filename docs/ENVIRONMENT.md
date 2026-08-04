@@ -21,6 +21,27 @@ This document enumerates all environment variables consumed by the mediator serv
 | `BASE_QR_URL` | `${PUBLIC_ORIGIN}/qr` | Base URL used to build QR links. |
 | `BASE_UI_URL` | `${PUBLIC_ORIGIN}/ui` | Base URL used for UI links from QR codes. |
 
+## Authentication and user management (Authentik)
+
+These variables are consumed by **`docker-compose.yml` only** to run the bundled Authentik
+services (`authentik-server`, `authentik-worker`, `authentik-postgresql`, `authentik-redis`).
+The backend does **not** read them yet — forward-auth enforcement (proxy `auth_request` + backend
+role checks) is a planned follow-up. Authentik uses its own dedicated Postgres/Redis, separate from
+the mediator database.
+
+| Variable | Default / Example | Notes |
+| --- | --- | --- |
+| `AUTHENTIK_TAG` | `2024.12.3` | Authentik image tag. Pin to the current stable release (see https://goauthentik.io/docker-compose.yml). |
+| `AUTHENTIK_IMAGE` | `ghcr.io/goauthentik/server` | Image repository for both server and worker. |
+| `AUTHENTIK_PG_USER` | `authentik` | Postgres user for Authentik's dedicated database. |
+| `AUTHENTIK_PG_DB` | `authentik` | Postgres database name for Authentik. |
+| `AUTHENTIK_PG_PASSWORD` | (required to start) | Password for Authentik's Postgres. Compose fails fast if unset. |
+| `AUTHENTIK_SECRET_KEY` | (required to start) | Django secret key. Generate with `openssl rand -base64 60`. Compose fails fast if unset. |
+| `AUTHENTIK_PORT` | `9000` | Host port publishing the Authentik admin/login UI (`http://<host>:<port>/if/admin/`). |
+| `AUTHENTIK_BOOTSTRAP_PASSWORD` | (unset) | First-boot password for the initial `akadmin` account. Ignored once the account exists. |
+| `AUTHENTIK_BOOTSTRAP_EMAIL` | (unset) | First-boot email for `akadmin`. |
+| `AUTHENTIK_BOOTSTRAP_TOKEN` | (unset) | First-boot API token for `akadmin` (optional). |
+
 ## Database and file storage
 
 <!-- TODO(media-root-contract): Document only root-level media mount env and fixed subfolder names. -->
