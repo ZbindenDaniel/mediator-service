@@ -2,6 +2,17 @@
 
 export type IntakeNextStep = 'select_ref' | 'quality' | 'phase2';
 
+// A sub-device the intake image detected. `serial` (with wwn/model as fallback keys) is
+// what turns the disk into an in-device component and keys its serial-addressed reports.
+export interface IntakeDisk {
+  name: string;
+  sizeGb: number;
+  type?: string;
+  serial?: string | null;
+  wwn?: string | null;
+  model?: string | null;
+}
+
 export interface IntakeScanPayload {
   serial?: string | null;
   mac?: string | null;
@@ -9,7 +20,7 @@ export interface IntakeScanPayload {
   model?: string | null;
   cpu?: string | null;
   ramMb?: number | null;
-  disks?: Array<{ name: string; sizeGb: number; type?: string }> | null;
+  disks?: IntakeDisk[] | null;
   batteryPercent?: number | null;
 }
 

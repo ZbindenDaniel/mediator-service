@@ -4,6 +4,29 @@
 const ITEM_ID_PREFIX = 'I-';
 const ITEM_ID_SEQUENCE_WIDTH = 4;
 
+// In-device components have no Artikelnummer to embed until they graduate at Zerlegung,
+// so they carry a temporary component UUID under a distinct prefix. It is replaced by a
+// normal I-<Artikelnummer>-#### id at graduation (see component-lifecycle). The prefix is
+// deliberately outside the I-/date parsers' alphabet so parseSequentialItemUUID degrades
+// to null rather than mis-deriving an Artikelnummer for a reference-less component.
+const COMPONENT_ID_PREFIX = 'C-';
+
+/** True when an ItemUUID is a temporary in-device component id (no Artikelnummer yet). */
+export function isComponentUUID(value: string | null | undefined): boolean {
+  return typeof value === 'string' && value.startsWith(COMPONENT_ID_PREFIX);
+}
+
+/**
+ * Mint a temporary component UUID for an in-device component. Uniqueness comes from a
+ * time+random token; callers still guard with an existence check (as add-item does) before
+ * insert, so a collision retries rather than throwing.
+ */
+export function generateComponentUUID(random: () => number = Math.random): string {
+  const time = Date.now().toString(36);
+  const rand = Math.floor(random() * 0x7fffffff).toString(36).padStart(6, '0');
+  return `${COMPONENT_ID_PREFIX}${time}${rand}`;
+}
+
 type MaybePromise<T> = T | Promise<T>;
 
 export interface ItemIdGenerationDependencies {
@@ -143,6 +166,7 @@ export async function generateItemUUID(
 export const __TESTING__ = {
   ITEM_ID_PREFIX,
   ITEM_ID_SEQUENCE_WIDTH,
+  COMPONENT_ID_PREFIX,
   formatItemIdDateSegment,
   parseSequentialItemUUID
 };

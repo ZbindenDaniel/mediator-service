@@ -13,6 +13,7 @@ import {
 } from '../db';
 import { queryOne } from '../db-client';
 import { generateItemUUID } from '../lib/itemIds';
+import { syncInDeviceComponents } from '../lib/in-device-components';
 import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse } from '../lib/quality-contracts';
 import { preFillQualityQuestions } from '../lib/intake-quality-map';
 import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion } from '../../models/intake';
@@ -175,6 +176,15 @@ const action = defineHttpAction({
       }
 
       const itemUUID = await ensureItem(ref.artikelNummer, serial, mac);
+
+      // Once the parent machine item exists, materialize its scanned sub-devices as in-device
+      // components (idempotent on re-scan). Non-fatal: a failure here must not block catalog.
+      try {
+        await syncInDeviceComponents(itemUUID, scan.disks, { logEvent });
+      } catch (err) {
+        console.warn('[intake-answer] Failed to sync in-device components', { itemUUID, err });
+      }
+
       const questions = buildQualityQuestions(ref.unterkategorienA, scan);
 
       const response: IntakeAnswerResponse = {

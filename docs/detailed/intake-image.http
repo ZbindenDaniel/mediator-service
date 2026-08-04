@@ -1,0 +1,222 @@
+# Intake image ⇄ mediator-service — expected requests
+#
+# Requirements contract for what the netbooted Alpine intake image (and its
+# station TUI) sends to the server, across Phase 1 (catalog) and Phase 2
+# (automated tests). This is the reference the image is built against.
+#
+# Compatible with the VS Code "REST Client" / JetBrains .http runner.
+# Fill the variables below, then run requests top-to-bottom.
+#
+# NEW vs today (deferred-identity components, see component-lifecycle.md):
+#   • disks[] MUST carry a per-drive `serial` (+ optional wwn/model) — today it
+#     only sends name/sizeGb/type. This is the load-bearing image change:
+#     each reported sub-device becomes an in-device component instance, and its
+#     Phase-2 reports are uploaded under SN:<driveSerial>/ (not the machine SN).
+#   • Phase-2 uploads split into machine-level (SN:<machineSerial>) and
+#     per-component (SN:<driveSerial>) targets.
+
+@host = http://localhost:8080
+@intakeToken = dev-intake-token
+
+# --- Identity of the device on the bench (from the scan) --------------------
+@machineSerial = PF1ABCDE
+@mac = a4:83:e7:00:11:22
+# One entry per physical drive the image detects. Its SERIAL is the report key.
+@disk0Serial = S3Z9NX0M12345
+@disk1Serial = 224481007777
+
+@intakeKey = SN:{{machineSerial}}
+
+
+###############################################################################
+# PHASE 0 — image boot / TUI bootstrap
+###############################################################################
+
+# Category dropdown for the "create new reference" TUI step (bootable devices only).
+GET {{host}}/api/intake/categories
+X-Intake-Token: {{intakeToken}}
+
+
+###############################################################################
+# PHASE 1 — catalog (station TUI, operator-driven)
+###############################################################################
+
+# 1) State-machine router. Sent on every boot; server picks the next step from
+#    DB state. The scan payload is the full hardware read.
+#
+#    SERVER SIDE-EFFECT (new): for each disks[] entry the server creates one
+#    in-device component instance (Artikel_Nummer NULL, BoxID NULL, Auf_Lager=1,
+#    Zerlegt_aus relation + slotKey to the machine item). Idempotent on re-scan,
+#    keyed on the drive serial (fallback wwn / model+size when serial is blank).
+POST {{host}}/api/intake/start
+X-Intake-Token: {{intakeToken}}
+Content-Type: application/json
+
+{
+  "serial": "{{machineSerial}}",
+  "mac": "{{mac}}",
+  "vendor": "HP",
+  "model": "EliteBook 840 G5",
+  "cpu": "Intel i5-8350U",
+  "ramMb": 8192,
+  "disks": [
+    { "name": "nvme0n1", "sizeGb": 256, "type": "nvme", "serial": "{{disk0Serial}}", "wwn": "eui.0025385...", "model": "SAMSUNG MZVLB256" },
+    { "name": "sda",     "sizeGb": 500, "type": "hdd",  "serial": "{{disk1Serial}}", "wwn": "5000c500...",   "model": "ST500LM021" }
+  ],
+  "batteryPercent": 87
+}
+
+###
+# 2a) Answer select_ref by picking an EXISTING reference.
+POST {{host}}/api/intake/{{intakeKey}}/answer
+X-Intake-Token: {{intakeToken}}
+Content-Type: application/json
+
+{
+  "type": "ref",
+  "artikelNummer": "12345",
+  "scanPayload": {
+    "serial": "{{machineSerial}}", "mac": "{{mac}}", "vendor": "HP", "model": "EliteBook 840 G5",
+    "cpu": "Intel i5-8350U", "ramMb": 8192,
+    "disks": [
+      { "name": "nvme0n1", "sizeGb": 256, "type": "nvme", "serial": "{{disk0Serial}}" },
+      { "name": "sda",     "sizeGb": 500, "type": "hdd",  "serial": "{{disk1Serial}}" }
+    ],
+    "batteryPercent": 87
+  }
+}
+
+###
+# 2b) …or answer select_ref by CREATING a new reference.
+#     Kurzbeschreibung is optional (defaults to scanPayload.model).
+POST {{host}}/api/intake/{{intakeKey}}/answer
+X-Intake-Token: {{intakeToken}}
+Content-Type: application/json
+
+{
+  "type": "ref",
+  "newRef": {
+    "Hersteller": "HP",
+    "Kurzbeschreibung": "EliteBook 840 G5",
+    "Hauptkategorien_A": 20,
+    "Unterkategorien_A": 201
+  },
+  "scanPayload": {
+    "serial": "{{machineSerial}}", "mac": "{{mac}}", "vendor": "HP", "model": "EliteBook 840 G5",
+    "cpu": "Intel i5-8350U", "ramMb": 8192,
+    "disks": [
+      { "name": "nvme0n1", "sizeGb": 256, "type": "nvme", "serial": "{{disk0Serial}}" }
+    ],
+    "batteryPercent": 87
+  }
+}
+
+###
+# 3) Answer the quality step. instanceSpecs carries per-unit spec confirmations.
+POST {{host}}/api/intake/{{intakeKey}}/answer
+X-Intake-Token: {{intakeToken}}
+Content-Type: application/json
+
+{
+  "type": "quality",
+  "qualityAnswers": {
+    "is_functional": "true",
+    "is_complete": "true",
+    "has_defects": "false",
+    "cosmetic": "B",
+    "drive_type": "NVMe SSD"
+  },
+  "instanceSpecs": {
+    "RAM": "8 GB DDR4",
+    "SSD": "256 GB NVMe"
+  }
+}
+
+###
+# 4) Trigger agentic enrichment. Idempotent; may be re-called after Phase 2
+#    uploads land so agentic re-runs with richer data.
+POST {{host}}/api/intake/{{intakeKey}}/complete
+X-Intake-Token: {{intakeToken}}
+Content-Type: application/json
+
+{}
+
+
+###############################################################################
+# PHASE 2 — automated tests (image-driven, no operator). Serial-keyed uploads.
+#   Reuses the external-docs write endpoint. The SN: prefix skips the DB lookup
+#   and resolves the storage path from the serial directly — the item (machine
+#   or component) does not need to exist yet. Files land at {mountPath}/{serial}/.
+###############################################################################
+
+# --- Machine-level reports → aggregate on the MACHINE item ------------------
+
+# memtest (whole-machine RAM)
+POST {{host}}/api/items/SN:{{machineSerial}}/external-docs/intake-scans
+X-Intake-Token: {{intakeToken}}
+X-Filename: memtest.txt
+Content-Type: text/plain
+
+<<< raw memtest output bytes >>>
+
+###
+# battery health (whole-machine)
+POST {{host}}/api/items/SN:{{machineSerial}}/external-docs/intake-scans
+X-Intake-Token: {{intakeToken}}
+X-Filename: battery.txt
+Content-Type: text/plain
+
+<<< raw battery report bytes >>>
+
+###
+# --- Per-component reports → aggregate on the DRIVE component (by serial) ----
+#   While the drive is in-device these surface on the parent (aggregated);
+#   after Zerlegung they surface on the drive's own standalone item — same
+#   files, no move, because storage is serial-keyed.
+
+# SMART for drive 0
+POST {{host}}/api/items/SN:{{disk0Serial}}/external-docs/intake-scans
+X-Intake-Token: {{intakeToken}}
+X-Filename: smart-nvme0n1.txt
+Content-Type: text/plain
+
+<<< raw smartctl -a output for drive 0 >>>
+
+###
+# wipe certificate for drive 0 (travels with the drive on graduation)
+POST {{host}}/api/items/SN:{{disk0Serial}}/external-docs/intake-scans
+X-Intake-Token: {{intakeToken}}
+X-Filename: wipe-certificate-nvme0n1.txt
+Content-Type: text/plain
+
+<<< raw wipe/erasure certificate for drive 0 >>>
+
+###
+# SMART for drive 1
+POST {{host}}/api/items/SN:{{disk1Serial}}/external-docs/intake-scans
+X-Intake-Token: {{intakeToken}}
+X-Filename: smart-sda.txt
+Content-Type: text/plain
+
+<<< raw smartctl -a output for drive 1 >>>
+
+###
+# wipe certificate for drive 1
+POST {{host}}/api/items/SN:{{disk1Serial}}/external-docs/intake-scans
+X-Intake-Token: {{intakeToken}}
+X-Filename: wipe-certificate-sda.txt
+Content-Type: text/plain
+
+<<< raw wipe/erasure certificate for drive 1 >>>
+
+
+###############################################################################
+# NOT part of the intake image (operator web app, listed for completeness)
+#   • Zerlegung / graduation (set identity write-once + extract) and
+#   • manual "add unidentified component" / component deletion
+#   run from the web UI, not the netboot image. See component-lifecycle.md §4.
+###############################################################################
+
+# Auth note: all /api/intake/* routes require X-Intake-Token when INTAKE_TOKEN
+# is set (all requests accepted when it is unset — dev mode). The external-docs
+# endpoint keeps its own existing auth.

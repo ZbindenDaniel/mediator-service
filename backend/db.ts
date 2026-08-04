@@ -437,6 +437,35 @@ ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "SpecContractVersion" INTEGER;
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Scope" TEXT NOT NULL DEFAULT 'instance';
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Artikel_Nummer" TEXT;
 CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
+-- Explicit slot key for assembly relations, so it stops being overloaded onto "Notes".
+-- Existing rows keep their slot in "Notes"; new component-creation writes "SlotKey".
+ALTER TABLE item_relations ADD COLUMN IF NOT EXISTS "SlotKey" TEXT;
+-- The graduation UUID-swap re-points an in-device component's PK to its I- id. user_item_marks
+-- is the only UUID FK without ON UPDATE CASCADE, so add it (drop + re-add by discovered name)
+-- to let the swap cascade cleanly instead of stranding or blocking on a mark.
+DO $do$
+DECLARE
+  fk_name text;
+BEGIN
+  SELECT tc.constraint_name INTO fk_name
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.key_column_usage kcu
+      ON tc.constraint_name = kcu.constraint_name
+    WHERE tc.table_name = 'user_item_marks'
+      AND tc.constraint_type = 'FOREIGN KEY'
+      AND kcu.column_name = 'ItemUUID'
+    LIMIT 1;
+  IF fk_name IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE user_item_marks DROP CONSTRAINT %I', fk_name);
+  END IF;
+  ALTER TABLE user_item_marks
+    ADD CONSTRAINT user_item_marks_item_fk
+    FOREIGN KEY ("ItemUUID") REFERENCES items("ItemUUID") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN
+  -- Constraint already re-added on a previous boot; nothing to do.
+  NULL;
+END
+$do$;
 -- Convert legacy TEXT "Meta" to jsonb exactly once. Guarded so it does not rewrite the
 -- table on every boot, and legacy non-JSON rows are coerced to NULL first — otherwise a
 -- single malformed value makes the cast (and thus initDb) throw, aborting startup and
@@ -754,6 +783,16 @@ function prepareItemPersistencePayload(item: Item): ItemPersistencePayload {
 
 const LOCATION_WITH_BOX_FALLBACK = `COALESCE(NULLIF(i."Location",''), NULLIF(b."Label",''))`;
 const ITEM_REFERENCE_JOIN_KEY = `COALESCE(NULLIF(i."Artikel_Nummer",''), i."ItemUUID")`;
+
+// An in-device component: a reference-less child still inside its parent (BoxID unset + a
+// Zerlegt_aus relation). It has no real Artikelnummer yet, so it must be excluded from any
+// path that would leak its placeholder id outward (ERP/Shopware export, agentic enrichment,
+// auto-print). Once it graduates it gets a BoxID and a real Artikelnummer and drops out of
+// this predicate. Kept as one string so the definition of "in-device" stays in one place.
+export const IN_DEVICE_COMPONENT_SQL =
+  `(i."BoxID" IS NULL AND EXISTS (` +
+  `SELECT 1 FROM item_relations ir_indev ` +
+  `WHERE ir_indev."ChildItemUUID" = i."ItemUUID" AND ir_indev."RelationType" = 'Zerlegt_aus'))`;
 
 const ITEM_JOIN_BASE = `
   FROM items i
@@ -1261,7 +1300,9 @@ export async function listItemsForExport(filters: Partial<ListItemsForExportFilt
   ])}${ITEM_JOIN_WITH_BOX}
    LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
    WHERE ($1::TEXT IS NULL OR i."Datum_erfasst" >= $1)
-     AND ($2::TEXT IS NULL OR i."UpdatedAt" >= $2)`;
+     AND ($2::TEXT IS NULL OR i."UpdatedAt" >= $2)
+     -- Never export in-device components: their placeholder id must not reach ERP/Shopware.
+     AND NOT ${IN_DEVICE_COMPONENT_SQL}`;
 
   const params: unknown[] = [createdAfter, updatedAfter];
 
@@ -1562,6 +1603,17 @@ export async function hasItemReferenceByArtikelNummer(artikelNummer: string): Pr
 // ---------------------------------------------------------------------------
 
 export async function queueLabel(itemUUID: string): Promise<void> {
+  // Guard: a reference-less in-device component would print a blank/misleading label
+  // (null materialNumber, empty category). Never enqueue one — it graduates to a real
+  // Artikelnummer first. Cheap lookup; the label queue is low-volume.
+  const row = await queryOne<{ Artikel_Nummer: string | null }>(
+    `SELECT "Artikel_Nummer" FROM items WHERE "ItemUUID" = $1`,
+    [itemUUID]
+  );
+  if (row && (row.Artikel_Nummer == null || String(row.Artikel_Nummer).trim() === '')) {
+    console.warn('[label] Skipping label enqueue for reference-less item', { itemUUID });
+    return;
+  }
   await execute(
     `INSERT INTO label_queue ("ItemUUID","CreatedAt") VALUES ($1,$2)`,
     [itemUUID, new Date().toISOString()]
