@@ -20,6 +20,19 @@
 
 ## Priority 2 — Intake station (deferred v2 items)
 
+- **Components: manual "add unidentified" UI.** Backend deletion/graduation paths exist and
+  intake auto-creates in-device components, but there is no explicit operator entry point in
+  Zerlegen to add an unidentified (reference-less) component by hand. See
+  [`docs/detailed/component-lifecycle.md`](docs/detailed/component-lifecycle.md).
+- **Components: contract signal for parent→Ersatzteil.** `remove-from-device` honors
+  `markParentAsSpare` but nothing yet supplies it from a contract/Auftrag — decide whether it is
+  a parent field or an operator toggle at Zerlegung and wire it. The API never auto-marks without
+  the flag.
+- **Components: sever `Zerlegt_aus` link on sale/stock-removal.** The provenance link is kept
+  after graduation; severing it when the extracted item is sold + stock-removed is deferred.
+- **Components: verify intake image can read per-drive serials.** The serial (with `wwn`/`model`
+  fallback) is the identity/report key; confirm the netboot image reads it for every drive type
+  on the bench (some USB bridges hide it). Contract: [`intake-image.http`](docs/detailed/intake-image.http).
 - **Intake: scan.txt augmentation of agentic extraction.** When `/complete` fires, if `items.SerialNumber` is set, look for Phase 2 test result files in `{intake-scans mountPath}/{serial}/` and prepend a summarized block (≤2000 chars) to the extraction prompt. Requires modifying `backend/agentic/flow/item-flow-extraction.ts`.
 - **Intake: operator notification on completion.** Notify the operator (push notification or TUI display) when a device finishes the full pipeline (quality done + agentic run queued).
 - **Intake: InstanceSpecs sync.** When a quality answer drives a spec change on a ref-sharing instance, propagate to all instances sharing the same Artikelnummer (pre-existing open question for the quality review flow too).

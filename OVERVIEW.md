@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+895. ✅ Deferred-identity in-device components: intake materializes one reference-less component per scanned disk (serial-keyed reports, C- UUID), which graduates at Zerlegung via an atomic identity-set + UUID-swap; parent→Ersatzteil is now contract-gated, and components are excluded from export/print until extracted → [intake]
 894. ✅ Idle contract-audit sweeper (AUTO_REWORK, default off): stamps `SpecContractVersion` per run (#46) and, only while idle, re-applies the current spec contract to the oldest stale item — re-stamp if complete, else enqueue a targeted rework for now-missing required fields (deterministic, no LLM) → [agentic]
 893. ✅ Targeted "KI Überarbeitung" rework: reuse the main pipeline to regenerate only operator-selected fields (partial update preserves the rest, categorizer/pricing skipped), driven by a field-picker + instruction modal → [agentic]
 892. ✅ Auto-approve clearly-good agentic runs to a new ERP-eligible `auto_approved` state (supervisor PASS + confidence + no missing-required + no ambiguity), behind AUTO_APPROVE flag (default off) → [agentic]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 888. ✅ Close event-log coverage gaps: intake, CSV import, import-time box upsert, and stubs now emit lifecycle events; agentic events surface on item history (keying fix) → [item-lifecycle]
 887. ✅ Item list Ki-Status filter is now a multi-select (checkbox popover; default = all except Freigegeben) → [ui]
 886. ✅ Scanner UX: full-frame visual scan feedback (green ✓ / red ✗) + explicit "Schliessen" exit that routes the placement loop into inventory reconciliation → [scanning]
-885. ✅ Inventory scan gets an exit route: unscanned box items can be stock-removed or location-cleared → [storage]

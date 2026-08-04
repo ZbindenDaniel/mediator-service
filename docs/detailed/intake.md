@@ -51,9 +51,15 @@ State machine router. Body: `IntakeScanPayload` + `serial`/`mac`.
 
 ```json
 { "serial": "PF1ABCDE", "mac": null, "vendor": "HP", "model": "EliteBook 840",
-  "cpu": "Intel i5-8350U", "ramMb": 8192, "disks": [{ "name": "nvme0n1", "sizeGb": 256, "type": "nvme" }],
+  "cpu": "Intel i5-8350U", "ramMb": 8192,
+  "disks": [{ "name": "nvme0n1", "sizeGb": 256, "type": "nvme", "serial": "S3Z9NX0M12345", "wwn": "eui.0025385...", "model": "SAMSUNG MZVLB256" }],
   "batteryPercent": 87 }
 ```
+
+Each `disks[]` entry should carry a per-drive `serial` (with `wwn`/`model` as fallback keys):
+at the **ref** step the server materializes one in-device component per disk with a usable
+serial (see [component lifecycle](component-lifecycle.md)). The full image request contract is
+in [`intake-image.http`](intake-image.http).
 
 The `select_ref` response echoes the scanned identity as `scan: { vendor, model }` so the
 TUI can pre-fill the new-reference fields from what was already scanned.

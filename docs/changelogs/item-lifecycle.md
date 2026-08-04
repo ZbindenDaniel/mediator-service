@@ -4,6 +4,26 @@ Covers: item creation, editing, quality assessment, specs, accessories, spare pa
 
 ---
 
+## 895. ✅ Reference-less item instances + write-once identity at graduation
+**Why:** Supports deferred-identity components (see intake changelog #895) at the item-lifecycle
+layer. An instance may now exist with `Artikel_Nummer` NULL (an in-device component) and later
+have its identity **set once** at Zerlegung — the reference goes NULL → value and is never
+changed, so there is no "change reference" operation to make safe. Graduation
+(`backend/lib/graduate-component.ts`, invoked from `remove-from-device`) re-mints the temporary
+`C-` UUID to a normal `I-<Artikelnummer>-####` id and re-points every UUID-keyed row atomically
+(`items` PK, `item_relations` both directions, `events`, `item_attachments`, `label_queue`;
+`user_item_marks` cascades via a new `ON UPDATE CASCADE`), then records an `item_ref_relations`
+`'Ersatzteil'` provenance link. Reference-less rows are gated out of ERP/Shopware export
+(`IN_DEVICE_COMPONENT_SQL`) and never queue a label (`queueLabel` guard), so a placeholder id
+can't leak outward. Parent → Ersatzteil on extraction is now **contract-gated**
+(`markParentAsSpare`), decoupled from the extraction itself.
+**Why (approach):** UUID re-mint (rather than embedding a null Artikelnummer or keeping the `C-`
+id) keeps graduated components indistinguishable from ordinary items; it is cheap because it runs
+before history accrues and reports are serial-keyed. Reused the `Zerlegt_aus` + `BoxID IS NULL`
+convention so spare-part deletion/relocation paths were unchanged.
+**Deferred:** re-link/change-reference (out of scope by construction); severing the provenance
+link on sale/stock-removal (kept for now). See intake changelog #895 for the full deferred list.
+
 ## 888. ✅ Close event-log coverage gaps so items and boxes reliably have a history
 **Why:** Items and boxes often had zero events, which should be near-impossible. Root cause: event emission is wired per-endpoint (the persistence helpers don't emit), and the two biggest creation sources were never wired — device **intake** (`intake-answer.ts` created the instance via `ensureItem`/`persistItemInstance` and often a new ref, with no `logEvent`) and the **CSV importer** (`importer.ts` `persistItem` in the row loop). Boxes born from `import-item`'s `runUpsertBox` and stubs (`create-stub.ts`) also logged nothing; only relocations did, which is why moved items were the only ones with history. Fixes: intake now logs Item `Created` (Meta `source:'intake'`) on new-instance mint and `QualityAssessed` on the quality step; the CSV importer logs `Created`/`Updated` per instance (`source:'csv-import'`); `import-item` logs a Box `Created` for boxes newly created during import (existence-checked via `ctx.getBox`); `create-stub` logs `StubCreated` keyed to the shelf; `quality-review` logs `QualityAssessed`. Added event keys `QualityAssessed` and `StubCreated` to `models/event-resources.json`. Also fixed the keying bug where reference-level agentic events (`AgenticSearchQueued`, keyed by Artikel_Nummer) never showed on item history: `listEventsForItem(itemId, artikelNummer?)` now also matches the item's Artikel_Nummer. Drive-by: `bulk-move-items.ts` called the async `bulkMoveItems` without `await`, so `results.map` threw a 500 — now awaited (the Moved events were already emitted by the DB layer).
 **Why (approach):** Kept the established per-endpoint `logEvent` pattern rather than moving emission into the persistence helpers, which would double-log the paths that already emit (e.g. `import-item`). Reused `Created`/`Updated` for all creation sources, distinguished by `Meta.source`, so existing feed/level/topic filtering applies unchanged.
