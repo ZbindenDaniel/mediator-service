@@ -64,6 +64,35 @@ sudo openssl req -x509 -nodes -days 365   -newkey rsa:2048   -keyout secrets/tls
 2. Restart the proxy container: `docker compose restart proxy`.
 3. Confirm the new credentials are required and audit the access log for expected logins.
 
+## Authentik (user management)
+
+`docker-compose.yml` bundles [Authentik](https://goauthentik.io/) as the user-management / SSO
+provider: `authentik-server`, `authentik-worker`, plus a dedicated `authentik-postgresql` and
+`authentik-redis` (separate from the mediator database). This is **Phase 1 — the services are stood
+up for an admin to configure, but nothing is enforced yet.** The nginx Basic Auth ingress is
+unchanged, and the backend does not yet read any Authentik identity. Wiring forward-auth (nginx
+`auth_request` / Traefik `forwardAuth` → the Authentik outpost, with the backend reading
+`X-authentik-username` / `X-authentik-groups` for admin-vs-user roles) is the deliberate follow-up
+tracked by the `# TODO(ingress-auth)` markers.
+
+1. Set the Authentik variables in `.env` (see `.env.example` / `docs/ENVIRONMENT.md`). At minimum:
+   - `AUTHENTIK_SECRET_KEY` — generate with `openssl rand -base64 60`.
+   - `AUTHENTIK_PG_PASSWORD` — a strong password for Authentik's own Postgres.
+   - `AUTHENTIK_BOOTSTRAP_PASSWORD` (and optionally `AUTHENTIK_BOOTSTRAP_EMAIL`) — the initial
+     `akadmin` login, applied only on first boot.
+   - Optionally pin `AUTHENTIK_TAG` to the current stable release.
+2. Start (or update) the stack: `docker compose up -d`. Confirm all four `authentik-*` containers
+   report healthy in `docker compose ps`; check `docker compose logs authentik-server` for a clean
+   startup with migrations applied.
+3. Open the admin UI at `http://<host>:${AUTHENTIK_PORT:-9000}/if/admin/` and log in as `akadmin`
+   with the bootstrap password. From here admins create users and assign groups.
+4. **Not yet wired:** the mediator app still authenticates via the existing proxy Basic Auth /
+   `ADMIN_SECRET`. Do not remove those until the forward-auth follow-up lands.
+
+> The manual deploy workflow (`.gitea/workflows/deploy.yaml`) only rolls the `mediator` service, so
+> it will **not** start these new Authentik services on the host — bring them up once with a manual
+> `docker compose up -d` (or extend the workflow) on the deployment host.
+
 ## Postgres rollout notes
 
 - These notes reflect the current Compose-driven workflow; managed database guidance has not been documented yet.
