@@ -45,7 +45,8 @@ function makeRequest(url: string, method: string, body?: unknown): IncomingMessa
   return req as IncomingMessage;
 }
 
-const sparePartItem = { ItemUUID: 'FAN-001', BoxID: null };
+// A legacy spare part always carries a reference, so it takes the relocate-only path.
+const sparePartItem = { ItemUUID: 'FAN-001', Artikel_Nummer: 'ART-FAN', BoxID: null };
 const destBox = { BoxID: 'B-042', LocationId: 'S-01', Location: 'Regal 1' };
 
 function makeCtx(overrides: Record<string, any> = {}) {
@@ -251,6 +252,106 @@ describe('remove-from-device action', () => {
       // QA failure is non-fatal: item is still relocated
       expect(getStatus()).toBe(200);
       expect(getBody().ok).toBe(true);
+    });
+
+    it('does NOT mark the parent when markParentAsSpare is false (contract: sold whole)', async () => {
+      const ctx = makeCtx();
+      const req = makeRequest('/api/items/FAN-001/remove-from-device', 'POST', {
+        actor: 'alice',
+        toBoxId: 'B-042',
+        markParentAsSpare: false,
+      });
+      const { res, getStatus } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      expect(getStatus()).toBe(200);
+      expect(mockInsertQA).not.toHaveBeenCalled();
+      expect(mockUpdateQA).not.toHaveBeenCalled();
+      expect(ctx.enqueueShopwareSyncJob).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('graduation of an in-device component (no reference yet)', () => {
+    const mockWithTransaction = dbClient.withTransaction as jest.Mock;
+    const component = { ItemUUID: 'C-comp1', Artikel_Nummer: null, BoxID: null };
+
+    function makeGraduationClient() {
+      return {
+        query: jest.fn(async (sql: string) => {
+          if (sql.includes('SELECT "Artikel_Nummer" FROM items')) return { rows: [{ Artikel_Nummer: null }], rowCount: 1 };
+          if (sql.includes('ParentArtikelNummer')) return { rows: [{ ParentArtikelNummer: '000010' }], rowCount: 1 };
+          return { rows: [], rowCount: 1 };
+        }),
+      };
+    }
+
+    function makeGradCtx(overrides: Record<string, any> = {}) {
+      // getItem returns the component for its own id, null for freshly minted candidates.
+      return makeCtx({
+        getItem: jest.fn(async (id: string) => (id === 'C-comp1' ? component : null)),
+        generateItemUUID: jest.fn(async () => 'I-000042-0001'),
+        getMaxArtikelNummer: jest.fn(async () => '000041'),
+        ...overrides,
+      });
+    }
+
+    beforeEach(() => {
+      mockWithTransaction.mockImplementation(async (fn: any) => fn(makeGraduationClient()));
+    });
+    afterEach(() => {
+      mockWithTransaction.mockImplementation(async (fn: any) => fn({}));
+    });
+
+    it('sets identity, re-keys to the I- UUID, and returns the new id', async () => {
+      const ctx = makeGradCtx();
+      const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', {
+        actor: 'alice',
+        toBoxId: 'B-042',
+        artikelNummer: '000042',
+      });
+      const { res, getStatus, getBody } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      expect(getStatus()).toBe(200);
+      expect(getBody().itemUUID).toBe('I-000042-0001');
+      const gradEvent = ctx.logEvent.mock.calls.find((c: any[]) => c[0].Event === 'ComponentGraduated');
+      expect(gradEvent).toBeDefined();
+      expect(JSON.parse(gradEvent[0].Meta).previousUuid).toBe('C-comp1');
+    });
+
+    it('rejects graduation without an artikelNummer or newRef', async () => {
+      const ctx = makeGradCtx();
+      const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', {
+        actor: 'alice',
+        toBoxId: 'B-042',
+      });
+      const { res, getStatus, getBody } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      expect(getStatus()).toBe(400);
+      expect(getBody().error).toMatch(/identity/i);
+    });
+
+    it('creates a new reference from newRef when no artikelNummer is given', async () => {
+      const ctx = makeGradCtx();
+      const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', {
+        actor: 'alice',
+        toBoxId: 'B-042',
+        newRef: { Artikelbeschreibung: 'Samsung SSD 256GB', Hersteller: 'Samsung', Unterkategorien_A: 301 },
+      });
+      const { res, getStatus } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      expect(getStatus()).toBe(200);
+      // Next Artikelnummer after 000041 is 000042 (zero-padded to 6).
+      expect(mockExecute).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO item_refs'),
+        expect.arrayContaining(['000042', 'Samsung SSD 256GB'])
+      );
     });
   });
 });
