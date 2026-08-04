@@ -2813,7 +2813,7 @@ button:focus {
 .sort-direction-control,
 .filter-control {
     display: flex;
-    flex-direction: column;
+    // flex-direction: column;
     align-items: flex-start;
     gap: 6px;
     width: 100%;
@@ -2823,7 +2823,7 @@ button:focus {
 .sort-control label,
 .sort-direction-control label {
     display: flex;
-    flex-direction: column;
+    // flex-direction: column;
     gap: 6px;
     width: 100%;
 }

@@ -1,5 +1,5 @@
 @base_url = https://192.168.10.178
-@serial = SN12345001
+@serial = SN123450-AA445
 @intake_key = SN:{{serial}}
 @intake_token = 123456
 @auth_token = YWRtaW46bDFuMnhrM3JuNGwh
@@ -121,7 +121,7 @@ Content-Type: application/json
 
 
 ### Upload Doc
-POST {{base_url}}/api/items/{{intake_key}}/external-docs/intake-scans
+POST {{base_url}}/api/items/{{intake_key}}/external-docs/wipe-report
 Authorization: Basic {{auth_token}} 
 X-Intake-Token: {{intake_token}}
 X-Filename: {{upload_filename}}

@@ -76,7 +76,7 @@ services:
       # Shared CUPS socket from the cups service — not :ro because lpadmin writes to socket
       - cups-socket:/run/cups
       - ./config/alt-doc-dirs.json:/etc/mediator/alt-doc-dirs.json:ro
-      - mediator-scans:/mnt/mediator-scans
+      - mediator-scans:/mnt/mediator-docs
     restart: unless-stopped
     logging:
       driver: "json-file"
