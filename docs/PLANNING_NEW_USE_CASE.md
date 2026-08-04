@@ -5,16 +5,24 @@
 refurbishment / revamp‑it) so a new use case can be scoped against it and gaps
 identified. This is the "list" to compare requirements against.
 
-> **Deployment decision (resolved):** the new use case runs as a **separate
-> instance / deployment** — not alongside IT refurbishment in one runtime. This
-> means the goal is **not** multi-use-case scoping inside a shared namespace, but
-> **externalizing the use-case-specific data so one codebase deploys with a
-> different taxonomy / contracts / branding without a code fork.** See
-> [§5](#5-decision--remaining-input).
+> **The use case (resolved):** **thorough spare-part cataloging** — catalogue
+> *every reusable part* of a device, rather than general stock handling +
+> enrichment. Similar shape to the existing app (it was built with this in mind),
+> so the biggest change is **taxonomy** (must be configurable / seedable), the
+> **contracts** are redefined to model per-part cataloging, several features are
+> **opted out** (removed from UI + disabled by config), and the parts we keep are
+> **strengthened**. See [§7](#7-use-case-spare-part-cataloging) onward.
 >
-> **Still needed:** *what the new use case actually is* — its category taxonomy
-> and quality/spec requirements — to fill in the requirements column and finish
-> the gap analysis.
+> **Deployment decision (resolved):** runs as a **separate deployment** from IT
+> refurbishment — but that deployment must itself support **multiple tenants**.
+> So: deployment-level separation from the old use case + tenant-level separation
+> of customers *within* the spare-part app. Goal remains **one codebase, per-
+> deployment data** (externalized taxonomy/contracts), now plus a **tenant
+> dimension** inside it.
+>
+> **Still needed:** the concrete spare-part **taxonomy** and per-part
+> **quality/spec contract** definitions (domain input), plus the two decisions in
+> [§9](#9-features-not-listed--decisions-needed).
 
 ---
 
@@ -154,3 +162,119 @@ out of code so a new deployment is a config/data change, not a fork.
 4. **Cheap wins regardless:** fix the `disassembly/` vs `assembly/` doc drift
    (G‑K3); add the taxonomy generator (step 1) since it de‑risks any category
    change even for the existing deployment.
+
+---
+
+## 7. Use case: spare-part cataloging
+
+**Goal:** catalogue devices for spare-part reuse, with the focus on *very
+thorough cataloging* — every reusable part of a device is captured, assessed, and
+locatable. This is a narrower, deeper slice of what the app already does (item +
+disassembly + spare-parts lifecycle), with general stock enrichment de-scoped.
+
+**Shape vs. the existing app:**
+- The **disassembly / component lifecycle already models "every reusable part"** —
+  it is the centerpiece to *strengthen*, not build from scratch (see §8).
+- **Taxonomy** is the biggest change: categories/subcategories must be
+  **configurable or seedable** per deployment (critical path G‑C1 / §6.1).
+- **Contracts** are redefined so quality/spec/assembly model per-part condition,
+  reusability, and identity.
+- Many features are **opted out** — removed from the UI *and* disabled by config
+  (requires the feature-flag system that does not exist yet, §10.2).
+- Two new cross-cutting concerns: **multi-tenancy** (§10.1) and a **feature-flag /
+  capability system** (§10.2).
+
+---
+
+## 8. Feature disposition
+
+Legend: **Keep** = stays as-is · **Strengthen** = keep + invest ·
+**Remove-by-config** = code stays but off by default + hidden in UI ·
+**Out** = not needed / not carried into this deployment.
+
+| Feature | Disposition | Notes |
+|---|---|---|
+| **Taxonomy** (categories/subcategories) | **Externalize + redefine** | Configurable/seedable per deployment. Critical path (G‑C1). |
+| **Disassembly / components / spare-parts** (Zerlegen, assembly contracts, in-device components, parent→Ersatzteil, `item_relations`) | **Strengthen — centerpiece** | Already models per-part reuse. Distinct from the netboot intake station (which is Out) — this logic lives in the action handlers and stays. |
+| **Contracts** (quality/specs/assembly) | **Redefine + strengthen** | Model per-part condition, reusability, identity. |
+| **Quality / condition assessment** | **Strengthen** | Per-part "is this reusable / what condition" is core. |
+| **Stock handling** (boxes, locations, relocation, placement) | **Keep + strengthen + tenant-scope** | Must be robust and **multi-tenant** (§10.1). |
+| **General item handling** | **Strengthen** | Better control + **traceability** (event log, §8 audit). |
+| **Search** (item / serial / MAC / EAN) | **Keep** | Find parts. Separate from AI search. |
+| **Event log / audit** | **Strengthen** | Traceability requirement; close known coverage gaps. |
+| **Media / attachments** | **Keep + extend** | Add **videos + text documents**, and links to a **third-party app (wiki)**. |
+| **Reference / product model + accessories** | **Keep** | Relate parts to catalog part numbers. |
+| **Auth** | **Keep + extend for tenants** | Authentik (forward-auth) is stood up; add tenant + role mapping (§10.1). |
+| **Mobile** | **Keep (nice-to-have)** | Should fit the responsive shell. |
+| **Import/export** (generic CSV + data/backup) | **Keep** | Bulk cataloging + backup. This is **not** kivitendo. |
+| **AI / agentic flow** | **Remove-by-config** | Not in spec; keep code, gate route + hide UI. Re-add if needed. |
+| **Printing / labels** | **Remove-by-config** | No requirement; consider externalizing label templates if re-enabled. |
+| **Scanning / QR** | **Decide (§9)** | Not listed. Likely **Keep** for part identification/location even without printing. |
+| **Intake API** (netboot station) | **Out** | No requirement; resources later. Does not remove disassembly logic. |
+| **Kivitendo ERP** | **Out** | Very specific to current use case. |
+| **Shopware** | **Remove-by-config** | Not now; was added for exactly this kind of development. |
+| **Stubs** (box stubs) | **Out** | No requirement. |
+| **Transport boxes (T-)** | **Out** | Planned but unshipped; not needed. |
+| **Inventory (passive cycle)** | **Out (revisit)** | Planned but unshipped; revisit if reconciliation is needed. |
+| **CO₂ / impact scoring** | **Out (decide §9)** | Refurbishment-specific; drop unless part reuse wants an impact metric. |
+| **Admin page** | **Keep minimal / defer** | Underdefined; less needed without print + AI. May host tenant admin later. |
+| **Simple mode** (client-side CSS opt-out) | **Supersede** | Replace the ad-hoc CSS opt-out with the real feature-flag system (§10.2). |
+
+---
+
+## 9. Features not listed / decisions needed
+
+Answers to the original "am I missing features?" — items not in the request list,
+plus the two open decisions:
+
+- **Missing from the list (surfaced):** disassembly/component lifecycle (the
+  centerpiece), scanning/QR, quality/condition assessment, generic import/export
+  (≠ kivitendo), global search, reference/accessories model, event-log
+  traceability. See dispositions in §8.
+- **Decision D1 — Scanning/QR:** keep (part identification/location) or
+  remove-by-config? Recommend **keep** — it is independent of label *printing*.
+- **Decision D2 — CO₂ / impact scoring:** drop entirely, or repurpose as a
+  reuse/impact metric per part? Recommend **drop** unless there's a reporting need.
+
+---
+
+## 10. New cross-cutting workstreams (greenfield)
+
+These do not exist today and gate the "multi-tenant + opt-out" requirements.
+
+### 10.1 Multi-tenancy (largest single lift)
+- **Confirmed absent:** no `tenant` / `mandant` / `org_id` concept anywhere in
+  models, SQL, queries, or auth.
+- **Scope:** a tenant dimension on the core tables (items, boxes, refs, events,
+  relations, quality), tenant scoping enforced in **every** query, tenant
+  resolution in auth (map Authentik groups/claims → tenant + role), and per-tenant
+  config. This touches the whole data layer — plan it as its own phased doc.
+- **Interaction with §6:** externalized taxonomy/contracts are per-deployment; the
+  tenant dimension is *within* a deployment. Decide whether taxonomy/contracts are
+  deployment-wide (shared by all tenants) or overridable per tenant.
+
+### 10.2 Feature-flag / capability system (enables "opt out by config")
+- **Confirmed absent:** toggles today are ad-hoc per integration
+  (`SHOPWARE_SYNC_ENABLED`, `ERP_SYNC_ENABLED`, …) plus a client-side "simple mode"
+  CSS class. Nothing disables a backend feature *and* hides its UI from one source.
+- **Scope:** one capability config (per deployment, and ideally per tenant) read by
+  both backend (guard routes/jobs) and frontend (hide nav/tabs/actions), replacing
+  the scattered flags and the CSS opt-out. This is the mechanism the entire §8
+  "Remove-by-config" column depends on — build it before opting features out.
+
+---
+
+## 11. Recommended sequencing
+
+1. **Feature-flag/capability system (§10.2)** — prerequisite for every
+   "remove-by-config" item; smallest enabler with the widest payoff.
+2. **Externalize taxonomy (§6.1 / G‑C1)** — unblocks the redefined spare-part
+   categories without a fork.
+3. **Redefine contracts (§8)** for per-part cataloging once subcategories exist.
+4. **Multi-tenancy (§10.1)** — largest lift; can proceed in parallel with 2–3 but
+   needs its own phased plan.
+5. **Strengthen the keepers:** disassembly/components, stock handling,
+   traceability, media (videos/text/wiki links).
+6. **Opt features out** (AI, printing, shopware, intake, stubs, kivitendo) via the
+   flag system + UI hiding.
+7. **Resolve D1/D2** (scanning, CO₂).

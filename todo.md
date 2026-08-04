@@ -241,11 +241,24 @@
 
 ## Priority 3 — Infrastructure & Platform
 
-53. **New use case: config / categories / contracts readiness.** Inventory + gap
-   list in [`docs/PLANNING_NEW_USE_CASE.md`](docs/PLANNING_NEW_USE_CASE.md).
-   Blocked on two answers before implementation: (1) what the new use case is
-   (its taxonomy + quality/spec requirements), and (2) **coexist vs. replace** IT
-   refurbishment. Concrete gaps found:
+53. **New use case: spare-part cataloging (separate, multi-tenant deployment).**
+   Feature-disposition plan + gap list in
+   [`docs/PLANNING_NEW_USE_CASE.md`](docs/PLANNING_NEW_USE_CASE.md). Use case =
+   thorough spare-part cataloging (catalogue every reusable part); disassembly/
+   component lifecycle is the centerpiece to strengthen. Two greenfield
+   workstreams gate it:
+   - **G‑T1 Multi-tenancy (largest lift).** No `tenant`/`mandant`/`org_id`
+     concept exists anywhere — needs a tenant dimension on core tables, scoping in
+     every query, and tenant/role resolution from Authentik. Own phased plan.
+   - **G‑FF1 Feature-flag / capability system.** No unified toggle exists (ad-hoc
+     `*_ENABLED` env vars + client-side "simple mode" CSS). Build one config
+     surface that disables backend features *and* hides UI — prerequisite for
+     opting out AI / printing / shopware / intake / stubs / kivitendo.
+   - **Opt out:** AI flow, printing, intake API, shopware, stubs (remove-by-config);
+     kivitendo, transport boxes, inventory (out). **Strengthen:** stock handling,
+     traceability/event log, media (videos/text/wiki links), search. **Decide:**
+     D1 scanning/QR (recommend keep), D2 CO₂ scoring (recommend drop).
+   Category/config gaps found:
    - **G‑C1** Taxonomy lives in 4 hand‑synced copies (`models/item-categories.ts`,
      `frontend/src/data/itemCategories.ts` re‑export, `docs/data_struct.md` LLM
      reference, `INTAKE_CATEGORIES`) — no generator enforces consistency. Add a
