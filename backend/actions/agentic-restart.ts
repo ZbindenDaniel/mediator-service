@@ -181,6 +181,16 @@ const action = defineHttpAction({
 
     const replaceReviewMetadata = payload.replaceReviewMetadata === true;
     const skipSearch = payload.skipSearch === true;
+    // Targeted rework: keys to regenerate + free-text instruction. When present, the run does a partial
+    // update (only these keys change) and skips categorization/pricing.
+    const reworkSpecFields = Array.isArray((payload as { reworkSpecFields?: unknown }).reworkSpecFields)
+      ? ((payload as { reworkSpecFields: unknown[] }).reworkSpecFields)
+          .map((k) => (typeof k === 'string' ? k.trim() : ''))
+          .filter((k) => k.length > 0)
+      : [];
+    const reworkInstructions = typeof (payload as { reworkInstructions?: unknown }).reworkInstructions === 'string'
+      ? ((payload as { reworkInstructions: string }).reworkInstructions).trim() || null
+      : null;
     const requestContext = resolveAgenticRequestContext(payload, itemId);
 
     try {
@@ -192,6 +202,8 @@ const action = defineHttpAction({
           review: normalizedReview,
           replaceReviewMetadata,
           skipSearch,
+          reworkSpecFields: reworkSpecFields.length > 0 ? reworkSpecFields : null,
+          reworkInstructions,
           context: 'agentic-restart',
           request: requestContext
         },

@@ -16,7 +16,8 @@ exports[`prompt template composition snapshots renders categorizer.md with share
   - If required information is missing, use the role-specific fallback (null/empty/fail) instead of inventing data.
 - Never fabricate unsupported facts.
   - Do **not** alter or infer any fields beyond the four category codes. Respect schema contract in \`backend/agentic/prompts/schema-contract.md\`.
-  - Canonical target schema is injected below:
+  - The full item schema below is reference context describing the item you are categorizing — it is
+    **not** the shape of your reply. Your reply contains only the four keys shown in <output_format>.
 {{TARGET_SCHEMA_FORMAT}}
   - Always analyse the provided item JSON and prefer explicit signals (names, specs, usage) when selecting categories.
   - Treat Spezifikationen as supporting context when deciding categories.
@@ -24,11 +25,28 @@ exports[`prompt template composition snapshots renders categorizer.md with share
   {{CATEGORIZER_REVIEW}}
   - The taxonomy reference supplied alongside the conversation is authoritative. Use it to map descriptions to valid codes.
   - Preserve locked values. If the payload includes a "__locked" array listing category fields, keep their existing values.
-  - Return JSON with numeric codes (no text labels). Use null when no confident assignment can be made.
+  - Return **only** a valid JSON object with numeric codes (no text labels, no markdown, no bullet points, no prose). Use null when no confident assignment can be made.
+  - Your reply must contain **exactly** these four top-level keys, spelled exactly as shown, with no wrapper
+    object and no other keys: \`Hauptkategorien_A\`, \`Unterkategorien_A\`, \`Hauptkategorien_B\`, \`Unterkategorien_B\`.
+    Do not invent alternative key names (e.g. \`assigned_categories\`, \`primary\`/\`secondary\`, \`category\`/\`subcategory\`).
   - Prefer filling the Hauptkategorien_A and Unterkategorien_A fields. Populate the corresponding _B fields only when the item clearly belongs to two distinct categories.
   - Avoid additional commentary. Place intermediate reasoning inside <think> tags if needed. Only request or rely on new search results if the reviewer explicitly allows it.
   - This step **only categorizes**. Do not suggest edits, rewrite item data, or trigger follow-up actions. If the provided item already has suitable categories (or they are locked), return them unchanged and make no further modifications.
 </rules>
+<output_format>
+
+Follow this format exactly — these are the only four keys your reply may contain:
+
+\`\`\`json
+{
+  "Hauptkategorien_A": null,
+  "Unterkategorien_A": null,
+  "Hauptkategorien_B": null,
+  "Unterkategorien_B": null
+}
+\`\`\`
+
+</output_format>
 <examples>
 
 Input:
@@ -36,22 +54,12 @@ Input:
 \`\`\`
     "item": {
       "Artikelbeschreibung": "Corsair Hydro Series H60 (CWCH60)",
-    "Verkaufspreis": 0,
-    "Kurzbeschreibung": "Der Corsair Hydro Series H60 (CWCH60) ist eine hochleistungsfähige All-in-One-Wasserkühlungslösung für CPU-Kühler. Mit einem Mikro-Kanal-Kühlkörper und einer kompakten 120 mm Radiatorgröße bietet er eine effiziente Kühlung für verschiedene CPU-Sockel, ideal für Gamer und PC-Enthusiasten.",
+    "Kurzbeschreibung": "All-in-One-Wasserkühlungslösung für CPU-Kühler mit 120 mm Radiator.",
     "Spezifikationen": {
-      "Modell": "CWCH60",
       "Typ": "All-in-One Liquid Kühler",
-      "Radiatorgröße": "120 mm",
-      "Maximale Fan-Drehzahl": "1700 RPM",
-      "Maximaler Luftstrom": "74.4 CFM",
-      "Lautstärke": "30.2 dB",
-      "Sockelkompatibilität": "LGA775,LGA1150,LGA1151,LGA1155,LGA1156,LGA1366,AM2,AM3,AM4,FM1,FM2"
+      "Radiatorgröße": "120 mm"
     },
     "Hersteller": "Corsair",
-    "Länge_mm": 120,
-    "Breite_mm": 25,
-    "Höhe_mm": 0,
-    "Gewicht_kg": 0.6,
     "Hauptkategorien_A": null,
     "Unterkategorien_A": null,
     "Hauptkategorien_B": null,
@@ -95,7 +103,13 @@ exports[`prompt template composition snapshots renders extract.md with shared fr
 - Do not prepend or append narrative text outside explicitly allowed sections.
   - If required information is missing, use the role-specific fallback (null/empty/fail) instead of inventing data.
 - Never fabricate unsupported facts.
+  - When \`Conflicting fields\` appear in the user context, find independent evidence from search results
+    for each conflicting field and emit the value supported by sources. Do not copy either conflicting
+    value without evidence — leave the field at its current value if sources are silent.
   - Focus on already present keys in 'Spezifikationen'; add additional fields found in the search.
+  - Reuse the EXACT spec key names already provided in 'Spezifikationen' (e.g. keep "Prozessor" — do
+    not rename it to "CPU"/"Processor"). Do not translate, abbreviate, or invent a synonym for a key
+    that is already present; only introduce a new key for a genuinely new spec.
   - Field notes:
     - Artikelbeschreibung: Correct to the precise product name stated in sources.Add a broad device type in front (e.g. 'Laptop', 'Festplatte', 'Drucker.
     - Kurzbeschreibung: One concise paragraph; bullets only if they clarify.
@@ -200,7 +214,9 @@ exports[`prompt template composition snapshots renders search-planner.md with sh
   You examine provided JSON describing the current item state.
 </role>
 <task>
-  - List the schema fields that remain empty or null.
+  - Use \`missingFields\` (pre-computed contract gap) as your authoritative list of what to search for.
+  - If \`ambiguousFields\` is present, these fields have conflicting values between the item record and
+    intake scan data. Treat them as priority search targets to find independent evidence.
   - Interpret reviewer instructions, especially any variants of "no search" or "skip search".
   - Decide whether automated search is required.
 </task>
@@ -222,7 +238,8 @@ exports[`prompt template composition snapshots renders search-planner.md with sh
       ]
     }
   - If reviewer notes forbid search, set "shouldSearch" to false and return an empty "plans" array.
-  - Generate at most three targeted queries, focusing only on the most critical missing fields.
+  - Generate at most three targeted queries, focusing on the most critical missing fields from
+    \`missingFields\`. If \`ambiguousFields\` are present, add a targeted query to resolve conflicts.
   - Query construction priority:
     1. \`<exact product name>\`
     2. \`<exact product name> <missing attribute>\` (for example: dimensions, weight, specs, datasheet)
@@ -287,11 +304,16 @@ exports[`prompt template composition snapshots renders shopware-verify.md with s
 exports[`prompt template composition snapshots renders supervisor.md with shared fragments and no unresolved shared tokens 1`] = `
 "<!-- TODO(agent): Keep pseudo-XML tag layout consistent with shared prompt format guidelines. -->
 <role>
-  You review extracted item data for plausibility and completeness. Verify that any fields designated as locked in the input still contain their original values. It is acceptable for genuinely unknown fields to remain empty or null, but flag responses that clear or overwrite locked data or ignore obvious inconsistencies.
+  You review extracted item data for description quality and coherence. Spec completeness is checked
+  programmatically — your job is quality, not counting fields.
 </role>
 <task>
-  Assess item data strictly while balancing fairness and localization needs to decide whether it should pass or fail.
-  Validate fields against \`backend/agentic/prompts/schema-contract.md\`.
+  Assess item data while balancing fairness and localization needs to decide whether it should pass or fail.
+  Focus exclusively on:
+  1. Description coherence — Artikelbeschreibung and Kurzbeschreibung are consistent, accurate, and well-written German.
+  2. Internal consistency — no contradictions between fields (e.g. category and product type, dimensions that are implausible).
+  3. Plausibility — values are physically possible and reflect a real product.
+  4. Locked field integrity — fields marked as locked in the input still contain their original values.
   - Canonical target schema is injected below:
 {{TARGET_SCHEMA_FORMAT}}
 </task>
@@ -304,13 +326,13 @@ exports[`prompt template composition snapshots renders supervisor.md with shared
   - If required information is missing, use the role-specific fallback (null/empty/fail) instead of inventing data.
 - Never fabricate unsupported facts.
   {{SUPERVISOR_REVIEW}}
-  - Be strict: most values should be filled in unless the source material truly lacks the information.
-  - Be fair: if you see an error and know how to correct it do so. You might fix invalid JSON formating for example.
-  - Be reasonable: A missing price with otherwise good data does not mean it's failed. Most important is the decription. Be strict in the first attempt and become easier with the last attempt allthough inccorect data may never be passed.
-  - Be Outcome oriented: The Data is used for product description in an online shop. the data should reflect this.
-  - Be localized: The target audience speaks German so the data should be german too. Do not be super strict as technical jargon often contains english words.
+  - Do NOT fail because spec fields are missing — the contract gap is checked separately.
+  - Be fair: if you see a fixable error (e.g. invalid JSON formatting) correct it instead of failing.
+  - Be reasonable: a missing price with otherwise good data is not a reason to fail.
+  - Be Outcome oriented: the data is used for product descriptions in an online shop.
+  - Be localized: the target audience speaks German. Technical jargon may contain English words — that is fine.
   - Keep all internal reasoning inside <think> tags so that only the final verdict appears outside of them.
-  - Reply with "PASS" if the data looks reasonable, otherwise respond with "FAIL" and a short reason, missing fields.
+  - Reply with "PASS" if the description quality and coherence are acceptable, otherwise "FAIL" with a short reason.
 </rules>
 "
 `;

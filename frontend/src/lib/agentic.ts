@@ -18,6 +18,12 @@ const AGENTIC_FAILURE_REASON_DESCRIPTIONS: Record<string, string> = {
   'request-log-load-failed': 'KI-Anfragelog konnte nicht geladen werden',
   'response-not-ok': 'Unerwartete Antwort vom KI-Dienst',
   'network-error': 'Netzwerkfehler',
+  // Pipeline failure reasons written to agentic_runs.LastError by the backend orchestrator.
+  'invocation-result-not-ok': 'KI-Dienst lieferte kein Ergebnis',
+  'invocation-dispatch-error': 'Fehler beim Aufruf des KI-Dienstes',
+  'stale-run-auto-cancelled': 'Zeitüberschreitung – Lauf blieb hängen',
+  'over-cap-cancelled': 'Kapazitätsgrenze erreicht',
+  'agentic model invocation unavailable': 'KI-Dienst nicht verfügbar',
 };
 
 export function extractAgenticFailureReason(details: unknown): string | null {
@@ -468,6 +474,10 @@ export interface AgenticRestartRequestInput {
   reviewNotes?: string | null;
   reviewedBy?: string | null;
   skipSearch?: boolean;
+  /** Targeted rework: keys to regenerate (partial update; skips categorization/pricing). */
+  reworkSpecFields?: string[] | null;
+  /** Free-text operator instruction for the rework (e.g. "translate to German"). */
+  reworkInstructions?: string | null;
 }
 
 export function buildAgenticRestartRequestPayload({
@@ -476,7 +486,9 @@ export function buildAgenticRestartRequestPayload({
   reviewDecision,
   reviewNotes,
   reviewedBy,
-  skipSearch
+  skipSearch,
+  reworkSpecFields,
+  reworkInstructions
 }: AgenticRestartRequestInput): Record<string, unknown> {
   const trimmedActor = actor.trim();
   const trimmedSearch = (search ?? '').trim();
@@ -486,6 +498,17 @@ export function buildAgenticRestartRequestPayload({
   };
   if (skipSearch) {
     payload.skipSearch = true;
+  }
+
+  const normalizedReworkFields = Array.isArray(reworkSpecFields)
+    ? reworkSpecFields.map((k) => (typeof k === 'string' ? k.trim() : '')).filter((k) => k.length > 0)
+    : [];
+  if (normalizedReworkFields.length > 0) {
+    payload.reworkSpecFields = normalizedReworkFields;
+    const trimmedInstructions = reworkInstructions && reworkInstructions.trim() ? reworkInstructions.trim() : null;
+    if (trimmedInstructions) {
+      payload.reworkInstructions = trimmedInstructions;
+    }
   }
 
   const decisionNormalized = reviewDecision && reviewDecision.trim() ? reviewDecision.trim().toLowerCase() : null;

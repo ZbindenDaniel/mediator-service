@@ -1,5 +1,5 @@
 // TODO(agent): Revisit item flow orchestration once planner surfaces richer item metadata requirements.
-import { agentActorId } from '../config';
+import { agentActorId, autoApproveConfig } from '../config';
 import type { AgenticResultPayload } from '../result-handler';
 import { createRateLimiter, DEFAULT_DELAY_MS, type RateLimiterLogger } from '../utils/rate-limiter';
 import { FlowError } from './errors';
@@ -22,6 +22,7 @@ import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
 import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
 import { getSpecContract } from '../..//contracts/registry';
+import { canonicalizeSpecKeyRecord } from '../../../models/spec-contract';
 
 const REVIEW_CONTEXT_NOTE_LIMIT = 2_000;
 
@@ -102,6 +103,9 @@ export interface RunItemFlowInput {
   reviewNotes?: string | null;
   missingSpecFields?: string[];
   unneededSpecFields?: string[];
+  // Targeted rework: keys to regenerate. Non-empty ⇒ rework mode (partial update; skip cat/pricing).
+  reworkSpecFields?: string[];
+  reworkInstructions?: string | null;
   skipSearch?: boolean;
   storedSources?: SearchSource[];
   maxAttempts?: number;
@@ -153,9 +157,16 @@ function buildSpecContext(
   const specContract = getSpecContract(subcategoryCode);
   if (!specContract) return result;
 
-  const langtext = target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)
+  const rawLangtext = target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)
     ? (target.Langtext as Record<string, unknown>)
     : {};
+  // Canonicalize spec keys up front so a value under a variant ("CPU") is seen by every stage under
+  // its canonical contract key ("Prozessor") — and write it back onto the target so the stored output
+  // carries a single canonical name, not a duplicate variant sibling.
+  const langtext = canonicalizeSpecKeyRecord(rawLangtext);
+  if (target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)) {
+    target.Langtext = langtext;
+  }
 
   for (const field of specContract.fields) {
     const itemRaw = langtext[field.key];
@@ -226,7 +237,9 @@ function buildCallbackPayload({
   reviewedBy,
   error,
   sources,
-  actor
+  actor,
+  autoApprovable,
+  specContractVersion
 }: {
   artikelNummer: string;
   itemData: AgenticTarget;
@@ -240,6 +253,8 @@ function buildCallbackPayload({
   error?: string | null;
   sources?: unknown;
   actor?: string | null;
+  autoApprovable?: boolean;
+  specContractVersion?: number | null;
 }): AgenticResultPayload {
   const resolvedStatus = status ?? (needsReview ? 'needs_review' : 'completed');
   const resolvedNeedsReview = typeof needsReview === 'boolean' ? needsReview : resolvedStatus !== 'completed';
@@ -270,8 +285,44 @@ function buildCallbackPayload({
     reviewNotes: resolvedReviewNotes,
     reviewedBy: resolvedReviewedBy,
     actor: resolvedActor,
-    item: itemPayload
+    item: itemPayload,
+    autoApprovable: autoApprovable === true,
+    specContractVersion: specContractVersion ?? null
   };
+}
+
+// Builds the final item for a targeted rework: keeps every original value and overlays the model's
+// output ONLY for the selected keys (a selected key may be a top-level field like Artikelbeschreibung
+// or a Langtext spec sub-key). Deterministic preservation — the model cannot alter unselected fields.
+// Exported for unit testing of the preservation guarantee.
+export function applyReworkPartialUpdate(
+  target: Record<string, unknown>,
+  modelData: Record<string, unknown> | null | undefined,
+  reworkSpecFields: string[],
+  itemId: string
+): AgenticTarget {
+  const result: Record<string, unknown> = { ...target, Artikel_Nummer: itemId };
+  const model = (modelData && typeof modelData === 'object') ? (modelData as Record<string, unknown>) : {};
+  const originalLangtext = target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)
+    ? { ...(target.Langtext as Record<string, unknown>) }
+    : {};
+  const modelLangtext = model.Langtext && typeof model.Langtext === 'object' && !Array.isArray(model.Langtext)
+    ? (model.Langtext as Record<string, unknown>)
+    : {};
+  const mergedLangtext: Record<string, unknown> = { ...originalLangtext };
+  for (const key of reworkSpecFields) {
+    // Top-level field selected (e.g. Artikelbeschreibung, Kurzbeschreibung) — Langtext itself is
+    // handled via mergedLangtext below, so it is excluded here.
+    if (key !== 'Langtext' && key !== 'Spezifikationen' && Object.prototype.hasOwnProperty.call(model, key)) {
+      result[key] = model[key];
+    }
+    // Langtext spec key selected — overlay the model's value for that key only when present.
+    if (Object.prototype.hasOwnProperty.call(modelLangtext, key)) {
+      mergedLangtext[key] = modelLangtext[key];
+    }
+  }
+  result.Langtext = mergedLangtext;
+  return result as AgenticTarget;
 }
 
 export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDependencies): Promise<AgenticResultPayload> {
@@ -288,6 +339,16 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     ? input.reviewNotes.trim()
     : null;
   const skipSearch = Boolean(input.skipSearch);
+
+  // Targeted rework: when set, only these keys are accepted from the model output (all other fields
+  // keep their originals) and the categorizer/pricing stages are skipped.
+  const reworkSpecFields = Array.isArray(input.reworkSpecFields)
+    ? input.reworkSpecFields.map((k) => String(k).trim()).filter((k) => k.length > 0)
+    : [];
+  const reworkMode = reworkSpecFields.length > 0;
+  const reworkInstructions = typeof input.reworkInstructions === 'string' && input.reworkInstructions.trim()
+    ? input.reworkInstructions.trim()
+    : null;
 
   try {
     const context = prepareItemContext(input, logger);
@@ -439,6 +500,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     const subcategoryCode = typeof target.Unterkategorien_A === 'number' ? target.Unterkategorien_A : null;
     const instanceSpecs = input.instanceSpecs && typeof input.instanceSpecs === 'object' ? input.instanceSpecs : null;
+    // Spec contract version this run runs against — stamped on the run so an idle sweep can later detect
+    // items enriched against an outdated contract (getSpecContract is cached, so this is cheap).
+    const specContractVersion = subcategoryCode ? (getSpecContract(subcategoryCode)?.version ?? null) : null;
     const specCtx = buildSpecContext(target, subcategoryCode, instanceSpecs);
     logger.debug?.({ msg: 'spec context built', itemId, subcategoryCode, missingRequired: specCtx.missingRequired, missingDesired: specCtx.missingDesired, ambiguousCount: Object.keys(specCtx.ambiguousFields).length });
 
@@ -556,6 +620,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       ambiguousFields: specCtx.ambiguousFields,
       missingSpecFieldDescriptions: specCtx.missingFieldDescriptions,
       unneededSpecFields: Array.isArray(input.unneededSpecFields) ? input.unneededSpecFields : [],
+      reworkSpecFields,
+      reworkInstructions,
       skipSearch,
       exampleItemBlock: input.exampleItemBlock ?? null,
       correctionModel: deps.correctionLlm,
@@ -564,7 +630,33 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     checkCancellation();
 
-    const finalData: AgenticTarget = { ...target, ...extractionResult.data, Artikel_Nummer: itemId };
+    // In rework mode, produce a partial update deterministically: start from the ORIGINAL item and
+    // accept the model's output ONLY for the selected keys. This preserves every other field
+    // regardless of what the model returned — no reliance on the model honouring "locked" fields.
+    const finalData: AgenticTarget = reworkMode
+      ? applyReworkPartialUpdate(target, extractionResult.data, reworkSpecFields, itemId)
+      : { ...target, ...extractionResult.data, Artikel_Nummer: itemId };
+    // Canonicalize spec keys on the final output so any variant the model emitted (e.g. "CPU") is
+    // folded onto the canonical contract key ("Prozessor") before persistence — one name, no dupes.
+    if (finalData.Langtext && typeof finalData.Langtext === 'object' && !Array.isArray(finalData.Langtext)) {
+      finalData.Langtext = canonicalizeSpecKeyRecord(
+        finalData.Langtext as Record<string, unknown>
+      ) as typeof finalData.Langtext;
+    }
+
+    // "Clearly good" signal for auto-approval: supervisor PASS + no missing-required + no ambiguous
+    // fields + extraction confidence at/above the configured threshold. The final on/off gate lives
+    // in the result handler (AUTO_APPROVE); here we only compute whether the data qualifies.
+    const extractionConfidence =
+      typeof (extractionResult.data as { confidence?: unknown })?.confidence === 'number'
+        ? ((extractionResult.data as { confidence: number }).confidence)
+        : null;
+    const autoApprovable =
+      extractionResult.success &&
+      specCtx.missingRequired.length === 0 &&
+      Object.keys(specCtx.ambiguousFields).length === 0 &&
+      extractionConfidence !== null &&
+      extractionConfidence >= autoApproveConfig.minConfidence;
 
     const payload = buildCallbackPayload({
       artikelNummer: itemId,
@@ -579,7 +671,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       reviewNotes: extractionResult.supervisor || reviewerNotes,
       reviewedBy: 'supervisor-agent',
       error: extractionResult.success ? null : 'Supervisor flagged issues',
-      sources: extractionResult.sources
+      sources: extractionResult.sources,
+      autoApprovable,
+      specContractVersion
     });
 
     await dispatchAgenticResult({

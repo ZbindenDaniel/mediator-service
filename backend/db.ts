@@ -433,6 +433,7 @@ ALTER TABLE item_refs ADD COLUMN IF NOT EXISTS "LastSyncedAt" TEXT;
 ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedAt" TEXT;
 ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedBy" TEXT;
 ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "Confidence" FLOAT;
+ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "SpecContractVersion" INTEGER;
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Scope" TEXT NOT NULL DEFAULT 'instance';
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Artikel_Nummer" TEXT;
 CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
@@ -1158,7 +1159,8 @@ export async function listItemsWithFilters(filters: {
   searchTerm: string | null;
   subcategoryFilter: string | null;
   boxFilter: string | null;
-  agenticStatus: string | null;
+  // null = no agentic-status filter; array = statuses to include (empty array → match nothing).
+  agenticStatuses: string[] | null;
   unplacedOnly: number | null;
 }): Promise<any[]> {
   const rows = await query(
@@ -1172,10 +1174,10 @@ export async function listItemsWithFilters(filters: {
           OR LOWER(COALESCE(i."Artikel_Nummer",'')) LIKE $1 OR LOWER(COALESCE(i."ItemUUID",'')) LIKE $1)
      AND ($2::TEXT IS NULL OR $2 = '' OR LOWER(COALESCE(CAST(r."Unterkategorien_A" AS TEXT),'')) LIKE $2)
      AND ($3::TEXT IS NULL OR $3 = '' OR LOWER(COALESCE(i."BoxID",'')) LIKE $3)
-     AND ($4::TEXT IS NULL OR $4 = '' OR COALESCE(ar."Status",'notStarted') = $4)
+     AND ($4::TEXT[] IS NULL OR COALESCE(ar."Status",'notStarted') = ANY($4))
      AND ($5::INTEGER IS NULL OR $5 = 0 OR i."BoxID" IS NULL)
      ORDER BY i."ItemUUID"`,
-    [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatus, filters.unplacedOnly]
+    [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatuses, filters.unplacedOnly]
   );
   return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsWithFilters');
 }
@@ -1184,7 +1186,8 @@ export async function listItemReferencesWithFilters(filters: {
   searchTerm: string | null;
   subcategoryFilter: string | null;
   boxFilter: string | null;
-  agenticStatus: string | null;
+  // null = no agentic-status filter; array = statuses to include (empty array → match nothing).
+  agenticStatuses: string[] | null;
   unplacedOnly: number | null;
 }): Promise<any[]> {
   const rows = await query(
@@ -1213,10 +1216,10 @@ export async function listItemReferencesWithFilters(filters: {
           OR LOWER(COALESCE(r."Artikel_Nummer",'')) LIKE $1 OR LOWER(COALESCE(i."ItemUUID",'')) LIKE $1)
      AND ($2::TEXT IS NULL OR $2 = '' OR LOWER(COALESCE(CAST(r."Unterkategorien_A" AS TEXT),'')) LIKE $2)
      AND ($3::TEXT IS NULL OR $3 = '' OR LOWER(COALESCE(i."BoxID",'')) LIKE $3)
-     AND ($4::TEXT IS NULL OR $4 = '' OR COALESCE(ar."Status",'notStarted') = $4)
+     AND ($4::TEXT[] IS NULL OR COALESCE(ar."Status",'notStarted') = ANY($4))
      AND ($5::INTEGER IS NULL OR $5 = 0 OR i."BoxID" IS NULL)
      ORDER BY COALESCE(NULLIF(r."Artikel_Nummer",''), i."ItemUUID")`,
-    [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatus, filters.unplacedOnly]
+    [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatuses, filters.unplacedOnly]
   );
   return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemReferencesWithFilters');
 }
@@ -1298,6 +1301,15 @@ export async function incrementItemStock(itemUUID: string): Promise<number> {
 export async function zeroItemStock(itemUUID: string): Promise<number> {
   return execute(
     `UPDATE items SET "Auf_Lager"=0,"BoxID"=NULL,"Location"=NULL,"UpdatedAt"=$2 WHERE "ItemUUID"=$1`,
+    [itemUUID, new Date().toISOString()]
+  );
+}
+
+// Clears the box assignment only — unlike zeroItemStock, stock stays intact so an
+// unscanned-but-still-owned item (inventory reconciliation) isn't dropped from inventory.
+export async function clearItemLocation(itemUUID: string): Promise<number> {
+  return execute(
+    `UPDATE items SET "BoxID"=NULL,"Location"=NULL,"UpdatedAt"=$2 WHERE "ItemUUID"=$1`,
     [itemUUID, new Date().toISOString()]
   );
 }
@@ -1642,12 +1654,16 @@ export async function listEventsForBox(boxId: string): Promise<EventLog[]> {
   );
 }
 
-export async function listEventsForItem(itemId: string): Promise<EventLog[]> {
+export async function listEventsForItem(itemId: string, artikelNummer?: string | null): Promise<EventLog[]> {
+  // Also surface reference-level events keyed by Artikel_Nummer (e.g. AgenticSearchQueued),
+  // which apply to every instance of the reference; otherwise they never show on item history.
+  const ref = (artikelNummer ?? '').trim();
   return query<EventLog>(
-    `SELECT * FROM events WHERE "EntityType"='Item' AND "EntityId"=$1
+    `SELECT * FROM events WHERE "EntityType"='Item'
+       AND ("EntityId"=$1 OR ($2 <> '' AND "EntityId"=$2))
      AND ${levelFilterExpression()} AND ${topicFilterExpression()}
      ORDER BY "Id" DESC LIMIT 200`,
-    [itemId]
+    [itemId, ref]
   );
 }
 
@@ -1838,10 +1854,11 @@ export async function upsertAgenticRun(params: {
   LastReviewDecision?: string | null;
   LastReviewNotes?: string | null;
   Confidence?: number | null;
+  SpecContractVersion?: number | null;
 }): Promise<void> {
   await execute(
-    `INSERT INTO agentic_runs ("Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy","LastReviewDecision","LastReviewNotes","Confidence")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+    `INSERT INTO agentic_runs ("Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy","LastReviewDecision","LastReviewNotes","Confidence","SpecContractVersion")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
      ON CONFLICT("Artikel_Nummer") DO UPDATE SET
        "SearchQuery"=COALESCE(EXCLUDED."SearchQuery",agentic_runs."SearchQuery"),
        "LastSearchLinksJson"=COALESCE(EXCLUDED."LastSearchLinksJson",agentic_runs."LastSearchLinksJson"),
@@ -1852,20 +1869,52 @@ export async function upsertAgenticRun(params: {
        "LastReviewDecision"=COALESCE(EXCLUDED."LastReviewDecision",agentic_runs."LastReviewDecision"),
        "LastReviewNotes"=COALESCE(EXCLUDED."LastReviewNotes",agentic_runs."LastReviewNotes"),
        "Confidence"=COALESCE(EXCLUDED."Confidence",agentic_runs."Confidence"),
+       "SpecContractVersion"=COALESCE(EXCLUDED."SpecContractVersion",agentic_runs."SpecContractVersion"),
        "RetryCount"=CASE WHEN EXCLUDED."Status"='queued' THEN 0 ELSE agentic_runs."RetryCount" END,
        "NextRetryAt"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."NextRetryAt" END,
        "LastError"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."LastError" END,
        "LastAttemptAt"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."LastAttemptAt" END`,
-    [params.Artikel_Nummer, params.SearchQuery ?? null, params.LastSearchLinksJson ?? null, params.Status, params.LastModified, params.ReviewState, params.ReviewedBy ?? null, params.LastReviewDecision ?? null, params.LastReviewNotes ?? null, params.Confidence ?? null]
+    [params.Artikel_Nummer, params.SearchQuery ?? null, params.LastSearchLinksJson ?? null, params.Status, params.LastModified, params.ReviewState, params.ReviewedBy ?? null, params.LastReviewDecision ?? null, params.LastReviewNotes ?? null, params.Confidence ?? null, params.SpecContractVersion ?? null]
   );
 }
 
 export async function getAgenticRun(artikelNummer: string): Promise<AgenticRun | null> {
   return queryOne<AgenticRun>(
     `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
-            "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt","Confidence"
+            "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt","Confidence","SpecContractVersion"
      FROM agentic_runs WHERE "Artikel_Nummer"=$1`,
     [artikelNummer]
+  );
+}
+
+// Idle contract-audit sweeper: settled runs joined to their item ref, oldest-first, with the stored
+// contract version + the data needed to compute the gap in code (contract versions live in JSON, not SQL).
+export async function listContractAuditCandidates(limit: number): Promise<Array<{
+  Artikel_Nummer: string;
+  SpecContractVersion: number | null;
+  Langtext: string | null;
+  SubCategory: number | null;
+  Artikelbeschreibung: string | null;
+}>> {
+  return query(
+    `SELECT r."Artikel_Nummer", r."SpecContractVersion",
+            i."Langtext", CAST(i."Unterkategorien_A" AS INTEGER) AS "SubCategory",
+            i."Artikelbeschreibung"
+     FROM agentic_runs r
+     JOIN item_refs i ON i."Artikel_Nummer" = r."Artikel_Nummer"
+     WHERE r."Status" IN ('approved','auto_approved')
+       AND i."Unterkategorien_A" IS NOT NULL
+     ORDER BY r."LastModified" ASC
+     LIMIT $1`,
+    [limit]
+  );
+}
+
+// Cheap re-stamp when an item is already complete under the new contract (no rerun needed).
+export async function stampAgenticRunContractVersion(artikelNummer: string, version: number): Promise<void> {
+  await execute(
+    `UPDATE agentic_runs SET "SpecContractVersion"=$1 WHERE "Artikel_Nummer"=$2`,
+    [version, artikelNummer]
   );
 }
 

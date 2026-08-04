@@ -16,4 +16,7 @@ export interface AgenticRun {
   LastAttemptAt: string | null;
   TranscriptUrl?: string | null;
   Confidence?: number | null;
+  // Spec contract version this run completed against; lets an idle sweep detect items enriched
+  // against an outdated contract (stored < current) and re-apply it.
+  SpecContractVersion?: number | null;
 }

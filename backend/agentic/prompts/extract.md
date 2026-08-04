@@ -17,6 +17,9 @@
     for each conflicting field and emit the value supported by sources. Do not copy either conflicting
     value without evidence — leave the field at its current value if sources are silent.
   - Focus on already present keys in 'Spezifikationen'; add additional fields found in the search.
+  - Reuse the EXACT spec key names already provided in 'Spezifikationen' (e.g. keep "Prozessor" — do
+    not rename it to "CPU"/"Processor"). Do not translate, abbreviate, or invent a synonym for a key
+    that is already present; only introduce a new key for a genuinely new spec.
   - Field notes:
     - Artikelbeschreibung: Correct to the precise product name stated in sources.Add a broad device type in front (e.g. 'Laptop', 'Festplatte', 'Drucker.
     - Kurzbeschreibung: One concise paragraph; bullets only if they clarify.

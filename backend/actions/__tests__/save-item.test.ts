@@ -137,7 +137,7 @@ describe('save-item action', () => {
     expect(body.reference).toEqual(expect.objectContaining({ Artikel_Nummer: 'ART-2' }));
     expect(Array.isArray(body.instances)).toBe(true);
     expect(body.instances.length).toBe(1);
-    expect(ctx.listEventsForItem).toHaveBeenCalledWith('ITEM-2');
+    expect(ctx.listEventsForItem).toHaveBeenCalledWith('ITEM-2', 'ART-2');
   });
 
   it('returns reference-backed detail and empty instances for Artikel_Nummer lookups without instances', async () => {

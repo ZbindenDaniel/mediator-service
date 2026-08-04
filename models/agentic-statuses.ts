@@ -2,6 +2,10 @@ export const AGENTIC_RUN_STATUS_QUEUED = 'queued' as const;
 export const AGENTIC_RUN_STATUS_RUNNING = 'running' as const;
 export const AGENTIC_RUN_STATUS_REVIEW = 'review' as const;
 export const AGENTIC_RUN_STATUS_APPROVED = 'approved' as const;
+// Machine-approved when the data is clearly good (supervisor PASS + high confidence + no missing
+// required fields + no ambiguity). Distinct from `approved` so operators can sort/filter and choose
+// what to sync; still ERP-eligible and promotable to full `approved` via Abschliessen.
+export const AGENTIC_RUN_STATUS_AUTO_APPROVED = 'auto_approved' as const;
 export const AGENTIC_RUN_STATUS_REJECTED = 'rejected' as const;
 export const AGENTIC_RUN_STATUS_FAILED = 'failed' as const;
 export const AGENTIC_RUN_STATUS_CANCELLED = 'cancelled' as const;
@@ -12,6 +16,7 @@ export const AGENTIC_RUN_STATUSES = [
   AGENTIC_RUN_STATUS_RUNNING,
   AGENTIC_RUN_STATUS_REVIEW,
   AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_AUTO_APPROVED,
   AGENTIC_RUN_STATUS_REJECTED,
   AGENTIC_RUN_STATUS_FAILED,
   AGENTIC_RUN_STATUS_CANCELLED,
@@ -19,6 +24,15 @@ export const AGENTIC_RUN_STATUSES = [
 ] as const;
 
 export type AgenticRunStatus = (typeof AGENTIC_RUN_STATUSES)[number];
+
+// Default selection for the item-list Ki-Status multi-select: everything except
+// approved ("Freigegeben"), so completed items don't clutter the working list (todo #12).
+export const AGENTIC_RUN_DEFAULT_VISIBLE_STATUSES: readonly AgenticRunStatus[] =
+  AGENTIC_RUN_STATUSES.filter((status) => status !== AGENTIC_RUN_STATUS_APPROVED);
+
+// Sentinel query value meaning "an explicit empty selection" (match nothing) so the
+// backend can distinguish it from an absent param (no filter → match everything).
+export const AGENTIC_STATUS_FILTER_NONE = '__none__' as const;
 
 const STATUS_NORMALIZATION_MAP = new Map<string, AgenticRunStatus>([
   [AGENTIC_RUN_STATUS_QUEUED, AGENTIC_RUN_STATUS_QUEUED],
@@ -52,6 +66,10 @@ const STATUS_NORMALIZATION_MAP = new Map<string, AgenticRunStatus>([
   ['finished', AGENTIC_RUN_STATUS_APPROVED],
   ['resolved', AGENTIC_RUN_STATUS_APPROVED],
   ['released', AGENTIC_RUN_STATUS_APPROVED],
+  [AGENTIC_RUN_STATUS_AUTO_APPROVED, AGENTIC_RUN_STATUS_AUTO_APPROVED],
+  ['autoapproved', AGENTIC_RUN_STATUS_AUTO_APPROVED],
+  ['auto-approved', AGENTIC_RUN_STATUS_AUTO_APPROVED],
+  ['auto_approved', AGENTIC_RUN_STATUS_AUTO_APPROVED],
   [AGENTIC_RUN_STATUS_REJECTED, AGENTIC_RUN_STATUS_REJECTED],
   ['declined', AGENTIC_RUN_STATUS_REJECTED],
   ['denied', AGENTIC_RUN_STATUS_REJECTED],
@@ -106,6 +124,7 @@ export const AGENTIC_RUN_REVIEW_REQUIRED_STATUSES: ReadonlySet<AgenticRunStatus>
 
 export const AGENTIC_RUN_RESTARTABLE_STATUSES: ReadonlySet<AgenticRunStatus> = new Set([
   AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_AUTO_APPROVED,
   AGENTIC_RUN_STATUS_REJECTED,
   AGENTIC_RUN_STATUS_FAILED,
   AGENTIC_RUN_STATUS_CANCELLED

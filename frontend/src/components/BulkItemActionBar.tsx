@@ -91,10 +91,12 @@ type KiAction = 'start' | 'stop';
 interface KiActionFormProps {
   selectedItems: Item[];
   onChange: (action: KiAction) => void;
+  onSkipSearchChange: (skipSearch: boolean) => void;
 }
 
-function KiActionForm({ selectedItems, onChange }: KiActionFormProps) {
+function KiActionForm({ selectedItems, onChange, onSkipSearchChange }: KiActionFormProps) {
   const [action, setAction] = useState<KiAction>('start');
+  const [skipSearch, setSkipSearch] = useState<boolean>(false);
 
   const startableCount = selectedItems.filter((item) =>
     item.AgenticStatus !== AGENTIC_RUN_STATUS_RUNNING
@@ -136,6 +138,16 @@ function KiActionForm({ selectedItems, onChange }: KiActionFormProps) {
             <span className="ki-action-form__label">Stoppen</span>
             <span className="ki-action-form__count">{stoppableCount} laufende/wartende Artikel stoppen</span>
           </span>
+        </label>
+      ) : null}
+      {action === 'start' ? (
+        <label className="ki-action-form__skip-search">
+          <input
+            type="checkbox"
+            checked={skipSearch}
+            onChange={(event) => { setSkipSearch(event.target.checked); onSkipSearchChange(event.target.checked); }}
+          />
+          <span className="ki-action-form__label">Suche überspringen (gespeicherte Suche wiederverwenden)</span>
         </label>
       ) : null}
     </div>
@@ -285,6 +297,7 @@ export default function BulkItemActionBar({
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const shopFormRef = useRef<ShopStatusValues>({ shopartikel: null, veröffentlicht: null, verkaufspreis: null });
   const kiActionRef = useRef<KiAction>('start');
+  const kiSkipSearchRef = useRef<boolean>(false);
   const effectiveResolveActor = resolveActor ?? ensureUser;
   const selectedCount = selectedIds.length;
   const hasSelection = selectedCount > 0;
@@ -537,6 +550,7 @@ export default function BulkItemActionBar({
 
     setFeedback(null);
     kiActionRef.current = 'start';
+    kiSkipSearchRef.current = false;
 
     // TODO(agentic-bulk): Ensure bulk agentic triggers only use Artikel_Nummer once list payloads always include it.
     const itemMap = new Map<string, Item>();
@@ -554,6 +568,7 @@ export default function BulkItemActionBar({
           <KiActionForm
             selectedItems={selectedItems}
             onChange={(action) => { kiActionRef.current = action; }}
+            onSkipSearchChange={(skip) => { kiSkipSearchRef.current = skip; }}
           />
         ),
         confirmLabel: 'Ausführen',
@@ -697,7 +712,7 @@ export default function BulkItemActionBar({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               context: 'item-list-bulk',
-              payload: { artikelNummer, artikelbeschreibung }
+              payload: { artikelNummer, artikelbeschreibung, skipSearch: kiSkipSearchRef.current }
             })
           });
 

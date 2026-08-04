@@ -170,7 +170,7 @@ describe('agentic direct dispatch', () => {
     expect(upsertAgenticRun).not.toHaveBeenCalled();
   });
 
-  test('auto-cancels run when dispatch invocation reports failure', async () => {
+  test('fails run when dispatch invocation reports failure and retries are exhausted', async () => {
     const existingRun: AgenticRun = {
       Id: 3,
       Artikel_Nummer: 'item-fail-1',
@@ -181,7 +181,8 @@ describe('agentic direct dispatch', () => {
       ReviewedBy: null,
       LastReviewDecision: null,
       LastReviewNotes: null,
-      // MAX_AUTO_RETRIES = 5; exhausted retries trigger cancelled (not re-queued) path
+      // MAX_AUTO_RETRIES = 5; exhausted retries now terminate in FAILED (a pipeline error), not
+      // cancelled (which is reserved for explicit user stops).
       RetryCount: 5,
       NextRetryAt: null,
       LastError: null,
@@ -207,9 +208,9 @@ describe('agentic direct dispatch', () => {
     expect(failingInvoke).toHaveBeenCalledTimes(1);
     expect(getAgenticRun).toHaveBeenCalled();
     const updateCalls = updateAgenticRunStatus.mock.calls;
-    expect(updateCalls.some((call: any[]) => call?.[0]?.Status === 'cancelled')).toBe(true);
+    expect(updateCalls.some((call: any[]) => call?.[0]?.Status === 'failed')).toBe(true);
     expect(logEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ Event: 'AgenticRunCancelled', EntityId: existingRun.Artikel_Nummer })
+      expect.objectContaining({ Event: 'AgenticRunFailed', EntityId: existingRun.Artikel_Nummer })
     );
   });
 });
