@@ -47,6 +47,7 @@ Presentation only. No direct API calls — use `../data/` functions. No business
 - Component files are named by what they render (noun), not by what triggers them
 - Large modal dialogs go in `dialog/` even if they're used by one component
 - `item-tabs/` tabs are rendered by `ItemDetail.tsx` via `DetailTabBar.tsx`
+- **Simple mode hides by default (opt-out).** With `simple-mode` active on `<body>` (see `lib/simpleMode.ts`), any header nav item or `DetailTabBar` tab is hidden unless explicitly kept — nav items need the `simple-keep` class, tabs need `keepInSimple: true` on their `TabDef`. So a new nav item / tab is invisible in simple mode until you opt it in; only add the marker for surfaces an overwhelmed operator genuinely needs.
 
 ## See also
 - [docs/detailed/item-detail-layout.md](../../../docs/detailed/item-detail-layout.md) — UX hierarchy and persona-based design rationale

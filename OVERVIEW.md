@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+897. ✅ Add opt-in "einfacher Modus" (simple mode): user-settings dialog toggle hides UI via a body CSS class — opt-out model, so every future nav item/tab is hidden by default unless marked `simple-keep` → [ui]
 896. ✅ Add separate manually-triggered Gitea deploy workflow: SSHes to the Docker host and rolls the mediator compose service onto a chosen image tag → [docs-infra]
 895. ✅ Add Gitea Actions workflow to build & publish the Docker image to Gitea's own container registry (no PAT; runs on main/tags/dispatch) → [docs-infra]
 894. ✅ Idle contract-audit sweeper (AUTO_REWORK, default off): stamps `SpecContractVersion` per run (#46) and, only while idle, re-applies the current spec contract to the oldest stale item — re-stamp if complete, else enqueue a targeted rework for now-missing required fields (deterministic, no LLM) → [agentic]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 890. ✅ Skip-search hardening: honour skipSearch only when a stored search exists (else live-search fallback); thread the flag through bulk start + a bulk UI toggle → [agentic]
 889. ✅ Fix spec field naming: canonicalize variant spec keys (CPU→Prozessor) onto the contract key so a present field is never reported missing and no duplicate sibling is stored → [agentic]
 888. ✅ Close event-log coverage gaps: intake, CSV import, import-time box upsert, and stubs now emit lifecycle events; agentic events surface on item history (keying fix) → [item-lifecycle]
-887. ✅ Item list Ki-Status filter is now a multi-select (checkbox popover; default = all except Freigegeben) → [ui]

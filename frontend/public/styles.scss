@@ -3991,3 +3991,39 @@ button:focus {
         flex-shrink: 0;
     }
 }
+
+// User-settings dialog fields (username + simple-mode toggle)
+.dialog-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.95rem;
+    color: var(--fg);
+}
+
+.dialog-field--checkbox {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+
+    input[type="checkbox"] {
+        margin: 0;
+        flex-shrink: 0;
+    }
+}
+
+// Simple/minimalistic mode: hide surfaces that overwhelm some operators.
+// Toggled via a `simple-mode` class on <body> (see lib/simpleMode.ts).
+//
+// Opt-out model: simple mode hides by DEFAULT. A nav item or detail tab stays
+// visible only if it is explicitly marked to keep — nav items via a `simple-keep`
+// class (Header.tsx), detail tabs via `data-simple-keep` (DetailTabBar.tsx).
+// Any new nav item / tab is therefore hidden in simple mode until it opts in.
+// Hiding is purely visual; routes and tab content logic are untouched.
+body.simple-mode {
+    .header-nav__items > *:not(.simple-keep),
+    .detail-tab-bar__tab:not([data-simple-keep]) {
+        display: none;
+    }
+}
