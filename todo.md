@@ -241,6 +241,27 @@
 
 ## Priority 3 — Infrastructure & Platform
 
+53. **New use case: config / categories / contracts readiness.** Inventory + gap
+   list in [`docs/PLANNING_NEW_USE_CASE.md`](docs/PLANNING_NEW_USE_CASE.md).
+   Blocked on two answers before implementation: (1) what the new use case is
+   (its taxonomy + quality/spec requirements), and (2) **coexist vs. replace** IT
+   refurbishment. Concrete gaps found:
+   - **G‑C1** Taxonomy lives in 4 hand‑synced copies (`models/item-categories.ts`,
+     `frontend/src/data/itemCategories.ts` re‑export, `docs/data_struct.md` LLM
+     reference, `INTAKE_CATEGORIES`) — no generator enforces consistency. Add a
+     build‑time generator to de‑risk any category change.
+   - **G‑C2 / G‑K2** Taxonomy and contract files are a flat global namespace — no
+     scoping, so two use cases cannot coexist on one instance without new design.
+   - **G‑F1 / G‑F2** No use‑case/domain/tenant dimension exists in config at all;
+     "change the config for a use case" is greenfield.
+   - **G‑K3** (cheap) `contracts/README.md` says `disassembly/` but the dir is
+     `assembly/` — fix the doc drift.
+   - Domain hardcodes to revisit for a new use case: `models/shelf-locations.ts`
+     (revamp sites), ERP booking group `453` (`backend/config.ts:366`),
+     `ERP_IMPORT_FORM_*`, `contracts/impact/co2.json`.
+
+
+
 33. ✅ **Admin mode / admin page for operational controls.** `/admin` page with import, export, shelf creation, print queue, KI queue, and system status. Gear icon in header nav. Old `/admin/shelves/new` redirects to `/admin`.
 
 33b. ✅ **Admin page: add password protection via ADMIN_SECRET.** If `ADMIN_SECRET` env var is set, backend rejects all `/api/admin/*` requests without a matching `Authorization: Bearer <secret>` header. Frontend shows a password gate on `/admin` that stores the entered value in `sessionStorage` and threads it through admin API calls (`/api/admin/label-queue`, `/api/admin/config`). Existing non-admin endpoints (`/api/overview`, `/api/export/items`, etc.) stay unprotected.

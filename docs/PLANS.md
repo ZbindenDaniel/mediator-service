@@ -8,6 +8,7 @@ This file is the single entry point for all active feature planning documents.
 - [`docs/PLANNING_transport_boxes.md`](PLANNING_transport_boxes.md) — Transport boxes (T-) use cases, data model, and phased rollout
 - [`docs/PLANNING_STUB_BOXES.md`](PLANNING_STUB_BOXES.md) — Stub box creation, listing, and transport integration
 - [`docs/PLANNING_INVENTORY.md`](PLANNING_INVENTORY.md) — Passive inventory cycle, session tracking, and scan workflows
+- [`docs/PLANNING_NEW_USE_CASE.md`](PLANNING_NEW_USE_CASE.md) — Readiness inventory for onboarding a new use case (config / categories / contracts) and gap list
 
 ## Active task tracker
 
