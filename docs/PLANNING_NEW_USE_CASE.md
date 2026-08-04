@@ -278,3 +278,105 @@ These do not exist today and gate the "multi-tenant + opt-out" requirements.
 6. **Opt features out** (AI, printing, shopware, intake, stubs, kivitendo) via the
    flag system + UI hiding.
 7. **Resolve D1/D2** (scanning, CO₂).
+
+---
+
+## 12. Architecture proposals (high concept)
+
+Two mechanisms gate the whole plan. Both have a single natural leverage point in
+the current architecture, so neither needs to be sprinkled across handlers.
+
+### 12.1 The two leverage points that make this cheap
+
+- **Backend chokepoint.** Every API request resolves through *one* line —
+  `backend/server.ts:960` finds the matching action and calls
+  `action.handle(req, res, ctx)` with a single `ctx` object. Anything injected
+  into `ctx`, or any gate placed *before* `handle`, applies to the entire API for
+  free.
+- **The `ctx` object.** Handlers already receive one shared context (DB
+  functions + config). It is the natural carrier for both `ctx.tenant` and
+  `ctx.features` — no handler signature changes.
+- **The DB layer.** DB access is a flat set of functions in `backend/db.ts`
+  passed through `ctx`. Rules enforced there (tenant scoping) cannot be forgotten
+  by an individual handler.
+
+### 12.2 Feature flags — one manifest, two enforcement styles
+
+**Concept:** a single **capability manifest** — one JSON source of truth listing
+which features are on (per deployment, optionally overridable per tenant). The
+same manifest drives backend enforcement and frontend visibility, so they cannot
+drift.
+
+**Granularity — match the requirement, stay coarse.** The opt-outs (AI,
+printing, shopware, intake, stubs, kivitendo) are *whole subsystems*, not
+individual buttons. So flags should be **feature-group** level (~1 flag per
+subsystem), not per-endpoint. This is the 80/20.
+
+**Backend enforcement (hard gate, at the chokepoint):**
+- Extend the `Action` interface with an optional `feature?: string` tag; each
+  action file declares which feature it belongs to (most declare none = always on).
+- At `server.ts:960`, skip / `404` any action whose `feature` is disabled. One
+  gate covers every route. Background jobs (nightly sync, print worker, agentic
+  dispatch) check the same manifest at their entry point.
+- This *supersedes* the scattered `*_ENABLED` env vars (`SHOPWARE_SYNC_ENABLED`,
+  `ERP_SYNC_ENABLED`, …) — fold them into the manifest incrementally.
+
+**Frontend visibility (soft hide):**
+- Serve the manifest read-only via a new `GET /api/app-config` at boot (there is
+  no config endpoint today — flags currently ride build-time `define` /
+  `globalThis.__APP_CONFIG__`). A served endpoint is what enables *per-deployment
+  and per-tenant* flags without a rebuild.
+- Expose a `useFeature('printing')` hook / `<Feature name>` guard for
+  nav/tabs/actions. For cheap bulk hiding, **reuse the `simpleMode` CSS-class
+  pattern**: stamp `body.feature-off-printing` and let CSS hide
+  `.feature-printing` elements — the mechanism already exists, just source it from
+  the manifest instead of `localStorage`. `simpleMode` then becomes one flag
+  among many rather than a parallel system.
+
+**The frontend/backend split, resolved:** the backend is the source of truth and
+the *security* boundary (a hidden button is not access control — the route gate
+is). The frontend consumes the same manifest purely for *UX*. Same JSON, two
+consumers → no drift, and the FE can never grant access the BE denies.
+
+**Recommended path:** (1) define the manifest + `/api/app-config`; (2) add the
+dispatcher gate + `feature` tag; (3) migrate `*_ENABLED` and `simpleMode` onto
+it; (4) tag the opt-out subsystems off by default for this deployment.
+
+### 12.3 Tenant system — row-level tenancy in a shared DB
+
+Matches the stated model: shared database, everyone sees mostly the same things,
+work is mostly shared, but writes/deletes are owned per tenant + optional
+filtering. This is the *simplest* tenancy model — no per-tenant schemas/DBs.
+
+**Concept:** a single nullable `tenant_id` column on the owned tables (items /
+instances, boxes, refs, events, relations, quality), a tenant **resolved once**
+from auth and placed on `ctx.tenant`, and two distinct access rules:
+
+| Operation | Rule | Rationale |
+|---|---|---|
+| **Read / list** | Shared by default (see all rows); optional filter-by-tenant | "everyone works on the same database" + filtering as a case |
+| **Create** | Stamp `ctx.tenant` onto the new row | Establishes ownership |
+| **Update / delete (destructive)** | Assert `row.tenant_id === ctx.tenant` | "no tenant can delete another's items" |
+
+**Minimum viable tenancy** (why this is small): because reads are shared, tenancy
+reduces to three touch-points — **(a)** stamp `tenant_id` on create, **(b)** guard
+destructive ops by ownership, **(c)** an optional list filter. Enforce (b)/(c) in
+the `db.ts` functions (not per handler) so they can't be bypassed.
+
+**Auth wiring:** resolve tenant *once* at the chokepoint from the authenticated
+identity — Authentik forward-auth headers (`X-authentik-username` / `-groups`),
+the same source the planned `group→capability` map (todo 33c) uses. A
+`group→tenant` (and `group→role`) resolver sets `ctx.tenant`/`ctx.role`. Until
+Authentik enforcement lands, a header/config default keeps single-tenant behavior.
+
+**Migration:** `tenant_id` nullable and additive; existing rows stay `NULL` =
+"shared/legacy" and remain readable. Backfill or assign a default tenant later.
+Low-risk, no big-bang rewrite.
+
+**Roles (thin):** the same resolver can carry a coarse role (e.g. `admin` vs
+`user`) so destructive/admin actions check `ctx.role` — reuse the feature-gate
+plumbing rather than building a separate permission system.
+
+**Deliberately out of scope for "simple":** per-tenant taxonomy/contracts
+(deployment-wide is fine — §10.1 open question), per-tenant DBs, and row-level
+read isolation. Add only if a concrete requirement appears.

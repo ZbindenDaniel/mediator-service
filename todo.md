@@ -248,11 +248,17 @@
    component lifecycle is the centerpiece to strengthen. Two greenfield
    workstreams gate it:
    - **G‑T1 Multi-tenancy (largest lift).** No `tenant`/`mandant`/`org_id`
-     concept exists anywhere — needs a tenant dimension on core tables, scoping in
-     every query, and tenant/role resolution from Authentik. Own phased plan.
+     concept exists anywhere. **Proposed (plan §12.3):** row-level tenancy in the
+     shared DB — nullable `tenant_id` on owned tables, tenant resolved once onto
+     `ctx.tenant` from Authentik headers; shared reads, ownership-guarded
+     writes/deletes enforced in `db.ts`. MVP = stamp-on-create + guard-destructive
+     + optional list filter; additive nullable migration. Own phased plan.
    - **G‑FF1 Feature-flag / capability system.** No unified toggle exists (ad-hoc
-     `*_ENABLED` env vars + client-side "simple mode" CSS). Build one config
-     surface that disables backend features *and* hides UI — prerequisite for
+     `*_ENABLED` env vars + client-side "simple mode" CSS). **Proposed (plan
+     §12.2):** one capability manifest → backend hard-gate at the dispatch
+     chokepoint (`server.ts:960`, `feature?` tag on `Action`) + frontend soft-hide
+     via a served `GET /api/app-config` and a `useFeature` hook reusing the
+     `simpleMode` CSS-class pattern. Coarse (1 flag/subsystem); prerequisite for
      opting out AI / printing / shopware / intake / stubs / kivitendo.
    - **Opt out:** AI flow, printing, intake API, shopware, stubs (remove-by-config);
      kivitendo, transport boxes, inventory (out). **Strengthen:** stock handling,
