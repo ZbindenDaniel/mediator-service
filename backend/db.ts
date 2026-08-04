@@ -437,6 +437,35 @@ ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "SpecContractVersion" INTEGER;
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Scope" TEXT NOT NULL DEFAULT 'instance';
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Artikel_Nummer" TEXT;
 CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
+-- Explicit slot key for assembly relations, so it stops being overloaded onto "Notes".
+-- Existing rows keep their slot in "Notes"; new component-creation writes "SlotKey".
+ALTER TABLE item_relations ADD COLUMN IF NOT EXISTS "SlotKey" TEXT;
+-- The graduation UUID-swap re-points an in-device component's PK to its I- id. user_item_marks
+-- is the only UUID FK without ON UPDATE CASCADE, so add it (drop + re-add by discovered name)
+-- to let the swap cascade cleanly instead of stranding or blocking on a mark.
+DO $do$
+DECLARE
+  fk_name text;
+BEGIN
+  SELECT tc.constraint_name INTO fk_name
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.key_column_usage kcu
+      ON tc.constraint_name = kcu.constraint_name
+    WHERE tc.table_name = 'user_item_marks'
+      AND tc.constraint_type = 'FOREIGN KEY'
+      AND kcu.column_name = 'ItemUUID'
+    LIMIT 1;
+  IF fk_name IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE user_item_marks DROP CONSTRAINT %I', fk_name);
+  END IF;
+  ALTER TABLE user_item_marks
+    ADD CONSTRAINT user_item_marks_item_fk
+    FOREIGN KEY ("ItemUUID") REFERENCES items("ItemUUID") ON DELETE CASCADE ON UPDATE CASCADE;
+EXCEPTION WHEN duplicate_object THEN
+  -- Constraint already re-added on a previous boot; nothing to do.
+  NULL;
+END
+$do$;
 -- Convert legacy TEXT "Meta" to jsonb exactly once. Guarded so it does not rewrite the
 -- table on every boot, and legacy non-JSON rows are coerced to NULL first — otherwise a
 -- single malformed value makes the cast (and thus initDb) throw, aborting startup and
