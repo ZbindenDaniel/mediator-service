@@ -255,9 +255,9 @@ These do not exist today and gate the "multi-tenant + opt-out" requirements.
   platform admin (admin tenant).
 - **Scope:** add `TenantId` to logistics tables, class-aware scoping enforced in
   the `db.ts` layer, tenant/group resolution at the dispatch chokepoint. Own
-  phased doc. Open sub-decisions: **DL1** warehouse ID namespacing (global PK
-  collisions), **DL2** cross-tenant availability signal, **DL3** QR/scan tenant
-  resolution.
+  phased doc. Sub-decisions **resolved** (see §12.3): DL1 keep global-unique IDs +
+  `TenantId` as a visibility column (real follow-on: per-tenant shelf *locations*);
+  DL2 shared global aggregate quantity, private locations; DL3 self-resolving.
 - **Interaction with §6:** externalized taxonomy/contracts are per-deployment and
   **deployment-wide** (shared by all tenants) unless a per-tenant requirement
   appears — the shared catalogue implies a single shared taxonomy anyway.
@@ -381,9 +381,13 @@ and — crucially — it maps onto a seam the schema already has: the
 
 **Access rules (class-aware — this replaces the earlier "shared reads" rule):**
 - **Catalogue** — reads global; writes/deletes guarded by `ContributedByTenant`
-  (+ platform admin override).
+  (+ platform admin override). Catalogue reads also expose a **global aggregate
+  stock quantity** (see DL2) — the *number* is shared, the *locations* are not.
 - **Logistics** — reads *and* writes filtered by `ctx.tenant` with **no shared
   fallback**. A tenant simply cannot query another warehouse's rows.
+
+So a user viewing a part sees: shared reference data + **global total quantity
+across the network** + **only their own** instances/locations.
 
 **Authorization dimensions:**
 1. **Tenant** (org) — Authentik → `ctx.tenant` (the reference column).
@@ -403,24 +407,42 @@ creation is a **super-user** action stamped with their tenant. This directly
 satisfies "each tenant admin creates shelves" and "never see other warehouse
 data."
 
-**Design decisions this forces (flag now, decide before build):**
-- **DL1 — Warehouse ID namespacing.** `BoxID`/shelf IDs are **global primary
-  keys** today. Two tenants both wanting shelf `A1` collide. Choose: (a) composite
-  key `(TenantId, BoxID)`, or (b) keep global PK but tenant-prefix generated IDs.
-  (b) is the smaller change.
-- **DL2 — Cross-tenant availability.** Does the shared catalogue expose *that*
-  stock exists elsewhere (e.g. "3 available across the network" so an org can
-  request a part), or only the part definition? This is the crux of "all orgs can
-  use it" — reference-only vs. an availability/sourcing signal that still hides
-  *where*. Product decision.
-- **DL3 — QR/scan resolution.** Box QR URLs are global; a scanned logistics code
-  must resolve within the scanner's tenant. Minor, but confirm.
+**Design decisions (resolved):**
+- **DL1 — Warehouse IDs: keep the scheme, add `TenantId` as a visibility column
+  (not part of the key).** `BoxID`/shelf IDs are *not* autoincrement — they are
+  structured, **globally-unique** minted TEXT keys (`B-DDMMYY-####`,
+  `S-<location>-<floor>-<index>`) drawn from a global counter, and boxes/shelves
+  already carry a human `Label`/`ShelfLabel`. Because IDs come from one global
+  sequence they **don't collide across tenants** — no composite key needed. Global
+  uniqueness is actually a *feature*: a scanned code maps to exactly one box, then
+  tenant isolation decides visibility. **Two real follow-ons, not blockers:**
+  (1) shelf IDs encode a **location**, and `shelfLocations` is a global hardcoded
+  list today — physical sites must become **per-tenant** (folds into the
+  taxonomy/config externalization work, §6); (2) optionally **tenant-prefix minted
+  box IDs** for human/debug legibility — cosmetic, not required for correctness.
+- **DL2 — Shared *quantity*, private *location*.** Not a marketplace (a separate
+  shop may come later); this is centralized data storage. The catalogue exposes a
+  **global aggregate stock quantity** — a controlled cross-tenant
+  `SUM(items) GROUP BY Artikel_Nummer` that returns only the total, never tenant
+  or location rows. Item detail = shared reference + global count + own-tenant
+  instances only.
+- **DL3 — QR/scan: resolves itself.** Because logistics IDs are globally unique
+  (DL1), a scan resolves to one row; the same tenant-isolation read rule then
+  gates whether the scanner may see it. No special handling.
 
 **Auth wiring:** resolve tenant + group *once* at the chokepoint from Authentik
 forward-auth headers (`X-authentik-username` / `-groups`) — the same source the
 planned `group→capability` map (todo 33c) uses; here it also yields
 `group→tenant` and `group→role`. Until forward-auth enforcement lands, a
 config/header default keeps single-tenant behaviour.
+
+**Self-registration (org token) — no impact on this design.** Letting users
+self-register with an organisation token that files them under the right tenant is
+an **Authentik-side enrollment concern** (registration flow → group/attribute
+assignment). The app is unaffected: it still just reads `ctx.tenant`/`ctx.group`
+from forward-auth headers. Only provisioning policy needs deciding (who issues
+tokens, expiry, and that the admin tenant is bootstrapped first) — none of it
+touches the data model or the scoping rules above.
 
 **Migration:** add `TenantId` to logistics tables only, nullable + additive;
 existing rows stay `NULL` = legacy/default tenant. `item_refs` untouched. Low

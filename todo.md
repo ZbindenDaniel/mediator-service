@@ -256,9 +256,13 @@
      platform-admin) from Authentik; resolved once at the chokepoint; class-aware
      scoping in `db.ts`; additive nullable migration on logistics tables only.
      Super users create their tenant's shelves; nobody sees another warehouse.
-     **Decide before build:** DL1 warehouse ID namespacing (`BoxID`/shelf are
-     global PKs → collisions), DL2 cross-tenant availability signal vs
-     reference-only, DL3 QR/scan tenant resolution. Own phased plan.
+     Catalogue view = shared ref + **global aggregate quantity** + own-tenant
+     instances only (locations private). DL1/2/3 **resolved:** keep global-unique
+     minted IDs (`BoxID`/shelf) + `TenantId` as a visibility column (no composite
+     key); real follow-on = **per-tenant shelf locations** (`shelfLocations` is a
+     global hardcoded list today, folds into §6 config externalization). Self-
+     registration via org token = Authentik enrollment only, no data-model impact.
+     Own phased plan.
    - **G‑FF1 Feature-flag / capability system.** No unified toggle exists (ad-hoc
      `*_ENABLED` env vars + client-side "simple mode" CSS). **Proposed (plan
      §12.2):** one capability manifest → backend hard-gate at the dispatch
