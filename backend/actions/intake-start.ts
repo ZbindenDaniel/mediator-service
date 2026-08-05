@@ -2,7 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { requireIntakeAuth } from '../utils/intake-auth';
 import { query, queryOne } from '../db-client';
-import { loadGeneralContract, loadSubCategoryContract } from '../lib/quality-contracts';
+import { loadGeneralContract, loadSubCategoryContract, assemblyToQualityContract } from '../lib/quality-contracts';
+import { getAssemblyContract } from '../contracts/registry';
 import { preFillQualityQuestions } from '../lib/intake-quality-map';
 import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeQuestion } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
@@ -92,9 +93,14 @@ function buildQualityQuestions(unterkategorienA: number | null, scan: IntakeScan
   try {
     const general = loadGeneralContract();
     const subCat = unterkategorienA ? loadSubCategoryContract(unterkategorienA) : null;
+    // Assembly (accessory) questions ask about parts — presence drives quality, spec answers
+    // fill specs — so the intake questionnaire can produce a complete item, not just quality.
+    const assembly = unterkategorienA ? getAssemblyContract(unterkategorienA) : null;
+    const assemblyQ = assembly ? assemblyToQualityContract(assembly) : null;
     const allQuestions = [
       ...general.questions,
-      ...(subCat?.questions ?? [])
+      ...(subCat?.questions ?? []),
+      ...(assemblyQ?.questions ?? [])
     ];
     return preFillQualityQuestions(allQuestions, scan);
   } catch {

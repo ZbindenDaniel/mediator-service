@@ -36,11 +36,18 @@ jest.mock('../../utils/intake-auth', () => ({
 jest.mock('../../lib/quality-contracts', () => ({
   loadGeneralContract: jest.fn(() => ({ questions: [] })),
   loadSubCategoryContract: jest.fn(() => ({ questions: [] })),
+  assemblyToQualityContract: jest.fn(() => ({ questions: [] })),
   buildQualityCheckResponse: jest.fn(() => ({ qualityTag: 'good', qualityValue: 4, derivedSpecs: {}, answers: {} })),
+}));
+
+jest.mock('../../contracts/registry', () => ({
+  getAssemblyContract: jest.fn(() => null),
 }));
 
 jest.mock('../../lib/intake-quality-map', () => ({
   preFillQualityQuestions: jest.fn(() => []),
+  deriveInstanceSpecsFromScan: jest.fn(() => ({})),
+  normalizeScanComponents: jest.fn(() => []),
 }));
 
 import action from '../intake-answer';

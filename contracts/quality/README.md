@@ -8,7 +8,7 @@ Each file is named by subcategory number (matching `items.SubCategory`):
 - `102.json` — desktop computers
 - `103.json` — servers
 - `105.json` — workstations
-- `201.json` — laptops (v4: battery/RAM/storage questions moved to disassembly contract)
+- `201.json` — laptops (v4: battery/RAM/storage questions moved to the assembly contract)
 - `204.json` — tablets
 - `301.json` — monitors
 - `302.json` — projectors

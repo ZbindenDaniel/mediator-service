@@ -437,8 +437,8 @@ ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "SpecContractVersion" INTEGER;
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Scope" TEXT NOT NULL DEFAULT 'instance';
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Artikel_Nummer" TEXT;
 CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
--- Explicit slot key for assembly relations, so it stops being overloaded onto "Notes".
--- Existing rows keep their slot in "Notes"; new component-creation writes "SlotKey".
+-- Explicit slot key for assembly relations, so it stops being overloaded onto "Notes"
+-- ("Notes" stays for genuine Zubehör relation notes). All slot writes/reads target "SlotKey".
 ALTER TABLE item_relations ADD COLUMN IF NOT EXISTS "SlotKey" TEXT;
 -- The graduation UUID-swap re-points an in-device component's PK to its I- id. user_item_marks
 -- is the only UUID FK without ON UPDATE CASCADE, so add it (drop + re-add by discovered name)

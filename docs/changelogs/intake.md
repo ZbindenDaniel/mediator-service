@@ -4,7 +4,55 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
-## 895. ✅ Deferred-identity in-device components (creation → graduation → gates)
+## 902. ✅ Generalize intake sub-devices to a `components[]` object (PCI fills assembly info)
+**Why:** The intake→component pipeline only read `disks[]`, but the lifecycle (deferred identity,
+serial-keyed reports, graduation, gates) is not disk-specific. Generalized the input to a single
+extensible `IntakeComponent` object — `{ kind, slotKey?, serial?, wwn?, vendor?, model?, type?,
+sizeGb?, attributes? }` — carried in `scan.components[]`. `disks[]` stays as a shorthand for
+`kind:'disk'` (folded in via `normalizeScanComponents`). Auto-creation is now **serial-gated and
+kind-agnostic**: any component with a usable serial becomes an in-device item (disks, serial-bearing
+NICs/GPUs); serialless components (typical PCI cards) are **not** created. Instead a detected
+serialless component **fills assembly info** — `preFillQualityQuestions` pre-fills, by slot-key
+convention, `has_<slotKey>` → `"true"` and `<slotKey>_model` → its model, so a detected GPU tagged
+`slotKey:"gpu"` pre-answers a `has_gpu` question (operator confirms), provided the subcategory's
+assembly contract defines that slot. `deriveInstanceSpecsFromScan` and the scan→default mappers now
+read the disk-kind component instead of `disks[0]`. Guide + `.http` updated.
+**Why (approach):** Serial-gating (not a hardcoded kind allowlist) keeps it future-proof and
+naturally does the right thing — PCI cards usually lack a stable serial, so they fall to
+assembly-info without special-casing; a serial-bearing card that *is* inventory-worthy still works.
+The slot-key pre-fill convention reuses the flat question shape (no slot metadata needed at pre-fill).
+**Deferred:** Auto-creating items for serial-bearing PCI is allowed by the serial gate (not
+kind-restricted) — revisit if a kind allowlist is ever wanted. Recording detected serialless
+components that map to no assembly slot (pure visibility) is not done.
+
+## 900. ✅ Intake quality step produces a complete item (specs + accessories)
+**Why:** The intake quality step only assessed quality — it never asked accessory questions or
+filled the spec fields a "complete" item needs, so intaked items still required heavy agentic
+/ operator follow-up. Now the step also serves the subcategory's **assembly (accessory)
+contract**: `intake-start` and `intake-answer` merge the assembly questions (presence + spec)
+into `qualityQuestions`, and the quality answer feeds the assembly contract into
+`buildQualityCheckResponse` so accessory answers drive **both** quality (a missing part → lower
+quality) **and** specs (spec answers → Spezifikationen) — mirroring what the operator review
+flow (`quality-review.ts`) already did. Specs are filled from three merged sources (lowest →
+highest precedence): **scan-derived** (`deriveInstanceSpecsFromScan` back-fills the canonical
+required keys `Prozessor`/`RAM`/`Speicher`/`Speichertyp` from the scan — "present because the
+device booted"; the quality body accepts an optional `scanPayload`), **questionnaire-derived**,
+and **explicit `instanceSpecs`** sent free-form by the script. Author guide:
+[`docs/detailed/intake-image-guide.md`](../detailed/intake-image-guide.md); request contract
+updated in [`intake-image.http`](../detailed/intake-image.http).
+**Why (approach):** Reused the existing assembly-contract + `assemblyToQualityContract`
+machinery and the `/api/contracts/*` serving endpoints rather than inventing an intake-specific
+schema, so intake and the operator review derive quality/specs identically. Spec-name alignment
+is **manual/by-convention**: instanceSpecs keys must match `contracts/specs/<subcat>.json`
+exactly (no intake-side aliasing) — stated in the guide.
+**Deferred:** intake does not auto-create linked accessory *items* for non-serialed slots
+(RAM/keyboard/…) — those are captured as specs; only serialed disks become components (existing
+behavior), and `noLink` slots are spec-only by contract. Duplication guard for
+already-cataloged-without-serial devices (re-intake matches on serial/MAC only) is unchanged and
+noted in the guide. Nested/detailed future contracts (a display made of hinges/LCD/housing) fit
+the recursive relation model but are not yet authored.
+
+## 899. ✅ Deferred-identity in-device components (creation → graduation → gates)
 **Why:** Phase-2 artefacts (wipe, SMART) are produced per sub-device, but components had no
 identity — reports could only attach to the machine serial and drives never became items. We
 make any scanned sub-device a first-class instance that carries **no Artikelnummer** while

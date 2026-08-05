@@ -46,7 +46,10 @@ set) they drop out and re-enter export/list normally.
 
 ### Creation → in-device component (`backend/lib/in-device-components.ts`)
 At the intake **ref** step, once the parent machine item exists, `syncInDeviceComponents`
-materializes one component per scanned disk with a usable serial:
+materializes one component per detected sub-device **that has a usable serial** — kind-agnostic
+(disks, some serial-bearing NICs/GPUs), the serial is the gate. Serialless sub-devices (typical
+PCI cards) are **not** auto-created; they fill assembly info via question pre-fill instead. The
+input is the normalized generic `components[]` list (with the `disks[]` shorthand folded in):
 - `Artikel_Nummer` NULL, `BoxID` NULL, `Auf_Lager=1`, `SerialNumber` set, a `Zerlegt_aus`
   relation to the parent with `SlotKey` = the device name, and `InstanceSpecs` from the scan
   (size/type/model).
