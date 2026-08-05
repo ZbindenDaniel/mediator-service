@@ -13,12 +13,14 @@ identified. This is the "list" to compare requirements against.
 > **opted out** (removed from UI + disabled by config), and the parts we keep are
 > **strengthened**. See [§7](#7-use-case-spare-part-cataloging) onward.
 >
-> **Deployment decision (resolved):** runs as a **separate deployment** from IT
-> refurbishment — but that deployment must itself support **multiple tenants**.
-> So: deployment-level separation from the old use case + tenant-level separation
-> of customers *within* the spare-part app. Goal remains **one codebase, per-
-> deployment data** (externalized taxonomy/contracts), now plus a **tenant
-> dimension** inside it.
+> **Deployment + hosting model (resolved):** runs as a **separate deployment** from
+> IT refurbishment, and *we host it* for **multiple external organisations** who
+> contribute stock/cataloguing. The payoff is a **shared spare-part catalogue all
+> orgs can use**, while **logistics (warehouses/shelves/stock) stays private per
+> tenant**. Tenants + groups are managed **externally in Authentik**; the app
+> stores a **tenant reference column**. This is a **two-tier visibility model**
+> (shared catalogue / private logistics), which maps onto the schema's existing
+> reference↔instance seam — see [§12.3](#123-tenant-system--two-tier-visibility-on-a-shared-db).
 >
 > **Still needed:** the concrete spare-part **taxonomy** and per-part
 > **quality/spec contract** definitions (domain input), plus the two decisions in
@@ -245,13 +247,20 @@ These do not exist today and gate the "multi-tenant + opt-out" requirements.
 ### 10.1 Multi-tenancy (largest single lift)
 - **Confirmed absent:** no `tenant` / `mandant` / `org_id` concept anywhere in
   models, SQL, queries, or auth.
-- **Scope:** a tenant dimension on the core tables (items, boxes, refs, events,
-  relations, quality), tenant scoping enforced in **every** query, tenant
-  resolution in auth (map Authentik groups/claims → tenant + role), and per-tenant
-  config. This touches the whole data layer — plan it as its own phased doc.
-- **Interaction with §6:** externalized taxonomy/contracts are per-deployment; the
-  tenant dimension is *within* a deployment. Decide whether taxonomy/contracts are
-  deployment-wide (shared by all tenants) or overridable per tenant.
+- **Model (see §12.3 for the full design):** **two-tier visibility** — a shared
+  catalogue (`item_refs` level, no `TenantId`) that all orgs read, and private
+  logistics (`items`/`boxes`/shelves, carry `TenantId`) that are hard-isolated per
+  tenant. Tenants/groups come from **Authentik**; the app stores a tenant
+  reference + reads forward-auth headers. Groups: normal / super (tenant admin) /
+  platform admin (admin tenant).
+- **Scope:** add `TenantId` to logistics tables, class-aware scoping enforced in
+  the `db.ts` layer, tenant/group resolution at the dispatch chokepoint. Own
+  phased doc. Open sub-decisions: **DL1** warehouse ID namespacing (global PK
+  collisions), **DL2** cross-tenant availability signal, **DL3** QR/scan tenant
+  resolution.
+- **Interaction with §6:** externalized taxonomy/contracts are per-deployment and
+  **deployment-wide** (shared by all tenants) unless a per-tenant requirement
+  appears — the shared catalogue implies a single shared taxonomy anyway.
 
 ### 10.2 Feature-flag / capability system (enables "opt out by config")
 - **Confirmed absent:** toggles today are ad-hoc per integration
@@ -342,41 +351,85 @@ consumers → no drift, and the FE can never grant access the BE denies.
 dispatcher gate + `feature` tag; (3) migrate `*_ENABLED` and `simpleMode` onto
 it; (4) tag the opt-out subsystems off by default for this deployment.
 
-### 12.3 Tenant system — row-level tenancy in a shared DB
+### 12.3 Tenant system — two-tier visibility on a shared DB
 
-Matches the stated model: shared database, everyone sees mostly the same things,
-work is mostly shared, but writes/deletes are owned per tenant + optional
-filtering. This is the *simplest* tenancy model — no per-tenant schemas/DBs.
+**The hosting model (resolved):** *we* host and operate the service; independent
+organisations contribute stock and cataloguing effort; the payoff is a **shared
+spare-part catalogue every org can use**. But **logistics is per tenant** — each
+org's warehouse (shelves, boxes, physical stock) is private and must never be
+visible to another org. Tenants + groups are managed **externally in Authentik**;
+the app just stores a **tenant reference column** and reads identity from
+forward-auth headers.
 
-**Concept:** a single nullable `tenant_id` column on the owned tables (items /
-instances, boxes, refs, events, relations, quality), a tenant **resolved once**
-from auth and placed on `ctx.tenant`, and two distinct access rules:
+This is *not* "everyone sees the same DB." It is a **two-tier visibility model**,
+and — crucially — it maps onto a seam the schema already has: the
+**reference vs. instance** split.
 
-| Operation | Rule | Rationale |
-|---|---|---|
-| **Read / list** | Shared by default (see all rows); optional filter-by-tenant | "everyone works on the same database" + filtering as a case |
-| **Create** | Stamp `ctx.tenant` onto the new row | Establishes ownership |
-| **Update / delete (destructive)** | Assert `row.tenant_id === ctx.tenant` | "no tenant can delete another's items" |
+**Data classes (mapped to existing tables):**
 
-**Minimum viable tenancy** (why this is small): because reads are shared, tenancy
-reduces to three touch-points — **(a)** stamp `tenant_id` on create, **(b)** guard
-destructive ops by ownership, **(c)** an optional list filter. Enforce (b)/(c) in
-the `db.ts` functions (not per handler) so they can't be bypassed.
+| Class | Existing tables | `TenantId`? | Read | Write |
+|---|---|---|---|---|
+| **Shared catalogue** | `item_refs` (part descriptions/specs/taxonomy), `item_ref_relations`, ref-level `agentic_runs`, contracts/taxonomy | **No** (optional `ContributedByTenant` for attribution) | **All tenants** | Contributor + platform admin |
+| **Private logistics** | `items` (physical instances), `boxes` + shelves, `box_stubs`, `item_relations`, per-instance `quality_assessments`, logistics `events` | **Yes** | **Own tenant only — hard isolation** | Own tenant only |
+| **Platform** | tenant/user management | admin tenant | Platform admins | Platform admins |
 
-**Auth wiring:** resolve tenant *once* at the chokepoint from the authenticated
-identity — Authentik forward-auth headers (`X-authentik-username` / `-groups`),
-the same source the planned `group→capability` map (todo 33c) uses. A
-`group→tenant` (and `group→role`) resolver sets `ctx.tenant`/`ctx.role`. Until
-Authentik enforcement lands, a header/config default keeps single-tenant behavior.
+> **Why this fits:** `item_refs` (keyed by `Artikel_Nummer`) is *already* the
+> shared, deduplicated part-reference level, and `items`/`boxes` are *already* the
+> physical layer. So the catalogue stays shared with **no** `TenantId`, and
+> `TenantId` is added only to the logistics tables. The reference↔instance
+> boundary the app was built on **is** the tenancy boundary.
 
-**Migration:** `tenant_id` nullable and additive; existing rows stay `NULL` =
-"shared/legacy" and remain readable. Backfill or assign a default tenant later.
-Low-risk, no big-bang rewrite.
+**Access rules (class-aware — this replaces the earlier "shared reads" rule):**
+- **Catalogue** — reads global; writes/deletes guarded by `ContributedByTenant`
+  (+ platform admin override).
+- **Logistics** — reads *and* writes filtered by `ctx.tenant` with **no shared
+  fallback**. A tenant simply cannot query another warehouse's rows.
 
-**Roles (thin):** the same resolver can carry a coarse role (e.g. `admin` vs
-`user`) so destructive/admin actions check `ctx.role` — reuse the feature-gate
-plumbing rather than building a separate permission system.
+**Authorization dimensions:**
+1. **Tenant** (org) — Authentik → `ctx.tenant` (the reference column).
+2. **Group within tenant** — `normal` vs `super` (tenant admin), for now.
+3. **Admin tenant** — a designated tenant whose `super` users are **platform
+   admins** with cross-tenant reach (support/management).
 
-**Deliberately out of scope for "simple":** per-tenant taxonomy/contracts
-(deployment-wide is fine — §10.1 open question), per-tenant DBs, and row-level
-read isolation. Add only if a concrete requirement appears.
+| Actor | Shared catalogue | Own logistics | Other tenants' logistics | Platform mgmt |
+|---|---|---|---|---|
+| Normal user | read + contribute | read/write | — (none) | — |
+| Super user (tenant admin) | read + contribute | read/write **+ create shelves, manage own users** | — (none) | — |
+| Platform admin (admin tenant) | all | all | all (support) | tenants/users |
+
+**"Logistics per tenant" — the concrete solution:** put `TenantId` on
+`boxes`/shelves/`items`; every logistics query filters by `ctx.tenant`; shelf
+creation is a **super-user** action stamped with their tenant. This directly
+satisfies "each tenant admin creates shelves" and "never see other warehouse
+data."
+
+**Design decisions this forces (flag now, decide before build):**
+- **DL1 — Warehouse ID namespacing.** `BoxID`/shelf IDs are **global primary
+  keys** today. Two tenants both wanting shelf `A1` collide. Choose: (a) composite
+  key `(TenantId, BoxID)`, or (b) keep global PK but tenant-prefix generated IDs.
+  (b) is the smaller change.
+- **DL2 — Cross-tenant availability.** Does the shared catalogue expose *that*
+  stock exists elsewhere (e.g. "3 available across the network" so an org can
+  request a part), or only the part definition? This is the crux of "all orgs can
+  use it" — reference-only vs. an availability/sourcing signal that still hides
+  *where*. Product decision.
+- **DL3 — QR/scan resolution.** Box QR URLs are global; a scanned logistics code
+  must resolve within the scanner's tenant. Minor, but confirm.
+
+**Auth wiring:** resolve tenant + group *once* at the chokepoint from Authentik
+forward-auth headers (`X-authentik-username` / `-groups`) — the same source the
+planned `group→capability` map (todo 33c) uses; here it also yields
+`group→tenant` and `group→role`. Until forward-auth enforcement lands, a
+config/header default keeps single-tenant behaviour.
+
+**Migration:** add `TenantId` to logistics tables only, nullable + additive;
+existing rows stay `NULL` = legacy/default tenant. `item_refs` untouched. Low
+risk, no big-bang.
+
+**Enforcement point:** apply the class-aware rules in the `db.ts` functions (the
+reference-level vs. instance-level functions are already separate), so scoping
+cannot be bypassed by a handler.
+
+**Deliberately out of scope for now:** per-tenant taxonomy/contracts
+(deployment-wide is fine — §10.1), per-tenant DBs/schemas, and finer-grained roles
+beyond normal/super/platform-admin.

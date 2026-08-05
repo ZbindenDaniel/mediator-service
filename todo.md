@@ -248,11 +248,17 @@
    component lifecycle is the centerpiece to strengthen. Two greenfield
    workstreams gate it:
    - **G‑T1 Multi-tenancy (largest lift).** No `tenant`/`mandant`/`org_id`
-     concept exists anywhere. **Proposed (plan §12.3):** row-level tenancy in the
-     shared DB — nullable `tenant_id` on owned tables, tenant resolved once onto
-     `ctx.tenant` from Authentik headers; shared reads, ownership-guarded
-     writes/deletes enforced in `db.ts`. MVP = stamp-on-create + guard-destructive
-     + optional list filter; additive nullable migration. Own phased plan.
+     concept exists anywhere. **Proposed (plan §12.3) — two-tier visibility** on
+     the reference↔instance seam: `item_refs` = shared catalogue (no `TenantId`,
+     read by all, writes guarded by `ContributedByTenant`); `items`/`boxes`/
+     shelves/instance-quality/logistics-events = **`TenantId`, hard-isolated**
+     (reads+writes filtered by `ctx.tenant`). Tenants+groups (normal/super/
+     platform-admin) from Authentik; resolved once at the chokepoint; class-aware
+     scoping in `db.ts`; additive nullable migration on logistics tables only.
+     Super users create their tenant's shelves; nobody sees another warehouse.
+     **Decide before build:** DL1 warehouse ID namespacing (`BoxID`/shelf are
+     global PKs → collisions), DL2 cross-tenant availability signal vs
+     reference-only, DL3 QR/scan tenant resolution. Own phased plan.
    - **G‑FF1 Feature-flag / capability system.** No unified toggle exists (ad-hoc
      `*_ENABLED` env vars + client-side "simple mode" CSS). **Proposed (plan
      §12.2):** one capability manifest → backend hard-gate at the dispatch
