@@ -4,6 +4,34 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 903. ✅ Auto-resolve intake questions from the scan (contract-declared, not hardcoded)
+**Why:** A booting laptop was still asked presence questions it obviously satisfies ("Lüfter/Display/
+Mainboard vorhanden?") and re-asked data the scan already has (RAM, storage, drive type, battery) —
+the scan values were only used as a shown `defaultValue`. Now the intake questionnaire returns
+**only the questions a human must decide**; everything else is answered server-side. Two fields,
+declared per question in the contract JSON (no code, no hardcoded question-id table):
+`autoFill: "<signal>"` binds a question to a named scan signal (`ram` / `storageSize` /
+`storageType` / `battery`) — the server auto-answers and drops it, numeric signals snapping to the
+question's own `values`; `skipAtIntake: true` means "a booted device implies this" — assumed
+present and dropped. `resolveIntakeQuestions` splits the merged contract questions into `ask` vs.
+`autoAnswers`; at the quality step the auto-answers are merged **under** the submitted answers
+(operator/script wins) before scoring + spec derivation, so quality and specs stay complete. The
+old hardcoded `FIELD_MAPPERS` (question-id → scan field, with hardcoded option arrays) is gone —
+replaced by a small named-signal registry that snaps to the contract's `values`. Applied to
+`assembly/201.json` (skip fan/keyboard/display/mainboard; autoFill ram/storage/drive_type/battery)
+and `assembly/102.json` (skip cpu/mainboard, keep gpu; autoFill ram/storage/drive_type). The raw
+scan is persisted at the ref step (`items.IntakeScan`) so the quality step resolves without the
+script re-sending it — **no script change** (it already renders `qualityQuestions` generically).
+**Why (approach):** Named signals (contract says `autoFill: "ram"`, code holds ~4 adapters) over a
+fully-declarative JSON transform spec — the signal set maps 1:1 to what the image actually gathers,
+which is the only legitimate code coupling; everything else (which question is auto/skip) is JSON.
+Persisting the scan server-side (vs. requiring a `scanPayload` echo) keeps the script contract
+unchanged. `quality-review` is untouched — the operator/refurb flow still asks everything.
+**Deferred:** No intake-time "show everything / advanced" override to correct a mis-scan (auto now,
+editable later on item detail). `battery` auto-labels from percent — a swollen battery reporting a
+healthy % isn't caught at intake. Battery/drive-type signal label strings must match the question's
+`values` (a named-signal tradeoff).
+
 ## 902. ✅ Generalize intake sub-devices to a `components[]` object (PCI fills assembly info)
 **Why:** The intake→component pipeline only read `disks[]`, but the lifecycle (deferred identity,
 serial-keyed reports, graduation, gates) is not disk-specific. Generalized the input to a single

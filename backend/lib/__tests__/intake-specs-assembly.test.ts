@@ -1,6 +1,6 @@
 // Uses the REAL contract files (contracts/assembly/201.json, contracts/specs/201.json) to prove
 // the accessory questionnaire and scan-derived specs line up with the canonical spec keys.
-import { deriveInstanceSpecsFromScan, normalizeScanComponents, preFillQualityQuestions } from '../intake-quality-map';
+import { deriveInstanceSpecsFromScan, normalizeScanComponents, resolveIntakeQuestions, resolveAutoFill } from '../intake-quality-map';
 import type { QualityQuestion } from '../../../models/quality-contract';
 import { assemblyToQualityContract, buildQualityCheckResponse, loadGeneralContract } from '../quality-contracts';
 import { getAssemblyContract, getSpecContract } from '../../contracts/registry';
@@ -60,9 +60,48 @@ describe('generic component object', () => {
       { id: 'gpu_model', type: 'text', question: 'Grafikkarten-Modell?' },
     ];
     const scan = { components: [{ kind: 'gpu', slotKey: 'gpu', model: 'NVIDIA GT710' }] } as any;
-    const out = preFillQualityQuestions(questions, scan);
-    expect(out.find((q) => q.id === 'has_gpu')?.defaultValue).toBe('true');
-    expect(out.find((q) => q.id === 'gpu_model')?.defaultValue).toBe('NVIDIA GT710');
+    const { ask } = resolveIntakeQuestions(questions, scan);
+    expect(ask.find((q) => q.id === 'has_gpu')?.defaultValue).toBe('true');
+    expect(ask.find((q) => q.id === 'gpu_model')?.defaultValue).toBe('NVIDIA GT710');
+  });
+});
+
+describe('contract-declared auto-resolution at intake', () => {
+  const scan = {
+    cpu: 'Intel i5', ramMb: 8192, batteryPercent: 87,
+    disks: [{ name: 'nvme0n1', sizeGb: 250, type: 'nvme', serial: 'X' }],
+  } as any;
+
+  test('resolveAutoFill snaps a numeric signal to the question\'s own values', () => {
+    const ram: QualityQuestion = { id: 'ram_gb', type: 'select', question: '', values: ['2','4','8','16'], autoFill: 'ram' };
+    expect(resolveAutoFill(ram, scan)).toBe('8');
+    const storage: QualityQuestion = { id: 'storage_gb', type: 'select', question: '', values: ['128','256','512'], autoFill: 'storageSize' };
+    expect(resolveAutoFill(storage, scan)).toBe('256'); // 250 → nearest option
+  });
+
+  test('resolveAutoFill maps string signals (battery bucket, drive type) to a valid option', () => {
+    const bat: QualityQuestion = { id: 'battery_condition', type: 'select', question: '', values: ['Gut (>80%)','Mittel (50–80%)','Schwach (<50%)'], autoFill: 'battery' };
+    expect(resolveAutoFill(bat, scan)).toBe('Gut (>80%)');
+    const dt: QualityQuestion = { id: 'drive_type', type: 'select', question: '', values: ['SSD','NVMe SSD','HDD'], autoFill: 'storageType' };
+    expect(resolveAutoFill(dt, scan)).toBe('NVMe SSD');
+  });
+
+  test('resolveAutoFill returns undefined when the scan lacks the data', () => {
+    const bat: QualityQuestion = { id: 'battery_condition', type: 'select', question: '', values: ['Gut (>80%)'], autoFill: 'battery' };
+    expect(resolveAutoFill(bat, { cpu: 'x' } as any)).toBeUndefined();
+  });
+
+  test('resolveIntakeQuestions auto-answers autoFill + skipAtIntake and asks the rest', () => {
+    const questions: QualityQuestion[] = [
+      { id: 'condition_optical', type: 'select', question: 'Zustand?', values: ['Gut','Beschädigt'] },
+      { id: 'has_fan', type: 'boolean', question: 'Lüfter vorhanden?', skipAtIntake: true },
+      { id: 'ram_gb', type: 'select', question: 'RAM?', values: ['4','8','16'], autoFill: 'ram' },
+      { id: 'battery_condition', type: 'select', question: 'Akku?', values: ['Gut (>80%)'], autoFill: 'battery' },
+    ];
+    const { ask, autoAnswers } = resolveIntakeQuestions(questions, scan);
+    // Only the human-judgment question remains.
+    expect(ask.map((q) => q.id)).toEqual(['condition_optical']);
+    expect(autoAnswers).toEqual({ has_fan: 'true', ram_gb: '8', battery_condition: 'Gut (>80%)' });
   });
 });
 

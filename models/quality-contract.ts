@@ -8,7 +8,20 @@ export interface ShowIfCondition {
   value: string;
 }
 
-export interface SelectQuestion {
+/**
+ * Intake-only auto-resolution fields, declared per question in the contract JSON so the intake
+ * questionnaire stays short without hardcoding anything in code:
+ *   • `autoFill` binds the question to a named scan signal (ram / storageSize / storageType /
+ *     battery); when the scan yields a value the server auto-answers it and does NOT ask.
+ *   • `skipAtIntake` means "a booted device implies this" — assume present, don't ask.
+ * Both are ignored outside intake (the operator quality review still asks everything).
+ */
+export interface IntakeResolveFields {
+  autoFill?: string;
+  skipAtIntake?: boolean;
+}
+
+export interface SelectQuestion extends IntakeResolveFields {
   id: string;
   type: 'select';
   question: string;
@@ -24,7 +37,7 @@ export interface SelectQuestion {
   showIf?: ShowIfCondition;
 }
 
-export interface BooleanQuestion {
+export interface BooleanQuestion extends IntakeResolveFields {
   id: string;
   type: 'boolean';
   question: string;
@@ -36,7 +49,7 @@ export interface BooleanQuestion {
   showIf?: ShowIfCondition;
 }
 
-export interface TextQuestion {
+export interface TextQuestion extends IntakeResolveFields {
   id: string;
   type: 'text';
   question: string;

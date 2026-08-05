@@ -150,18 +150,30 @@ no token). Answers come back in `qualityAnswers` (keyed by question `id`); `inst
 free-form specs using the canonical `contracts/specs/{subcat}.json` keys. Full script-author
 reference incl. the contract→script sync surface: [`intake-image-guide.md`](intake-image-guide.md).
 
-When routing to the `quality` step, the server pre-fills `defaultValue` on questions whose `specField` overlaps with reliable scan fields:
+**Auto-resolution — only human-judgment questions are returned.** The server answers what it
+already knows and drops those questions, via two contract-declared fields (`resolveIntakeQuestions`
+in `intake-quality-map.ts`):
 
-| Question ID | Scan field | Mapping |
-|-------------|-----------|---------|
-| `drive_type` | `disks[0].type` | `nvme` → `NVMe SSD`, `ssd` → `SSD`, `hdd` → `HDD`, `emmc` → `eMMC` |
-| `ram_gb` | `ramMb` | rounded to nearest 2/4/8/16/32/64/128 |
-| `storage_gb` | `disks[0].sizeGb` | rounded to nearest 128/256/512/1000/2000 |
-| `battery_condition` | `batteryPercent` | ≥80 → `Gut (>80%)`, ≥50 → `Mittel (50–80%)`, else `Schwach (<50%)` |
+- **`autoFill: "<signal>"`** on a question → auto-answered from the scan. Named signals map the
+  scan payload to a value; numeric ones snap to the question's own `values` (no hardcoded arrays):
 
-The operator confirms or overrides each pre-filled value in the TUI. Beyond these questionnaire
-pre-fills, echoing `scanPayload` in the quality answer back-fills the canonical required specs
-(`Prozessor`/`RAM`/`Speicher`/`Speichertyp`) directly.
+  | Signal | Scan source | Notes |
+  |---|---|---|
+  | `ram` | `ramMb` / 1024 | snapped to the question's `values` |
+  | `storageSize` | first disk `sizeGb` | snapped to the question's `values` |
+  | `storageType` | first disk `type` | `nvme→NVMe SSD`, `ssd→SSD`, `hdd→HDD`, `emmc→eMMC` |
+  | `battery` | `batteryPercent` | ≥80 `Gut (>80%)`, ≥50 `Mittel (50–80%)`, else `Schwach (<50%)` |
+
+- **`skipAtIntake: true`** on a question → "a booted device implies it"; assumed present (`true`
+  for booleans) and dropped (e.g. `has_fan`, `has_display`, `has_keyboard`, `has_mainboard`).
+
+Auto-answers are applied server-side (merged **under** any submitted answer, so operator/script
+values win) before quality scoring + spec derivation. The raw scan is persisted at the ref step
+(`items.IntakeScan`), so the quality step resolves without the script re-sending it (echoing
+`scanPayload` still works and takes precedence). Which questions are auto-resolved is entirely in
+the contract JSON — adding/removing one is not a code change. Component-detected slots still
+pre-fill kept questions (`has_<slotKey>`) as a confirmable `defaultValue`. Full author reference:
+[`intake-image-guide.md`](intake-image-guide.md).
 
 ## Concurrent devices
 

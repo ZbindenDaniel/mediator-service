@@ -1,9 +1,6 @@
 import type { IntakeScanPayload, IntakeQuestion, IntakeComponent } from '../../models/intake';
 import type { QualityQuestion } from '../../models/quality-contract';
 
-// Maps scan payload fields to quality/assembly question defaultValues.
-type ScanMapper = (scan: IntakeScanPayload) => string | null;
-
 /** Rounds a value to the nearest option in a sorted array of numbers. */
 function roundToNearest(value: number, options: number[]): number {
   return options.reduce((prev, curr) =>
@@ -39,32 +36,7 @@ function firstOfKind(scan: IntakeScanPayload, kind: string): IntakeComponent | u
   return normalizeScanComponents(scan).find((c) => c.kind === kind);
 }
 
-const FIELD_MAPPERS: Record<string, ScanMapper> = {
-  drive_type: (scan) => driveTypeLabel(firstOfKind(scan, 'disk')?.type),
-
-  ram_gb: (scan) => {
-    if (!scan.ramMb || scan.ramMb <= 0) return null;
-    const gb = scan.ramMb / 1024;
-    const nearest = roundToNearest(gb, [2, 4, 8, 16, 32, 64, 128]);
-    return String(nearest);
-  },
-
-  storage_gb: (scan) => {
-    const disk = firstOfKind(scan, 'disk');
-    if (!disk?.sizeGb || disk.sizeGb <= 0) return null;
-    const nearest = roundToNearest(disk.sizeGb, [128, 256, 512, 1000, 2000]);
-    return String(nearest);
-  },
-
-  battery_condition: (scan) => {
-    if (scan.batteryPercent == null) return null;
-    if (scan.batteryPercent >= 80) return 'Gut (>80%)';
-    if (scan.batteryPercent >= 50) return 'Mittel (50–80%)';
-    return 'Schwach (<50%)';
-  }
-};
-
-// Canonical drive-type label from a scanned type string. Shared with the drive_type prefill.
+// Canonical drive-type label from a scanned type string.
 function driveTypeLabel(type: string | null | undefined): string | null {
   const t = (type || '').toLowerCase();
   if (t.includes('nvme')) return 'NVMe SSD';
@@ -72,6 +44,57 @@ function driveTypeLabel(type: string | null | undefined): string | null {
   if (t.includes('hdd')) return 'HDD';
   if (t.includes('emmc')) return 'eMMC';
   return null;
+}
+
+// Named scan "signals" — the adapters from the scan payload to a raw value. A contract question
+// references one via `autoFill`. This is the ONLY code coupling: a signal exists iff the image
+// actually gathers that data. WHICH question uses WHICH signal lives in the contract JSON, not
+// here — so renaming/adding auto-filled questions is a JSON change, not a code change.
+// A numeric signal is snapped to the question's own `values` (no hardcoded option arrays).
+type ScanSignal = (scan: IntakeScanPayload) => number | string | null;
+
+const SCAN_SIGNALS: Record<string, ScanSignal> = {
+  ram: (scan) => (scan.ramMb && scan.ramMb > 0 ? scan.ramMb / 1024 : null),
+  storageSize: (scan) => {
+    const disk = firstOfKind(scan, 'disk');
+    return disk?.sizeGb && disk.sizeGb > 0 ? disk.sizeGb : null;
+  },
+  storageType: (scan) => driveTypeLabel(firstOfKind(scan, 'disk')?.type),
+  // Percent → labelled bucket. The labels must match the question's `values`.
+  battery: (scan) => {
+    if (scan.batteryPercent == null) return null;
+    if (scan.batteryPercent >= 80) return 'Gut (>80%)';
+    if (scan.batteryPercent >= 50) return 'Mittel (50–80%)';
+    return 'Schwach (<50%)';
+  },
+};
+
+/** Parse a select question's options as numbers, or null when they aren't all numeric. */
+function numericOptions(q: QualityQuestion): number[] | null {
+  if (!('values' in q) || !q.values) return null;
+  const nums = q.values.map((v) => Number(v));
+  return nums.every((n) => Number.isFinite(n)) ? nums : null;
+}
+
+/**
+ * Resolve a question's `autoFill` binding to a concrete answer, or undefined when the scan can't
+ * answer it (missing data, unknown signal, or a string result outside the offered options).
+ * Numeric signals snap to the question's own `values`.
+ */
+export function resolveAutoFill(q: QualityQuestion, scan: IntakeScanPayload): string | undefined {
+  const name = q.autoFill;
+  if (!name) return undefined;
+  const signal = SCAN_SIGNALS[name];
+  if (!signal) return undefined;
+  const raw = signal(scan);
+  if (raw == null) return undefined;
+  if (typeof raw === 'number') {
+    const nums = numericOptions(q);
+    return String(nums ? roundToNearest(raw, nums) : raw);
+  }
+  // A string answer must be one of the offered options, else we ask rather than store junk.
+  if ('values' in q && q.values && !q.values.includes(raw)) return undefined;
+  return raw;
 }
 
 /**
@@ -113,26 +136,48 @@ function componentPrefill(questionId: string, components: IntakeComponent[]): st
   return undefined;
 }
 
-export function preFillQualityQuestions(
+/** Project a contract question to the wire shape the intake TUI renders, applying prefills. */
+function toIntakeQuestion(q: QualityQuestion, components: IntakeComponent[]): IntakeQuestion {
+  const defaultValue = componentPrefill(q.id, components);
+  const result: IntakeQuestion = {
+    id: q.id,
+    type: q.type as IntakeQuestion['type'],
+    question: q.question,
+  };
+  if ('values' in q && q.values) result.values = q.values;
+  if ('suggestions' in q && q.suggestions) result.suggestions = q.suggestions;
+  if (q.specField) result.specField = q.specField;
+  if (defaultValue !== undefined) result.defaultValue = defaultValue;
+  if (q.showIf) result.showIf = q.showIf;
+  return result;
+}
+
+/**
+ * Split the merged contract questions into what to ASK the operator vs. what the server
+ * AUTO-answers at intake. A question is auto-resolved (and dropped from `ask`) when:
+ *   • `skipAtIntake` — a booted device implies it → assume "true" for booleans; or
+ *   • `autoFill` — the scan yields a value via its named signal.
+ * Everything else is asked (with component-driven prefills). The caller merges `autoAnswers`
+ * under the submitted answers (operator/script value wins) before scoring/spec derivation.
+ */
+export function resolveIntakeQuestions(
   questions: QualityQuestion[],
   scan: IntakeScanPayload
-): IntakeQuestion[] {
+): { ask: IntakeQuestion[]; autoAnswers: Record<string, string> } {
   const components = normalizeScanComponents(scan);
-  return questions.map((q): IntakeQuestion => {
-    const mapper = FIELD_MAPPERS[q.id];
-    // Scalar scan mappers take precedence; component-driven prefill covers the rest.
-    const defaultValue = (mapper ? mapper(scan) ?? undefined : undefined)
-      ?? componentPrefill(q.id, components);
-    const result: IntakeQuestion = {
-      id: q.id,
-      type: q.type as IntakeQuestion['type'],
-      question: q.question,
-    };
-    if ('values' in q && q.values) result.values = q.values;
-    if ('suggestions' in q && q.suggestions) result.suggestions = q.suggestions;
-    if (q.specField) result.specField = q.specField;
-    if (defaultValue !== undefined) result.defaultValue = defaultValue;
-    if (q.showIf) result.showIf = q.showIf;
-    return result;
-  });
+  const ask: IntakeQuestion[] = [];
+  const autoAnswers: Record<string, string> = {};
+  for (const q of questions) {
+    if (q.skipAtIntake) {
+      if (q.type === 'boolean') autoAnswers[q.id] = 'true';
+      continue;
+    }
+    const auto = resolveAutoFill(q, scan);
+    if (auto !== undefined) {
+      autoAnswers[q.id] = auto;
+      continue;
+    }
+    ask.push(toIntakeQuestion(q, components));
+  }
+  return { ask, autoAnswers };
 }
