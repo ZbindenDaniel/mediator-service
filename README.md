@@ -102,5 +102,22 @@ npm run smoke   # run HTTP/HTTPS smoke checks
 - If you modify shared contracts, verify alignment across `models/`, backend usage, and frontend usage.
 - Extend existing logging/error-handling paths for operationally relevant flow changes.
 
+## License
+
+Copyright (C) 2026 revamp-it.
+
+Mediator Service is free software: you can redistribute it and/or modify it under
+the terms of the **GNU Affero General Public License** as published by the Free
+Software Foundation, either version 3 of the License, or (at your option) any
+later version. The full text is in [`LICENSE`](LICENSE).
+
+Because this is a network-facing service, AGPL §13 applies: **if you run a
+modified version and let users interact with it over a network, you must offer
+those users the corresponding source code of your modified version.** Improvements
+and modifications are expected to flow back under the same license.
+
+Third-party dependencies retain their own (permissive) licenses; see
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
 <!-- TODO(agent): Keep this functionality overview aligned with docs/OVERVIEW.md when core workflows shift. -->
 <!-- TODO(agent): Revisit quick-start once multi-node/service-split deployment guidance is finalized. -->

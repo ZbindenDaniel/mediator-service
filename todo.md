@@ -264,6 +264,8 @@
 
 40. ✅ **Postgres migration complete.** `DATABASE_URL` required; no SQLite fallback. Migration script: `scripts/migrate-sqlite-to-postgres.ts`. Multi-instance agentic safety (`SELECT FOR UPDATE SKIP LOCKED`) implemented in `claimQueuedAgenticRuns`.
 
+41. **AGPL §13 in-app "Source" affordance (follow-up to licensing, OVERVIEW 900).** The project is now AGPL-3.0-or-later (`LICENSE`, `package.json`, README). AGPL §13 asks a network-facing service to let its users obtain the *corresponding source of the running version*. Add a small UI affordance (e.g. a footer "Source" link + version/commit) pointing at the repo tag matching the deployed build. Low urgency while the repo is public and the running version tracks it, but required to be strictly conformant once modified builds are deployed. Optional companion: per-file FSF boilerplate headers (deferred as mechanical). Also confirm the two `UNKNOWN`-licensed deps (`png-js`, `exit`) in `THIRD_PARTY_NOTICES.md` before any binary redistribution.
+
 ---
 
 ## Open Questions
