@@ -14,8 +14,9 @@ import {
 import { queryOne } from '../db-client';
 import { generateItemUUID } from '../lib/itemIds';
 import { syncInDeviceComponents } from '../lib/in-device-components';
-import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse } from '../lib/quality-contracts';
-import { preFillQualityQuestions } from '../lib/intake-quality-map';
+import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse, assemblyToQualityContract } from '../lib/quality-contracts';
+import { getAssemblyContract } from '../contracts/registry';
+import { preFillQualityQuestions, deriveInstanceSpecsFromScan, normalizeScanComponents } from '../lib/intake-quality-map';
 import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
@@ -132,7 +133,12 @@ function buildQualityQuestions(unterkategorienA: number | null, scan: IntakeScan
   try {
     const general = loadGeneralContract();
     const subCat = unterkategorienA ? loadSubCategoryContract(unterkategorienA) : null;
-    return preFillQualityQuestions([...general.questions, ...(subCat?.questions ?? [])], scan);
+    const assembly = unterkategorienA ? getAssemblyContract(unterkategorienA) : null;
+    const assemblyQ = assembly ? assemblyToQualityContract(assembly) : null;
+    return preFillQualityQuestions(
+      [...general.questions, ...(subCat?.questions ?? []), ...(assemblyQ?.questions ?? [])],
+      scan
+    );
   } catch {
     return [];
   }
@@ -177,10 +183,11 @@ const action = defineHttpAction({
 
       const itemUUID = await ensureItem(ref.artikelNummer, serial, mac);
 
-      // Once the parent machine item exists, materialize its scanned sub-devices as in-device
-      // components (idempotent on re-scan). Non-fatal: a failure here must not block catalog.
+      // Once the parent machine item exists, materialize its scanned sub-devices that have a
+      // usable serial as in-device components (idempotent on re-scan). Serialless components
+      // (e.g. PCI cards) fill assembly info instead. Non-fatal: a failure must not block catalog.
       try {
-        await syncInDeviceComponents(itemUUID, scan.disks, { logEvent });
+        await syncInDeviceComponents(itemUUID, normalizeScanComponents(scan), { logEvent });
       } catch (err) {
         console.warn('[intake-answer] Failed to sync in-device components', { itemUUID, err });
       }
@@ -232,7 +239,10 @@ const action = defineHttpAction({
       const subCatContract = itemRow.Unterkategorien_A
         ? loadSubCategoryContract(itemRow.Unterkategorien_A)
         : null;
-      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, qualityAnswers);
+      // Accessory questions contribute to both quality (presence) and specs (spec answers).
+      const assemblyContract = itemRow.Unterkategorien_A ? getAssemblyContract(itemRow.Unterkategorien_A) : null;
+      const assemblyQualityContract = assemblyContract ? assemblyToQualityContract(assemblyContract) : null;
+      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, qualityAnswers, assemblyQualityContract);
 
       const assessment = {
         tag: checkResponse.qualityTag as import('../../models/quality').QualityTag,
@@ -261,7 +271,10 @@ const action = defineHttpAction({
         }),
       });
 
-      const mergedSpecs = { ...checkResponse.derivedSpecs, ...(instanceSpecs ?? {}) };
+      // Spec precedence (lowest → highest): scan-derived (device booted, so present) <
+      // questionnaire-derived < explicit script/operator instanceSpecs.
+      const scanSpecs = qualBody.scanPayload ? deriveInstanceSpecsFromScan(qualBody.scanPayload) : {};
+      const mergedSpecs = { ...scanSpecs, ...checkResponse.derivedSpecs, ...(instanceSpecs ?? {}) };
       if (Object.keys(mergedSpecs).length > 0) {
         await updateItemInstanceSpecs(itemRow.ItemUUID, mergedSpecs).catch((err) => {
           console.warn('[intake-answer] Failed to store derived specs', { itemUUID: itemRow.ItemUUID, err });

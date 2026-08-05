@@ -2,8 +2,28 @@
 
 export type IntakeNextStep = 'select_ref' | 'quality' | 'phase2';
 
-// A sub-device the intake image detected. `serial` (with wwn/model as fallback keys) is
-// what turns the disk into an in-device component and keys its serial-addressed reports.
+// A generic sub-device the intake image detected — a disk, a PCI card (GPU/NIC/…), RAM, etc.
+// Extensible on purpose: `kind` names the family, `attributes` is an open bag for anything the
+// image learns in the future. Two fields drive behavior:
+//   • `serial` (with `wwn` as a fallback key) — when present and usable, the component is
+//     materialized as an in-device item and its serial-addressed reports key on it. When absent
+//     (typical for PCI cards), the component is NOT auto-created; it only fills assembly info.
+//   • `slotKey` — the assembly-contract slot it fills (e.g. "gpu", "storage"), used to pre-fill
+//     the corresponding presence/spec questions.
+export interface IntakeComponent {
+  kind: string;                 // 'disk' | 'gpu' | 'network' | 'pci' | 'memory' | … (open)
+  slotKey?: string | null;
+  serial?: string | null;
+  wwn?: string | null;
+  vendor?: string | null;
+  model?: string | null;
+  type?: string | null;
+  sizeGb?: number | null;
+  attributes?: Record<string, string> | null;
+}
+
+// Shorthand for a disk-kind component (name → slotKey). Accepted for convenience; normalized
+// into IntakeComponent (kind:'disk') server-side.
 export interface IntakeDisk {
   name: string;
   sizeGb: number;
@@ -20,6 +40,9 @@ export interface IntakeScanPayload {
   model?: string | null;
   cpu?: string | null;
   ramMb?: number | null;
+  // Canonical, general list of detected sub-devices.
+  components?: IntakeComponent[] | null;
+  // Convenience shorthand for disks; folded into `components` (kind:'disk').
   disks?: IntakeDisk[] | null;
   batteryPercent?: number | null;
 }
@@ -79,7 +102,13 @@ export interface IntakeAnswerRefBody {
 export interface IntakeAnswerQualityBody {
   type: 'quality';
   qualityAnswers: Record<string, string>;
+  // Free-form instance specs written by the script. Keys must match the spec contract
+  // (contracts/specs/<subcat>.json) — alignment is by convention, not automatic. These win
+  // over both scan-derived and questionnaire-derived specs.
   instanceSpecs?: Record<string, string>;
+  // Optional: echo the scan so the server can back-fill scan-derived required specs
+  // (Prozessor/RAM/Speicher) for anything the script/operator did not provide.
+  scanPayload?: IntakeScanPayload;
 }
 
 export type IntakeAnswerBody = IntakeAnswerRefBody | IntakeAnswerQualityBody;

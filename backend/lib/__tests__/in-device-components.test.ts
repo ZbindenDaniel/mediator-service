@@ -45,13 +45,13 @@ function resetState() {
 describe('syncInDeviceComponents', () => {
   beforeEach(resetState);
 
-  test('creates one in-device component per disk with a usable serial', async () => {
+  test('creates one in-device component per serial-bearing component', async () => {
     const logEvent = jest.fn();
     const res = await syncInDeviceComponents(
       'I-100-0001',
       [
-        { name: 'nvme0n1', sizeGb: 256, type: 'nvme', serial: 'SER-A', model: 'Samsung' },
-        { name: 'sda', sizeGb: 500, type: 'hdd', serial: 'SER-B' },
+        { kind: 'disk', slotKey: 'nvme0n1', sizeGb: 256, type: 'nvme', serial: 'SER-A', model: 'Samsung' },
+        { kind: 'disk', slotKey: 'sda', sizeGb: 500, type: 'hdd', serial: 'SER-B' },
       ],
       { logEvent, genUUID: (() => { let n = 0; return () => `C-test${n++}`; })() }
     );
@@ -71,13 +71,13 @@ describe('syncInDeviceComponents', () => {
     expect(logEvent).toHaveBeenCalledTimes(2);
   });
 
-  test('skips disks with missing or placeholder serials', async () => {
+  test('does NOT auto-create serialless components (e.g. PCI cards)', async () => {
     const res = await syncInDeviceComponents(
       'I-100-0001',
       [
-        { name: 'sda', sizeGb: 500, serial: null },
-        { name: 'sdb', sizeGb: 500, serial: 'Default string' },
-        { name: 'sdc', sizeGb: 500, serial: '   ' },
+        { kind: 'gpu', slotKey: 'gpu', model: 'NVIDIA GT710', vendor: 'NVIDIA' },      // no serial
+        { kind: 'disk', slotKey: 'sdb', sizeGb: 500, serial: 'Default string' },       // placeholder
+        { kind: 'network', slotKey: 'nic', serial: '   ' },                            // blank
       ]
     );
     expect(res.created).toHaveLength(0);
@@ -88,7 +88,7 @@ describe('syncInDeviceComponents', () => {
   test('falls back to wwn when serial is absent', async () => {
     const res = await syncInDeviceComponents(
       'I-100-0001',
-      [{ name: 'sda', sizeGb: 500, serial: null, wwn: '5000c500abc' }],
+      [{ kind: 'disk', slotKey: 'sda', sizeGb: 500, serial: null, wwn: '5000c500abc' }],
       { genUUID: () => 'C-fromwwn' }
     );
     expect(res.created).toHaveLength(1);
@@ -99,14 +99,14 @@ describe('syncInDeviceComponents', () => {
     state.existingSerials.add('SER-A');
     const res = await syncInDeviceComponents(
       'I-100-0001',
-      [{ name: 'nvme0n1', sizeGb: 256, serial: 'SER-A' }]
+      [{ kind: 'disk', slotKey: 'nvme0n1', sizeGb: 256, serial: 'SER-A' }]
     );
     expect(res.created).toHaveLength(0);
     expect(res.skipped[0].reason).toBe('exists');
     expect(state.inserts).toHaveLength(0);
   });
 
-  test('empty/absent disk list is a no-op', async () => {
+  test('empty/absent component list is a no-op', async () => {
     expect((await syncInDeviceComponents('I-1', null)).created).toHaveLength(0);
     expect((await syncInDeviceComponents('I-1', [])).created).toHaveLength(0);
   });

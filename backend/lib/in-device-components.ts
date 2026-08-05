@@ -1,8 +1,10 @@
 // Creation of in-device components from an intake scan.
 //
-// Each sub-device the intake image reports (currently disks) becomes a first-class item
-// instance that carries NO Artikelnummer while inside its parent (deferred identity). Its
-// reports are keyed on its own serial; its identity is set once, later, at Zerlegung.
+// A detected sub-device becomes a first-class item instance ONLY when it has a usable serial
+// (disks, some NICs/GPUs). It carries NO Artikelnummer while inside its parent (deferred
+// identity); its reports key on its serial; its identity is set once, later, at Zerlegung.
+// Serialless components (typical PCI cards) are NOT auto-created here — they fill assembly info
+// via question pre-fill instead (see intake-quality-map). Kind-agnostic: the serial is the gate.
 //
 // This runs at the intake "ref" step, once the parent machine item exists. It is idempotent
 // on re-scan: a component is keyed on its serial, so re-running never duplicates it.
@@ -11,7 +13,7 @@ import type { PoolClient } from 'pg';
 import { withTransaction } from '../db-client';
 import { generateComponentUUID } from './itemIds';
 import { isUsableSerial } from './component-serial';
-import type { IntakeDisk } from '../../models/intake';
+import type { IntakeComponent } from '../../models/intake';
 
 export interface SyncComponentsDeps {
   now?: () => Date;
@@ -36,28 +38,31 @@ async function componentUUIDFree(client: PoolClient, uuid: string): Promise<bool
 }
 
 /**
- * Create one in-device component per disk with a usable serial, linked to `parentUUID` via a
- * `Zerlegt_aus` relation. Skips disks whose serial is missing/placeholder (can't key reports)
- * and disks whose serial already has an item (idempotent). Whole batch runs in one transaction.
+ * Create one in-device component per detected component that has a usable serial, linked to
+ * `parentUUID` via a `Zerlegt_aus` relation. Skips components whose serial is missing/placeholder
+ * (can't key reports — e.g. most PCI cards; those fill assembly info instead) and those whose
+ * serial already has an item (idempotent). Whole batch runs in one transaction. Pass the
+ * normalized component list (`normalizeScanComponents`).
  */
 export async function syncInDeviceComponents(
   parentUUID: string,
-  disks: IntakeDisk[] | null | undefined,
+  components: IntakeComponent[] | null | undefined,
   deps: SyncComponentsDeps = {}
 ): Promise<SyncComponentsResult> {
   const result: SyncComponentsResult = { created: [], skipped: [] };
-  if (!Array.isArray(disks) || disks.length === 0) return result;
+  if (!Array.isArray(components) || components.length === 0) return result;
 
   const now = deps.now ?? (() => new Date());
   const genUUID = deps.genUUID ?? generateComponentUUID;
 
   await withTransaction(async (client) => {
-    for (const disk of disks) {
-      const slotKey = (disk?.name ?? '').trim();
+    for (const comp of components) {
+      const slotKey = (comp?.slotKey ?? '').trim();
       // Serial is the report/identity key; wwn is the accepted fallback when firmware hides it.
-      const rawSerial = (disk?.serial ?? disk?.wwn ?? '').trim();
+      const rawSerial = (comp?.serial ?? comp?.wwn ?? '').trim();
 
       if (!isUsableSerial(rawSerial)) {
+        // Serialless (e.g. PCI card): not an item; captured as assembly info elsewhere.
         result.skipped.push({ reason: 'no-serial', slotKey, serial: rawSerial || null });
         continue;
       }
@@ -83,9 +88,12 @@ export async function syncInDeviceComponents(
 
       const ts = now().toISOString();
       const specs: Record<string, string> = {};
-      if (typeof disk.sizeGb === 'number' && Number.isFinite(disk.sizeGb)) specs.Size = `${disk.sizeGb} GB`;
-      if (disk.type) specs.Type = String(disk.type);
-      if (disk.model) specs.Model = String(disk.model);
+      if (comp.kind) specs.Kind = String(comp.kind);
+      if (typeof comp.sizeGb === 'number' && Number.isFinite(comp.sizeGb)) specs.Size = `${comp.sizeGb} GB`;
+      if (comp.type) specs.Type = String(comp.type);
+      if (comp.model) specs.Model = String(comp.model);
+      if (comp.vendor) specs.Hersteller = String(comp.vendor);
+      for (const [k, v] of Object.entries(comp.attributes ?? {})) specs[k] = String(v);
       const specsJson = Object.keys(specs).length > 0 ? JSON.stringify(specs) : null;
 
       // In-device component: no Artikel_Nummer, no BoxID — excluded from lists/export/print
@@ -107,7 +115,7 @@ export async function syncInDeviceComponents(
           EntityType: 'Item',
           EntityId: parentUUID,
           Event: 'ComponentDetected',
-          Meta: JSON.stringify({ childItemUUID: uuid, serial: rawSerial, slotKey: slotKey || null }),
+          Meta: JSON.stringify({ childItemUUID: uuid, kind: comp.kind ?? null, serial: rawSerial, slotKey: slotKey || null }),
         });
       }
       result.created.push({ itemUUID: uuid, serial: rawSerial, slotKey });

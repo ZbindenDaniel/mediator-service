@@ -33,7 +33,7 @@ Use this directory as the single navigation root for deep-dive operational and i
 | [`intake.md`](./intake.md) | Device intake station: cataloguing flow, netboot, Phase 1/2 |
 | [`agentic-search-events.md`](./agentic-search-events.md) | Agentic search event inspection and analysis |
 | [`item-detail-layout.md`](./item-detail-layout.md) | Item detail UX hierarchy, persona-based design |
-| [`spare-parts-catalog.md`](./spare-parts-catalog.md) | Spare parts: disassembly contracts, quality integration, Zerlegen UI |
+| [`spare-parts-catalog.md`](./spare-parts-catalog.md) | Spare parts: assembly contracts, quality integration, Zerlegen UI |
 | [`Shopware integration.md`](./Shopware%20integration.md) | Shopware product discovery, sync queue architecture |
 | [`glossary.md`](./glossary.md) | Canonical terminology: Item/ItemRef/ItemInstance, Box/Shelf/Location |
 | [`traceability-matrix.md`](./traceability-matrix.md) | Doc-to-code mapping: domain → backend actions → frontend components |
