@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+903. ✅ Fix `invalid input syntax for type integer: "201.0"` crash in reviewed-example selection: two read sites (`invoker.ts`, `db.ts`) now cast float-formatted subcategory TEXT via `ROUND(NULLIF(...)::NUMERIC)::INTEGER`, plus a one-time `normalize-category-values` cleanup script for the legacy `"201.0"` data → [agentic]
 902. ✅ Generalize intake sub-devices to an extensible `components[]` object (`disks[]` becomes a shorthand): auto-create is serial-gated and kind-agnostic, and a detected serialless PCI device (GPU/NIC) fills assembly info by pre-filling `has_<slotKey>`/`<slotKey>_model` instead of creating an item → [intake]
 901. ✅ Consolidate the assembly slot key onto `item_relations."SlotKey"`: `catalog-spare-part` writes and reads it directly (clean cutover, no backfill/fallback), and `Notes` stays for genuine Zubehör relation notes → [item-lifecycle]
 900. ✅ Intake produces a complete item: the quality step now serves the subcategory's assembly (accessory) questions and scores/derives specs from them, back-fills the canonical required specs (Prozessor/RAM/Speicher) from the scan, and accepts full free-form instanceSpecs from the script (canonical keys, aligned by convention) → [intake]
