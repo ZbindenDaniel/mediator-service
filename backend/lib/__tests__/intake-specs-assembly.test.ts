@@ -2,7 +2,7 @@
 // the accessory questionnaire and scan-derived specs line up with the canonical spec keys.
 import { deriveInstanceSpecsFromScan, normalizeScanComponents, resolveIntakeQuestions, resolveAutoFill } from '../intake-quality-map';
 import type { QualityQuestion } from '../../../models/quality-contract';
-import { assemblyToQualityContract, buildQualityCheckResponse, loadGeneralContract } from '../quality-contracts';
+import { assemblyToQualityContract, buildQualityCheckResponse, loadGeneralContract, loadSubCategoryContract } from '../quality-contracts';
 import { getAssemblyContract, getSpecContract } from '../../contracts/registry';
 import type { IntakeScanPayload } from '../../../models/intake';
 
@@ -111,7 +111,9 @@ describe('assembly contract as intake questions', () => {
     expect(assembly).not.toBeNull();
     const q = assemblyToQualityContract(assembly!);
     const ids = q.questions.map((x) => x.id);
-    expect(ids).toEqual(expect.arrayContaining(['has_fan', 'has_keyboard', 'keyboard_layout', 'battery_condition', 'ram_gb', 'storage_gb', 'drive_type']));
+    // keyboard_layout now lives in the 201 quality contract (decoupled from the keyboard part).
+    expect(ids).toEqual(expect.arrayContaining(['has_fan', 'has_keyboard', 'battery_condition', 'ram_gb', 'storage_gb', 'drive_type']));
+    expect(ids).not.toContain('keyboard_layout');
   });
 
   test('accessory answers drive both quality (presence) and specs (spec answers)', () => {
@@ -120,13 +122,21 @@ describe('assembly contract as intake questions', () => {
     const res = buildQualityCheckResponse(
       general,
       null,
-      { has_fan: 'false', ram_gb: '16', keyboard_layout: 'CH' },
+      { has_fan: 'false', ram_gb: '16' },
       assembly
     );
     // Missing fan forces quality to 1 (Ersatzteil) via qualityImpact.
     expect(res.qualityValue).toBe(1);
     // Spec answers become Spezifikationen entries.
     expect(res.derivedSpecs['RAM']).toBe('16 GB');
-    expect(res.derivedSpecs['Tastatur-Layout']).toBe('CH');
+  });
+
+  test('201 quality contract asks the human-judgment condition questions', () => {
+    const sub = loadSubCategoryContract(201);
+    const scan = { cpu: 'i5', ramMb: 8192, batteryPercent: 87, disks: [{ name: 'nvme0n1', sizeGb: 256, type: 'nvme', serial: 'X' }] } as any;
+    const { ask } = resolveIntakeQuestions(sub!.questions, scan);
+    const ids = ask.map((q) => q.id);
+    // None of these are scan-answerable/skippable → all asked.
+    expect(ids).toEqual(expect.arrayContaining(['keyboard_layout', 'keyboard_condition', 'screen_condition', 'battery_swollen', 'hinges_ok', 'fan_dusty']));
   });
 });

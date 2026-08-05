@@ -24,14 +24,6 @@
         "question": "Tastatur vorhanden?",
         "skipAtIntake": true,
         "qualityImpact": { "false": 1 }
-      },
-      "specQuestion": {
-        "id": "keyboard_layout",
-        "type": "select",
-        "question": "Tastatur-Layout?",
-        "values": ["CH", "DE", "US", "Anderes"],
-        "specField": "Tastatur-Layout",
-        "specValue": "%v"
       }
     },
     {

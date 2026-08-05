@@ -4,6 +4,27 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 904. ✅ Enrich the human-judgment quality questions; decouple keyboard layout
+**Why:** After auto-resolution the intake questionnaire was thin, and the one cosmetic question was
+too generic. Split the generic `condition_optical` ("Optischer Zustand?") in `general.json` into
+`discoloration_residue` ("Verfärbungen oder Kleberückstände?") and `scratches` ("Kratzer?"), and
+added laptop condition questions to `quality/201.json`: `keyboard_condition`, `screen_condition`,
+`battery_swollen` ("Akku aufgebläht oder verformt?" → quality 1, the safety check the battery %
+signal can't catch), `hinges_ok`, `fan_dusty`. Also **decoupled `keyboard_layout`** — moved it out
+of the keyboard assembly part's `specQuestion` into `quality/201.json` as a standalone question, so
+a human-only spec is never orphaned by skipping its presence question (`has_keyboard` stays in
+assembly for Zerlegen). A laptop now asks ~10 human-judgment questions (cosmetic, OS, keyboard
+layout+condition, display, swollen battery, hinges, dust) while the 8 scan/boot-known ones stay
+auto-resolved.
+**Why (approach):** These are all genuine human observations (no `autoFill`/`skipAtIntake`), so they
+just flow through the existing resolver as `ask`. Decoupling `keyboard_layout` to the quality
+contract (option 2) keeps its id/specField (`Tastatur-Layout`) unchanged, so downstream specs and
+the operator review are unaffected; the keyboard slot in Zerlegen simply no longer carries an inline
+layout field. Contract versions bumped (general v3→v4, 201 v5→v6).
+**Deferred:** More condition questions (ports/charging jack, trackpad, free-text Bemerkungen) are
+easy follow-ons — left out to keep the set focused. `fan_dusty` is recorded in the assessment
+responses only (no spec/quality impact) — a maintenance flag, not a defect.
+
 ## 903. ✅ Auto-resolve intake questions from the scan (contract-declared, not hardcoded)
 **Why:** A booting laptop was still asked presence questions it obviously satisfies ("Lüfter/Display/
 Mainboard vorhanden?") and re-asked data the scan already has (RAM, storage, drive type, battery) —

@@ -31,9 +31,10 @@ must decide**. Two contract-declared mechanisms (see the contract JSON, no code)
 - **`skipAtIntake: true`** on a question → "a booted device implies this"; assumed present and
   dropped (e.g. `has_fan`, `has_display`, `has_mainboard`).
 
-So for a laptop, the ten-ish assembly/quality questions collapse to roughly **cosmetic condition
-+ OS** — RAM, storage, drive type, battery, and the boot-implied presence checks are resolved from
-the scan. The script needs **no change** for this: it already renders `qualityQuestions`
+So for a laptop, what remains are the **human-judgment** questions — cosmetic (Verfärbungen/
+Kleberückstände, Kratzer), OS, keyboard layout + condition, display condition, swollen battery,
+hinges, dusty fan — while RAM, storage, drive type, battery %, and the boot-implied presence
+checks are resolved from the scan. The script needs **no change** for this: it already renders `qualityQuestions`
 generically, so a shorter list just renders shorter, and the scan it already sends (persisted at
 the ref step) is what the server resolves from. Adding/removing an auto-resolved question later is
 a contract-JSON edit.
