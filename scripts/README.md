@@ -6,6 +6,7 @@ One-off maintenance, migration, and debugging scripts — not part of the produc
 ## Contents
 - `migrate-sqlite-to-postgres.ts` / `.js` — data migration from the legacy SQLite database to Postgres
 - `fix-integer-columns.ts` / `.js` — DB column type repair (run after Postgres migration)
+- `normalize-category-values.ts` / `.js` — one-time in-place repair of float-formatted category strings (e.g. `"201.0"` → `"201"`) in the `item_refs` category TEXT columns
 - `media-migration.py` — migrates media files to the new directory layout
 - `dump-agentic-search-events.ts` — debug: dumps agentic search event fixtures from DB for analysis
 - `smoke-server.ts` — production smoke test: starts server, checks key endpoints, exits

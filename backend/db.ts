@@ -1953,7 +1953,7 @@ export async function listContractAuditCandidates(limit: number): Promise<Array<
 }>> {
   return query(
     `SELECT r."Artikel_Nummer", r."SpecContractVersion",
-            i."Langtext", CAST(i."Unterkategorien_A" AS INTEGER) AS "SubCategory",
+            i."Langtext", ROUND(NULLIF(i."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "SubCategory",
             i."Artikelbeschreibung"
      FROM agentic_runs r
      JOIN item_refs i ON i."Artikel_Nummer" = r."Artikel_Nummer"
