@@ -2168,19 +2168,38 @@ export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
   }
 }
 
-export async function fetchIdleFillAgenticRuns(limit = 3): Promise<AgenticRun[]> {
+export async function claimIdleFillAgenticRuns(limit = 3): Promise<AgenticRun[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
+  const now = new Date().toISOString();
   try {
+    // Atomic claim, mirroring claimQueuedAgenticRuns. Keep-busy picks up notStarted runs that carry a
+    // SearchQuery (the default state for bulk-imported items) and flips them to 'running' in one
+    // FOR UPDATE SKIP LOCKED statement so each run is dispatched exactly once. A plain SELECT here
+    // re-selected the SAME runs on every dispatch tick, re-running (and re-billing) the same search
+    // queries indefinitely — the token-burn bug this claim prevents. It also means the run is already
+    // 'running' when scheduleAgenticModelInvocation re-checks it, so the promotion guard passes.
     return query<AgenticRun>(
-      `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
-              "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt"
-       FROM agentic_runs
-       WHERE "Status"='notStarted' AND "SearchQuery" IS NOT NULL AND TRIM("SearchQuery") != ''
-       ORDER BY "LastModified" ASC, "Id" ASC LIMIT $1`,
-      [effectiveLimit]
+      `WITH next_runs AS (
+         SELECT "Id"
+         FROM agentic_runs
+         WHERE "Status" = 'notStarted' AND "SearchQuery" IS NOT NULL AND TRIM("SearchQuery") != ''
+         ORDER BY "LastModified" ASC, "Id" ASC
+         LIMIT $1
+         FOR UPDATE SKIP LOCKED
+       )
+       UPDATE agentic_runs
+       SET "Status" = 'running',
+           "LastModified" = $2,
+           "LastAttemptAt" = $2,
+           "NextRetryAt" = NULL,
+           "LastError" = NULL
+       FROM next_runs
+       WHERE agentic_runs."Id" = next_runs."Id"
+       RETURNING agentic_runs.*`,
+      [effectiveLimit, now]
     );
   } catch (err) {
-    console.error('[db] Failed to fetch idle-fill agentic runs', err);
+    console.error('[db] Failed to claim idle-fill agentic runs', err);
     throw err;
   }
 }

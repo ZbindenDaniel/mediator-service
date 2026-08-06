@@ -36,7 +36,7 @@ import {
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure,
   claimQueuedAgenticRuns,
-  fetchIdleFillAgenticRuns,
+  claimIdleFillAgenticRuns,
   updateQueuedAgenticRunQueueState,
   listAgenticRunReviewHistory,
   listContractAuditCandidates,
@@ -1274,7 +1274,11 @@ export async function dispatchQueuedAgenticRuns(
   const remainingSlots = Math.max(0, MAX_CONCURRENT_RUNNING_RUNS - runningCount - scheduled - 1);
   if (remainingSlots > 0) {
     try {
-      const idleRuns = await fetchIdleFillAgenticRuns(remainingSlots);
+      // Atomically claim (notStarted -> running) instead of a plain SELECT: without the claim the
+      // same notStarted+SearchQuery runs were re-selected and re-dispatched on every dispatch tick,
+      // re-billing the same search queries (token burn). The claim also leaves the run 'running' so
+      // scheduleAgenticModelInvocation's promotion re-check passes, matching the queued path.
+      const idleRuns = await claimIdleFillAgenticRuns(remainingSlots);
       for (const run of idleRuns) {
         const artikelNummer = (run.Artikel_Nummer || '').trim();
         const searchQuery = (run.SearchQuery || '').trim();
@@ -1299,7 +1303,7 @@ export async function dispatchQueuedAgenticRuns(
         }
       }
     } catch (err) {
-      logger.error?.('[agentic-service] Failed to fetch idle-fill agentic runs', {
+      logger.error?.('[agentic-service] Failed to claim idle-fill agentic runs', {
         error: toErrorMessage(err)
       });
     }
