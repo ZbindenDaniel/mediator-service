@@ -344,6 +344,38 @@ function matchObjectContaining(received, expectedSample) {
     && matchExpected(received[key], expectedSample[key]));
 }
 
+// Jest `toMatchObject` semantics: recursive *subset* match. Unlike matchExpected
+// (which requires objects to have identical key sets), extra keys on `received`
+// are allowed; nested objects/arrays are matched recursively as subsets, while
+// asymmetric matchers (any/objectContaining/…) and primitives fall through to
+// matchExpected for exact/structural checks.
+function matchObjectSubset(received, expected) {
+  if (isAny(expected)
+    || isObjectContaining(expected)
+    || (expected && (expected._type === 'arrayContaining' || expected._type === 'stringContaining'))) {
+    return matchExpected(received, expected);
+  }
+  if (Array.isArray(expected)) {
+    if (!Array.isArray(received) || received.length !== expected.length) {
+      return false;
+    }
+    return expected.every((value, index) => matchObjectSubset(received[index], value));
+  }
+  if (isPlainObject(expected)) {
+    if (!isPlainObject(received)) {
+      return false;
+    }
+    return Object.keys(expected).every((key) => Object.prototype.hasOwnProperty.call(received, key)
+      && matchObjectSubset(received[key], expected[key]));
+  }
+  try {
+    assert.deepStrictEqual(received, expected);
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
 function matchesThrown(thrown, expected) {
   if (expected === undefined) {
     return true;
@@ -468,6 +500,13 @@ function createMatchers() {
     },
     toBeNull(received) {
       assert.strictEqual(received, null);
+    },
+    toMatchObject(received, expected) {
+      if (!matchObjectSubset(received, expected)) {
+        throw new assert.AssertionError({
+          message: `Expected ${safeStringify(received)} to match object ${safeStringify(expected)}`
+        });
+      }
     },
     toContain(received, sub) {
       if (typeof received?.includes !== 'function') {

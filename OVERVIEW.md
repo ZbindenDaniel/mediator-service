@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+904. ✅ Add missing `toMatchObject` matcher to the custom test harness (`test/harness.js`): a recursive subset match reusing the existing partial-match helpers — unblocks the 16 spurious `toMatchObject is not a function` failures across the suite → [testing]
 903. ✅ Fix `invalid input syntax for type integer: "201.0"` crash in reviewed-example selection: two read sites (`invoker.ts`, `db.ts`) now cast float-formatted subcategory TEXT via `ROUND(NULLIF(...)::NUMERIC)::INTEGER`, plus a one-time `normalize-category-values` cleanup script for the legacy `"201.0"` data → [agentic]
 902. ✅ Generalize intake sub-devices to an extensible `components[]` object (`disks[]` becomes a shorthand): auto-create is serial-gated and kind-agnostic, and a detected serialless PCI device (GPU/NIC) fills assembly info by pre-filling `has_<slotKey>`/`<slotKey>_model` instead of creating an item → [intake]
 901. ✅ Consolidate the assembly slot key onto `item_relations."SlotKey"`: `catalog-spare-part` writes and reads it directly (clean cutover, no backfill/fallback), and `Notes` stays for genuine Zubehör relation notes → [item-lifecycle]
@@ -46,5 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 897. ✅ Add opt-in "einfacher Modus" (simple mode): user-settings dialog toggle hides UI via a body CSS class — opt-out model, so every future nav item/tab is hidden by default unless marked `simple-keep` → [ui]
 896. ✅ Add separate manually-triggered Gitea deploy workflow: SSHes to the Docker host and rolls the mediator compose service onto a chosen image tag → [docs-infra]
 895. ✅ Add Gitea Actions workflow to build & publish the Docker image to Gitea's own container registry (no PAT; runs on main/tags/dispatch) → [docs-infra]
-894. ✅ Idle contract-audit sweeper (AUTO_REWORK, default off): stamps `SpecContractVersion` per run (#46) and, only while idle, re-applies the current spec contract to the oldest stale item — re-stamp if complete, else enqueue a targeted rework for now-missing required fields (deterministic, no LLM) → [agentic]
-893. ✅ Targeted "KI Überarbeitung" rework: reuse the main pipeline to regenerate only operator-selected fields (partial update preserves the rest, categorizer/pricing skipped), driven by a field-picker + instruction modal → [agentic]
