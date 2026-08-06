@@ -11,6 +11,7 @@ import {
   logEvent,
   getAgenticRequestLog,
   persistAgenticRunError,
+  persistAgenticSearchLinks,
   saveAgenticRequestPayload,
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure
@@ -52,6 +53,42 @@ function normalizeNullableNumber(value: unknown): number | null {
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value);
+}
+
+// Serialize retrieved search results to the LastSearchLinksJson shape that skipSearch reads back
+// (a SearchSource[] with at least a description). Deduped by URL and capped, mirroring the terminal
+// result-handler write so both writers store a uniform shape.
+function serializeSearchSourcesForReuse(sources: SearchSource[]): string | null {
+  if (!Array.isArray(sources) || sources.length === 0) {
+    return null;
+  }
+  const normalized: Array<{ url: string; title?: string; description?: string }> = [];
+  const seen = new Set<string>();
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    const url = typeof source.url === 'string' ? source.url.trim() : '';
+    if (!url) continue;
+    const key = url.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const title = typeof source.title === 'string' && source.title.trim() ? source.title.trim() : undefined;
+    const description =
+      typeof source.description === 'string' && source.description.trim()
+        ? source.description.trim()
+        : typeof source.content === 'string' && source.content.trim()
+          ? source.content.trim()
+          : undefined;
+    normalized.push({ url, title, description });
+    if (normalized.length >= 25) break;
+  }
+  if (normalized.length === 0) {
+    return null;
+  }
+  try {
+    return JSON.stringify(normalized);
+  } catch {
+    return null;
+  }
 }
 
 const REVIEW_SPEC_FIELD_LIMIT = AGENTIC_REVIEW_SPEC_MAX_ENTRIES;
@@ -776,8 +813,16 @@ export class AgenticModelInvoker {
         exampleItemBlock = STATIC_EXAMPLE_ITEM_BLOCK;
       }
 
+      // Reuse stored search results whenever we have them and no targeted re-search is warranted, so
+      // the search provider is hit only when actually needed — no stored results yet, or a reviewer
+      // asked us to find specific missing fields. This is the single decision point for search-vs-reuse
+      // and so covers every path uniformly (first run, in-cycle retry after a failure, and the keep-busy
+      // retry of a failed/cancelled run): a given item searches at most once until it is reset. A live
+      // search persists its results immediately (deps.persistSearchLinks), so even a run that later
+      // fails leaves them stored for the next, search-free attempt.
+      const wantsFreshTargetedSearch = normalizedMissingSpecFields.length > 0;
       let storedSources: SearchSource[] | undefined;
-      if (requestedSkipSearch) {
+      if (!wantsFreshTargetedSearch) {
         try {
           const existingRun = await getAgenticRun(trimmedItemId);
           if (existingRun?.LastSearchLinksJson) {
@@ -787,18 +832,21 @@ export class AgenticModelInvoker {
             }
           }
         } catch (err) {
-          this.logger.warn?.({ err, msg: 'failed to load stored search sources for skipSearch run', itemId: trimmedItemId });
+          this.logger.warn?.({ err, msg: 'failed to load stored search sources', itemId: trimmedItemId });
         }
       }
 
-      // Only honour skipSearch when there is actually a stored search to reuse. Otherwise a skip would
-      // extract with zero evidence and no fallback — so we downgrade to a normal live search.
-      const skipSearch = requestedSkipSearch && Array.isArray(storedSources) && storedSources.length > 0;
-      if (requestedSkipSearch && !skipSearch) {
+      // Skip the live search only when there is actually a stored search to reuse; otherwise fall back
+      // to a live search (a skip with zero evidence would extract nothing).
+      const skipSearch = Array.isArray(storedSources) && storedSources.length > 0;
+      if ((requestedSkipSearch || storedSources !== undefined) && !skipSearch) {
         this.logger.info?.({
-          msg: 'skipSearch requested but no stored search found; falling back to live search',
-          itemId: trimmedItemId
+          msg: 'no stored search to reuse; performing a live search',
+          itemId: trimmedItemId,
+          requestedSkipSearch
         });
+      } else if (skipSearch && !requestedSkipSearch) {
+        this.logger.info?.({ msg: 'reusing stored search results (no live search needed)', itemId: trimmedItemId });
       }
 
       const payload = await runItemFlow(
@@ -829,7 +877,14 @@ export class AgenticModelInvoker {
           saveRequestPayload: saveAgenticRequestPayload,
           markNotificationSuccess: markAgenticRequestNotificationSuccess,
           markNotificationFailure: markAgenticRequestNotificationFailure,
-          persistLastError: this.persistAgenticRunError
+          persistLastError: this.persistAgenticRunError,
+          persistSearchLinks: async (id: string, sources: SearchSource[]) => {
+            try {
+              await persistAgenticSearchLinks(id, serializeSearchSourcesForReuse(sources));
+            } catch (err) {
+              this.logger.warn?.({ err, msg: 'failed to persist search links for reuse', itemId: id });
+            }
+          }
         }
       );
 

@@ -97,7 +97,7 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
     (dbClientMod.queryOne as jest.Mock).mockResolvedValueOnce({ runningcount: 0 });
     const fetchQueuedSpy = jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
     // idle-fill runs when scheduled=0 and remainingSlots = 3-0-0-1 = 2 > 0
-    jest.spyOn(agenticDb, 'fetchIdleFillAgenticRuns').mockResolvedValue([]);
+    jest.spyOn(agenticDb, 'claimIdleFillAgenticRuns').mockResolvedValue([]);
 
     await dispatchQueuedAgenticRuns(deps, { limit: 5 });
 
@@ -110,11 +110,40 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
     (dbClientMod.queryOne as jest.Mock).mockResolvedValueOnce({ runningcount: 0 });
     const fetchQueuedSpy = jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
     // idle-fill also called when scheduled=0 and remainingSlots > 0
-    jest.spyOn(agenticDb, 'fetchIdleFillAgenticRuns').mockResolvedValue([]);
+    jest.spyOn(agenticDb, 'claimIdleFillAgenticRuns').mockResolvedValue([]);
 
     await dispatchQueuedAgenticRuns(deps, { limit: 2 });
 
     expect(fetchQueuedSpy).toHaveBeenCalledWith(2);
+  });
+
+  it('claims idle-fill runs atomically (reserving 1 slot) and dispatches a claimed run exactly once', async () => {
+    // Regression: idle-fill used a plain SELECT that re-selected the same notStarted+SearchQuery run
+    // every dispatch tick (re-billing the same search query — token burn). The atomic claim flips the
+    // run to 'running', so it is dispatched once and the promotion re-check passes.
+    const deps = createDeps();
+    const invokeModel = jest.fn().mockResolvedValue({ ok: true, message: null });
+    deps.invokeModel = invokeModel;
+    // The claim returns the run already flipped to 'running'; getAgenticRun re-reads it as 'running'.
+    const claimedIdleRun = makeRun({ Status: AGENTIC_RUN_STATUS_RUNNING, SearchQuery: 'idle query' });
+    (deps.getAgenticRun as jest.Mock).mockResolvedValue(claimedIdleRun);
+
+    (dbClientMod.queryOne as jest.Mock).mockResolvedValue({ runningcount: 0 });
+    jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
+    const claimIdleSpy = jest
+      .spyOn(agenticDb, 'claimIdleFillAgenticRuns')
+      .mockResolvedValue([claimedIdleRun]);
+
+    await dispatchQueuedAgenticRuns(deps, { limit: 5 });
+    // Let the setImmediate-scheduled background invocation run.
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // remainingSlots = MAX(3) - running(0) - scheduled(0) - reserved(1) = 2
+    expect(claimIdleSpy).toHaveBeenCalledWith(2);
+    expect(invokeModel).toHaveBeenCalledTimes(1);
+    expect(invokeModel).toHaveBeenCalledWith(
+      expect.objectContaining({ itemId: claimedIdleRun.Artikel_Nummer, searchQuery: 'idle query' })
+    );
   });
 });
 

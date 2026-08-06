@@ -93,6 +93,9 @@ export interface ItemFlowDependencies {
   markNotificationFailure: (itemId: string, errorMessage: string) => Promise<void> | void;
   shopwareSearch?: (query: string, limit: number, logger?: ItemFlowLogger) => Promise<ShopwareSearchResult>;
   persistLastError?: (itemId: string, errorMessage: string, attemptAt?: string) => Promise<void> | void;
+  // Persist retrieved search results immediately (before extraction), so a later failure still leaves
+  // them stored for a search-free automatic retry.
+  persistSearchLinks?: (itemId: string, sources: SearchSource[]) => Promise<void> | void;
 }
 
 export interface RunItemFlowInput {
@@ -592,6 +595,17 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       storedSources: input.storedSources,
       transcriptWriter
     });
+
+    // Persist the freshly retrieved search results now (only when a live search actually ran), so a
+    // downstream failure still leaves them stored for a search-free automatic retry. A skipSearch run
+    // reused already-stored results, so there is nothing new to write.
+    if (finalShouldSearch && Array.isArray(aggregatedSources) && aggregatedSources.length > 0) {
+      try {
+        await deps.persistSearchLinks?.(itemId, aggregatedSources);
+      } catch (persistErr) {
+        logger.warn?.({ err: persistErr, msg: 'failed to persist retrieved search links', itemId });
+      }
+    }
 
     checkCancellation();
 
