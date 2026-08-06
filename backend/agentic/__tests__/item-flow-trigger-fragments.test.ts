@@ -236,6 +236,47 @@ describe('runExtractionAttempts review trigger prompt fragment injection', () =>
     }));
   });
 
+  it('injects category guidance into extraction and supervisor review placeholders', async () => {
+    const target = buildTarget();
+    const validExtraction =
+      '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
+      '"Langtext":{"Veröffentlicht":"","Stromversorgung":""},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
+      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1,"Unterkategorien_A":11,"Hauptkategorien_B":2,' +
+      '"Unterkategorien_B":22}';
+    const llm: ChatModel = {
+      invoke: jest.fn(async () => ({ content: asJsonBlock(validExtraction) }))
+    };
+    const guidance = 'Do not mention the operating system in the prose description.';
+
+    await runExtractionAttempts({
+      llm,
+      logger: console,
+      itemId: target.Artikel_Nummer,
+      maxAttempts: 1,
+      searchContexts: [],
+      aggregatedSources: [],
+      recordSources: jest.fn(),
+      buildAggregatedSearchText: () => '',
+      extractPrompt: 'extract {{EXTRACTION_REVIEW}}',
+      correctionPrompt: 'repair json',
+      targetFormat: '{}',
+      supervisorPrompt: 'supervisor {{SUPERVISOR_REVIEW}}',
+      categorizerPrompt: 'categorizer',
+      pricingPrompt: 'pricing',
+      searchInvoker: jest.fn(async () => ({ text: '', sources: [] })),
+      target,
+      reviewNotes: null,
+      categoryGuidance: [guidance],
+      skipSearch: true,
+      transcriptWriter: null
+    });
+
+    const extractionMessages = (llm.invoke as jest.Mock).mock.calls[0]?.[0];
+    const supervisorMessages = (llm.invoke as jest.Mock).mock.calls[1]?.[0];
+    expect(JSON.stringify(extractionMessages)).toContain(guidance);
+    expect(JSON.stringify(supervisorMessages)).toContain(guidance);
+  });
+
   it('applies missing/unneeded spec guidance to injected target snapshot content', async () => {
     const target = buildTarget();
     const validExtraction =

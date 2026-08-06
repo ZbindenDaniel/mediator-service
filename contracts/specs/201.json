@@ -9,5 +9,8 @@
     { "key": "Betriebssystem",  "required": false, "description": "Operating system installed" },
     { "key": "Akku",            "required": false, "description": "Battery condition" },
     { "key": "Tastatur-Layout", "required": false, "description": "Keyboard layout (CH/DE/US)" }
+  ],
+  "guidance": [
+    "Do not mention the operating system or the specific drive/disk model in the prose description (Kurzbeschreibung); those belong only in their structured spec fields if known."
   ]
 }

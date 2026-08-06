@@ -506,6 +506,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     // Spec contract version this run runs against — stamped on the run so an idle sweep can later detect
     // items enriched against an outdated contract (getSpecContract is cached, so this is cheap).
     const specContractVersion = subcategoryCode ? (getSpecContract(subcategoryCode)?.version ?? null) : null;
+    const categoryGuidance = subcategoryCode ? (getSpecContract(subcategoryCode)?.guidance ?? []) : [];
     const specCtx = buildSpecContext(target, subcategoryCode, instanceSpecs);
     logger.debug?.({ msg: 'spec context built', itemId, subcategoryCode, missingRequired: specCtx.missingRequired, missingDesired: specCtx.missingDesired, ambiguousCount: Object.keys(specCtx.ambiguousFields).length });
 
@@ -633,6 +634,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       ],
       ambiguousFields: specCtx.ambiguousFields,
       missingSpecFieldDescriptions: specCtx.missingFieldDescriptions,
+      categoryGuidance,
       unneededSpecFields: Array.isArray(input.unneededSpecFields) ? input.unneededSpecFields : [],
       reworkSpecFields,
       reworkInstructions,
