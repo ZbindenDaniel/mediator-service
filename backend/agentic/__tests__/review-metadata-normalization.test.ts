@@ -14,7 +14,7 @@ jest.mock('../../db', () => ({
   markAgenticRequestNotificationSuccess: jest.fn(),
   markAgenticRequestNotificationFailure: jest.fn(),
   claimQueuedAgenticRuns: jest.fn(async () => []),
-  fetchIdleFillAgenticRuns: jest.fn(async () => []),
+  claimIdleFillAgenticRuns: jest.fn(async () => []),
   updateQueuedAgenticRunQueueState: jest.fn(),
   listAgenticRunReviewHistory: jest.fn(async () => []),
 }));

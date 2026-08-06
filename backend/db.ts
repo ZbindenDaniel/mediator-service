@@ -2124,6 +2124,24 @@ export async function persistAgenticRunError(params: { artikelNummer: string; er
   }
 }
 
+// Persist the search results for a run as soon as they are retrieved, independent of the run's
+// status/outcome. This is what lets an automatic retry of a failed/cancelled run reuse the stored
+// search (skipSearch) instead of re-billing the search provider — the normal LastSearchLinksJson
+// write only happens on the terminal result dispatch, which a failed run never reaches.
+export async function persistAgenticSearchLinks(artikelNummer: string, linksJson: string | null): Promise<void> {
+  const trimmed = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!trimmed) return;
+  try {
+    await execute(
+      `UPDATE agentic_runs SET "LastSearchLinksJson"=$2 WHERE "Artikel_Nummer"=$1`,
+      [trimmed, linksJson ?? null]
+    );
+  } catch (err) {
+    console.error('[db] Failed to persist agentic search links', { artikelNummer: trimmed, error: err });
+    throw err;
+  }
+}
+
 export type AgenticRunQueueUpdate = {
   Artikel_Nummer: string;
   Status?: string | null;
@@ -2168,19 +2186,53 @@ export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
   }
 }
 
-export async function fetchIdleFillAgenticRuns(limit = 3): Promise<AgenticRun[]> {
+export async function claimIdleFillAgenticRuns(limit = 3, retryCooldownMinutes = 60): Promise<AgenticRun[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
+  const cooldown = Number.isFinite(retryCooldownMinutes) && retryCooldownMinutes >= 0 ? Math.floor(retryCooldownMinutes) : 60;
+  const now = new Date().toISOString();
   try {
+    // Atomic claim, mirroring claimQueuedAgenticRuns. Keep-busy picks up, and flips to 'running' in one
+    // FOR UPDATE SKIP LOCKED statement (so each is dispatched exactly once — no re-selection, no tight
+    // loop, and it satisfies scheduleAgenticModelInvocation's 'running' promotion re-check):
+    //   • notStarted runs (fresh, bulk-imported items) with a SearchQuery, and
+    //   • failed / cancelled runs whose last attempt is older than the cooldown — an automatic retry
+    //     of the settled backlog. RetryCount is reset so the retry gets a fresh cycle; the cooldown
+    //     keeps a permanently-broken item to a periodic retry instead of every dispatch tick.
+    // Search reuse is handled downstream in the invoker: it reuses stored LastSearchLinksJson when
+    // present and only searches live when none exist, so these retries never re-bill the search
+    // provider (an item hits it at most once until reset).
     return query<AgenticRun>(
-      `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
-              "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt"
-       FROM agentic_runs
-       WHERE "Status"='notStarted' AND "SearchQuery" IS NOT NULL AND TRIM("SearchQuery") != ''
-       ORDER BY "LastModified" ASC, "Id" ASC LIMIT $1`,
-      [effectiveLimit]
+      `WITH next_runs AS (
+         SELECT "Id"
+         FROM agentic_runs
+         WHERE "SearchQuery" IS NOT NULL AND TRIM("SearchQuery") != ''
+           AND ("NextRetryAt" IS NULL OR "NextRetryAt"::timestamptz <= $2::timestamptz)
+           AND (
+             "Status" = 'notStarted'
+             OR (
+               "Status" IN ('failed', 'cancelled')
+               AND ("LastAttemptAt" IS NULL
+                    OR "LastAttemptAt"::timestamptz < $2::timestamptz - make_interval(mins => $3::int))
+             )
+           )
+         ORDER BY (CASE WHEN "Status" = 'notStarted' THEN 0 ELSE 1 END), "LastModified" ASC, "Id" ASC
+         LIMIT $1
+         FOR UPDATE SKIP LOCKED
+       )
+       UPDATE agentic_runs
+       SET "Status" = 'running',
+           "LastModified" = $2,
+           "LastAttemptAt" = $2,
+           "NextRetryAt" = NULL,
+           "LastError" = NULL,
+           "RetryCount" = 0
+       FROM next_runs
+       WHERE agentic_runs."Id" = next_runs."Id"
+       RETURNING agentic_runs.*`,
+      [effectiveLimit, now, cooldown]
     );
   } catch (err) {
-    console.error('[db] Failed to fetch idle-fill agentic runs', err);
+    console.error('[db] Failed to claim idle-fill agentic runs', err);
     throw err;
   }
 }
