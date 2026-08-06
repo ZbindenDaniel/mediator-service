@@ -55,6 +55,10 @@ export interface RunExtractionOptions {
   // Spec-contract `description` per missing field key (contracts/specs/<subcategory>.json), so the
   // extraction prompt can explain what a bare key name expects instead of leaving it to guesswork.
   missingSpecFieldDescriptions?: Record<string, string>;
+  // Human-authored, category-level prompt snippets (contracts/specs/<subcategory>.json `guidance`),
+  // injected into the extraction and supervisor review placeholders to steer the model on things it
+  // often gets wrong for this subcategory.
+  categoryGuidance?: string[];
   ambiguousFields?: Record<string, { itemValue: string; intakeValue: string }>;
   unneededSpecFields?: string[];
   // Targeted rework: keys to regenerate + operator instruction. Non-empty ⇒ rework mode — the prompt
@@ -807,6 +811,7 @@ export async function runExtractionAttempts({
   reviewNotes,
   missingSpecFields,
   missingSpecFieldDescriptions,
+  categoryGuidance,
   ambiguousFields,
   unneededSpecFields,
   reworkSpecFields,
@@ -1116,6 +1121,27 @@ export async function runExtractionAttempts({
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.categorizerReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.supervisorReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.targetSchemaFormat, adjustedTargetSchemaFormat);
+
+  // Category-level guidance snippets (contracts/specs/<subcategory>.json `guidance`) go to extraction
+  // (factual hints) and supervisor (enforcement) — not the categorizer, which decides category, not content.
+  const categoryGuidanceEntries = Array.isArray(categoryGuidance)
+    ? categoryGuidance.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    : [];
+  let injectedCategoryGuidanceCount = 0;
+  for (const guidanceEntry of categoryGuidanceEntries) {
+    appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.extractionReview, guidanceEntry);
+    appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.supervisorReview, guidanceEntry);
+    injectedCategoryGuidanceCount += 1;
+  }
+  if (categoryGuidanceEntries.length > 0) {
+    logger?.info?.({
+      msg: 'category guidance prompt injection complete',
+      itemId,
+      injectedCategoryGuidanceCount,
+      providedCount: categoryGuidance?.length ?? 0
+    });
+  }
+
   const resolvedExampleItemBlock = typeof exampleItemBlock === 'string' ? exampleItemBlock.trim() : '';
   if (resolvedExampleItemBlock) {
     basePromptFragments.set(PROMPT_PLACEHOLDERS.exampleItem, [resolvedExampleItemBlock]);

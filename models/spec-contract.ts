@@ -8,6 +8,10 @@ export interface SpecContract {
   version: number;
   subCategory?: number;
   fields: SpecContractField[];
+  // Optional human-authored, category-level prompt snippets injected into the agentic extraction and
+  // supervisor prompts for this subcategory (e.g. "3.5\" HDDs usually measure 146×101×26 mm"). Free-form
+  // guidance to steer the model on things it often gets wrong; each entry is sanitized before injection.
+  guidance?: string[];
 }
 
 export interface SpecGapResult {

@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+908. ✅ Add optional category-level `guidance[]` prompt snippets to spec contracts (`contracts/specs/<sub>.json`): human-authored hints injected per subcategory into the extraction + supervisor review placeholders to steer the LLM on things it often gets wrong (e.g. laptops: don't mention OS in prose) → [agentic]
 907. ✅ Add missing `toMatchObject` matcher to the custom test harness (`test/harness.js`): a recursive subset match reusing the existing partial-match helpers — unblocks the 16 spurious `toMatchObject is not a function` failures across the suite → [testing]
 906. ✅ Fix `invalid input syntax for type integer: "201.0"` crash in reviewed-example selection: two read sites (`invoker.ts`, `db.ts`) now cast float-formatted subcategory TEXT via `ROUND(NULLIF(...)::NUMERIC)::INTEGER`, plus a one-time `normalize-category-values` cleanup script for the legacy `"201.0"` data → [agentic]
 905. ✅ Auto-resolve robustness: `resolveIntakeQuestions` resolves a question's `showIf` against auto-answered controllers server-side (ask unconditionally when met, drop when not), so a dependent whose controller was `autoFill`/`skipAtIntake`-resolved is never wrongly hidden by the script → [intake]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 901. ✅ Consolidate the assembly slot key onto `item_relations."SlotKey"`: `catalog-spare-part` writes and reads it directly (clean cutover, no backfill/fallback), and `Notes` stays for genuine Zubehör relation notes → [item-lifecycle]
 900. ✅ Intake produces a complete item: the quality step now serves the subcategory's assembly (accessory) questions and scores/derives specs from them, back-fills the canonical required specs (Prozessor/RAM/Speicher) from the scan, and accepts full free-form instanceSpecs from the script (canonical keys, aligned by convention) → [intake]
 899. ✅ Deferred-identity in-device components: intake materializes one reference-less component per scanned disk (serial-keyed reports, C- UUID), which graduates at Zerlegung via an atomic identity-set + UUID-swap; parent→Ersatzteil is now contract-gated, and components are excluded from export/print until extracted → [intake]
-898. ✅ Add Authentik (server + worker + own Postgres/Redis) to the docker-compose stack for user management; Phase 1 stands it up only — forward-auth enforcement (proxy + backend roles) deferred → [docs-infra]
