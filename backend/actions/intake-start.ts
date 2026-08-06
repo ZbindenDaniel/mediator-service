@@ -4,7 +4,7 @@ import { requireIntakeAuth } from '../utils/intake-auth';
 import { query, queryOne } from '../db-client';
 import { loadGeneralContract, loadSubCategoryContract, assemblyToQualityContract } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
-import { preFillQualityQuestions } from '../lib/intake-quality-map';
+import { resolveIntakeQuestions } from '../lib/intake-quality-map';
 import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeQuestion } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
@@ -102,7 +102,8 @@ function buildQualityQuestions(unterkategorienA: number | null, scan: IntakeScan
       ...(subCat?.questions ?? []),
       ...(assemblyQ?.questions ?? [])
     ];
-    return preFillQualityQuestions(allQuestions, scan);
+    // Only return questions a human must answer; the rest are auto-resolved at the quality step.
+    return resolveIntakeQuestions(allQuestions, scan).ask;
   } catch {
     return [];
   }

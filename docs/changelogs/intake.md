@@ -4,6 +4,68 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 905. ✅ Resolve `showIf` against auto-answered controllers (auto-resolve robustness)
+**Why:** With auto-resolution, a question's `showIf` could point at a question the server
+auto-answered (`autoFill`/`skipAtIntake`). The script never sees auto-answers, so it would evaluate
+the `showIf` as unmet and wrongly hide the dependent — a latent trap as contracts grow (no current
+contract hits it). `resolveIntakeQuestions` now resolves such `showIf`s server-side: if the
+auto-answered controller meets the condition the dependent is asked unconditionally (the `showIf`
+is stripped, since the controller isn't shown), otherwise it is dropped. `showIf`s pointing at
+still-asked questions are untouched (the client handles them as before).
+**Why (approach):** Two-pass split (compute auto-answers first, then resolve dependents) so it works
+regardless of question order. Keeps the script a dumb renderer — no client-side awareness of
+auto-answers needed.
+**Deferred:** Nothing.
+
+## 904. ✅ Enrich the human-judgment quality questions; decouple keyboard layout
+**Why:** After auto-resolution the intake questionnaire was thin, and the one cosmetic question was
+too generic. Split the generic `condition_optical` ("Optischer Zustand?") in `general.json` into
+`discoloration_residue` ("Verfärbungen oder Kleberückstände?") and `scratches` ("Kratzer?"), and
+added laptop condition questions to `quality/201.json`: `keyboard_condition`, `screen_condition`,
+`battery_swollen` ("Akku aufgebläht oder verformt?" → quality 1, the safety check the battery %
+signal can't catch), `hinges_ok`, `fan_dusty`. Also **decoupled `keyboard_layout`** — moved it out
+of the keyboard assembly part's `specQuestion` into `quality/201.json` as a standalone question, so
+a human-only spec is never orphaned by skipping its presence question (`has_keyboard` stays in
+assembly for Zerlegen). A laptop now asks ~10 human-judgment questions (cosmetic, OS, keyboard
+layout+condition, display, swollen battery, hinges, dust) while the 8 scan/boot-known ones stay
+auto-resolved.
+**Why (approach):** These are all genuine human observations (no `autoFill`/`skipAtIntake`), so they
+just flow through the existing resolver as `ask`. Decoupling `keyboard_layout` to the quality
+contract (option 2) keeps its id/specField (`Tastatur-Layout`) unchanged, so downstream specs and
+the operator review are unaffected; the keyboard slot in Zerlegen simply no longer carries an inline
+layout field. Contract versions bumped (general v3→v4, 201 v5→v6).
+**Deferred:** More condition questions (ports/charging jack, trackpad, free-text Bemerkungen) are
+easy follow-ons — left out to keep the set focused. `fan_dusty` is recorded in the assessment
+responses only (no spec/quality impact) — a maintenance flag, not a defect.
+
+## 903. ✅ Auto-resolve intake questions from the scan (contract-declared, not hardcoded)
+**Why:** A booting laptop was still asked presence questions it obviously satisfies ("Lüfter/Display/
+Mainboard vorhanden?") and re-asked data the scan already has (RAM, storage, drive type, battery) —
+the scan values were only used as a shown `defaultValue`. Now the intake questionnaire returns
+**only the questions a human must decide**; everything else is answered server-side. Two fields,
+declared per question in the contract JSON (no code, no hardcoded question-id table):
+`autoFill: "<signal>"` binds a question to a named scan signal (`ram` / `storageSize` /
+`storageType` / `battery`) — the server auto-answers and drops it, numeric signals snapping to the
+question's own `values`; `skipAtIntake: true` means "a booted device implies this" — assumed
+present and dropped. `resolveIntakeQuestions` splits the merged contract questions into `ask` vs.
+`autoAnswers`; at the quality step the auto-answers are merged **under** the submitted answers
+(operator/script wins) before scoring + spec derivation, so quality and specs stay complete. The
+old hardcoded `FIELD_MAPPERS` (question-id → scan field, with hardcoded option arrays) is gone —
+replaced by a small named-signal registry that snaps to the contract's `values`. Applied to
+`assembly/201.json` (skip fan/keyboard/display/mainboard; autoFill ram/storage/drive_type/battery)
+and `assembly/102.json` (skip cpu/mainboard, keep gpu; autoFill ram/storage/drive_type). The raw
+scan is persisted at the ref step (`items.IntakeScan`) so the quality step resolves without the
+script re-sending it — **no script change** (it already renders `qualityQuestions` generically).
+**Why (approach):** Named signals (contract says `autoFill: "ram"`, code holds ~4 adapters) over a
+fully-declarative JSON transform spec — the signal set maps 1:1 to what the image actually gathers,
+which is the only legitimate code coupling; everything else (which question is auto/skip) is JSON.
+Persisting the scan server-side (vs. requiring a `scanPayload` echo) keeps the script contract
+unchanged. `quality-review` is untouched — the operator/refurb flow still asks everything.
+**Deferred:** No intake-time "show everything / advanced" override to correct a mis-scan (auto now,
+editable later on item detail). `battery` auto-labels from percent — a swollen battery reporting a
+healthy % isn't caught at intake. Battery/drive-type signal label strings must match the question's
+`values` (a named-signal tradeoff).
+
 ## 902. ✅ Generalize intake sub-devices to a `components[]` object (PCI fills assembly info)
 **Why:** The intake→component pipeline only read `disks[]`, but the lifecycle (deferred identity,
 serial-keyed reports, graduation, gates) is not disk-specific. Generalized the input to a single

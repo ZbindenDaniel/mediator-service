@@ -21,14 +21,35 @@ POST /api/intake/{key}/complete                  # trigger agentic enrichment
 `{key}` is `SN:{serial}` (or `MAC:{mac}` when no serial). Auth: `X-Intake-Token` on all
 `/api/intake/*` routes. The `/api/contracts/*` routes are open (no token).
 
+## The questionnaire is auto-trimmed — you render what comes back
+
+At intake the server answers everything it already knows and returns **only the questions a human
+must decide**. Two contract-declared mechanisms (see the contract JSON, no code):
+- **`autoFill: "<signal>"`** on a question → the server answers it from the scan (signals:
+  `ram`, `storageSize`, `storageType`, `battery`) and drops it. Numeric signals snap to the
+  question's own `values`.
+- **`skipAtIntake: true`** on a question → "a booted device implies this"; assumed present and
+  dropped (e.g. `has_fan`, `has_display`, `has_mainboard`).
+
+So for a laptop, what remains are the **human-judgment** questions — cosmetic (Verfärbungen/
+Kleberückstände, Kratzer), OS, keyboard layout + condition, display condition, swollen battery,
+hinges, dusty fan — while RAM, storage, drive type, battery %, and the boot-implied presence
+checks are resolved from the scan. The script needs **no change** for this: it already renders `qualityQuestions`
+generically, so a shorter list just renders shorter, and the scan it already sends (persisted at
+the ref step) is what the server resolves from. Adding/removing an auto-resolved question later is
+a contract-JSON edit. (A `showIf` pointing at an auto-answered question is resolved server-side —
+the dependent is asked or dropped based on the auto value — so you never need the script to know
+about auto-answers.)
+
 ## 2. Specs — how to fill them
 
 Specs at intake are written to the **instance** (`items.InstanceSpecs`); ref-level
 Spezifikationen are filled later by agentic. Three sources merge, lowest precedence first:
 
-1. **Scan-derived** (automatic) — if you echo `scanPayload` in the quality body, the server
-   back-fills `Prozessor`, `RAM`, `Speicher`, `Speichertyp` from the scan. "Present because the
-   device booted."
+1. **Scan-derived** (automatic) — the server back-fills `Prozessor`, `RAM`, `Speicher`,
+   `Speichertyp` from the scan ("present because the device booted"). The scan is persisted at the
+   ref step, so this works even if the quality call omits `scanPayload`; echoing it still works and
+   takes precedence.
 2. **Questionnaire-derived** — any answered question carrying a `specField` becomes a spec.
 3. **`instanceSpecs`** (explicit, highest precedence) — a **free-form** map the script sends
    directly. This is your main lever: send everything you auto-detected.
@@ -159,6 +180,9 @@ Question order: general → subcategory → assembly.
 - change a select's `values` (the new list flows through in `values`);
 - retune `qualityImpact` or change `specValue` — these are **server-side only**; the server scores
   quality and derives specs from the raw answers, so the script never sees them.
+- add/remove **`autoFill`** or **`skipAtIntake`** on a question — the server just returns a shorter
+  (or longer) list; the script renders whatever comes back. Auto-resolved answers are applied
+  server-side, so they still contribute to quality and specs.
 
 **Edits that DO need script attention:**
 - **New required key in `specs/{subcat}.json`** — not a question. The script must fill it, either

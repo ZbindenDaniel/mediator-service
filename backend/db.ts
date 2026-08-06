@@ -440,6 +440,9 @@ CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Art
 -- Explicit slot key for assembly relations, so it stops being overloaded onto "Notes"
 -- ("Notes" stays for genuine Zubehör relation notes). All slot writes/reads target "SlotKey".
 ALTER TABLE item_relations ADD COLUMN IF NOT EXISTS "SlotKey" TEXT;
+-- Raw intake scan payload (JSON), stored when the item is created at intake so the later quality
+-- step can auto-resolve scan-answerable questions without the script re-sending the scan.
+ALTER TABLE items ADD COLUMN IF NOT EXISTS "IntakeScan" TEXT;
 -- The graduation UUID-swap re-points an in-device component's PK to its I- id. user_item_marks
 -- is the only UUID FK without ON UPDATE CASCADE, so add it (drop + re-add by discovered name)
 -- to let the swap cascade cleanly instead of stranding or blocking on a mark.

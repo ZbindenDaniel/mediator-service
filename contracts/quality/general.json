@@ -1,18 +1,30 @@
 {
-  "version": 3,
+  "version": 4,
   "questions": [
     {
-      "id": "condition_optical",
+      "id": "discoloration_residue",
       "type": "select",
-      "question": "Optischer Zustand?",
-      "values": ["Wie neu", "Gut", "Gebrauchsspuren", "Beschädigt"],
-      "specField": "Zustand",
+      "question": "Verfärbungen oder Kleberückstände?",
+      "values": ["Keine", "Leicht", "Stark"],
+      "specField": "Verfärbungen",
       "specValue": "%v",
       "qualityImpact": {
-        "Wie neu": 5,
-        "Gut": 4,
-        "Gebrauchsspuren": 3,
-        "Beschädigt": 2
+        "Keine": 5,
+        "Leicht": 4,
+        "Stark": 3
+      }
+    },
+    {
+      "id": "scratches",
+      "type": "select",
+      "question": "Kratzer?",
+      "values": ["Keine", "Leicht", "Deutlich"],
+      "specField": "Kratzer",
+      "specValue": "%v",
+      "qualityImpact": {
+        "Keine": 5,
+        "Leicht": 4,
+        "Deutlich": 3
       }
     }
   ]
