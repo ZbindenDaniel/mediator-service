@@ -50,6 +50,27 @@ describe('resolveIntakeQuestions — ask vs. auto-answer', () => {
     expect(autoAnswers).toEqual({ has_fan: 'true' });
   });
 
+  it('resolves showIf against an auto-answered controller (keeps dependent when met)', () => {
+    const questions: QualityQuestion[] = [
+      { id: 'has_fan', type: 'boolean', question: 'Lüfter?', skipAtIntake: true }, // auto → "true"
+      { id: 'fan_rpm', type: 'text', question: 'Lüfter-Drehzahl?', showIf: { questionId: 'has_fan', value: 'true' } },
+    ];
+    const { ask, autoAnswers } = resolveIntakeQuestions(questions, makeScan());
+    expect(autoAnswers).toEqual({ has_fan: 'true' });
+    const dep = ask.find((q) => q.id === 'fan_rpm');
+    expect(dep).toBeDefined();          // condition met → still asked
+    expect(dep!.showIf).toBeUndefined(); // showIf stripped (controller isn't shown to the script)
+  });
+
+  it('drops a showIf dependent when its auto-answered controller does not meet the condition', () => {
+    const questions: QualityQuestion[] = [
+      { id: 'has_fan', type: 'boolean', question: 'Lüfter?', skipAtIntake: true }, // auto → "true"
+      { id: 'why_no_fan', type: 'text', question: 'Warum kein Lüfter?', showIf: { questionId: 'has_fan', value: 'false' } },
+    ];
+    const { ask } = resolveIntakeQuestions(questions, makeScan());
+    expect(ask.find((q) => q.id === 'why_no_fan')).toBeUndefined();
+  });
+
   it('a detected component pre-fills a kept presence question by slot convention', () => {
     const q: QualityQuestion = { id: 'has_gpu', type: 'boolean', question: 'GPU?' };
     const scan = makeScan({ components: [{ kind: 'gpu', slotKey: 'gpu', model: 'GT710' }] });

@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+905. ✅ Auto-resolve robustness: `resolveIntakeQuestions` resolves a question's `showIf` against auto-answered controllers server-side (ask unconditionally when met, drop when not), so a dependent whose controller was `autoFill`/`skipAtIntake`-resolved is never wrongly hidden by the script → [intake]
 904. ✅ Enrich intake quality questions: split the generic optical condition into Verfärbungen/Kleberückstände + Kratzer, add laptop condition checks (keyboard/display condition, swollen battery, hinges, dusty fan), and decouple `keyboard_layout` from the keyboard assembly part into the 201 quality contract so a human-only spec is never orphaned by skipping presence → [intake]
 903. ✅ Auto-resolve intake questions from the scan: a question declares `autoFill: "<signal>"` (ram/storageSize/storageType/battery) or `skipAtIntake: true` in the contract, and the server auto-answers + drops it — so a laptop is asked only cosmetic condition + OS instead of re-confirming RAM/storage/battery/fan/display. Scan persisted server-side, no script change → [intake]
 902. ✅ Generalize intake sub-devices to an extensible `components[]` object (`disks[]` becomes a shorthand): auto-create is serial-gated and kind-agnostic, and a detected serialless PCI device (GPU/NIC) fills assembly info by pre-filling `has_<slotKey>`/`<slotKey>_model` instead of creating an item → [intake]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 898. ✅ Add Authentik (server + worker + own Postgres/Redis) to the docker-compose stack for user management; Phase 1 stands it up only — forward-auth enforcement (proxy + backend roles) deferred → [docs-infra]
 897. ✅ Add opt-in "einfacher Modus" (simple mode): user-settings dialog toggle hides UI via a body CSS class — opt-out model, so every future nav item/tab is hidden by default unless marked `simple-keep` → [ui]
 896. ✅ Add separate manually-triggered Gitea deploy workflow: SSHes to the Docker host and rolls the mediator compose service onto a chosen image tag → [docs-infra]
-895. ✅ Add Gitea Actions workflow to build & publish the Docker image to Gitea's own container registry (no PAT; runs on main/tags/dispatch) → [docs-infra]

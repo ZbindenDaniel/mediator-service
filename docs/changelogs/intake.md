@@ -4,6 +4,19 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 905. ✅ Resolve `showIf` against auto-answered controllers (auto-resolve robustness)
+**Why:** With auto-resolution, a question's `showIf` could point at a question the server
+auto-answered (`autoFill`/`skipAtIntake`). The script never sees auto-answers, so it would evaluate
+the `showIf` as unmet and wrongly hide the dependent — a latent trap as contracts grow (no current
+contract hits it). `resolveIntakeQuestions` now resolves such `showIf`s server-side: if the
+auto-answered controller meets the condition the dependent is asked unconditionally (the `showIf`
+is stripped, since the controller isn't shown), otherwise it is dropped. `showIf`s pointing at
+still-asked questions are untouched (the client handles them as before).
+**Why (approach):** Two-pass split (compute auto-answers first, then resolve dependents) so it works
+regardless of question order. Keeps the script a dumb renderer — no client-side awareness of
+auto-answers needed.
+**Deferred:** Nothing.
+
 ## 904. ✅ Enrich the human-judgment quality questions; decouple keyboard layout
 **Why:** After auto-resolution the intake questionnaire was thin, and the one cosmetic question was
 too generic. Split the generic `condition_optical` ("Optischer Zustand?") in `general.json` into

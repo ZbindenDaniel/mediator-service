@@ -37,7 +37,9 @@ hinges, dusty fan — while RAM, storage, drive type, battery %, and the boot-im
 checks are resolved from the scan. The script needs **no change** for this: it already renders `qualityQuestions`
 generically, so a shorter list just renders shorter, and the scan it already sends (persisted at
 the ref step) is what the server resolves from. Adding/removing an auto-resolved question later is
-a contract-JSON edit.
+a contract-JSON edit. (A `showIf` pointing at an auto-answered question is resolved server-side —
+the dependent is asked or dropped based on the auto value — so you never need the script to know
+about auto-answers.)
 
 ## 2. Specs — how to fill them
 

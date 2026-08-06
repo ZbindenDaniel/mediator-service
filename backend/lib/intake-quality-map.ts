@@ -165,8 +165,8 @@ export function resolveIntakeQuestions(
   scan: IntakeScanPayload
 ): { ask: IntakeQuestion[]; autoAnswers: Record<string, string> } {
   const components = normalizeScanComponents(scan);
-  const ask: IntakeQuestion[] = [];
   const autoAnswers: Record<string, string> = {};
+  const pending: QualityQuestion[] = [];
   for (const q of questions) {
     if (q.skipAtIntake) {
       if (q.type === 'boolean') autoAnswers[q.id] = 'true';
@@ -177,7 +177,19 @@ export function resolveIntakeQuestions(
       autoAnswers[q.id] = auto;
       continue;
     }
-    ask.push(toIntakeQuestion(q, components));
+    pending.push(q);
+  }
+  // Resolve showIf against auto-answered controllers: the script never sees auto-answers, so a
+  // dependent whose controller was auto-resolved would be wrongly hidden client-side. Decide it
+  // here — drop when the condition isn't met, else ask it unconditionally (strip the showIf).
+  const ask: IntakeQuestion[] = [];
+  for (const q of pending) {
+    const iq = toIntakeQuestion(q, components);
+    if (q.showIf && q.showIf.questionId in autoAnswers) {
+      if (autoAnswers[q.showIf.questionId] === q.showIf.value) delete iq.showIf;
+      else continue;
+    }
+    ask.push(iq);
   }
   return { ask, autoAnswers };
 }
