@@ -1269,21 +1269,25 @@ export async function dispatchQueuedAgenticRuns(
     }
   }
 
-  // Keep-busy: if slots remain after dispatching queued runs, fill them with notStarted runs.
+  // Keep-busy: if slots remain after dispatching queued runs, fill them with idle-fill runs.
   // Reserve 1 slot so an explicit queue trigger can always start immediately without waiting.
   const remainingSlots = Math.max(0, MAX_CONCURRENT_RUNNING_RUNS - runningCount - scheduled - 1);
   if (remainingSlots > 0) {
     try {
-      // Atomically claim (notStarted -> running) instead of a plain SELECT: without the claim the
-      // same notStarted+SearchQuery runs were re-selected and re-dispatched on every dispatch tick,
-      // re-billing the same search queries (token burn). The claim also leaves the run 'running' so
-      // scheduleAgenticModelInvocation's promotion re-check passes, matching the queued path.
+      // Atomically claim (notStarted / retryable failed|cancelled -> running) instead of a plain
+      // SELECT: without the claim the same runs were re-selected and re-dispatched on every dispatch
+      // tick, re-billing the same search queries (token burn). The claim also leaves the run 'running'
+      // so scheduleAgenticModelInvocation's promotion re-check passes, matching the queued path.
       const idleRuns = await claimIdleFillAgenticRuns(remainingSlots);
       for (const run of idleRuns) {
         const artikelNummer = (run.Artikel_Nummer || '').trim();
         const searchQuery = (run.SearchQuery || '').trim();
         if (!artikelNummer || !searchQuery) continue;
         try {
+          // Search reuse is decided in the invoker (it reuses stored LastSearchLinksJson when present
+          // and only searches live when none exist), so an item hits the search provider at most once
+          // and every automatic retry of a failed/cancelled run is search-free — no per-dispatch flag
+          // needed here.
           void scheduleAgenticModelInvocation({
             artikelNummer,
             searchQuery,
