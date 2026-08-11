@@ -34,6 +34,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        
+      - name: Debug token presence
+        run: |
+          echo "token length: ${#TOK}"
+          echo "user: admin"
+        env:
+          TOK: ${{ secrets.PACKAGE_TOKEN }}
 
       - name: Build & push (Docker CLI only)
         run: |
