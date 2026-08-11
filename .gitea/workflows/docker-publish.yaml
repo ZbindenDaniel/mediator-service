@@ -52,7 +52,7 @@ jobs:
           REF="${{ github.ref_name }}"
 
           echo "${{ secrets.GITHUB_TOKEN }}" \
-            | docker login "$REGISTRY" -u "${{ github.actor }}" --password-stdin
+            | docker login "$REGISTRY" -u "admin" --password-stdin
 
           # Tags: sanitized branch/tag ref + short sha, plus :latest on main.
           TAGS="-t $IMAGE:$(echo "$REF" | tr '/' '-') -t $IMAGE:sha-${GITHUB_SHA::12}"
