@@ -231,6 +231,7 @@ export default function ItemInstanceTab({
               einheit={item.Einheit}
               currentSerialNumber={item.SerialNumber}
               currentMacAddress={item.MacAddress}
+              currentInstanceSpecs={item.InstanceSpecs}
               onSaved={onInstanceSaved}
               onCancel={onInstanceSaved}
             />

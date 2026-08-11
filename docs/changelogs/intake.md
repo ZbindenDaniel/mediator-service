@@ -4,6 +4,17 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 912. ✅ Fix intake asking about the drive when the scan already knows it
+**Why:** `POST /api/intake/start` rebuilt the scan object field-by-field and forwarded only the
+`disks[]` shorthand, dropping the canonical `components[]` list (#902 made `components[]` the general
+shape). A drive reported via `components[]` reached `resolveIntakeQuestions` with no disk, so the
+`storageSize`/`storageType` signals returned null and the `storage_gb`/`drive_type` questions were
+asked instead of auto-resolved. Fix: forward `components[]` alongside `disks[]`. The `ref` answer
+path never had the bug (it passes the whole `scanPayload` through), so only `/start` needed it.
+**Deferred:** The two entry points still build their scan independently — consolidating onto one
+helper is left for later. (Pre-existing, unrelated: `intake-specs-assembly.test.ts` fails on a clean
+tree because `loadSubCategoryContract` returns null under jest — see todo #52.)
+
 ## 905. ✅ Resolve `showIf` against auto-answered controllers (auto-resolve robustness)
 **Why:** With auto-resolution, a question's `showIf` could point at a question the server
 auto-answered (`autoFill`/`skipAtIntake`). The script never sees auto-answers, so it would evaluate

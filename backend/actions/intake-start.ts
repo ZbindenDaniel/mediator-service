@@ -139,6 +139,10 @@ const action = defineHttpAction({
       model: body.model ?? null,
       cpu: body.cpu ?? null,
       ramMb: body.ramMb ?? null,
+      // Forward BOTH sub-device shapes: `components[]` is the canonical list, `disks[]` the
+      // shorthand. Dropping `components` here made storageSize/storageType signals return null,
+      // so a drive reported only via components[] wrongly triggered the storage/drive-type questions.
+      components: body.components ?? null,
       disks: body.disks ?? null,
       batteryPercent: body.batteryPercent ?? null,
     };
