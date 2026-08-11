@@ -34,7 +34,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        
+
       - name: Debug token presence
         run: |
           echo "token length: ${#TOK}"
@@ -46,28 +46,26 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Traefik-fronted Gitea host. TLS terminated by Traefik on 443, so no
-          # port and no insecure-registries needed (matches the manual push).
-          REGISTRY="gitea.192.168.10.120.nip.io"
+          # Isolate a clean docker config so login + push share the SAME auth
+          # and no inherited credsStore/credHelper hijacks the password.
+          export DOCKER_CONFIG="$(mktemp -d)"
 
-          # owner/repo, lowercased — matches the repo so Gitea links the package
-          # to it. To pin an explicit path instead, replace the line below with:
-          #   IMAGE_PATH="admin/mediator-service"
+          REGISTRY="gitea.192.168.10.120.nip.io"
           IMAGE_PATH="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
           IMAGE="$REGISTRY/$IMAGE_PATH"
-
           REF="${{ github.ref_name }}"
 
-          echo "${{ secrets.GITHUB_TOKEN }}" \
+          echo "${{ secrets.PACKAGE_TOKEN }}" \
             | docker login "$REGISTRY" -u "admin" --password-stdin
 
-          # Tags: sanitized branch/tag ref + short sha, plus :latest on main.
+          # Prove the auth actually landed before building:
+          test -s "$DOCKER_CONFIG/config.json" && echo "config written"
+          grep -q "$REGISTRY" "$DOCKER_CONFIG/config.json" && echo "registry auth present"
+
           TAGS="-t $IMAGE:$(echo "$REF" | tr '/' '-') -t $IMAGE:sha-${GITHUB_SHA::12}"
           if [ "$REF" = "main" ]; then
             TAGS="$TAGS -t $IMAGE:latest"
           fi
 
-          # Built-in daemon BuildKit (needed by the `# syntax=` Dockerfile line),
-          # NOT a separate Buildx container.
           DOCKER_BUILDKIT=1 docker build $TAGS .
           docker push --all-tags "$IMAGE"
