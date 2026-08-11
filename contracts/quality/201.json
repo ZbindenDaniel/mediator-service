@@ -6,7 +6,6 @@
       "id": "has_os",
       "type": "boolean",
       "question": "Betriebssystem installiert?",
-      "qualityImpact": { "true": 5, "false": 4 }
     },
     {
       "id": "os_installed",
@@ -52,7 +51,7 @@
       "values": ["Einwandfrei", "Kratzer", "Flecken/Pixelfehler"],
       "specField": "Display-Zustand",
       "specValue": "%v",
-      "qualityImpact": { "Einwandfrei": 5, "Kratzer": 4, "Flecken/Pixelfehler": 2 }
+      "qualityImpact": { "Einwandfrei": 5, "Kratzer": 4, "Flecken/Pixelfehler": 3 }
     },
     {
       "id": "battery_swollen",
@@ -64,12 +63,13 @@
       "id": "hinges_ok",
       "type": "boolean",
       "question": "Scharniere in Ordnung?",
-      "qualityImpact": { "true": 5, "false": 3 }
+      "qualityImpact": { "true": 5, "false": 2 }
     },
     {
       "id": "fan_dusty",
       "type": "boolean",
-      "question": "Lüfter verstaubt?"
+      "question": "Lüfter verstaubt?",
+      "qualityImpact": { "true": 5, "false": 4 }
     }
   ]
 }

@@ -2686,6 +2686,11 @@ button:focus {
     white-space: nowrap;
 }
 
+.col-location {
+    font-size: 10px; // Make it a bit smaller so it does not bloat the row to much
+    max-height: 32px;
+}
+
 @media (min-width: 960px) {
     .item-list .optional-column {
         display: table-cell;

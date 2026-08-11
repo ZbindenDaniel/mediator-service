@@ -11,6 +11,6 @@
     { "key": "Tastatur-Layout", "required": false, "description": "Keyboard layout (CH/DE/US)" }
   ],
   "guidance": [
-    "Do not mention the operating system or the specific drive/disk model in the prose description (Kurzbeschreibung); those belong only in their structured spec fields if known."
+    "Do not mention the operating system or the specific drive/disk model in the prose description (Kurzbeschreibung) or specs; those may vary inbetween the same model and can not be guaranteed"
   ]
 }
