@@ -4,6 +4,24 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 912. ✅ Fix intake asking about the drive when the scan already knows it
+**Why:** `POST /api/intake/start` rebuilt the scan object field-by-field and forwarded only the
+`disks[]` shorthand, silently dropping the canonical `components[]` list (#902 made `components[]`
+the general shape, `disks[]` a convenience alias — "send either or both"). A script reporting its
+drive via `components[]` (kind:`disk`) therefore reached `resolveIntakeQuestions` with no disk, so
+the `storageSize`/`storageType` signals returned null and the `storage_gb` ("Speicher (SSD/HDD)?")
+and `drive_type` ("Speichertyp?") questions were **asked** instead of auto-resolved — even though
+the data was in the scan. `/start` now forwards `components[]` alongside `disks[]`.
+**Why (approach):** Minimal, matches the working path — the `ref` answer path in `intake-answer.ts`
+never had the bug because it passes the whole `scanPayload` through (and persists it intact to
+`items.IntakeScan`), so only `/start`'s hand-built scan needed the missing field. Did not refactor
+the two entry points onto a shared scan-builder (larger change, out of scope for the fix).
+**Deferred:** The two intake entry points still construct their scan independently; consolidating
+them onto one helper is left for a future cleanup. Pre-existing unrelated test-infra issue noted:
+`intake-specs-assembly.test.ts`'s "human-judgment condition questions" case fails on a clean tree
+because `loadSubCategoryContract` (the `lib/quality-contracts` loader, distinct from the registry)
+returns null under jest — untouched here.
+
 ## 905. ✅ Resolve `showIf` against auto-answered controllers (auto-resolve robustness)
 **Why:** With auto-resolution, a question's `showIf` could point at a question the server
 auto-answered (`autoFill`/`skipAtIntake`). The script never sees auto-answers, so it would evaluate
