@@ -210,6 +210,57 @@ describe('edit-item-instance action', () => {
       expect(meta.Quality).toBe(5);
     });
 
+    it('replaces InstanceSpecs with a normalized JSON payload and logs it', async () => {
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      const ctx = makeCtx();
+      const req = makeRequest('/api/items/test-uuid/instance', 'PATCH', {
+        actor: 'tester',
+        InstanceSpecs: { RAM: ' 16 GB ', ' Speicher ': '512 GB', Empty: '  ', '': 'noKey' }
+      });
+      const { res, getStatus } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      expect(getStatus()).toBe(200);
+      const sql: string = mockExecute.mock.calls[0][0];
+      expect(sql).toContain('"InstanceSpecs"');
+      const meta = JSON.parse(ctx.logEvent.mock.calls[0][0].Meta);
+      // Keys/values trimmed; empty-value and empty-key rows dropped.
+      expect(JSON.parse(meta.InstanceSpecs)).toEqual({ RAM: '16 GB', Speicher: '512 GB' });
+    });
+
+    it('clears InstanceSpecs (stores null) when given an empty object', async () => {
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      const ctx = makeCtx();
+      const req = makeRequest('/api/items/test-uuid/instance', 'PATCH', {
+        actor: 'tester',
+        InstanceSpecs: {}
+      });
+      const { res, getStatus } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      expect(getStatus()).toBe(200);
+      const meta = JSON.parse(ctx.logEvent.mock.calls[0][0].Meta);
+      expect(meta.InstanceSpecs).toBeNull();
+    });
+
+    it('ignores a non-object InstanceSpecs value (treated as not provided)', async () => {
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      const ctx = makeCtx();
+      const req = makeRequest('/api/items/test-uuid/instance', 'PATCH', {
+        actor: 'tester',
+        InstanceSpecs: 'not-an-object'
+      });
+      const { res, getStatus, getBody } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      // The only field was an invalid InstanceSpecs, so no editable fields remain.
+      expect(getStatus()).toBe(400);
+      expect(getBody().error).toBe('no editable fields provided');
+    });
+
     it('includes UpdatedAt in the SQL SET clause', async () => {
       mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
       const ctx = makeCtx();
