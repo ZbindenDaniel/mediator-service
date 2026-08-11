@@ -1,44 +1,27 @@
-// Naming/matching helpers for the device-intake flow.
+// Naming helper for the device-intake flow.
 //
-// The netboot intake image reports the manufacturer both as a separate `vendor`
-// field AND embedded in `model` (e.g. vendor="HP", model="HP HP ProBook 470 G4"),
-// so a naive `[vendor, model].join(' ')` produced triplicated brands
-// ("HP HP HP ProBook 470 G4") and a substring match on the doubled model missed
-// clean catalog descriptions. These helpers strip the redundant leading vendor.
+// The netboot intake image embeds the manufacturer inside `model` (e.g.
+// vendor="HP", model="HP HP ProBook 470 G4"), and the old name builder also
+// prepended `Hersteller`, so a new reference ended up as "HP HP HP ProBook…".
+// We no longer prepend the vendor; we only collapse the accidental repeated
+// tokens so the brand the scan already carries appears exactly once.
 
 /**
- * Remove one-or-more leading occurrences of `vendor` from `model`
- * (case-insensitive, whitespace-tolerant). Returns the trimmed model unchanged
- * when `vendor` is empty or not a leading token.
+ * Collapse consecutive duplicate whitespace-separated tokens (case-insensitive),
+ * keeping the first occurrence's casing. Used to remove the brand duplication the
+ * intake scan/name-composition introduces without stripping a brand that is
+ * legitimately part of the model name.
  *
- * stripLeadingVendor("HP HP ProBook 470 G4", "HP") === "ProBook 470 G4"
- * stripLeadingVendor("ProBook 470 G4", "HP")       === "ProBook 470 G4"
- * stripLeadingVendor("HP ProBook", "")             === "HP ProBook"
+ * collapseRepeatedTokens("HP HP HP ProBook 470 G4") === "HP ProBook 470 G4"
+ * collapseRepeatedTokens("ProBook 470 G4")          === "ProBook 470 G4"
  */
-export function stripLeadingVendor(model: string | null | undefined, vendor: string | null | undefined): string {
-  let m = (model ?? '').trim();
-  const v = (vendor ?? '').trim();
-  if (!v) return m;
-  const vLower = v.toLowerCase();
-  // Strip repeatedly so a doubled prefix ("HP HP …") collapses fully.
-  while (m.toLowerCase().startsWith(vLower)) {
-    const rest = m.slice(v.length);
-    // Only treat it as a leading token if the brand is followed by whitespace
-    // (or is the whole string) — avoids eating "HP" out of "HProBook".
-    if (rest.length > 0 && !/^\s/.test(rest)) break;
-    m = rest.trimStart();
+export function collapseRepeatedTokens(text: string | null | undefined): string {
+  const parts = (text ?? '').trim().split(/\s+/).filter(Boolean);
+  const out: string[] = [];
+  for (const p of parts) {
+    if (!out.length || out[out.length - 1].toLowerCase() !== p.toLowerCase()) {
+      out.push(p);
+    }
   }
-  return m;
-}
-
-/**
- * Compose a reference display name carrying the brand exactly once:
- * `<vendor> <model-without-leading-vendor>`.
- *
- * composeRefName("HP", "HP HP ProBook 470 G4") === "HP ProBook 470 G4"
- */
-export function composeRefName(vendor: string | null | undefined, model: string | null | undefined): string {
-  const v = (vendor ?? '').trim();
-  const cleanModel = stripLeadingVendor(model, v);
-  return [v, cleanModel].filter(Boolean).join(' ');
+  return out.join(' ');
 }

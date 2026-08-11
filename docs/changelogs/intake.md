@@ -6,32 +6,34 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ## 911. ✅ Fix intake reference matching + "HP HP HP" brand triplication
 **Why:** The intake flow failed to surface an existing reference even for an identical device,
-pushing operators to create duplicates with mangled names ("HP HP HP ProBook 470 G4"). Two
-compounding root causes: **(1) wrong column** — `findRefCandidates` matched the scanned model only
-against `item_refs."Kurzbeschreibung"`, but the kivitendo/ERP importer maps `description →
-Artikelbeschreibung`, `suchbegriff → Suchbegriff`, `notes → Kurzbeschreibung`, so for every
-imported ref the model name lives in `Artikelbeschreibung` while `Kurzbeschreibung` holds (usually
-empty) notes — the match never touched the right field. Only intake-created refs round-tripped,
-because `findOrCreateRef` writes the model into `Kurzbeschreibung`. **(2) duplicated vendor** — the
-netboot image embeds the brand in `model` (e.g. `vendor="HP"`, `model="HP HP ProBook 470 G4"`), so
-even against the right column the contiguous `%HP HP ProBook 470 G4%` substring missed the clean
-description, and the name builder's unconditional `[Hersteller, model].join(' ')` produced a triple
-brand. Fixes: (a) matching now searches `Artikelbeschreibung`/`Suchbegriff`/`Kurzbeschreibung` (and
-matches the vendor against `Hersteller` OR the description) after stripping the leading vendor from
-the model term; (b) a new `backend/lib/intake-naming.ts` (`stripLeadingVendor`, `composeRefName`)
-strips a leading brand before composing the name so `Hersteller` is prepended exactly once, applied
-in `findOrCreateRef` (new refs) and defensively in `intake-complete` (agentic hand-off).
-**Why (approach):** Broadening the candidate query (OR across the three description columns, vendor
-in `Hersteller` OR description) is the right trade for a candidate list the operator confirms — a
-false positive is cheap, a miss creates a duplicate reference. Stripping the vendor server-side
-keeps the fix tolerant of the external netboot image (out of this repo) rather than depending on it
-to emit a clean model. This reconciles the #884 assumption ("Kurzbeschreibung is the model name",
-true only for intake-created refs) with the importer's actual column mapping.
-**Deferred:** Matching stays substring-based (contiguous cleaned model within a description column);
-token/fuzzy/accent-fold matching was not added. No backfill of already-created duplicate refs or
-brand-triplicated names. The external intake-station TUI still combines echoed `vendor`+`model` when
-pre-filling the new-ref form — the backend is now defensive against that, but the TUI itself is
-unchanged.
+pushing operators to create duplicates with mangled names ("HP HP HP ProBook 470 G4"). Two root
+causes: **(1) a separate, weaker matcher** — `findRefCandidates` ran a bespoke `Kurzbeschreibung`-only
+substring query, but the kivitendo/ERP importer maps `description → Artikelbeschreibung`,
+`suchbegriff → Suchbegriff`, `notes → Kurzbeschreibung`, so for every imported ref the model name
+lives in `Artikelbeschreibung` while `Kurzbeschreibung` holds (usually empty) notes — the match
+never touched the right field (only intake-created refs, which write the model into
+`Kurzbeschreibung`, round-tripped). **(2) brand triplication** — the netboot image embeds the brand
+in `model` (`vendor="HP"`, `model="HP HP ProBook 470 G4"`) and the name builder additionally did an
+unconditional `[Hersteller, model].join(' ')`, yielding a triple brand.
+Fixes: **(a) Matching now reuses the one shared matcher** that manual item creation already uses —
+the token-based fuzzy reference search behind `/api/search?scope=refs` was extracted into
+`searchItemReferences(term, opts)` (exported from `backend/actions/search.ts`); `findRefCandidates`
+builds a clean search term from the scan and calls it, so intake and manual creation surface
+identical candidates. **(b)** The new-ref name no longer prepends `Hersteller` (it's a separate
+first-class column); `backend/lib/intake-naming.ts` `collapseRepeatedTokens` simply removes the
+consecutive duplicate tokens the scan introduces, so the brand the model already carries appears
+once. Applied in `findOrCreateRef` (new refs) and defensively in `intake-complete` (agentic
+hand-off).
+**Why (approach):** Per operator request, matching must be *the same* everywhere — so rather than
+tune a second query, the existing search was made the single implementation and intake now consumes
+it (no behavior drift, one place to improve). Not prepending the vendor (only collapsing repeats)
+avoids re-introducing the very duplication we were fixing and respects that `Hersteller` is stored
+separately. This supersedes #884's "Artikelbeschreibung = Hersteller + Kurzbeschreibung" composition
+for intake-created refs.
+**Deferred:** No backfill of already-created duplicate refs or brand-triplicated names. The external
+intake-station TUI still combines echoed `vendor`+`model` when pre-filling the new-ref form — the
+backend is now defensive against that (collapse), but the TUI itself is unchanged. `searchItemReferences`
+was extracted verbatim (same SQL/scoring/dedupe), so manual-creation ranking is unchanged.
 
 ## 905. ✅ Resolve `showIf` against auto-answered controllers (auto-resolve robustness)
 **Why:** With auto-resolution, a question's `showIf` could point at a question the server
