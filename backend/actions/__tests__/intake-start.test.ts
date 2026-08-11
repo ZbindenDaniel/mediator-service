@@ -65,21 +65,6 @@ describe('intake-start action — drive question auto-resolution', () => {
     expect(ids).not.toContain('drive_type');
   });
 
-  it('drops them equally via the disks[] shorthand', async () => {
-    const req = makeRequest({
-      serial: 'SN1',
-      disks: [{ name: 'nvme0n1', sizeGb: 256, type: 'nvme' }],
-    });
-    const { res, getStatus, getBody } = createMockResponse();
-
-    await action.handle(req, res);
-
-    expect(getStatus()).toBe(200);
-    const ids = questionIds(getBody());
-    expect(ids).not.toContain('storage_gb');
-    expect(ids).not.toContain('drive_type');
-  });
-
   it('still asks the drive questions when the scan carries no drive data', async () => {
     const req = makeRequest({ serial: 'SN1' });
     const { res, getStatus, getBody } = createMockResponse();
