@@ -4,6 +4,35 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 911. ✅ Fix intake reference matching + "HP HP HP" brand triplication
+**Why:** The intake flow failed to surface an existing reference even for an identical device,
+pushing operators to create duplicates with mangled names ("HP HP HP ProBook 470 G4"). Two
+compounding root causes: **(1) wrong column** — `findRefCandidates` matched the scanned model only
+against `item_refs."Kurzbeschreibung"`, but the kivitendo/ERP importer maps `description →
+Artikelbeschreibung`, `suchbegriff → Suchbegriff`, `notes → Kurzbeschreibung`, so for every
+imported ref the model name lives in `Artikelbeschreibung` while `Kurzbeschreibung` holds (usually
+empty) notes — the match never touched the right field. Only intake-created refs round-tripped,
+because `findOrCreateRef` writes the model into `Kurzbeschreibung`. **(2) duplicated vendor** — the
+netboot image embeds the brand in `model` (e.g. `vendor="HP"`, `model="HP HP ProBook 470 G4"`), so
+even against the right column the contiguous `%HP HP ProBook 470 G4%` substring missed the clean
+description, and the name builder's unconditional `[Hersteller, model].join(' ')` produced a triple
+brand. Fixes: (a) matching now searches `Artikelbeschreibung`/`Suchbegriff`/`Kurzbeschreibung` (and
+matches the vendor against `Hersteller` OR the description) after stripping the leading vendor from
+the model term; (b) a new `backend/lib/intake-naming.ts` (`stripLeadingVendor`, `composeRefName`)
+strips a leading brand before composing the name so `Hersteller` is prepended exactly once, applied
+in `findOrCreateRef` (new refs) and defensively in `intake-complete` (agentic hand-off).
+**Why (approach):** Broadening the candidate query (OR across the three description columns, vendor
+in `Hersteller` OR description) is the right trade for a candidate list the operator confirms — a
+false positive is cheap, a miss creates a duplicate reference. Stripping the vendor server-side
+keeps the fix tolerant of the external netboot image (out of this repo) rather than depending on it
+to emit a clean model. This reconciles the #884 assumption ("Kurzbeschreibung is the model name",
+true only for intake-created refs) with the importer's actual column mapping.
+**Deferred:** Matching stays substring-based (contiguous cleaned model within a description column);
+token/fuzzy/accent-fold matching was not added. No backfill of already-created duplicate refs or
+brand-triplicated names. The external intake-station TUI still combines echoed `vendor`+`model` when
+pre-filling the new-ref form — the backend is now defensive against that, but the TUI itself is
+unchanged.
+
 ## 905. ✅ Resolve `showIf` against auto-answered controllers (auto-resolve robustness)
 **Why:** With auto-resolution, a question's `showIf` could point at a question the server
 auto-answered (`autoFill`/`skipAtIntake`). The script never sees auto-answers, so it would evaluate

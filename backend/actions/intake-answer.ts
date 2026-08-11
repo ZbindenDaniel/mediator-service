@@ -17,6 +17,7 @@ import { syncInDeviceComponents } from '../lib/in-device-components';
 import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse, assemblyToQualityContract } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveIntakeQuestions, deriveInstanceSpecsFromScan, normalizeScanComponents } from '../lib/intake-quality-map';
+import { stripLeadingVendor, composeRefName } from '../lib/intake-naming';
 import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
@@ -60,9 +61,12 @@ async function findOrCreateRef(
   const nextArtikelNummer = String((maxArtikel ? parseInt(maxArtikel, 10) : 0) + 1);
 
   // Kurzbeschreibung is the model name; default it to the scanned model so the operator
-  // doesn't have to re-type what the station already scanned.
-  const kurzbeschreibung = (newRef.Kurzbeschreibung ?? '').trim() || (scannedModel ?? '').trim();
-  const artikelbeschreibung = [newRef.Hersteller, kurzbeschreibung].filter(Boolean).join(' ');
+  // doesn't have to re-type what the station already scanned. Strip a leading brand so a
+  // scanned/pre-filled model that already embeds it ("HP HP ProBook…") doesn't triplicate
+  // the Hersteller in the composed name.
+  const rawKurz = (newRef.Kurzbeschreibung ?? '').trim() || (scannedModel ?? '').trim();
+  const kurzbeschreibung = stripLeadingVendor(rawKurz, newRef.Hersteller);
+  const artikelbeschreibung = composeRefName(newRef.Hersteller, rawKurz);
   if (!artikelbeschreibung.trim()) {
     throw new Error('Hersteller and Kurzbeschreibung cannot both be empty');
   }

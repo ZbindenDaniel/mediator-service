@@ -5,6 +5,7 @@ import { query, queryOne } from '../db-client';
 import { loadGeneralContract, loadSubCategoryContract, assemblyToQualityContract } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveIntakeQuestions } from '../lib/intake-quality-map';
+import { stripLeadingVendor } from '../lib/intake-naming';
 import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeQuestion } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
@@ -62,10 +63,16 @@ async function findItemByIdentifier(serial: string | null, mac: string | null) {
 
 async function findRefCandidates(vendor: string | null | undefined, model: string | null | undefined): Promise<IntakeRefCandidate[]> {
   if (!vendor && !model) return [];
+  // The scanned model embeds the brand (e.g. "HP HP ProBook 470 G4"); strip it so
+  // the substring term matches clean catalog descriptions ("… ProBook 470 G4 …").
+  const cleanModel = stripLeadingVendor(model, vendor);
   const vendorTerm = vendor ? `%${vendor}%` : null;
-  const modelTerm = model ? `%${model}%` : null;
-  // Search model in Kurzbeschreibung and vendor in Hersteller separately —
-  // combined term would never match since the fields store them independently
+  const modelTerm = cleanModel ? `%${cleanModel}%` : null;
+  // Imported refs keep the model name in Artikelbeschreibung/Suchbegriff
+  // (Kurzbeschreibung is kivitendo notes); intake-created refs keep it in
+  // Kurzbeschreibung — search all three. Vendor may sit in Hersteller or be
+  // embedded in the description, so match either. Broad on purpose: the operator
+  // confirms the pick, so a false positive is cheap while a miss creates a dupe.
   const rows = await query<{
     Artikel_Nummer: string; Hersteller: string | null;
     Kurzbeschreibung: string | null; Hauptkategorien_A: string | null; Unterkategorien_A: string | null;
@@ -74,8 +81,11 @@ async function findRefCandidates(vendor: string | null | undefined, model: strin
             r."Hauptkategorien_A", r."Unterkategorien_A"
      FROM item_refs r
      WHERE (
-       ($1::text IS NULL OR r."Kurzbeschreibung" ILIKE $1)
-       AND ($2::text IS NULL OR r."Hersteller" ILIKE $2)
+       ($1::text IS NULL OR r."Artikelbeschreibung" ILIKE $1
+                         OR r."Suchbegriff" ILIKE $1
+                         OR r."Kurzbeschreibung" ILIKE $1)
+       AND ($2::text IS NULL OR r."Hersteller" ILIKE $2
+                             OR r."Artikelbeschreibung" ILIKE $2)
      )
      ORDER BY r."Artikel_Nummer" DESC LIMIT 10`,
     [modelTerm, vendorTerm]

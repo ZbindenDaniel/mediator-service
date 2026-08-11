@@ -3,6 +3,7 @@ import { defineHttpAction } from './index';
 import { requireIntakeAuth } from '../utils/intake-auth';
 import { queryOne } from '../db-client';
 import { forwardAgenticTrigger } from './agentic-trigger';
+import { composeRefName } from '../lib/intake-naming';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -54,9 +55,10 @@ const action = defineHttpAction({
       return sendJson(res, 404, { error: 'item not found or missing artikel number' });
     }
 
-    const artikelbeschreibung = [itemRow.Hersteller, itemRow.Kurzbeschreibung]
-      .filter(Boolean)
-      .join(' ') || itemRow.Artikel_Nummer;
+    // Defensive: a legacy row whose Kurzbeschreibung still embeds the brand must not
+    // re-duplicate it when the name is rebuilt for the agentic hand-off.
+    const artikelbeschreibung = composeRefName(itemRow.Hersteller, itemRow.Kurzbeschreibung)
+      || itemRow.Artikel_Nummer;
 
     try {
       const result = await forwardAgenticTrigger(
