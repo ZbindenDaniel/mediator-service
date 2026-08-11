@@ -18,22 +18,23 @@ unconditional `[Hersteller, model].join(' ')`, yielding a triple brand.
 Fixes: **(a) Matching now reuses the one shared matcher** that manual item creation already uses —
 the token-based fuzzy reference search behind `/api/search?scope=refs` was extracted into
 `searchItemReferences(term, opts)` (exported from `backend/actions/search.ts`); `findRefCandidates`
-builds a clean search term from the scan and calls it, so intake and manual creation surface
-identical candidates. **(b)** The new-ref name no longer prepends `Hersteller` (it's a separate
-first-class column); `backend/lib/intake-naming.ts` `collapseRepeatedTokens` simply removes the
-consecutive duplicate tokens the scan introduces, so the brand the model already carries appears
-once. Applied in `findOrCreateRef` (new refs) and defensively in `intake-complete` (agentic
-hand-off).
+builds a search term from the scan (`vendor` + `model`) and calls it, so intake and manual creation
+surface identical candidates. (The token search matches even when the term carries a duplicated
+brand — the repeated token just hits the same field.) **(b)** The new-ref name (and the
+`intake-complete` agentic hand-off, which now uses the ref's `Artikelbeschreibung` as-is) no longer
+prepends `Hersteller` — it's a separate first-class column and the model already carries the brand,
+so prepending it was the extra "HP".
 **Why (approach):** Per operator request, matching must be *the same* everywhere — so rather than
 tune a second query, the existing search was made the single implementation and intake now consumes
-it (no behavior drift, one place to improve). Not prepending the vendor (only collapsing repeats)
-avoids re-introducing the very duplication we were fixing and respects that `Hersteller` is stored
-separately. This supersedes #884's "Artikelbeschreibung = Hersteller + Kurzbeschreibung" composition
-for intake-created refs.
-**Deferred:** No backfill of already-created duplicate refs or brand-triplicated names. The external
-intake-station TUI still combines echoed `vendor`+`model` when pre-filling the new-ref form — the
-backend is now defensive against that (collapse), but the TUI itself is unchanged. `searchItemReferences`
-was extracted verbatim (same SQL/scoring/dedupe), so manual-creation ranking is unchanged.
+it (no behavior drift, one place to improve). We deliberately did **not** add a token-dedup step in
+the name/search: the duplicated brand originates in the netboot image's `model` (and the station TUI
+combining `vendor`+`model`), and collapsing it here would mask a source bug that must be fixed where
+it originates (see todo). This supersedes #884's "Artikelbeschreibung = Hersteller + Kurzbeschreibung"
+composition for intake-created refs.
+**Deferred:** The duplicated-brand-in-`model` is fixed at its source (netboot image / station TUI),
+tracked in todo — not worked around in the backend. No backfill of already-created duplicate refs or
+brand-duplicated names. `searchItemReferences` was extracted verbatim (same SQL/scoring/dedupe), so
+manual-creation ranking is unchanged.
 
 ## 905. ✅ Resolve `showIf` against auto-answered controllers (auto-resolve robustness)
 **Why:** With auto-resolution, a question's `showIf` could point at a question the server

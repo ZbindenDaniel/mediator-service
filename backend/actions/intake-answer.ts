@@ -17,7 +17,6 @@ import { syncInDeviceComponents } from '../lib/in-device-components';
 import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse, assemblyToQualityContract } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveIntakeQuestions, deriveInstanceSpecsFromScan, normalizeScanComponents } from '../lib/intake-quality-map';
-import { collapseRepeatedTokens } from '../lib/intake-naming';
 import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
@@ -61,11 +60,9 @@ async function findOrCreateRef(
   const nextArtikelNummer = String((maxArtikel ? parseInt(maxArtikel, 10) : 0) + 1);
 
   // Kurzbeschreibung is the model name; default it to the scanned model so the operator
-  // doesn't have to re-type what the station already scanned. The scan embeds the brand in
-  // the model ("HP HP ProBook…"), so collapse the repeated tokens — but don't prepend the
-  // Hersteller (it's a separate first-class field), which is what produced "HP HP HP …".
-  const rawKurz = (newRef.Kurzbeschreibung ?? '').trim() || (scannedModel ?? '').trim();
-  const kurzbeschreibung = collapseRepeatedTokens(rawKurz);
+  // doesn't have to re-type what the station already scanned. Don't prepend the Hersteller
+  // (it's a separate first-class field) — prepending it is what produced "HP HP HP …".
+  const kurzbeschreibung = (newRef.Kurzbeschreibung ?? '').trim() || (scannedModel ?? '').trim();
   const artikelbeschreibung = kurzbeschreibung || (newRef.Hersteller ?? '').trim();
   if (!artikelbeschreibung.trim()) {
     throw new Error('Hersteller and Kurzbeschreibung cannot both be empty');

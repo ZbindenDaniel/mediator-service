@@ -5,7 +5,6 @@ import { queryOne } from '../db-client';
 import { loadGeneralContract, loadSubCategoryContract, assemblyToQualityContract } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveIntakeQuestions } from '../lib/intake-quality-map';
-import { collapseRepeatedTokens } from '../lib/intake-naming';
 import { searchItemReferences } from './search';
 import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeQuestion } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
@@ -67,10 +66,8 @@ async function findRefCandidates(vendor: string | null | undefined, model: strin
   // Reuse the single reference matcher that manual item creation uses
   // (`/api/search?scope=refs`) so intake surfaces the same candidates as everywhere
   // else — token-based fuzzy match across Artikelbeschreibung/Suchbegriff/Hersteller/…,
-  // which the old Kurzbeschreibung-only substring query missed for imported refs. The
-  // scan embeds the brand in the model ("HP HP ProBook…"); collapse the repeated tokens
-  // so the search term is clean.
-  const term = collapseRepeatedTokens([vendor, model].filter(Boolean).join(' '));
+  // which the old Kurzbeschreibung-only substring query missed for imported refs.
+  const term = [vendor, model].filter(Boolean).join(' ');
   const refs = await searchItemReferences(term);
   return refs.map(r => ({
     artikelNummer: String(r.Artikel_Nummer ?? ''),
