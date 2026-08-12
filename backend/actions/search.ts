@@ -507,6 +507,216 @@ function toPositional(sql: string): string {
   return sql.replace(/\?/g, () => `$${++n}`);
 }
 
+export interface ReferenceSearchOptions {
+  deepSearch?: boolean;
+  limit?: number;
+}
+
+/**
+ * Token-based fuzzy reference (item_refs) search — the single matcher used for
+ * "similar/existing reference" lookups (manual item creation via
+ * `/api/search?scope=refs`, and device intake). Returns the deduped, ranked
+ * item_refs rows (each with exemplar item/box/location fields). Kept as the one
+ * shared implementation so every entry point matches identically.
+ */
+export async function searchItemReferences(
+  rawTerm: string,
+  opts: ReferenceSearchOptions = {}
+): Promise<Array<Record<string, unknown>>> {
+  const trimmed = (rawTerm ?? '').trim();
+  if (!trimmed) return [];
+  const normalized = trimmed.toLowerCase();
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  if (!tokens.length) return [];
+
+  const deepSearch = opts.deepSearch ?? true;
+  const limit = opts.limit ?? 10;
+  const minTokenHits = Math.max(1, Math.ceil(tokens.length * 0.5));
+  const suchbegriffFallbackExpr =
+    `COALESCE(NULLIF(r."Suchbegriff", ''), r."Artikelbeschreibung", r."Artikel_Nummer", '')`;
+
+  let refTokenPresenceTerms = '';
+  let refExactMatchExpr = '';
+  let refSql = '';
+  let refParams: Array<string | number> = [];
+  try {
+    const like7 = (t: string) => {
+      const p = `%${t}%`;
+      return [p, p, p, p, p, p, p] as [string, string, string, string, string, string, string];
+    };
+
+    refTokenPresenceTerms = tokens
+      .map(
+        () => `
+    CASE WHEN (
+      lower(r."Artikel_Nummer") LIKE ?
+      OR lower(COALESCE(r."Artikelbeschreibung", '')) LIKE ?
+      OR lower(COALESCE(r."Kurzbeschreibung", '')) LIKE ?
+      OR lower(${suchbegriffFallbackExpr}) LIKE ?
+      OR lower(COALESCE(r."Langtext", '')) LIKE ?
+      OR lower(COALESCE(r."Hersteller", '')) LIKE ?
+      OR lower(COALESCE(r."EAN", '')) LIKE ?
+    ) THEN 1 ELSE 0 END
+  `
+      )
+      .join(" + ");
+
+    refExactMatchExpr = `
+    CASE WHEN (
+      lower(r."Artikel_Nummer") = ?
+      OR lower(COALESCE(r."Artikelbeschreibung", '')) = ?
+      OR lower(${suchbegriffFallbackExpr}) = ?
+      OR lower(COALESCE(r."Hersteller", '')) = ?
+      OR lower(COALESCE(r."EAN", '')) = ?
+    ) THEN 1 ELSE 0 END
+  `;
+
+    refSql = `
+    SELECT *
+    FROM (
+      SELECT
+        r.*,
+        (${refTokenPresenceTerms}) AS token_hits,
+        ${refExactMatchExpr} AS exact_match,
+        CASE
+          WHEN ${refExactMatchExpr} = 1 THEN 1.0
+          ELSE (CAST((${refTokenPresenceTerms}) AS REAL) / ?) * 0.99
+        END AS sql_score,
+        (
+          SELECT i."ItemUUID"
+          FROM items i
+          WHERE i."Artikel_Nummer" = r."Artikel_Nummer"
+          ORDER BY i."UpdatedAt" DESC
+          LIMIT 1
+        ) AS exemplar_item_uuid,
+        (
+          SELECT i."BoxID"
+          FROM items i
+          WHERE i."Artikel_Nummer" = r."Artikel_Nummer"
+          AND i."BoxID" IS NOT NULL
+          ORDER BY i."UpdatedAt" DESC
+          LIMIT 1
+        ) AS exemplar_box_id,
+        (
+          SELECT COALESCE(i."Location", b."Label")
+          FROM items i
+          LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
+          WHERE i."Artikel_Nummer" = r."Artikel_Nummer"
+          ORDER BY i."UpdatedAt" DESC
+          LIMIT 1
+        ) AS exemplar_location
+      FROM item_refs r
+    )
+    WHERE token_hits >= ?
+    ORDER BY exact_match DESC, sql_score DESC
+    LIMIT 25
+  `;
+
+    refParams = [
+      // token_hits params (7 per token: Artikel_Nummer, Artikelbeschreibung, Kurzbeschreibung, Suchbegriff, Langtext, Hersteller, EAN)
+      ...tokens.flatMap(like7),
+      // exact_match params (equality: Artikel_Nummer, Artikelbeschreibung, Suchbegriff, Hersteller, EAN)
+      normalized,
+      normalized,
+      normalized,
+      normalized,
+      normalized,
+      // sql_score CASE exact_match params (repeat equality)
+      normalized,
+      normalized,
+      normalized,
+      normalized,
+      normalized,
+      // sql_score token_hits terms again (used in ELSE)
+      ...tokens.flatMap(like7),
+      // divisor = tokens.length
+      tokens.length,
+      // WHERE threshold
+      minTokenHits
+    ];
+  } catch (error) {
+    console.error('[search] Failed to build reference search query', { term: trimmed, error });
+    throw error;
+  }
+
+  let rawRefs: any[] = [];
+  try {
+    rawRefs = await query(toPositional(refSql), refParams);
+  } catch (error) {
+    console.error('[search] Failed to execute reference search query', { term: trimmed, error });
+    throw error;
+  }
+
+  const deduped = new Map<
+    string,
+    { ref: Record<string, unknown>; score: number; exact: number; scoreBreakdown: ReferenceFieldScores }
+  >();
+
+  for (const row of rawRefs) {
+    const {
+      token_hits,
+      exact_match,
+      sql_score,
+      exemplar_item_uuid,
+      exemplar_box_id,
+      exemplar_location,
+      ...rest
+    } = row as Record<string, any>;
+    const reference = {
+      ...rest,
+      exemplarItemUUID: exemplar_item_uuid ?? null,
+      exemplarBoxID: exemplar_box_id ?? null,
+      exemplarLocation: exemplar_location ?? null
+    } as Record<string, unknown> & { Artikel_Nummer?: string };
+    const suchbegriffCheck = resolveSearchSuchbegriff(reference.Suchbegriff, {
+      artikelbeschreibung: reference.Artikelbeschreibung,
+      artikelNummer: reference.Artikel_Nummer,
+      context: `ref-exact-match-${reference.Artikel_Nummer ?? 'unknown'}`
+    });
+    if (
+      typeof token_hits === 'number' &&
+      token_hits > 0 &&
+      !hasExactMatchFieldValue([
+        reference.Artikel_Nummer,
+        reference.Artikelbeschreibung,
+        suchbegriffCheck,
+        reference.Hersteller,
+        reference.EAN
+      ])
+    ) {
+      console.warn('[search] Reference token hits without exact-match fields populated', {
+        artikelNummer: reference.Artikel_Nummer ?? null,
+        tokenHits: token_hits
+      });
+    }
+    const key = reference.Artikel_Nummer;
+    if (!key) {
+      continue;
+    }
+    const scoreBreakdown = scoreReference(normalized, tokens, reference, deepSearch);
+    const score = scoreBreakdown.bestScore;
+    const exactValue = typeof exact_match === "number" ? exact_match : 0;
+    const existing = deduped.get(key);
+    if (!existing || score > existing.score || (score === existing.score && exactValue > existing.exact)) {
+      deduped.set(key, { ref: reference, score, exact: exactValue, scoreBreakdown });
+    }
+  }
+
+  const sorted = Array.from(deduped.values()).sort((a, b) => {
+    if (b.exact !== a.exact) {
+      return b.exact - a.exact;
+    }
+    return b.score - a.score;
+  });
+
+  const topRefScore = sorted.length ? sorted[0].score : 0;
+  const refs = sorted.slice(0, limit).map((entry) => entry.ref);
+
+  console.log("search", trimmed, "(refs) →", refs.length, "references", "top score", topRefScore.toFixed(3));
+
+  return refs;
+}
+
 const action = defineHttpAction({
   key: 'search',
   label: 'Search',
@@ -565,211 +775,7 @@ const action = defineHttpAction({
       });
 
       if (wantsRefs) {
-        let refTokenPresenceTerms = '';
-        let refExactMatchExpr = '';
-        let refSql = '';
-        let refParams: Array<string | number> = [];
-        try {
-          const like7 = (t: string) => {
-            const p = `%${t}%`;
-            return [p, p, p, p, p, p, p] as [string, string, string, string, string, string, string];
-          };
-
-          refTokenPresenceTerms = tokens
-            .map(
-              () => `
-    CASE WHEN (
-      lower(r."Artikel_Nummer") LIKE ?
-      OR lower(COALESCE(r."Artikelbeschreibung", '')) LIKE ?
-      OR lower(COALESCE(r."Kurzbeschreibung", '')) LIKE ?
-      OR lower(${suchbegriffFallbackExpr}) LIKE ?
-      OR lower(COALESCE(r."Langtext", '')) LIKE ?
-      OR lower(COALESCE(r."Hersteller", '')) LIKE ?
-      OR lower(COALESCE(r."EAN", '')) LIKE ?
-    ) THEN 1 ELSE 0 END
-  `
-            )
-            .join(" + ");
-
-          refExactMatchExpr = `
-    CASE WHEN (
-      lower(r."Artikel_Nummer") = ?
-      OR lower(COALESCE(r."Artikelbeschreibung", '')) = ?
-      OR lower(${suchbegriffFallbackExpr}) = ?
-      OR lower(COALESCE(r."Hersteller", '')) = ?
-      OR lower(COALESCE(r."EAN", '')) = ?
-    ) THEN 1 ELSE 0 END
-  `;
-
-          refSql = `
-    SELECT *
-    FROM (
-      SELECT
-        r.*, 
-        (${refTokenPresenceTerms}) AS token_hits,
-        ${refExactMatchExpr} AS exact_match,
-        CASE
-          WHEN ${refExactMatchExpr} = 1 THEN 1.0
-          ELSE (CAST((${refTokenPresenceTerms}) AS REAL) / ?) * 0.99
-        END AS sql_score,
-        (
-          SELECT i."ItemUUID"
-          FROM items i
-          WHERE i."Artikel_Nummer" = r."Artikel_Nummer"
-          ORDER BY i."UpdatedAt" DESC
-          LIMIT 1
-        ) AS exemplar_item_uuid,
-        (
-          SELECT i."BoxID"
-          FROM items i
-          WHERE i."Artikel_Nummer" = r."Artikel_Nummer"
-          AND i."BoxID" IS NOT NULL
-          ORDER BY i."UpdatedAt" DESC
-          LIMIT 1
-        ) AS exemplar_box_id,
-        (
-          SELECT COALESCE(i."Location", b."Label")
-          FROM items i
-          LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
-          WHERE i."Artikel_Nummer" = r."Artikel_Nummer"
-          ORDER BY i."UpdatedAt" DESC
-          LIMIT 1
-        ) AS exemplar_location
-      FROM item_refs r
-    )
-    WHERE token_hits >= ?
-    ORDER BY exact_match DESC, sql_score DESC
-    LIMIT 25
-  `;
-
-          refParams = [
-            // token_hits params (7 per token: Artikel_Nummer, Artikelbeschreibung, Kurzbeschreibung, Suchbegriff, Langtext, Hersteller, EAN)
-            ...tokens.flatMap(like7),
-            // exact_match params (equality: Artikel_Nummer, Artikelbeschreibung, Suchbegriff, Hersteller, EAN)
-            normalized,
-            normalized,
-            normalized,
-            normalized,
-            normalized,
-            // sql_score CASE exact_match params (repeat equality)
-            normalized,
-            normalized,
-            normalized,
-            normalized,
-            normalized,
-            // sql_score token_hits terms again (used in ELSE)
-            ...tokens.flatMap(like7),
-            // divisor = tokens.length
-            tokens.length,
-            // WHERE threshold
-            minTokenHits
-          ];
-        } catch (error) {
-          console.error('[search] Failed to build reference search query', { term: trimmed, error });
-          throw error;
-        }
-
-        let rawRefs: any[] = [];
-        try {
-          rawRefs = await query(toPositional(refSql), refParams);
-        } catch (error) {
-          console.error('[search] Failed to execute reference search query', { term: trimmed, error });
-          throw error;
-        }
-
-        // TODO(search-refs): Validate stored reference score breakdown logging after rollout.
-        const deduped = new Map<
-          string,
-          { ref: Record<string, unknown>; score: number; exact: number; scoreBreakdown: ReferenceFieldScores }
-        >();
-
-        for (const row of rawRefs) {
-          const {
-            token_hits,
-            exact_match,
-            sql_score,
-            exemplar_item_uuid,
-            exemplar_box_id,
-            exemplar_location,
-            ...rest
-          } = row as Record<string, any>;
-          const reference = {
-            ...rest,
-            exemplarItemUUID: exemplar_item_uuid ?? null,
-            exemplarBoxID: exemplar_box_id ?? null,
-            exemplarLocation: exemplar_location ?? null
-          } as Record<string, unknown> & { Artikel_Nummer?: string };
-          const suchbegriffCheck = resolveSearchSuchbegriff(reference.Suchbegriff, {
-            artikelbeschreibung: reference.Artikelbeschreibung,
-            artikelNummer: reference.Artikel_Nummer,
-            context: `ref-exact-match-${reference.Artikel_Nummer ?? 'unknown'}`
-          });
-          if (
-            typeof token_hits === 'number' &&
-            token_hits > 0 &&
-            !hasExactMatchFieldValue([
-              reference.Artikel_Nummer,
-              reference.Artikelbeschreibung,
-              suchbegriffCheck,
-              reference.Hersteller,
-              reference.EAN
-            ])
-          ) {
-            console.warn('[search] Reference token hits without exact-match fields populated', {
-              artikelNummer: reference.Artikel_Nummer ?? null,
-              tokenHits: token_hits
-            });
-          }
-          const key = reference.Artikel_Nummer;
-          if (!key) {
-            continue;
-          }
-          const scoreBreakdown = scoreReference(normalized, tokens, reference, deepSearch);
-          const score = scoreBreakdown.bestScore;
-          const exactValue = typeof exact_match === "number" ? exact_match : 0;
-          const existing = deduped.get(key);
-          if (!existing || score > existing.score || (score === existing.score && exactValue > existing.exact)) {
-            deduped.set(key, { ref: reference, score, exact: exactValue, scoreBreakdown });
-          }
-        }
-
-        const sorted = Array.from(deduped.values()).sort((a, b) => {
-          if (b.exact !== a.exact) {
-            return b.exact - a.exact;
-          }
-          return b.score - a.score;
-        });
-
-        const topRefScore = sorted.length ? sorted[0].score : 0;
-        const refs = sorted.slice(0, 10).map((entry) => entry.ref);
-
-        console.log(
-          "search",
-          term,
-          "(refs) →",
-          refs.length,
-          "references",
-          "top score",
-          topRefScore.toFixed(3)
-        );
-
-        sorted.slice(0, 3).forEach((entry, index) => {
-          try {
-            const scoreBreakdown = scoreReference(normalized, tokens, entry.ref, deepSearch);
-            console.info('[search] Top reference field score', {
-              index,
-              artikelNummer: (entry.ref as Record<string, unknown>).Artikel_Nummer ?? null,
-              bestField: entry.scoreBreakdown.bestField,
-              bestScore: entry.scoreBreakdown.bestScore
-            });
-          } catch (error) {
-            console.error('[search] Failed to compute reference field scores for logging', {
-              index,
-              error
-            });
-          }
-        });
-
+        const refs = await searchItemReferences(trimmed, { deepSearch });
         sendJson(res, 200, {
           items: refs,
           scope: "refs"

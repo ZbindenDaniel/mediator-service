@@ -38,13 +38,13 @@ const action = defineHttpAction({
 
     const itemRow = await queryOne<{
       ItemUUID: string; Artikel_Nummer: string | null;
-      Hersteller: string | null; Kurzbeschreibung: string | null;
+      Artikelbeschreibung: string | null;
     }>(
       serial
-        ? `SELECT i."ItemUUID", i."Artikel_Nummer", r."Hersteller", r."Kurzbeschreibung"
+        ? `SELECT i."ItemUUID", i."Artikel_Nummer", r."Artikelbeschreibung"
            FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
            WHERE i."SerialNumber" = $1 LIMIT 1`
-        : `SELECT i."ItemUUID", i."Artikel_Nummer", r."Hersteller", r."Kurzbeschreibung"
+        : `SELECT i."ItemUUID", i."Artikel_Nummer", r."Artikelbeschreibung"
            FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
            WHERE i."MacAddress" = $1 LIMIT 1`,
       [serial ?? mac]
@@ -54,9 +54,9 @@ const action = defineHttpAction({
       return sendJson(res, 404, { error: 'item not found or missing artikel number' });
     }
 
-    const artikelbeschreibung = [itemRow.Hersteller, itemRow.Kurzbeschreibung]
-      .filter(Boolean)
-      .join(' ') || itemRow.Artikel_Nummer;
+    // Use the reference's composed name as-is (it already carries the brand); don't
+    // re-prepend Hersteller — that is what produced the duplicated "HP HP …" description.
+    const artikelbeschreibung = (itemRow.Artikelbeschreibung ?? '').trim() || itemRow.Artikel_Nummer;
 
     try {
       const result = await forwardAgenticTrigger(
