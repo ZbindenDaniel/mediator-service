@@ -4,6 +4,38 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 913. ✅ Fix intake reference matching + "HP HP HP" brand triplication
+**Why:** The intake flow failed to surface an existing reference even for an identical device,
+pushing operators to create duplicates with mangled names ("HP HP HP ProBook 470 G4"). Two root
+causes: **(1) a separate, weaker matcher** — `findRefCandidates` ran a bespoke `Kurzbeschreibung`-only
+substring query, but the kivitendo/ERP importer maps `description → Artikelbeschreibung`,
+`suchbegriff → Suchbegriff`, `notes → Kurzbeschreibung`, so for every imported ref the model name
+lives in `Artikelbeschreibung` while `Kurzbeschreibung` holds (usually empty) notes — the match
+never touched the right field (only intake-created refs, which write the model into
+`Kurzbeschreibung`, round-tripped). **(2) brand triplication** — the netboot image embeds the brand
+in `model` (`vendor="HP"`, `model="HP HP ProBook 470 G4"`) and the name builder additionally did an
+unconditional `[Hersteller, model].join(' ')`, yielding a triple brand.
+Fixes: **(a) Matching now reuses the one shared matcher** that manual item creation already uses —
+the token-based fuzzy reference search behind `/api/search?scope=refs` was extracted into
+`searchItemReferences(term, opts)` (exported from `backend/actions/search.ts`); `findRefCandidates`
+builds a search term from the scan (`vendor` + `model`) and calls it, so intake and manual creation
+surface identical candidates. (The token search matches even when the term carries a duplicated
+brand — the repeated token just hits the same field.) **(b)** The new-ref name (and the
+`intake-complete` agentic hand-off, which now uses the ref's `Artikelbeschreibung` as-is) no longer
+prepends `Hersteller` — it's a separate first-class column and the model already carries the brand,
+so prepending it was the extra "HP".
+**Why (approach):** Per operator request, matching must be *the same* everywhere — so rather than
+tune a second query, the existing search was made the single implementation and intake now consumes
+it (no behavior drift, one place to improve). We deliberately did **not** add a token-dedup step in
+the name/search: the duplicated brand originates in the netboot image's `model` (and the station TUI
+combining `vendor`+`model`), and collapsing it here would mask a source bug that must be fixed where
+it originates (see todo). This supersedes #884's "Artikelbeschreibung = Hersteller + Kurzbeschreibung"
+composition for intake-created refs.
+**Deferred:** The duplicated-brand-in-`model` is fixed at its source (netboot image / station TUI),
+tracked in todo — not worked around in the backend. No backfill of already-created duplicate refs or
+brand-duplicated names. `searchItemReferences` was extracted verbatim (same SQL/scoring/dedupe), so
+manual-creation ranking is unchanged.
+
 ## 912. ✅ Fix intake asking about the drive when the scan already knows it
 **Why:** `POST /api/intake/start` rebuilt the scan object field-by-field and forwarded only the
 `disks[]` shorthand, dropping the canonical `components[]` list (#902 made `components[]` the general
