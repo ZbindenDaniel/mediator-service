@@ -46,10 +46,15 @@ export function normalizeAltDocIdentifierValue(
 
 export function resolveAltDocIdentifier(
   ctx: AltDocResolutionContext,
-  config: AltDocDirectoryConfig
+  config: AltDocDirectoryConfig,
+  // When the caller declares the identity explicitly (e.g. an SN:/MAC: URL prefix),
+  // that declared type wins over the dir's default identifierType — the prefix is the
+  // caller telling us which identifier keys the folder, not the dir's DB-lookup default.
+  identifierTypeOverride?: AltDocDirectoryConfig['identifierType']
 ): string | null {
+  const identifierType = identifierTypeOverride ?? config.identifierType;
   let raw: string | null | undefined;
-  switch (config.identifierType) {
+  switch (identifierType) {
     case 'ean': raw = ctx.ean; break;
     case 'serialNumber': raw = ctx.serialNumber; break;
     case 'macAddress': raw = ctx.macAddress; break;
@@ -59,10 +64,10 @@ export function resolveAltDocIdentifier(
 
   const normalized = normalizeAltDocIdentifierValue(raw, config.normalize ?? null);
 
-  if (!validateAltDocIdentifierValue(normalized, config.identifierType)) {
+  if (!validateAltDocIdentifierValue(normalized, identifierType)) {
     console.warn('[alt-doc-resolver] Identifier value failed validation, skipping', {
       itemUUID: ctx.itemUUID,
-      identifierType: config.identifierType,
+      identifierType,
       dirName: config.name,
       value: normalized
     });
@@ -74,9 +79,10 @@ export function resolveAltDocIdentifier(
 
 export function resolveAltDocDirPath(
   ctx: AltDocResolutionContext,
-  config: AltDocDirectoryConfig
+  config: AltDocDirectoryConfig,
+  identifierTypeOverride?: AltDocDirectoryConfig['identifierType']
 ): { dirPath: string; identifierValue: string } | null {
-  const identifierValue = resolveAltDocIdentifier(ctx, config);
+  const identifierValue = resolveAltDocIdentifier(ctx, config, identifierTypeOverride);
   if (!identifierValue) return null;
 
   const dirPath = resolvePathWithinRoot(config.mountPath, identifierValue, {

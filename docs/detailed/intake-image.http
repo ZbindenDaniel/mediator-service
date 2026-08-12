@@ -191,6 +191,13 @@ Content-Type: application/json
 #   Reuses the external-docs write endpoint. The SN: prefix skips the DB lookup
 #   and resolves the storage path from the serial directly — the item (machine
 #   or component) does not need to exist yet. Files land at {mountPath}/{serial}/.
+#
+#   MAC: fallback — a drive with no readable serial (some USB bridges) and
+#   machine-level / orphan reports are keyed by the machine MAC instead:
+#   POST .../external-docs/wipe-reports with itemUUID = MAC:{{mac-no-colons}}.
+#   The prefix declares the identifier type, so the MAC key is accepted even
+#   though wipe-reports is a serialNumber-typed dir; the file lands at
+#   {mountPath}/{MAC}/. Always prefer SN: when a drive serial is available.
 ###############################################################################
 
 # --- Machine-level reports → aggregate on the MACHINE item ------------------
