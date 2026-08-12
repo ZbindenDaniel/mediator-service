@@ -1,10 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { requireIntakeAuth } from '../utils/intake-auth';
-import { query, queryOne } from '../db-client';
+import { queryOne } from '../db-client';
 import { loadGeneralContract, loadSubCategoryContract, assemblyToQualityContract } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveIntakeQuestions } from '../lib/intake-quality-map';
+import { searchItemReferences } from './search';
 import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeQuestion } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
@@ -62,30 +63,18 @@ async function findItemByIdentifier(serial: string | null, mac: string | null) {
 
 async function findRefCandidates(vendor: string | null | undefined, model: string | null | undefined): Promise<IntakeRefCandidate[]> {
   if (!vendor && !model) return [];
-  const vendorTerm = vendor ? `%${vendor}%` : null;
-  const modelTerm = model ? `%${model}%` : null;
-  // Search model in Kurzbeschreibung and vendor in Hersteller separately —
-  // combined term would never match since the fields store them independently
-  const rows = await query<{
-    Artikel_Nummer: string; Hersteller: string | null;
-    Kurzbeschreibung: string | null; Hauptkategorien_A: string | null; Unterkategorien_A: string | null;
-  }>(
-    `SELECT r."Artikel_Nummer", r."Hersteller", r."Kurzbeschreibung",
-            r."Hauptkategorien_A", r."Unterkategorien_A"
-     FROM item_refs r
-     WHERE (
-       ($1::text IS NULL OR r."Kurzbeschreibung" ILIKE $1)
-       AND ($2::text IS NULL OR r."Hersteller" ILIKE $2)
-     )
-     ORDER BY r."Artikel_Nummer" DESC LIMIT 10`,
-    [modelTerm, vendorTerm]
-  );
-  return rows.map(r => ({
-    artikelNummer: r.Artikel_Nummer,
-    hersteller: r.Hersteller,
-    kurzbeschreibung: r.Kurzbeschreibung,
-    hauptkategorienA: r.Hauptkategorien_A ? Number(r.Hauptkategorien_A) : null,
-    unterkategorienA: r.Unterkategorien_A ? Number(r.Unterkategorien_A) : null,
+  // Reuse the single reference matcher that manual item creation uses
+  // (`/api/search?scope=refs`) so intake surfaces the same candidates as everywhere
+  // else — token-based fuzzy match across Artikelbeschreibung/Suchbegriff/Hersteller/…,
+  // which the old Kurzbeschreibung-only substring query missed for imported refs.
+  const term = [vendor, model].filter(Boolean).join(' ');
+  const refs = await searchItemReferences(term);
+  return refs.map(r => ({
+    artikelNummer: String(r.Artikel_Nummer ?? ''),
+    hersteller: (r.Hersteller as string | null) ?? null,
+    kurzbeschreibung: (r.Kurzbeschreibung as string | null) ?? null,
+    hauptkategorienA: r.Hauptkategorien_A != null ? Number(r.Hauptkategorien_A) : null,
+    unterkategorienA: r.Unterkategorien_A != null ? Number(r.Unterkategorien_A) : null,
   }));
 }
 
@@ -139,6 +128,10 @@ const action = defineHttpAction({
       model: body.model ?? null,
       cpu: body.cpu ?? null,
       ramMb: body.ramMb ?? null,
+      // Forward BOTH sub-device shapes: `components[]` is the canonical list, `disks[]` the
+      // shorthand. Dropping `components` here made storageSize/storageType signals return null,
+      // so a drive reported only via components[] wrongly triggered the storage/drive-type questions.
+      components: body.components ?? null,
       disks: body.disks ?? null,
       batteryPercent: body.batteryPercent ?? null,
     };

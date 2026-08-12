@@ -36,8 +36,9 @@ import {
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure,
   claimQueuedAgenticRuns,
-  claimIdleFillAgenticRuns,
+  claimNotStartedAgenticRuns,
   updateQueuedAgenticRunQueueState,
+  getSystemSetting,
   listAgenticRunReviewHistory,
   listContractAuditCandidates,
   stampAgenticRunContractVersion,
@@ -54,6 +55,7 @@ export interface AgenticServiceLogger {
   info?: Console['info'];
   warn?: Console['warn'];
   error?: Console['error'];
+  debug?: Console['debug'];
 }
 
 export type AgenticModelInvokerFn = (
@@ -143,10 +145,27 @@ const SELECT_STALE_AGENTIC_RUNS_SQL = `
 `;
 
 const MAX_CONCURRENT_RUNNING_RUNS = 3;
+// The waiting (queued) backlog is capped with the same parameter as the running cap, so the auto-feeder
+// maintains at most N running + N waiting instead of pulling the entire notStarted table into the queue.
+const MAX_WAITING_RUNS = MAX_CONCURRENT_RUNNING_RUNS;
 const STALE_RUN_TIMEOUT_MINUTES = 10;
-const MAX_AUTO_RETRIES = 5;
-// Backoff in minutes for each successive retry attempt (index = RetryCount at time of failure)
-const RETRY_BACKOFF_MINUTES = [2, 5, 10, 20, 30] as const;
+
+// Admin kill switch for the keep-busy auto-feeder. Stored in system_settings; default ON when unset
+// (only an explicit 'false' disables), so existing deployments keep working after upgrade.
+const AGENTIC_AUTO_DISPATCH_SETTING_KEY = 'agentic_auto_dispatch_enabled';
+
+async function isAutoDispatchEnabled(logger: AgenticServiceLogger): Promise<boolean> {
+  try {
+    const value = await getSystemSetting(AGENTIC_AUTO_DISPATCH_SETTING_KEY);
+    return value !== 'false';
+  } catch (err) {
+    // Fail open: a settings-read error must not silently stall the pipeline.
+    logger.warn?.('[agentic-service] Failed to read auto-dispatch setting; defaulting to enabled', {
+      error: toErrorMessage(err)
+    });
+    return true;
+  }
+}
 
 function toErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -308,6 +327,14 @@ async function fetchRunningCount(deps: AgenticServiceDependencies, logger: Agent
   const count = Number.isFinite(runningRow?.runningcount) ? Number(runningRow?.runningcount) : 0;
   // logger.info?.('[agentic-service] Fetched running agentic run count', { runningCount: count });
   return count;
+}
+
+async function fetchStatusCount(status: string): Promise<number> {
+  const row = await queryOne<{ statuscount?: number }>(
+    `SELECT COUNT(*) as statuscount FROM agentic_runs WHERE "Status" = $1`,
+    [status]
+  );
+  return Number.isFinite(row?.statuscount) ? Number(row?.statuscount) : 0;
 }
 
 function applyQueueUpdate(
@@ -887,16 +914,15 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
         const lastAttemptAt = existingRun?.LastAttemptAt ?? cancelTimestamp;
         const lastError = message ?? reason;
 
-        // Re-queue with backoff instead of permanently failing so transient failures recover automatically.
-        // Once MAX_AUTO_RETRIES is exhausted, land in FAILED (a pipeline error) — NOT cancelled, which is
-        // reserved for explicit user stops. The reason lives in LastError; Status now disambiguates
-        // user-cancel (cancelled) from give-up-after-error (failed).
-        const willRetry = retryCount < MAX_AUTO_RETRIES;
-        const backoffMinutes = RETRY_BACKOFF_MINUTES[Math.min(retryCount, RETRY_BACKOFF_MINUTES.length - 1)];
-        const nextRetryAt = willRetry
-          ? new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString()
-          : null;
-        const recoveryStatus = willRetry ? AGENTIC_RUN_STATUS_QUEUED : AGENTIC_RUN_STATUS_FAILED;
+        // A failed run is terminal and idle: it is NOT auto-requeued. Transient hiccups (search/LLM
+        // timeouts) are absorbed by in-process retries *within* a single run; a run that still fails is
+        // left FAILED for a manual re-trigger. Auto-requeuing here previously fed a runaway retry storm
+        // (compounded by the keep-busy feeder resetting RetryCount), so recovery no longer loops through
+        // the dispatcher. Status stays FAILED — never 'cancelled', which is reserved for explicit user
+        // stops; the reason lives in LastError.
+        const willRetry = false;
+        const nextRetryAt = null;
+        const recoveryStatus = AGENTIC_RUN_STATUS_FAILED;
 
         try {
           const updateResult = await deps.updateAgenticRunStatus(
@@ -1071,26 +1097,23 @@ export async function dispatchQueuedAgenticRuns(
     );
     await Promise.allSettled(staleRuns.map(async (staleRun) => {
       const retryCount = staleRun.RetryCount ?? 0;
-      const willRetry = retryCount < MAX_AUTO_RETRIES;
-      const backoffMinutes = RETRY_BACKOFF_MINUTES[Math.min(retryCount, RETRY_BACKOFF_MINUTES.length - 1)];
-      const nextRetryAt = willRetry
-        ? new Date(Date.now() + backoffMinutes * 60 * 1000).toISOString()
-        : null;
+      // A zombie run (stuck 'running' past the timeout — crash/restart mid-invocation) is recovered to
+      // terminal FAILED, not requeued. This frees the running slot (the original reason for recovery)
+      // without re-injecting the run into the pipeline, consistent with "failed runs stay idle". The
+      // item can be re-triggered manually if needed.
       logger.warn?.('[agentic-service] Recovering stale running agentic run', {
         artikelNummer: staleRun.Artikel_Nummer,
         lastAttemptAt: staleRun.LastAttemptAt,
         staleTimeoutMinutes: STALE_RUN_TIMEOUT_MINUTES,
-        willRetry,
-        retryCount,
-        nextRetryAt
+        retryCount
       });
       const updateQueueState = deps.updateQueuedAgenticRunQueueState ?? updateQueuedAgenticRunQueueState;
       await updateQueueState({
         Artikel_Nummer: staleRun.Artikel_Nummer,
-        Status: willRetry ? AGENTIC_RUN_STATUS_QUEUED : AGENTIC_RUN_STATUS_FAILED,
+        Status: AGENTIC_RUN_STATUS_FAILED,
         LastModified: nowIso,
         RetryCount: retryCount,
-        NextRetryAt: nextRetryAt,
+        NextRetryAt: null,
         LastError: 'stale-run-auto-cancelled',
         LastAttemptAt: staleRun.LastAttemptAt ?? nowIso
       });
@@ -1157,24 +1180,25 @@ export async function dispatchQueuedAgenticRuns(
   }
 
   const availableSlots = Math.max(0, MAX_CONCURRENT_RUNNING_RUNS - runningCount);
+  let queuedRuns: AgenticRun[] = [];
+
   if (availableSlots <= 0) {
+    // No free running slot: don't promote queued→running this tick. We still fall through to the
+    // auto-feeder below so the waiting buffer can be topped up while running is saturated.
     logger.info?.('[agentic-service] Skipping queued dispatch because running slot is occupied', {
       runningCount,
       maxConcurrentRunningRuns: MAX_CONCURRENT_RUNNING_RUNS
     });
-    return { scheduled: 0, skipped: 0, failed: 0 };
-  }
-
-  let queuedRuns: AgenticRun[] = [];
-
-  try {
-    queuedRuns = await claimQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots));
-  } catch (err) {
-    logger.error?.('[agentic-service] Failed to load queued agentic runs for dispatch', {
-      error: toErrorMessage(err),
-      limit: Math.min(effectiveLimit, availableSlots)
-    });
-    return { scheduled: 0, skipped: 0, failed: 0 };
+  } else {
+    try {
+      queuedRuns = await claimQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots));
+    } catch (err) {
+      // Log and continue to the feeder rather than aborting the whole cycle.
+      logger.error?.('[agentic-service] Failed to load queued agentic runs for dispatch', {
+        error: toErrorMessage(err),
+        limit: Math.min(effectiveLimit, availableSlots)
+      });
+    }
   }
 
   let scheduled = 0;
@@ -1269,53 +1293,43 @@ export async function dispatchQueuedAgenticRuns(
     }
   }
 
-  // Keep-busy: if slots remain after dispatching queued runs, fill them with idle-fill runs.
-  // Reserve 1 slot so an explicit queue trigger can always start immediately without waiting.
-  const remainingSlots = Math.max(0, MAX_CONCURRENT_RUNNING_RUNS - runningCount - scheduled - 1);
-  if (remainingSlots > 0) {
+  // Keep-busy auto-feeder (admin-disablable, demoted): top up the WAITING queue with never-started runs
+  // so running slots stay busy, without ever pulling in failed or cancelled runs. It only promotes
+  // 'notStarted' → 'queued' and is capped at MAX_WAITING_RUNS total waiting, so the queue can hold at
+  // most N running + N waiting instead of the whole notStarted backlog. The newly-queued runs are drained
+  // into running by the queued→running claim on a subsequent tick — the feeder itself never invokes the
+  // model. Previously this claimed failed/cancelled runs and promoted straight to running while resetting
+  // RetryCount, which resurrected operator-cancelled runs and drove a runaway retry storm.
+  let autoFed = 0;
+  const autoDispatchEnabled = await isAutoDispatchEnabled(logger);
+  if (autoDispatchEnabled) {
     try {
-      // Atomically claim (notStarted / retryable failed|cancelled -> running) instead of a plain
-      // SELECT: without the claim the same runs were re-selected and re-dispatched on every dispatch
-      // tick, re-billing the same search queries (token burn). The claim also leaves the run 'running'
-      // so scheduleAgenticModelInvocation's promotion re-check passes, matching the queued path.
-      const idleRuns = await claimIdleFillAgenticRuns(remainingSlots);
-      for (const run of idleRuns) {
-        const artikelNummer = (run.Artikel_Nummer || '').trim();
-        const searchQuery = (run.SearchQuery || '').trim();
-        if (!artikelNummer || !searchQuery) continue;
-        try {
-          // Search reuse is decided in the invoker (it reuses stored LastSearchLinksJson when present
-          // and only searches live when none exist), so an item hits the search provider at most once
-          // and every automatic retry of a failed/cancelled run is search-free — no per-dispatch flag
-          // needed here.
-          void scheduleAgenticModelInvocation({
-            artikelNummer,
-            searchQuery,
-            context: 'idle-fill',
-            review: null,
-            request: null,
-            imageData: null,
-            deps,
-            logger
-          });
-          scheduled += 1;
-        } catch (err) {
-          logger.error?.('[agentic-service] Failed to schedule idle-fill agentic run', {
-            artikelNummer,
-            error: toErrorMessage(err)
+      const waitingCount = await fetchStatusCount(AGENTIC_RUN_STATUS_QUEUED);
+      const feedSlots = Math.max(0, MAX_WAITING_RUNS - waitingCount);
+      if (feedSlots > 0) {
+        const fedRuns = await claimNotStartedAgenticRuns(feedSlots);
+        autoFed = fedRuns.length;
+        if (autoFed > 0) {
+          logger.info?.('[agentic-service] Auto-fed notStarted runs into waiting queue', {
+            fed: autoFed,
+            waitingBefore: waitingCount,
+            waitingCap: MAX_WAITING_RUNS
           });
         }
       }
     } catch (err) {
-      logger.error?.('[agentic-service] Failed to claim idle-fill agentic runs', {
+      logger.error?.('[agentic-service] Failed to auto-feed notStarted agentic runs', {
         error: toErrorMessage(err)
       });
     }
+  } else {
+    logger.debug?.('[agentic-service] Auto-dispatch disabled; skipping notStarted feed');
   }
 
-  // Idle contract-audit sweeper (default off): only when otherwise idle, re-apply the current spec
-  // contract to the oldest stale item — re-stamp if already complete, else enqueue a targeted rework.
-  if (autoReworkConfig.enabled && remainingSlots > 0) {
+  // Idle contract-audit sweeper (default off): only when otherwise idle (nothing dispatched or fed this
+  // cycle), re-apply the current spec contract to the oldest stale item — re-stamp if already complete,
+  // else enqueue a targeted rework. Gated on the auto-dispatch kill switch too, since it is auto work.
+  if (autoReworkConfig.enabled && autoDispatchEnabled && scheduled === 0 && autoFed === 0) {
     await sweepContractRework(deps, logger);
   }
 

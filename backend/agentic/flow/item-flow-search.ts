@@ -987,6 +987,14 @@ export async function collectSearchContexts({
     }
   }
 
+  // Per-plan resilience: a single plan's transient failure no longer aborts the whole run. We collect
+  // whatever the surviving plans return and only fail the run if EVERY plan failed (zero usable
+  // context). Partial results are still recorded/persisted by the caller, so a later failure leaves
+  // evidence for a search-free retry. A rate limit is the exception — it is a provider-wide signal, so
+  // we surface it immediately to back off the queue rather than hammering the remaining plans.
+  let searchFailureCount = 0;
+  let lastSearchErr: unknown = null;
+
   for (const [index, plan] of limitedPlans.entries()) {
     retrievalMetrics.uniqueQueries.add(normalizeQuery(plan.query));
     const metadata = { ...plan.metadata, requestIndex: index };
@@ -1042,11 +1050,27 @@ export async function collectSearchContexts({
       }
     } catch (searchErr) {
       logger?.error?.({ err: searchErr, msg: 'search failed', searchQuery: plan.query, itemId, requestIndex: index });
+      // A rate limit is provider-wide: abort now so the caller backs off instead of hammering.
       if (searchErr instanceof RateLimitError) {
         throw new FlowError('RATE_LIMITED', 'Search provider rate limited requests', searchErr.statusCode ?? 503);
       }
-      throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: searchErr });
+      // Otherwise tolerate this plan and try the rest; only fail the run if nothing survives.
+      searchFailureCount += 1;
+      lastSearchErr = searchErr;
     }
+  }
+
+  // Fail only when no plan produced any context — a partial set is enough to proceed to extraction.
+  if (searchContexts.length === 0 && searchFailureCount > 0) {
+    throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: lastSearchErr });
+  }
+  if (searchFailureCount > 0) {
+    logger?.warn?.({
+      msg: 'search completed with partial failures',
+      itemId,
+      failedPlans: searchFailureCount,
+      succeededPlans: searchContexts.length
+    });
   }
 
 

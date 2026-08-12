@@ -60,9 +60,10 @@ async function findOrCreateRef(
   const nextArtikelNummer = String((maxArtikel ? parseInt(maxArtikel, 10) : 0) + 1);
 
   // Kurzbeschreibung is the model name; default it to the scanned model so the operator
-  // doesn't have to re-type what the station already scanned.
+  // doesn't have to re-type what the station already scanned. Don't prepend the Hersteller
+  // (it's a separate first-class field) — prepending it is what produced "HP HP HP …".
   const kurzbeschreibung = (newRef.Kurzbeschreibung ?? '').trim() || (scannedModel ?? '').trim();
-  const artikelbeschreibung = [newRef.Hersteller, kurzbeschreibung].filter(Boolean).join(' ');
+  const artikelbeschreibung = kurzbeschreibung || (newRef.Hersteller ?? '').trim();
   if (!artikelbeschreibung.trim()) {
     throw new Error('Hersteller and Kurzbeschreibung cannot both be empty');
   }
