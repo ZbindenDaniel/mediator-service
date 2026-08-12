@@ -4,6 +4,26 @@ Covers: item creation, editing, quality assessment, specs, accessories, spare pa
 
 ---
 
+## 911. ✅ Editable instance specs
+**Why:** `items.InstanceSpecs` (per-instance specs like RAM/Speicher/Speichertyp) could only be
+written by the intake API (`intake-answer` → `updateItemInstanceSpecs`) and quality review; a wrong
+or missing value had no correction path once the device left the station. Extended the existing
+"Instanz bearbeiten" card (`EditInstanceCard`) with a key/value spec editor (add/edit/remove rows),
+and taught `PATCH /api/items/:id/instance` (`edit-item-instance`) to accept an optional
+`InstanceSpecs` object alongside `SerialNumber`/`MacAddress`/`Quality`.
+**Why (approach):** The PATCH uses **full-replace** semantics — the frontend sends the complete
+desired spec map and the handler overwrites the column (via `stringifyLangtext`), setting it to
+`NULL` when the object is empty — deliberately *not* reusing the intake merge helper
+`updateItemInstanceSpecs`, because a merge can never delete a wrongly-added spec. Normalization
+trims keys/values and drops empty-key/empty-value rows; a non-object `InstanceSpecs` is ignored
+(treated as not provided) rather than clearing the column. The change stayed on the already-wired
+instance-edit endpoint/event (`InstanceUpdated`), so no new route, migration, or DB helper was
+needed.
+**Deferred:** No InstanceSpecs sync across ref-sharing instances (still the open item in `todo.md`
+Priority 2 "Intake: InstanceSpecs sync"). No key autocomplete against the subcategory spec contract —
+keys are free-form text, matching the existing free-form spec model. `Menge` (bulk) instances can
+also edit specs; not restricted since InstanceSpecs is per-instance data.
+
 ## 901. ✅ Consolidate the assembly slot key onto item_relations."SlotKey"
 **Why:** Slot keys were split across two columns: intake-created components (#899) wrote the
 new `item_relations."SlotKey"` column, but `catalog-spare-part` still overloaded it onto

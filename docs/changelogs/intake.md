@@ -4,7 +4,7 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
-## 911. ✅ Fix intake reference matching + "HP HP HP" brand triplication
+## 913. ✅ Fix intake reference matching + "HP HP HP" brand triplication
 **Why:** The intake flow failed to surface an existing reference even for an identical device,
 pushing operators to create duplicates with mangled names ("HP HP HP ProBook 470 G4"). Two root
 causes: **(1) a separate, weaker matcher** — `findRefCandidates` ran a bespoke `Kurzbeschreibung`-only
@@ -35,6 +35,17 @@ composition for intake-created refs.
 tracked in todo — not worked around in the backend. No backfill of already-created duplicate refs or
 brand-duplicated names. `searchItemReferences` was extracted verbatim (same SQL/scoring/dedupe), so
 manual-creation ranking is unchanged.
+
+## 912. ✅ Fix intake asking about the drive when the scan already knows it
+**Why:** `POST /api/intake/start` rebuilt the scan object field-by-field and forwarded only the
+`disks[]` shorthand, dropping the canonical `components[]` list (#902 made `components[]` the general
+shape). A drive reported via `components[]` reached `resolveIntakeQuestions` with no disk, so the
+`storageSize`/`storageType` signals returned null and the `storage_gb`/`drive_type` questions were
+asked instead of auto-resolved. Fix: forward `components[]` alongside `disks[]`. The `ref` answer
+path never had the bug (it passes the whole `scanPayload` through), so only `/start` needed it.
+**Deferred:** The two entry points still build their scan independently — consolidating onto one
+helper is left for later. (Pre-existing, unrelated: `intake-specs-assembly.test.ts` fails on a clean
+tree because `loadSubCategoryContract` returns null under jest — see todo #52.)
 
 ## 905. ✅ Resolve `showIf` against auto-answered controllers (auto-resolve robustness)
 **Why:** With auto-resolution, a question's `showIf` could point at a question the server

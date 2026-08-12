@@ -2014,6 +2014,22 @@ button:focus {
     }
 }
 
+.edit-instance-spec-row {
+    display: flex;
+    gap: var(--pad);
+    align-items: center;
+    padding: 3px 0;
+
+    input {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .btn--small {
+        flex: 0 0 auto;
+    }
+}
+
 // TODO(qr-scan-button): Reconfirm search row spacing once the QR scan button is validated on narrow screens.
 // TODO(qr-scan-button): Verify QR button hit target inside the input wrapper on touch devices.
 .search-row {

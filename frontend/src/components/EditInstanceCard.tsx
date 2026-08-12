@@ -1,14 +1,29 @@
 import React, { useState } from 'react';
-import { ItemEinheit } from '../../../models';
+import { ItemEinheit, type Item } from '../../../models';
 import { ensureUser } from '../lib/user';
+import { parseLangtext } from '../lib/langtext';
+
+interface SpecRow {
+  key: string;
+  value: string;
+}
 
 interface Props {
   itemId: string;
   einheit: ItemEinheit | string | null | undefined;
   currentSerialNumber: string | null | undefined;
   currentMacAddress: string | null | undefined;
+  currentInstanceSpecs: Item['InstanceSpecs'];
   onSaved: () => void;
   onCancel: () => void;
+}
+
+function initialSpecRows(specs: Item['InstanceSpecs']): SpecRow[] {
+  const parsed = parseLangtext(specs ?? '');
+  if (parsed.kind === 'json') {
+    return parsed.entries.map((e) => ({ key: e.key, value: e.value }));
+  }
+  return [];
 }
 
 export default function EditInstanceCard({
@@ -16,6 +31,7 @@ export default function EditInstanceCard({
   einheit,
   currentSerialNumber,
   currentMacAddress,
+  currentInstanceSpecs,
   onSaved,
   onCancel
 }: Props) {
@@ -23,8 +39,21 @@ export default function EditInstanceCard({
 
   const [serialNumber, setSerialNumber] = useState(currentSerialNumber ?? '');
   const [macAddress, setMacAddress] = useState(currentMacAddress ?? '');
+  const [specRows, setSpecRows] = useState<SpecRow[]>(() => initialSpecRows(currentInstanceSpecs));
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
+
+  function updateSpecRow(index: number, patch: Partial<SpecRow>) {
+    setSpecRows((rows) => rows.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  }
+
+  function removeSpecRow(index: number) {
+    setSpecRows((rows) => rows.filter((_, i) => i !== index));
+  }
+
+  function addSpecRow() {
+    setSpecRows((rows) => [...rows, { key: '', value: '' }]);
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -36,6 +65,15 @@ export default function EditInstanceCard({
       body.SerialNumber = serialNumber.trim() || null;
       body.MacAddress = macAddress.trim() || null;
     }
+
+    // Full-replace: send the whole desired spec map so removed rows are actually deleted server-side.
+    const specs: Record<string, string> = {};
+    for (const row of specRows) {
+      const key = row.key.trim();
+      const value = row.value.trim();
+      if (key && value) specs[key] = value;
+    }
+    body.InstanceSpecs = specs;
 
     setSaving(true);
     setStatus('');
@@ -86,6 +124,43 @@ export default function EditInstanceCard({
             />
           </div>
         )}
+
+        <div className="row">
+          <label>Spezifikationen</label>
+          {specRows.length === 0 && (
+            <p className="muted">Keine Spezifikationen. Mit „+ Feld hinzufügen“ ergänzen.</p>
+          )}
+          {specRows.map((row, index) => (
+            <div className="edit-instance-spec-row" key={index}>
+              <input
+                value={row.key}
+                onChange={(e) => updateSpecRow(index, { key: e.target.value })}
+                placeholder="Feld (z. B. RAM)"
+                aria-label="Spezifikation Feld"
+                disabled={saving}
+              />
+              <input
+                value={row.value}
+                onChange={(e) => updateSpecRow(index, { value: e.target.value })}
+                placeholder="Wert (z. B. 16 GB)"
+                aria-label="Spezifikation Wert"
+                disabled={saving}
+              />
+              <button
+                type="button"
+                className="btn btn--small"
+                onClick={() => removeSpecRow(index)}
+                aria-label="Spezifikation entfernen"
+                disabled={saving}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <button type="button" className="btn btn--small" onClick={addSpecRow} disabled={saving}>
+            + Feld hinzufügen
+          </button>
+        </div>
 
         <div className="row">
           <div className="button-group">
