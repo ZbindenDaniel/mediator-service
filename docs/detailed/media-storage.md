@@ -257,6 +257,16 @@ Uploads a file to the external mount. Requires `writable: true` on the dir confi
 otherwise. Body: raw file bytes. Required header: `X-Filename`. The file is written to
 `<mountPath>/<identifierValue>/<safeName>`. Returns `{ ok: true, fileName, url }`.
 
+**Prefix-keyed uploads (Phase 2 intake).** When `:itemUUID` carries an `SN:` or `MAC:` prefix
+(e.g. `SN:ST940814AS`, `MAC:40167eaa9e6b`), the DB lookup is skipped and the folder is keyed
+directly from the prefixed value — this lets the netboot intake image upload before the item
+exists. The **prefix declares the identifier type**, and that declared type wins over the dir's
+default `identifierType`. So a `serialNumber`-typed directory (e.g. `wipe-reports`) still accepts a
+`MAC:`-keyed upload — needed because machine-level and orphan wipe reports are keyed by the machine
+MAC when the drive exposes no readable serial. The prefixed value is validated against the
+declared type's pattern (below) and path-guarded exactly as a DB-resolved value is. Returns `422
+identifier_not_set` only when the declared identifier is empty or fails validation.
+
 ```
 DELETE /api/items/:itemUUID/external-docs/:dirName/:fileName
 ```

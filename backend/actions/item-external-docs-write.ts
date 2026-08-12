@@ -39,9 +39,14 @@ const action = defineHttpAction({
     // SN:/MAC: prefix bypasses DB lookup so Phase 2 can upload before item creation
     let ctx2: { itemUUID: string; ean: string | null; serialNumber: string | null; macAddress: string | null; artikelNummer: string | null };
     let resolvedArtikelNummer: string | null = null;
+    // When a prefix is present it declares the identity directly; that declared type must
+    // win over the dir's default identifierType so e.g. a serialNumber-typed dir (wipe-reports)
+    // still accepts MAC-keyed uploads for drives with no readable serial.
+    let identifierTypeOverride: 'serialNumber' | 'macAddress' | undefined;
     if (itemUUID.startsWith('SN:') || itemUUID.startsWith('MAC:')) {
       const isSN = itemUUID.startsWith('SN:');
       const identifierValue = itemUUID.slice(isSN ? 3 : 4);
+      identifierTypeOverride = isSN ? 'serialNumber' : 'macAddress';
       ctx2 = {
         itemUUID,
         ean: null,
@@ -65,13 +70,13 @@ const action = defineHttpAction({
       };
     }
 
-    const resolved = resolveAltDocDirPath(ctx2, dirConfig);
+    const resolved = resolveAltDocDirPath(ctx2, dirConfig, identifierTypeOverride);
     if (!resolved) return sendJson(res, 422, { error: 'identifier_not_set' });
 
     const identifier = {
       artikelNummer: resolvedArtikelNummer,
       itemUUID,
-      altIdentifierType: dirConfig.identifierType,
+      altIdentifierType: identifierTypeOverride ?? dirConfig.identifierType,
       altIdentifierValue: resolved.identifierValue
     };
 

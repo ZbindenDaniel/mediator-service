@@ -33,6 +33,15 @@
 - **Components: verify intake image can read per-drive serials.** The serial (with `wwn`/`model`
   fallback) is the identity/report key; confirm the netboot image reads it for every drive type
   on the bench (some USB bridges hide it). Contract: [`intake-image.http`](docs/detailed/intake-image.http).
+  Note: MAC-keyed uploads now work as the serial-less fallback (media #915) — a drive with no
+  readable serial and machine-level/orphan wipe reports upload under `MAC:<mac>` — but see the
+  surfacing gap below.
+- **External docs: surface MAC-keyed reports on the machine item.** Fixed the upload (media #915:
+  `MAC:`-keyed uploads into the `serialNumber`-typed `wipe-reports` dir now succeed), but the
+  read/list/serve paths still resolve real items by the dir's default `identifierType` (serial), so
+  MAC-keyed machine-level/orphan wipe reports are stored durably but not listed on the machine item.
+  Decide between a multi-identifier-type dir config or a MAC-typed companion dir, then extend
+  `item-external-docs.ts` + the `server.ts` serve handler to resolve by the additional type.
 - **Intake: scan.txt augmentation of agentic extraction.** When `/complete` fires, if `items.SerialNumber` is set, look for Phase 2 test result files in `{intake-scans mountPath}/{serial}/` and prepend a summarized block (≤2000 chars) to the extraction prompt. Requires modifying `backend/agentic/flow/item-flow-extraction.ts`.
 - **Intake: operator notification on completion.** Notify the operator (push notification or TUI display) when a device finishes the full pipeline (quality done + agentic run queued).
 - **Intake: InstanceSpecs sync.** When a quality answer drives a spec change on a ref-sharing instance, propagate to all instances sharing the same Artikelnummer (pre-existing open question for the quality review flow too). Note: operators can now manually correct/add/delete a single instance's specs via the "Instanz bearbeiten" card (`PATCH /api/items/:id/instance` `InstanceSpecs`, full-replace — item-lifecycle #911); this edit is per-instance only and does not propagate.

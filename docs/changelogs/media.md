@@ -4,6 +4,30 @@ Covers: item photos, file attachments, external docs (EAN/Serial/MAC-keyed), Web
 
 ---
 
+## 915. ✅ Accept MAC-keyed external-doc uploads into a serialNumber-typed dir (intake wipe reports)
+**Why:** The netboot intake image uploads per-drive wipe certificates keyed by the drive serial
+(`SN:<serial>`) but keys the machine-level wipe log and "orphan" certificates (drives with no
+readable serial) by the machine MAC (`MAC:<mac>`). The `wipe-reports` dir is configured
+`identifierType: "serialNumber"`, and `resolveAltDocDirPath` resolved strictly by the dir's type —
+so every `MAC:`-keyed upload read the null `serialNumber` and returned `422 identifier_not_set`
+(the whole wipe log and all orphan certs silently never landed). The `SN:`/`MAC:` prefix is the
+caller declaring the identity directly (it already bypasses the DB lookup), so that declared type
+must win over the dir's *default* type. Added an optional `identifierTypeOverride` param to
+`resolveAltDocIdentifier`/`resolveAltDocDirPath`; the write action derives it from the prefix and
+passes it (and stamps the effective type into the media-audit identifier). The overridden value is
+still normalized, pattern-validated against the declared type, and path-guarded — a `MAC:` with a
+non-MAC value is rejected, not path-escaped.
+**Why (approach):** Chosen over adding a multi-type dir config (heavier schema change touching read,
+list, and serve resolution) or duplicating serial-keyed certs. The dir's `identifierType` stays the
+default for DB-lookup resolution and the UI availability listing; only an *explicit* prefixed request
+overrides it, so nothing changes for real-item reads. The existing "no override → still null" guard
+is kept (and tested) so the default resolution path is unchanged.
+**Deferred:** MAC-keyed machine-level reports are stored durably but are not surfaced via the
+`wipe-reports` listing on the machine item, because the read/serve paths still resolve real items by
+the dir's default type (serial). Surfacing them (e.g. a dir accepting multiple identifier types, or a
+MAC-typed companion dir) is left for later. The netboot-image/TUI contract in `intake-image.http` and
+`media-storage.md` were updated to document the MAC fallback.
+
 ## 877. ✅ Route product-level attachments so all instances of a product see them
 **Why:** The "Artikel (Produktebene)" binding was cosmetic — the file was still stored against a single `ItemUUID` and only listed for that instance, so sibling instances of the same `Artikel_Nummer` never saw it (the deferred gap from #760/#761). Gave `item_attachments` a product scope: added `Scope` (default `'instance'`) and `Artikel_Nummer` columns; product uploads send `X-Attachment-Scope: product`, are written under `dist/media/products/<artikelnummer>/`, and stored with `Scope='product'`. The product folder is derived server-side from the item row via `formatArtikelNummerForMedia()` — the client-supplied number is never trusted. Both read paths (the GET endpoint and the item-detail payload in `save-item.ts`) now return `WHERE "ItemUUID" = $1 OR ("Scope"='product' AND "Artikel_Nummer" = $2)`. Deleting a product-level attachment from any instance removes it for all (delete-for-all), matching its shared nature. The binding modal now appears whenever a real routing choice exists (product and/or external), not only for external dirs.
 **Deferred:** No backfill of existing `artikel:`-labeled attachments — they remain instance-bound until re-uploaded (per product decision). Automatic cleanup of `products/<nr>/` folders on product delete (consistent with the existing no-cascade policy for instance attachments).
