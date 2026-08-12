@@ -4,6 +4,7 @@ Admin panel cards — each file is a self-contained card shown on `AdminPage.tsx
 
 ## Files
 - `AdminGate.tsx` — auth wrapper that hides admin UI from non-admin users
+- `AgenticDispatchCard.tsx` — kill switch for the agentic keep-busy auto-feeder (`/api/admin/agentic-dispatch`)
 - `AgenticOverviewCard.tsx` — agentic queue stats and bulk controls
 - `ExportCard.tsx` — manual CSV/ZIP export trigger
 - `NightlyErpSyncCard.tsx` — nightly ERP sync toggle and last-run status

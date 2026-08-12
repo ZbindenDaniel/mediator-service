@@ -2186,53 +2186,39 @@ export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
   }
 }
 
-export async function claimIdleFillAgenticRuns(limit = 3, retryCooldownMinutes = 60): Promise<AgenticRun[]> {
+export async function claimNotStartedAgenticRuns(limit = 3): Promise<AgenticRun[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
-  const cooldown = Number.isFinite(retryCooldownMinutes) && retryCooldownMinutes >= 0 ? Math.floor(retryCooldownMinutes) : 60;
   const now = new Date().toISOString();
   try {
-    // Atomic claim, mirroring claimQueuedAgenticRuns. Keep-busy picks up, and flips to 'running' in one
-    // FOR UPDATE SKIP LOCKED statement (so each is dispatched exactly once — no re-selection, no tight
-    // loop, and it satisfies scheduleAgenticModelInvocation's 'running' promotion re-check):
-    //   • notStarted runs (fresh, bulk-imported items) with a SearchQuery, and
-    //   • failed / cancelled runs whose last attempt is older than the cooldown — an automatic retry
-    //     of the settled backlog. RetryCount is reset so the retry gets a fresh cycle; the cooldown
-    //     keeps a permanently-broken item to a periodic retry instead of every dispatch tick.
-    // Search reuse is handled downstream in the invoker: it reuses stored LastSearchLinksJson when
-    // present and only searches live when none exist, so these retries never re-bill the search
-    // provider (an item hits it at most once until reset).
+    // Keep-busy auto-feeder: promote never-started runs into the waiting queue ('notStarted' → 'queued')
+    // so the normal queued→running dispatch can drain them. Deliberately limited to 'notStarted': a
+    // 'failed' run is terminal until manually re-triggered and a 'cancelled' run is an explicit operator
+    // stop — auto-resurrecting either one caused an unstoppable retry storm, so all other states stay
+    // idle. Promotion to 'queued' is not an attempt, so RetryCount/LastAttemptAt are left untouched; the
+    // queued→running claim records the attempt when it actually runs. FOR UPDATE SKIP LOCKED keeps
+    // concurrent dispatchers from claiming the same row.
     return query<AgenticRun>(
       `WITH next_runs AS (
          SELECT "Id"
          FROM agentic_runs
-         WHERE "SearchQuery" IS NOT NULL AND TRIM("SearchQuery") != ''
-           AND ("NextRetryAt" IS NULL OR "NextRetryAt"::timestamptz <= $2::timestamptz)
-           AND (
-             "Status" = 'notStarted'
-             OR (
-               "Status" IN ('failed', 'cancelled')
-               AND ("LastAttemptAt" IS NULL
-                    OR "LastAttemptAt"::timestamptz < $2::timestamptz - make_interval(mins => $3::int))
-             )
-           )
-         ORDER BY (CASE WHEN "Status" = 'notStarted' THEN 0 ELSE 1 END), "LastModified" ASC, "Id" ASC
+         WHERE "Status" = 'notStarted'
+           AND "SearchQuery" IS NOT NULL AND TRIM("SearchQuery") != ''
+         ORDER BY "LastModified" ASC, "Id" ASC
          LIMIT $1
          FOR UPDATE SKIP LOCKED
        )
        UPDATE agentic_runs
-       SET "Status" = 'running',
+       SET "Status" = 'queued',
            "LastModified" = $2,
-           "LastAttemptAt" = $2,
            "NextRetryAt" = NULL,
-           "LastError" = NULL,
-           "RetryCount" = 0
+           "LastError" = NULL
        FROM next_runs
        WHERE agentic_runs."Id" = next_runs."Id"
        RETURNING agentic_runs.*`,
-      [effectiveLimit, now, cooldown]
+      [effectiveLimit, now]
     );
   } catch (err) {
-    console.error('[db] Failed to claim idle-fill agentic runs', err);
+    console.error('[db] Failed to claim notStarted agentic runs for queue', err);
     throw err;
   }
 }

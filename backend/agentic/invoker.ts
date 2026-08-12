@@ -43,6 +43,49 @@ export interface AgenticModelInvokerOptions {
   logger?: AgenticModelInvokerLogger;
 }
 
+// Keep the local model resident between calls so a cold VRAM load doesn't trip the request timeout on
+// every invocation. Value is the Ollama keep-alive duration.
+const OLLAMA_KEEP_ALIVE = '10m';
+const LLM_RETRY_ATTEMPTS = 3;
+const LLM_RETRY_BASE_DELAY_MS = 2000;
+
+// Classify an LLM/HTTP transport failure as transient. The recurring case is undici's
+// UND_ERR_HEADERS_TIMEOUT ("fetch failed") when the model is slow to return the first response headers
+// (cold model load / GPU contention); a retry usually succeeds once the model is warm.
+function isTransientLlmError(err: unknown): boolean {
+  const message = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase();
+  const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+  const code = String((err as { code?: string }).code ?? cause?.code ?? '').toLowerCase();
+  if (code && /headers_timeout|und_err|econnreset|etimedout|econnrefused|eai_again|enotfound|body_timeout/.test(code)) {
+    return true;
+  }
+  const causeMessage = (cause?.message ?? '').toLowerCase();
+  return /fetch failed|headers timeout|body timeout|timed out|timeout|socket hang up|econnreset|network|terminated/
+    .test(`${message} ${causeMessage}`);
+}
+
+async function withLlmRetry<T>(
+  op: () => Promise<T>,
+  logger: AgenticModelInvokerLogger | undefined,
+  label: string
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= LLM_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await op();
+    } catch (err) {
+      lastErr = err;
+      if (attempt >= LLM_RETRY_ATTEMPTS || !isTransientLlmError(err)) {
+        throw err;
+      }
+      const backoffMs = LLM_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+      logger?.warn?.({ err, msg: 'LLM transient failure; retrying', label, attempt, backoffMs });
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
+  }
+  throw lastErr ?? new Error('LLM invocation failed');
+}
+
 function normalizeNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -441,10 +484,14 @@ export class AgenticModelInvoker {
         if (typeof ChatOllama !== 'function') {
           throw new Error('ChatOllama constructor unavailable');
         }
+        // keepAlive keeps the model resident so subsequent calls skip the cold VRAM load that trips the
+        // request timeout. Cast the options: keepAlive is a valid ChatOllama field but not always in the
+        // published constructor typings.
         const client = new ChatOllama({
           baseUrl: modelConfig.baseUrl,
-          model: modelName
-        });
+          model: modelName,
+          keepAlive: OLLAMA_KEEP_ALIVE
+        } as ConstructorParameters<typeof ChatOllama>[0]);
         const rawInvoke = (client as {
           invoke?: (messages: Array<{ role: string; content: unknown }>) => Promise<{ content?: unknown }>;
         }).invoke;
@@ -453,9 +500,12 @@ export class AgenticModelInvoker {
           this.logger.error?.({ err, msg: 'ollama client missing invoke method' });
           throw err;
         }
+        const logger = this.logger;
         return {
           async invoke(messages) {
-            const response = await rawInvoke.call(client, messages);
+            // Retry transient transport failures (e.g. undici headers-timeout on a cold model load) so a
+            // slow first token doesn't permanently fail the run now that failed runs are terminal.
+            const response = await withLlmRetry(() => rawInvoke.call(client, messages), logger, 'ollama.invoke');
             return { content: response?.content };
           }
         } satisfies ChatModel;
