@@ -116,8 +116,8 @@ import { htmlForBox, htmlForItem, htmlForShelf } from './lib/labelHtml';
 import type { ItemLabelPayload } from './lib/labelHtml';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
-import { resolveExistingMediaPaths, resolveSafeMediaRelativePath, listFilesInAltDocDirectory } from './lib/media-request';
-import { resolveAltDocDirPath } from './lib/alt-doc-resolver';
+import { resolveExistingMediaPaths, resolveSafeMediaRelativePath } from './lib/media-request';
+import { resolveExternalDocFileForServe } from './lib/external-docs';
 import { emitMediaAudit } from './lib/media-audit';
 
 const actions = loadActions();
@@ -883,15 +883,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         artikelNummer: itemRow.Artikel_Nummer ?? null
       };
 
-      const resolved = resolveAltDocDirPath(resolveCtx, dirConfig);
+      // Fallback-chain dirs can hold files under more than one folder (e.g. serial + MAC), so find
+      // the accepted-type folder that actually contains this file rather than assuming the primary.
+      const resolved = resolveExternalDocFileForServe(dirConfig, resolveCtx, safeFileName);
       if (!resolved) {
-        console.warn('[external-docs] Could not resolve identifier for item', { itemUUID, dirName });
-        res.writeHead(404); return res.end('Not found');
-      }
-
-      const files = listFilesInAltDocDirectory(dirConfig.mountPath, resolved.identifierValue);
-      if (!files.includes(safeFileName)) {
-        console.warn('[external-docs] Requested file not in directory listing', { safeFileName, dirName, itemUUID });
+        console.warn('[external-docs] Requested file not resolvable for item', { safeFileName, dirName, itemUUID });
         res.writeHead(404); return res.end('Not found');
       }
 
@@ -907,7 +903,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         emitMediaAudit({
           action: 'fetch',
           scope: 'external-docs',
-          identifier: { itemUUID, artikelNummer: null, altIdentifierType: dirConfig.identifierType, altIdentifierValue: resolved.identifierValue },
+          identifier: { itemUUID, artikelNummer: null, altIdentifierType: resolved.identifierType, altIdentifierValue: resolved.identifierValue },
           path: filePath,
           root: dirConfig.mountPath,
           outcome: 'success',

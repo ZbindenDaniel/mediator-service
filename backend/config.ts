@@ -650,13 +650,25 @@ export interface AltDocDirectoryConfig {
   /** Absolute filesystem path to the mounted WebDAV root for this directory */
   mountPath: string;
   /**
-   * Which item field provides the subdirectory key.
+   * Primary item field providing the subdirectory key (also the preferred/default type).
    * Use 'ean' for product-level docs (shared across all instances of a product).
    * Use 'serialNumber' or 'macAddress' for per-unit docs.
    * Use 'artikelNummer' for internal catalog docs shared across all units of a product.
    */
   identifierType: 'ean' | 'serialNumber' | 'macAddress' | 'artikelNummer';
-  /** Optional transformation applied to the identifier value before use as a path segment */
+  /**
+   * Optional ordered list of ALL identifier types this directory accepts (a fallback chain).
+   * When present, files are resolved/listed/served under every type that yields a value on the
+   * item (e.g. serialNumber + macAddress for intake devices that may lack a readable serial), and
+   * the first resolving type is the preferred write target. Defaults to `[identifierType]`.
+   * `identifierType` is always included and takes precedence.
+   */
+  identifierTypes?: ('ean' | 'serialNumber' | 'macAddress' | 'artikelNummer')[];
+  /**
+   * Optional transformation applied to the identifier value before use as a path segment.
+   * Note: `macAddress` values are always canonicalized (separators stripped, upper-cased)
+   * regardless of this field, so serial-form and MAC-form keys have one stable folder name.
+   */
   normalize?: 'uppercase' | 'lowercase' | 'strip-colons' | null;
   /** Human-readable document category label (e.g. "Löschprotokoll", "Prüfprotokoll") */
   docType?: string | null;
@@ -710,6 +722,27 @@ function parseAltDocDirsConfig(raw: string, source: string): AltDocDirectoryConf
       console.warn(`[config] ${source} entry "${name}" has invalid "identifierType" "${identifierType}" (must be one of: ean, serialNumber, macAddress, artikelNummer) — skipped.`);
       continue;
     }
+    // Optional fallback chain: an ordered list of accepted types. Primary type is always
+    // included and preferred (first), so a mis-authored list can never drop the primary.
+    let identifierTypes: AltDocDirectoryConfig['identifierTypes'];
+    if (entry.identifierTypes !== undefined) {
+      if (!Array.isArray(entry.identifierTypes)) {
+        console.warn(`[config] ${source} entry "${name}" has non-array "identifierTypes" — ignored.`);
+      } else {
+        const accepted: AltDocDirectoryConfig['identifierType'][] = [identifierType as AltDocDirectoryConfig['identifierType']];
+        for (const t of entry.identifierTypes) {
+          const s = typeof t === 'string' ? t.trim() : '';
+          if (!ALT_DOC_IDENTIFIER_TYPES.has(s)) {
+            console.warn(`[config] ${source} entry "${name}" has invalid type "${s}" in "identifierTypes" — skipped.`);
+            continue;
+          }
+          if (!accepted.includes(s as AltDocDirectoryConfig['identifierType'])) {
+            accepted.push(s as AltDocDirectoryConfig['identifierType']);
+          }
+        }
+        if (accepted.length > 1) identifierTypes = accepted;
+      }
+    }
     const normalizeRaw = typeof entry.normalize === 'string' ? entry.normalize.trim() : null;
     const normalize = normalizeRaw && ALT_DOC_NORMALIZE_VALUES.has(normalizeRaw)
       ? (normalizeRaw as AltDocDirectoryConfig['normalize'])
@@ -720,7 +753,7 @@ function parseAltDocDirsConfig(raw: string, source: string): AltDocDirectoryConf
     const docType = typeof entry.docType === 'string' ? entry.docType.trim() || null : null;
     const writable = entry.writable === true;
     const deletable = entry.deletable === true;
-    results.push({ name, mountPath, identifierType: identifierType as AltDocDirectoryConfig['identifierType'], normalize, docType, writable, deletable });
+    results.push({ name, mountPath, identifierType: identifierType as AltDocDirectoryConfig['identifierType'], identifierTypes, normalize, docType, writable, deletable });
   }
 
   return results;

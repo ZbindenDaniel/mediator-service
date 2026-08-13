@@ -4,6 +4,40 @@ Covers: item photos, file attachments, external docs (EAN/Serial/MAC-keyed), Web
 
 ---
 
+## 916. ✅ Fallback-chain alt-doc directories: MAC-keyed wipe reports now surface in the UI too
+**Why:** #915 unblocked the *write* (the netboot image's `MAC:`-keyed uploads stopped 422-ing), but
+only the write path honored the fallback — the UI list, the item-detail payload, and the file-serve
+endpoint all still resolved a real item by the directory's single `identifierType`. So a serial-less
+intake machine (identity = MAC; `host-SN-` blank in the scan) had its wipe reports stored but
+**invisible**: the `wipe-reports` section reported `identifier_not_set` and the files were
+un-servable. Chosen fix (Option A over the config-only companion-dir): model a directory's key as an
+ordered **fallback chain**, mirroring intake's own "serial if present, else MAC" identity.
+**What changed:**
+- **Config** (`config.ts`): optional `identifierTypes: [...]` on a dir — the ordered list of accepted
+  types. Primary `identifierType` is always included and forced first; invalid/duplicate entries are
+  dropped. `wipe-reports` is now `["serialNumber","macAddress"]` in `config/alt-doc-dirs.json`.
+- **Resolver** (`alt-doc-resolver.ts`): `acceptedIdentifierTypes()` + `resolveAltDocDirPaths()` (plural)
+  resolve one folder per accepted type present on the item, in preference order. `macAddress` values
+  are now always canonicalized (`canonicalizeMacAddress` — strip `:.-`, upper-case) regardless of
+  `normalize`, so the image's `40167eaa9e6b` and a stored `40:16:7e:aa:9e:6b` land on one folder.
+- **Shared listing** (`lib/external-docs.ts`, new): `buildExternalDocSummary()` unions files across
+  all resolved folders (header = preferred/first type; used by the list endpoint and the item-detail
+  payload, the latter with `forceReadOnly`), and `resolveExternalDocFileForServe()` finds the folder
+  that actually holds a requested file. Replaces the three duplicated inline blocks (list endpoint,
+  `save-item.ts`, `server.ts` serve).
+- **Write** (`item-external-docs-write.ts`): a real-item upload now targets the first accepted type
+  present (preferred folder); the `SN:`/`MAC:` prefix still pins its declared type (the #915 override).
+**Why (approach):** A fits the existing single-`identifierType` model as an additive, backward-compatible
+option (dirs without `identifierTypes` behave exactly as before) and puts the union logic in one shared
+helper so list/detail/serve can't drift. The config-only companion-dir (Option B) was rejected because
+it still needed the MAC-canonicalization code change and produced duplicate UI sections.
+**Deferred:** (1) `intake-scans` (memtest/battery, machine-level) has the same serial-less exposure but
+is left single-type until confirmed the image keys those by MAC — opt in by adding `identifierTypes`,
+no code change. (2) Filename **collision** across folders (same name in the serial and MAC folder) lists
+both rows but serve returns the first type-order match for both URLs; low risk (per-drive vs machine-level
+reports have distinct names) — a per-file identifier annotation on the URL would fully disambiguate.
+(3) The list UI still shows one identifier value in the section header even when files span two folders.
+
 ## 915. ✅ Accept MAC-keyed external-doc uploads into a serialNumber-typed dir (intake wipe reports)
 **Why:** The netboot intake image uploads per-drive wipe certificates keyed by the drive serial
 (`SN:<serial>`) but keys the machine-level wipe log and "orphan" certificates (drives with no

@@ -18,8 +18,7 @@ import { generateShopwareCorrelationId } from '../db';
 import { attachTranscriptReference } from '../agentic';
 import { loadSubcategoryReviewAutomationSignals } from '../agentic/review-automation-signals';
 import { ALT_DOC_DIRS } from '../config';
-import { resolveAltDocDirPath, buildExternalDocUrl } from '../lib/alt-doc-resolver';
-import { listFilesInAltDocDirectory } from '../lib/media-request';
+import { buildExternalDocSummary } from '../lib/external-docs';
 import type { ExternalDocSummary } from '../../models/external-doc';
 import { listRecentAgenticRunReviewHistoryBySubcategory } from '../db';
 import { getSpecContract } from '../contracts/registry';
@@ -977,24 +976,9 @@ const action = defineHttpAction({
             macAddress: typeof item.MacAddress === 'string' ? item.MacAddress : null,
             artikelNummer: typeof item.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : null
           };
-          externalDocs = ALT_DOC_DIRS.map((dirConfig) => {
-            const resolved = resolveAltDocDirPath(resolveCtx, dirConfig);
-            if (!resolved) {
-              return { name: dirConfig.name, docType: dirConfig.docType ?? null, identifierType: dirConfig.identifierType, identifierValue: null, available: false, reason: 'identifier_not_set', fileCount: 0, files: [], writable: false, deletable: false };
-            }
-            const fileNames = listFilesInAltDocDirectory(dirConfig.mountPath, resolved.identifierValue);
-            return {
-              name: dirConfig.name,
-              docType: dirConfig.docType ?? null,
-              identifierType: dirConfig.identifierType,
-              identifierValue: resolved.identifierValue,
-              available: true,
-              fileCount: fileNames.length,
-              files: fileNames.map((fileName) => ({ fileName, url: buildExternalDocUrl(dirConfig.name, itemId, fileName) })),
-              writable: false,
-              deletable: false
-            };
-          });
+          externalDocs = ALT_DOC_DIRS.map((dirConfig) =>
+            buildExternalDocSummary(dirConfig, resolveCtx, itemId, { forceReadOnly: true })
+          );
         }
 
         const co2Impact = calculateCo2Impact({

@@ -1,8 +1,11 @@
 import {
   validateAltDocIdentifierValue,
   normalizeAltDocIdentifierValue,
+  canonicalizeMacAddress,
+  acceptedIdentifierTypes,
   resolveAltDocIdentifier,
   resolveAltDocDirPath,
+  resolveAltDocDirPaths,
   buildExternalDocUrl
 } from '../lib/alt-doc-resolver';
 import type { AltDocDirectoryConfig } from '../config';
@@ -80,6 +83,69 @@ describe('normalizeAltDocIdentifierValue', () => {
 
   it('strips colons when normalize is strip-colons', () => {
     expect(normalizeAltDocIdentifierValue('AA:BB:CC:DD:EE:FF', 'strip-colons')).toBe('AABBCCDDEEFF');
+  });
+});
+
+describe('canonicalizeMacAddress', () => {
+  it('strips separators and upper-cases (colon form)', () => {
+    expect(canonicalizeMacAddress('40:16:7e:aa:9e:6b')).toBe('40167EAA9E6B');
+  });
+  it('is a no-op-shape for an already colon-less lowercase MAC', () => {
+    expect(canonicalizeMacAddress('40167eaa9e6b')).toBe('40167EAA9E6B');
+  });
+  it('handles hyphen and dot separators', () => {
+    expect(canonicalizeMacAddress('AA-BB-CC-DD-EE-FF')).toBe('AABBCCDDEEFF');
+    expect(canonicalizeMacAddress('aabb.ccdd.eeff')).toBe('AABBCCDDEEFF');
+  });
+});
+
+describe('acceptedIdentifierTypes', () => {
+  it('defaults to just the primary type', () => {
+    expect(acceptedIdentifierTypes(makeConfig({ identifierType: 'serialNumber' }))).toEqual(['serialNumber']);
+  });
+  it('returns the ordered fallback chain with the primary first', () => {
+    const config = makeConfig({ identifierType: 'serialNumber', identifierTypes: ['serialNumber', 'macAddress'] });
+    expect(acceptedIdentifierTypes(config)).toEqual(['serialNumber', 'macAddress']);
+  });
+  it('forces the primary type in front and dedupes', () => {
+    const config = makeConfig({ identifierType: 'serialNumber', identifierTypes: ['macAddress', 'serialNumber', 'macAddress'] });
+    expect(acceptedIdentifierTypes(config)).toEqual(['serialNumber', 'macAddress']);
+  });
+});
+
+describe('resolveAltDocDirPaths (fallback chain)', () => {
+  const chainConfig = makeConfig({
+    identifierType: 'serialNumber',
+    identifierTypes: ['serialNumber', 'macAddress'],
+    mountPath: '/mnt/wipe'
+  });
+
+  it('resolves a serial-less machine under its canonical MAC folder', () => {
+    const ctx = makeCtx({ serialNumber: null, macAddress: '40:16:7e:aa:9e:6b' });
+    const result = resolveAltDocDirPaths(ctx, chainConfig);
+    expect(result).toHaveLength(1);
+    expect(result[0].identifierType).toBe('macAddress');
+    expect(result[0].dirPath).toBe('/mnt/wipe/40167EAA9E6B');
+  });
+
+  it('returns both folders (serial preferred first) when the item has serial and MAC', () => {
+    const ctx = makeCtx({ serialNumber: 'ST940814AS', macAddress: '40:16:7e:aa:9e:6b' });
+    const result = resolveAltDocDirPaths(ctx, chainConfig);
+    expect(result.map(r => r.identifierType)).toEqual(['serialNumber', 'macAddress']);
+    expect(result[0].dirPath).toBe('/mnt/wipe/ST940814AS');
+    expect(result[1].dirPath).toBe('/mnt/wipe/40167EAA9E6B');
+  });
+
+  it('returns empty when the item has neither accepted identifier', () => {
+    const ctx = makeCtx({ serialNumber: null, macAddress: null });
+    expect(resolveAltDocDirPaths(ctx, chainConfig)).toEqual([]);
+  });
+
+  it('a single-type dir still returns at most one entry', () => {
+    const ctx = makeCtx({ serialNumber: 'ST940814AS', macAddress: 'AABBCCDDEEFF' });
+    const result = resolveAltDocDirPaths(ctx, makeConfig({ identifierType: 'serialNumber', mountPath: '/mnt/wipe' }));
+    expect(result).toHaveLength(1);
+    expect(result[0].identifierType).toBe('serialNumber');
   });
 });
 

@@ -60,6 +60,31 @@ describe('ALT_DOC_DIRS configuration parsing', () => {
     });
   });
 
+  it('parses an identifierTypes fallback chain', () => {
+    process.env.ALT_DOC_DIRS_FILE = writeConfig([
+      { name: 'wipe-reports', mountPath: '/mnt/wipe', identifierType: 'serialNumber', identifierTypes: ['serialNumber', 'macAddress'] }
+    ]);
+    const config = loadConfig();
+    expect(config.ALT_DOC_DIRS[0].identifierTypes).toEqual(['serialNumber', 'macAddress']);
+  });
+
+  it('forces the primary type first and drops invalid entries in identifierTypes', () => {
+    process.env.ALT_DOC_DIRS_FILE = writeConfig([
+      { name: 'wipe-reports', mountPath: '/mnt/wipe', identifierType: 'serialNumber', identifierTypes: ['macAddress', 'uuid'] }
+    ]);
+    const config = loadConfig();
+    // primary prepended, invalid 'uuid' skipped
+    expect(config.ALT_DOC_DIRS[0].identifierTypes).toEqual(['serialNumber', 'macAddress']);
+  });
+
+  it('omits identifierTypes when it only restates the primary type', () => {
+    process.env.ALT_DOC_DIRS_FILE = writeConfig([
+      { name: 'wipe-reports', mountPath: '/mnt/wipe', identifierType: 'serialNumber', identifierTypes: ['serialNumber'] }
+    ]);
+    const config = loadConfig();
+    expect(config.ALT_DOC_DIRS[0].identifierTypes).toBeUndefined();
+  });
+
   it('parses multiple valid entries', () => {
     process.env.ALT_DOC_DIRS_FILE = writeConfig([
       { name: 'wipe-reports', mountPath: '/mnt/wipe', identifierType: 'serialNumber' },

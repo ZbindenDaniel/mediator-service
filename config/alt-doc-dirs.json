@@ -12,6 +12,7 @@
     "name": "wipe-reports",
     "mountPath": "/mnt/mediator-docs/wipe-reports",
     "identifierType": "serialNumber",
+    "identifierTypes": ["serialNumber", "macAddress"],
     "normalize": "uppercase",
     "docType": "Löschprotokoll",
     "writable": true,
