@@ -114,6 +114,7 @@ import {
   type AgenticStatusDisplay,
   type AgenticStatusCardProps
 } from './AgenticStatusCard';
+import { AgenticSearchSources, parseAgenticSearchSources } from './AgenticSearchSources';
 import {
   type NormalizedDetailValue,
   DETAIL_PLACEHOLDER_TEXT,
@@ -1007,6 +1008,16 @@ export default function ItemDetail({ itemId }: Props) {
   // TODO(agentic-transcript-ui): Keep the transcript link visible regardless of agentic run state once backend exposes it.
   if (agentic?.SearchQuery) {
     agenticRows.push(['Suchbegriff', agentic.SearchQuery]);
+  }
+  // Surface stored search evidence (LastSearchLinksJson) so operators can see whether an item already
+  // has search results, what was consulted, and that a rerun reuses them — previously persisted but
+  // never shown (todo #21).
+  const agenticSearchSources = parseAgenticSearchSources(agentic?.LastSearchLinksJson);
+  if (agenticSearchSources.length > 0) {
+    agenticRows.push([
+      `Suchergebnisse (${agenticSearchSources.length})`,
+      <AgenticSearchSources sources={agenticSearchSources} />
+    ]);
   }
   if (agentic?.LastModified) {
     agenticRows.push(['Zuletzt aktualisiert', formatDateTime(agentic.LastModified)]);

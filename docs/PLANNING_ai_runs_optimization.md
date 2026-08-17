@@ -1,6 +1,6 @@
 # PLANNING — AI Runs Optimization
 
-> **Status:** design / analysis for brainstorm. No behavior decided yet.
+> **Status:** in progress. ✅ Phase 1a shipped (Thread 5 Ollama timeout + Thread 4B queue-transition observability, agentic #915) · ✅ Phase 1b shipped (Thread 2A search-evidence surfaced in the KI tab, agentic #916). Next: phase 2 (Thread 4A/4C state-machine correctness), then grounding (Thread 1) and rework closure (Thread 3). Open questions in §6 still need a brainstorm before their phases.
 > **Domain:** [agentic](changelogs/agentic.md) · Runbooks: [item-flow](detailed/item-flow.md), [review-flow](detailed/review-flow.md), [agentic-basics](detailed/agentic-basics.md)
 > **Goal:** make agentic runs cheaper, more accurate, and — above all — **legible and steerable**: an operator should always be able to see what a run did, why it is in the state it is in, and act on it without restarting from zero.
 

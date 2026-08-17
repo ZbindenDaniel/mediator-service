@@ -3417,6 +3417,36 @@ button:focus {
     align-items: center;
 }
 
+.agentic-search-sources__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.agentic-search-sources__item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.agentic-search-sources__link {
+    overflow-wrap: anywhere;
+}
+
+.agentic-search-sources__domain {
+    font-size: 0.8em;
+    color: var(--muted);
+}
+
+.agentic-search-sources__note {
+    margin-top: 6px;
+    font-size: 0.85em;
+}
+
 @media (max-width: 800px) {
     .details {
         width: 100%;
