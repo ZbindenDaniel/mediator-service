@@ -9,6 +9,10 @@ const envSchema = z.object({
   MODEL_API_KEY: z.string().min(1).optional(),
   MODEL_NAME: z.string().min(1).optional(),
   VISION_MODEL_NAME: z.string().min(1).optional(),
+  // Raise undici's fetch header/body timeouts for the (local) model endpoint: a slow first token from a
+  // cold Ollama model is a legitimate long wait, not a transport failure. 0 disables the timeout.
+  MODEL_HTTP_HEADERS_TIMEOUT_MS: z.coerce.number().int().nonnegative().optional(),
+  MODEL_HTTP_BODY_TIMEOUT_MS: z.coerce.number().int().nonnegative().optional(),
   TAVILY_API_KEY: z.string().min(1).optional(),
   SEARCH_RATE_LIMIT_DELAY_MS: z.coerce.number().int().nonnegative().optional(),
   SEARCH_MAX_PLANS: z.coerce.number().int().min(1).optional(),
@@ -146,6 +150,8 @@ const envInput: EnvSchemaInput = {
   ),
   // Vision model name for OCR — standalone only, falls back to MODEL_NAME in code
   VISION_MODEL_NAME: resolveEnvValue('VISION_MODEL_NAME'),
+  MODEL_HTTP_HEADERS_TIMEOUT_MS: resolveNumber('MODEL_HTTP_HEADERS_TIMEOUT_MS'),
+  MODEL_HTTP_BODY_TIMEOUT_MS: resolveNumber('MODEL_HTTP_BODY_TIMEOUT_MS'),
   TAVILY_API_KEY: resolveEnvValue('TAVILY_API_KEY'),
   SEARCH_RATE_LIMIT_DELAY_MS: resolveNumber('SEARCH_RATE_LIMIT_DELAY_MS'),
   SEARCH_MAX_PLANS: resolveNumber('SEARCH_MAX_PLANS'),
@@ -195,6 +201,13 @@ export interface AgenticSearchConfig {
   rateLimitDelayMs?: number;
 }
 
+export interface AgenticModelHttpConfig {
+  /** undici header timeout (ms) for model fetches — the wall a slow first token hits. 0 disables it. */
+  headersTimeoutMs: number;
+  /** undici body timeout (ms) for model fetches — inter-chunk timeout while streaming. 0 disables it. */
+  bodyTimeoutMs: number;
+}
+
 export interface AgenticSearchLimitsConfig {
   maxPlans: number;
   maxAgentQueriesPerRequest: number;
@@ -226,6 +239,14 @@ export const modelConfig: AgenticModelConfig = {
 export const searchConfig: AgenticSearchConfig = {
   tavilyApiKey: parsedEnv.TAVILY_API_KEY,
   rateLimitDelayMs: parsedEnv.SEARCH_RATE_LIMIT_DELAY_MS
+};
+
+// Default 10 min matches OLLAMA_KEEP_ALIVE, so a cold model has the full keep-alive window to return its
+// first token before undici treats the wait as a transport failure. Raising the ceiling is harmless for
+// fast APIs (they respond well within it); it only delays the failure of a genuinely hung request.
+export const modelHttpConfig: AgenticModelHttpConfig = {
+  headersTimeoutMs: parsedEnv.MODEL_HTTP_HEADERS_TIMEOUT_MS ?? 600_000,
+  bodyTimeoutMs: parsedEnv.MODEL_HTTP_BODY_TIMEOUT_MS ?? 600_000
 };
 
 export const searchLimits: AgenticSearchLimitsConfig = {

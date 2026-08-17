@@ -29,6 +29,7 @@ import { FlowError } from './flow/errors';
 import { handleAgenticResult, type AgenticResultPayload } from './result-handler';
 import { parseSequentialItemUUID } from '../lib/itemIds';
 import type { SearchSource } from './utils/source-formatter';
+import { ensureModelHttpTimeouts } from './utils/http-dispatcher';
 
 // TODO(agent): Audit request payload merge rules whenever the AgenticTarget schema evolves.
 
@@ -49,9 +50,10 @@ const OLLAMA_KEEP_ALIVE = '10m';
 const LLM_RETRY_ATTEMPTS = 3;
 const LLM_RETRY_BASE_DELAY_MS = 2000;
 
-// Classify an LLM/HTTP transport failure as transient. The recurring case is undici's
-// UND_ERR_HEADERS_TIMEOUT ("fetch failed") when the model is slow to return the first response headers
-// (cold model load / GPU contention); a retry usually succeeds once the model is warm.
+// Classify an LLM/HTTP transport failure as transient. With the header/body-timeout ceiling raised
+// (ensureModelHttpTimeouts), a slow first token no longer trips UND_ERR_HEADERS_TIMEOUT — so retries
+// here now cover only genuine transport drops (reset connection, network blip), where a re-send once the
+// model is warm succeeds.
 function isTransientLlmError(err: unknown): boolean {
   const message = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase();
   const cause = (err as { cause?: { code?: string; message?: string } }).cause;
@@ -477,6 +479,11 @@ export class AgenticModelInvoker {
 
   /** Load a model for the configured provider using the shared API settings and the given model name. */
   private async loadModel(modelName: string | undefined): Promise<ChatModel> {
+    // Move undici's fetch header/body-timeout wall BEFORE building any model client, so a slow first
+    // token from a cold model isn't misclassified as a transport failure (root fix for the recurring
+    // UND_ERR_HEADERS_TIMEOUT). Idempotent + best-effort; retry below stays as the fallback for genuine
+    // transport drops.
+    await ensureModelHttpTimeouts(this.logger);
     if (modelConfig.provider === 'ollama') {
       try {
         const module = await import('@langchain/ollama');

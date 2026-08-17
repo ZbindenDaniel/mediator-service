@@ -123,7 +123,8 @@ describe('AgenticModelInvoker request payload merging', () => {
     }));
     jest.doMock('../config', () => ({
       modelConfig: { provider: 'ollama', ollama: { baseUrl: 'http://localhost', model: 'mock' }, openai: {} },
-      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 }
+      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 },
+      modelHttpConfig: { headersTimeoutMs: 600000, bodyTimeoutMs: 600000 }
     }));
     jest.doMock('../flow/item-flow', () => ({
       runItemFlow
@@ -205,7 +206,8 @@ describe('AgenticModelInvoker request payload merging', () => {
     }));
     jest.doMock('../config', () => ({
       modelConfig: { provider: 'ollama', ollama: { baseUrl: 'http://localhost', model: 'mock' }, openai: {} },
-      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 }
+      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 },
+      modelHttpConfig: { headersTimeoutMs: 600000, bodyTimeoutMs: 600000 }
     }));
     jest.doMock('../flow/item-flow', () => ({
       runItemFlow
@@ -277,7 +279,8 @@ describe('AgenticModelInvoker request payload merging', () => {
     }));
     jest.doMock('../config', () => ({
       modelConfig: { provider: 'ollama', ollama: { baseUrl: 'http://localhost', model: 'mock' }, openai: {} },
-      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 }
+      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 },
+      modelHttpConfig: { headersTimeoutMs: 600000, bodyTimeoutMs: 600000 }
     }));
     jest.doMock('../flow/item-flow', () => ({
       runItemFlow
@@ -373,7 +376,8 @@ describe('AgenticModelInvoker item target lookup', () => {
     }));
     jest.doMock('../config', () => ({
       modelConfig: { provider: 'ollama', ollama: { baseUrl: 'http://localhost', model: 'mock' }, openai: {} },
-      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 }
+      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 },
+      modelHttpConfig: { headersTimeoutMs: 600000, bodyTimeoutMs: 600000 }
     }));
     jest.doMock('../flow/item-flow', () => ({ runItemFlow }));
     jest.doMock('../../db', () => ({
@@ -433,7 +437,8 @@ describe('AgenticModelInvoker item target lookup', () => {
     }));
     jest.doMock('../config', () => ({
       modelConfig: { provider: 'ollama', ollama: { baseUrl: 'http://localhost', model: 'mock' }, openai: {} },
-      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 }
+      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 },
+      modelHttpConfig: { headersTimeoutMs: 600000, bodyTimeoutMs: 600000 }
     }));
     jest.doMock('../flow/item-flow', () => ({ runItemFlow }));
     jest.doMock('../../db', () => ({
@@ -499,7 +504,8 @@ describe('AgenticModelInvoker item target lookup', () => {
     }));
     jest.doMock('../config', () => ({
       modelConfig: { provider: 'ollama', ollama: { baseUrl: 'http://localhost', model: 'mock' }, openai: {} },
-      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 }
+      searchConfig: { tavilyApiKey: 'fake-key', rateLimitDelayMs: 0 },
+      modelHttpConfig: { headersTimeoutMs: 600000, bodyTimeoutMs: 600000 }
     }));
     jest.doMock('../flow/item-flow', () => ({ runItemFlow }));
     jest.doMock('../../db', () => ({
