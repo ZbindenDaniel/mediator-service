@@ -1,6 +1,6 @@
 # PLANNING — AI Runs Optimization
 
-> **Status:** in progress. ✅ Phase 1a shipped (Thread 5 Ollama timeout + Thread 4B queue-transition observability, agentic #915) · ✅ Phase 1b shipped (Thread 2A search-evidence surfaced in the KI tab, agentic #916). Next: phase 2 (Thread 4A/4C state-machine correctness), then grounding (Thread 1) and rework closure (Thread 3). Open questions in §6 still need a brainstorm before their phases.
+> **Status:** in progress. ✅ Phase 1a (Ollama timeout + queue-transition observability, #915) · ✅ Phase 1b (search-evidence surfaced in KI tab, #916) · ✅ Phase 3 (identity grounding, #917). Build order (decided): 3 → 4 → 2. **Next: phase 4** (run snapshots + diff, manual restore, keep 5). Then phase 2 (failure-aware queue — first-cut scope still undecided). See §8 for the refined plan.
 > **Domain:** [agentic](changelogs/agentic.md) · Runbooks: [item-flow](detailed/item-flow.md), [review-flow](detailed/review-flow.md), [agentic-basics](detailed/agentic-basics.md)
 > **Goal:** make agentic runs cheaper, more accurate, and — above all — **legible and steerable**: an operator should always be able to see what a run did, why it is in the state it is in, and act on it without restarting from zero.
 
@@ -172,6 +172,27 @@ Each phase is independently shippable and leaves the pipeline better than before
 - **Ollama dispatcher scope (Thread 5A):** a global `setGlobalDispatcher` (affects Tavily/Shopware fetch too) vs a client-scoped dispatcher/`fetch` for Ollama only? And what is the worst-case first-token latency we should size `headersTimeout` for?
 
 ---
+
+## 8. Refined implementation plan (decided)
+
+Phase 1 (1a + 1b) shipped. Remaining phases refined with the operator; **build order: Q3 → Q4 → Q2.**
+
+### Phase 3 — Grounding (next)
+- **No new schema.** The run's `agentic_runs.SearchQuery` already carries a stable anchor the pipeline does not overwrite mid-run — reuse it as the identity anchor instead of adding an immutable field.
+- **The fix is prompt-side.** Today the model gets category *codes* buried in the target JSON, is never told the device class in human terms, and `extract.md` explicitly says *"Correct Artikelbeschreibung to the precise product name stated in sources"* — so an off-topic source flips the device class (the Pokémon case).
+- **Changes:**
+  1. Resolve the known subcategory code → human label (via the taxonomy the categorizer already loads) and inject a **grounding block** into the extraction, categorizer, and supervisor system prompts: *"This item was catalogued as a `<category>` — `<anchor>`. Your output MUST describe this device. If the search results describe a different kind of product, prefer the provided value or null over contradicting the known identity."*
+  2. Soften the `extract.md` Artikelbeschreibung rule: refine the product name **within** the known device class; never change the device class itself.
+  3. Reinforce per-subcategory via the existing `guidance[]` channel (#910) where useful.
+- **Deferred:** the heavier post-search relevance gate (auto-re-anchor vs route-to-review) is not needed for the first cut — the grounding block is the lightweight root fix.
+
+### Phase 4 — Run snapshots + diff (after Q3)
+- New `agentic_run_snapshots` table (`Id, Artikel_Nummer, RunId, CreatedAt, Reason: 'pre-run'|'pre-rework', FieldsJson`); snapshot the pipeline-owned fields before a run/rework mutates them; **retain the last 5 per item** (prune older).
+- **Restore is manual** — an operator button in the KI tab, not automatic — so a failed/regressed run stays visible before rollback.
+- KI-tab **diff view**: per-field before→after for the latest run, browsable back through the retained snapshots, sitting next to the phase-1b search-sources panel.
+
+### Phase 2 — Failure-aware queue (last; **decision still open**)
+Operator wants the queue to slow down and re-queue (not terminally fail) when runs start failing, staying as-is while healthy. Mechanism drafted (§Q2 refinement): failure classification (`infra`/`transient`/`permanent`) + a DB-computed health window + a CLOSED/HALF-OPEN/OPEN throttle + **bounded** re-queue (RetryCount ceiling + `NextRetryAt` backoff, which the claim query already honors) + a global re-queue rate cap — the ceiling+cap being exactly what the #913 incident lacked. **Undecided:** how far the first cut goes (full breaker vs bounded-requeue-only vs keep-terminal + only infra re-queue); revisit when starting phase 2.
 
 ## 7. Related todo items
 

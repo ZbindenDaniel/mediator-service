@@ -10,6 +10,7 @@ import { runCategorizerStage } from './item-flow-categorizer';
 import { isUsablePrice, runPricingStage } from './item-flow-pricing';
 import type { SearchInvoker } from './item-flow-search';
 import { listRecentAgenticRunReviewHistoryBySubcategory, getItemReference } from '../../db';
+import { getSubcategoryLabelFromCode } from '../../../models';
 import { loadSubcategoryReviewAutomationSignals } from '../review-automation-signals';
 import {
   appendPlaceholderFragment,
@@ -50,6 +51,9 @@ export interface RunExtractionOptions {
   pricingPrompt: string;
   searchInvoker: SearchInvoker;
   target: AgenticTarget;
+  // The run's SearchQuery — a stable identity anchor the pipeline does not overwrite mid-run. Used to
+  // ground extraction/supervisor so an off-topic search result can't flip the device class (Thread 3).
+  searchTerm?: string;
   reviewNotes?: string | null;
   missingSpecFields?: string[];
   // Spec-contract `description` per missing field key (contracts/specs/<subcategory>.json), so the
@@ -502,6 +506,60 @@ function validateSecondCategoryRequirement(payload: AgenticOutput): CategoryVali
   };
 }
 
+// Identity grounding (Thread 3). Builds a short "this is what the item IS" instruction from the run's
+// stable SearchQuery anchor + the known subcategory label, so an off-topic search result cannot flip
+// the device class during extraction (the "PC catalogued as a Pokémon card set" failure). Returns null
+// when we have no usable identity signal — grounding is best-effort, never a hard gate here.
+function buildIdentityGroundingFragment(params: {
+  target: AgenticTarget;
+  searchTerm?: string;
+  logger?: ExtractionLogger;
+  itemId: string;
+}): string | null {
+  const { target, searchTerm, logger, itemId } = params;
+  try {
+    const record = target as Record<string, unknown>;
+    // Anchor: prefer the run's stable SearchQuery; fall back to the original Artikelbeschreibung
+    // (which, at extraction start, still holds the operator/intake value before any model rewrite).
+    const anchorSource =
+      typeof searchTerm === 'string' && searchTerm.trim()
+        ? searchTerm.trim()
+        : typeof record.Artikelbeschreibung === 'string'
+          ? (record.Artikelbeschreibung as string).trim()
+          : '';
+    const anchor = anchorSource.length > 160 ? `${anchorSource.slice(0, 160)}…` : anchorSource;
+
+    // Tolerate float-formatted category strings like "201.0" (see agentic #906).
+    const rawSub = record.Unterkategorien_A;
+    const subNumber =
+      typeof rawSub === 'number'
+        ? rawSub
+        : typeof rawSub === 'string' && rawSub.trim()
+          ? Number(rawSub)
+          : NaN;
+    const label = Number.isFinite(subNumber) ? getSubcategoryLabelFromCode(Math.round(subNumber)) ?? null : null;
+
+    if (!anchor && !label) {
+      return null;
+    }
+    const identityParts: string[] = [];
+    if (label) {
+      identityParts.push(`device class "${label}"`);
+    }
+    if (anchor) {
+      identityParts.push(`catalogued as "${anchor}"`);
+    }
+    return [
+      `Known identity (ground truth from cataloguing): ${identityParts.join(', ')}.`,
+      'Your output MUST describe THIS device. Refine the product name only WITHIN this device class — never change the device class.',
+      'If the search results describe a different kind of product, keep the provided value or use null rather than contradicting the known identity.'
+    ].join(' ');
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to build identity grounding fragment', itemId });
+    return null;
+  }
+}
+
 // TODO(agent): Consolidate LLM-facing field alias helpers across extraction/categorizer/pricing stages.
 function mapLangtextToSpezifikationenForLlm(
   payload: unknown,
@@ -808,6 +866,7 @@ export async function runExtractionAttempts({
   pricingPrompt,
   searchInvoker,
   target,
+  searchTerm,
   reviewNotes,
   missingSpecFields,
   missingSpecFieldDescriptions,
@@ -1114,6 +1173,16 @@ export async function runExtractionAttempts({
     });
   } catch (err) {
     logger?.warn?.({ err, msg: 'failed to inject review automation signal placeholder fragments', itemId });
+  }
+
+  // Identity grounding goes FIRST (before reviewer notes / category guidance) so the "stay in the known
+  // device class" constraint frames everything that follows. Extraction + supervisor only — the
+  // categorizer decides the category itself, so grounding it on the prior category would bias it.
+  const identityGroundingFragment = buildIdentityGroundingFragment({ target, searchTerm, logger, itemId });
+  if (identityGroundingFragment) {
+    appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.extractionReview, identityGroundingFragment);
+    appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.supervisorReview, identityGroundingFragment);
+    logger?.info?.({ msg: 'identity grounding injected', itemId, hasAnchor: Boolean(searchTerm) });
   }
 
   // TODO(agentic-schema-injection): Revisit whether categorizer/supervisor require reduced schema slices once prompt sizes are measured.
