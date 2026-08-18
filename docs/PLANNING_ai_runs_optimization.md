@@ -1,6 +1,6 @@
 # PLANNING — AI Runs Optimization
 
-> **Status:** in progress. ✅ Phase 1a (Ollama timeout + queue-transition observability, #915) · ✅ Phase 1b (search-evidence surfaced in KI tab, #916) · ✅ Phase 3 (identity grounding, #917). Build order (decided): 3 → 4 → 2. **Next: phase 4** (run snapshots + diff, manual restore, keep 5). Then phase 2 (failure-aware queue — first-cut scope still undecided). See §8 for the refined plan.
+> **Status:** in progress. ✅ Phase 1a (Ollama timeout + queue observability, #915) · ✅ Phase 1b (search evidence in KI tab, #916) · ✅ Phase 3 (identity grounding, #917) · ✅ Phase 4 (run snapshots + diff + non-destructive restore, #918). **Next: phase 2** (failure-aware queue) — first-cut scope still undecided (full breaker vs bounded-requeue-only vs keep-terminal). See §8 for the refined plan.
 > **Domain:** [agentic](changelogs/agentic.md) · Runbooks: [item-flow](detailed/item-flow.md), [review-flow](detailed/review-flow.md), [agentic-basics](detailed/agentic-basics.md)
 > **Goal:** make agentic runs cheaper, more accurate, and — above all — **legible and steerable**: an operator should always be able to see what a run did, why it is in the state it is in, and act on it without restarting from zero.
 
@@ -186,10 +186,12 @@ Phase 1 (1a + 1b) shipped. Remaining phases refined with the operator; **build o
   3. Reinforce per-subcategory via the existing `guidance[]` channel (#910) where useful.
 - **Deferred:** the heavier post-search relevance gate (auto-re-anchor vs route-to-review) is not needed for the first cut — the grounding block is the lightweight root fix.
 
-### Phase 4 — Run snapshots + diff (after Q3)
-- New `agentic_run_snapshots` table (`Id, Artikel_Nummer, RunId, CreatedAt, Reason: 'pre-run'|'pre-rework', FieldsJson`); snapshot the pipeline-owned fields before a run/rework mutates them; **retain the last 5 per item** (prune older).
-- **Restore is manual** — an operator button in the KI tab, not automatic — so a failed/regressed run stays visible before rollback.
-- KI-tab **diff view**: per-field before→after for the latest run, browsable back through the retained snapshots, sitting next to the phase-1b search-sources panel.
+### Phase 4 — Run snapshots + diff ✅ (shipped, #918)
+- `agentic_run_snapshots` table (`Id, Artikel_Nummer, RunId, CreatedAt, Reason, CapturedReviewState, Actor, TriggerReason, SchemaVersion, FieldsJson`); snapshot the AI-written fields before a run/rework mutates them.
+- **Retention: keep the 4 most recent + always the last approved state** (so rollback-to-last-good survives the window).
+- **Restore is manual and non-destructive** — an operator button that overlays the version's fields and records a new `restore` snapshot.
+- KI-tab **diff view**: per-field before→after (Langtext key-by-key) of the selected version → current, next to the phase-1b search-sources panel.
+- Field set = what the AI writes; instance/intake fields (`InstanceSpecs`, serial/MAC) deferred to a future extension.
 
 ### Phase 2 — Failure-aware queue (last; **decision still open**)
 Operator wants the queue to slow down and re-queue (not terminally fail) when runs start failing, staying as-is while healthy. Mechanism drafted (§Q2 refinement): failure classification (`infra`/`transient`/`permanent`) + a DB-computed health window + a CLOSED/HALF-OPEN/OPEN throttle + **bounded** re-queue (RetryCount ceiling + `NextRetryAt` backoff, which the claim query already honors) + a global re-queue rate cap — the ceiling+cap being exactly what the #913 incident lacked. **Undecided:** how far the first cut goes (full breaker vs bounded-requeue-only vs keep-terminal + only infra re-queue); revisit when starting phase 2.
