@@ -45,7 +45,7 @@ jest.mock('../../contracts/registry', () => ({
 }));
 
 jest.mock('../../lib/intake-quality-map', () => ({
-  resolveIntakeQuestions: jest.fn(() => ({ ask: [], autoAnswers: {} })),
+  resolveIntakeQuestions: jest.fn(() => ({ ask: [], autoAnswers: {}, detected: [], unresolvedAutoFill: [] })),
   deriveInstanceSpecsFromScan: jest.fn(() => ({})),
   normalizeScanComponents: jest.fn(() => []),
 }));

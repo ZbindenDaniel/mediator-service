@@ -14,6 +14,15 @@
 #     Phase-2 reports are uploaded under SN:<driveSerial>/ (not the machine SN).
 #   • Phase-2 uploads split into machine-level (SN:<machineSerial>) and
 #     per-component (SN:<driveSerial>) targets.
+#
+# REQUIRED — disk `sizeGb` source:
+#   • `sizeGb` MUST be the block-device capacity from `lsblk -bdno SIZE /dev/<name>`
+#     (bytes → / 1073741824 | floor), NOT smartctl `.user_capacity.bytes`.
+#     `user_capacity` is an ATA/SATA field: it is EMPTY for NVMe (and on smartctl
+#     open-fail), yielding sizeGb:0 → the server treats 0 as "unknown" and ASKS the
+#     operator for storage. Keep smartctl for identity only (serial/wwn/model/type).
+#     The server logs `[intake] question resolution` with `unresolvedAutoFill`
+#     naming `storage_gb` when the scan sent no usable size.
 
 @host = http://localhost:8080
 @intakeToken = dev-intake-token

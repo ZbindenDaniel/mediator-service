@@ -4,6 +4,40 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 915. ✅ Intake "asks RAM/storage": root-caused to NVMe disk size = 0 + made the scan gap visible
+**Why:** The reported bug — intake prompts for storage the device already scanned — is **not** a
+backend-logic or missing-echo bug. Verified by reproduction: the resolver drops `ram_gb`/`storage_gb`/
+`drive_type`/`battery_condition` for a well-formed scan, and `phase1.sh` attaches the full `scanPayload`
+in `/start` and in **both** ref-answer variants. The real cause is in the netboot image's
+`build_scan_payload` (in `common.sh`, a separate repo): disk `sizeGb` is read from `smartctl`'s
+`.user_capacity.bytes`, which is an **ATA/SATA-only** field — **empty for NVMe** (SMART reports NVMe
+capacity elsewhere) and empty on any smartctl open-fail. So on modern NVMe laptops `sizeGb` comes out
+**0**, the `storageSize` signal treats `0` as unknown, and `storage_gb` is asked. (RAM comes from
+`/proc/meminfo` and already resolved — storage was the visible offender.)
+Two things done **in this repo** (the image fix is handed off, below):
+1. **Surface what the scan answered.** `resolveIntakeQuestions` now also returns `detected` (the
+   scan-answered spec questions, rendered via `specValue`, e.g. `RAM=8 GB`) and `unresolvedAutoFill`
+   (autoFill questions the scan could NOT answer). The `quality`-step responses (`/start` step 2 and the
+   `ref` answer) carry a new **`detectedSpecs: [{label,value}]`** so the TUI shows the operator the
+   scanned specs instead of a blank — the operator's chosen "omit-but-inform" behavior.
+2. **Make a mis-scan visible.** Both question-generation paths now log one structured
+   `[intake] question resolution` line — `asked` / `detected` / `unresolvedAutoFill`. A non-empty
+   `unresolvedAutoFill` naming `storage_gb` is the exact fingerprint of the NVMe-size-0 gap, so the next
+   occurrence is diagnosable from the server log instead of guessed at.
+3. **Contract updated for the image.** `docs/detailed/intake-image.http` + `intake-image-guide.md` now
+   REQUIRE disk `sizeGb` to come from `lsblk -bdno SIZE` (authoritative for every transport), with
+   `smartctl` kept for identity only (serial/wwn/model/type).
+**Why (approach):** The server can't recover a size the scan never sent (`sizeGb:0` carries no
+information), so the storage prompt can only be fixed at the source — the image. The in-repo changes make
+the failure **observable** (log) and **less operator-hostile** (the specs are still shown), and pin the
+contract so the image fix is unambiguous. No staging-table / scan-persistence change was made: the earlier
+"script doesn't echo the scan" hypothesis was disproven by reading `phase1.sh`, so that complexity is
+unnecessary.
+**Deferred:** The `build_scan_payload` change itself lives in the intake-image repo (patch handed to the
+operator). Broadening `driveTypeLabel` for exotic `type` strings and a per-run scan-quality metric are
+left as follow-ups (todo 0z5). `detectedSpecs` rendering in `phase1.sh` is a small, optional image-side
+addition — the field is ignored harmlessly until then.
+
 ## 914. ✅ Fix invalid JSON in `contracts/quality/201.json` (laptop quality questions silently dropped)
 **Why:** A trailing comma after the `has_os` question made `contracts/quality/201.json` invalid JSON.
 Both contract loaders (`lib/quality-contracts.loadSubCategoryContract` and `contracts/registry.getQualityContract`)
