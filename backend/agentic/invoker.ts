@@ -523,11 +523,23 @@ export class AgenticModelInvoker {
         // keepAlive keeps the model resident so subsequent calls skip the cold VRAM load that trips the
         // request timeout. Cast the options: keepAlive is a valid ChatOllama field but not always in the
         // published constructor typings.
+        // numCtx: Ollama defaults to 2048 tokens, well below the extraction prompt (~6–7k tokens); the
+        // prompt was silently left-truncated and the model returned an empty completion (the root cause of
+        // the "json match missing"/EXTRACTION_FAILED loop). format: 'json' is an opt-in hard guard against
+        // empty/prose output (off by default so a reasoning model's <think> phase isn't suppressed).
         const client = new ChatOllama({
           baseUrl: modelConfig.baseUrl,
           model: modelName,
-          keepAlive: OLLAMA_KEEP_ALIVE
+          keepAlive: OLLAMA_KEEP_ALIVE,
+          ...(typeof modelConfig.numCtx === 'number' ? { numCtx: modelConfig.numCtx } : {}),
+          ...(modelConfig.formatJson ? { format: 'json' } : {})
         } as ConstructorParameters<typeof ChatOllama>[0]);
+        this.logger.info?.({
+          msg: 'loaded ollama chat model',
+          model: modelName,
+          numCtx: modelConfig.numCtx ?? null,
+          formatJson: modelConfig.formatJson
+        });
         const rawInvoke = (client as {
           invoke?: (messages: Array<{ role: string; content: unknown }>) => Promise<{ content?: unknown }>;
         }).invoke;

@@ -2,6 +2,7 @@ import { RateLimitError } from '../tools/tavily-client';
 import { stringifyLangChainContent } from '../utils/langchain';
 import type { SearchSource } from '../utils/source-formatter';
 import { parseJsonWithSanitizer } from '../utils/json';
+import { condenseSearchText } from '../utils/search-condense';
 import { searchLimits } from '../config';
 import { FlowError } from './errors';
 import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
@@ -91,6 +92,12 @@ const MAX_RETRY_SUMMARY_LENGTH = 260;
 // TODO(migration): Remove legacy identifier logging/stripping once all agent outputs are Artikel_Nummer-only.
 const LEGACY_IDENTIFIER_KEYS = ['itemUUid', 'itemId', 'id'] as const;
 const TARGET_SNAPSHOT_MAX_LENGTH = 2000;
+// Budget (chars) for the search context fed into the extraction prompt. Unlike the categorizer (which
+// gets the heavily-sanitized buildAggregatedSearchText output), extraction was handed the full raw
+// context — a 16k+ char blob for one item overflowed even a raised num_ctx and produced empty
+// completions. condenseSearchText keeps spec-bearing lines within this budget rather than truncating.
+// ~12k chars ≈ ~3k tokens, leaving room for system+schema+snapshot+answer inside an 8k-token window.
+const EXTRACTION_CONTEXT_MAX_LENGTH = 12000;
 const ACCUMULATOR_TEXT_MAX_LENGTH = 280;
 const ACCUMULATOR_SUMMARY_MAX_LENGTH = 2400;
 const ACCUMULATOR_OUTLINE_VALUE_MAX_LENGTH = 90;
@@ -1275,7 +1282,18 @@ export async function runExtractionAttempts({
       }
     })();
     const activeContext = searchContexts[contextCursor] ?? { query: 'aggregated-fallback', text: fallbackContextText, sources: [] };
-    const singleContextText = typeof activeContext?.text === 'string' ? activeContext.text : '';
+    const rawContextText = typeof activeContext?.text === 'string' ? activeContext.text : '';
+    // Condense an oversized raw context so it can't overflow the model window (empty completion →
+    // "json match missing"). This keeps the spec-bearing lines and drops boilerplate rather than blindly
+    // truncating, so quality is preserved; num_ctx sizing is the primary control and this the safety net.
+    // Small contexts (already within budget) pass through unchanged.
+    const condensedContext = condenseSearchText(rawContextText, {
+      maxLength: EXTRACTION_CONTEXT_MAX_LENGTH,
+      logger,
+      itemId,
+      query: activeContext?.query
+    });
+    const singleContextText = condensedContext.text;
     const accumulatorSummary = serializeExtractionAccumulator(extractionAccumulator);
     const compactAccumulator = accumulatorSummary.summary;
 
@@ -1636,11 +1654,21 @@ export async function runExtractionAttempts({
         itemContent = jsonContent;
       }
     } else {
-      logger?.debug?.({
-        msg: 'json match missing. Trying again',
+      // No JSON object in the response at all. This is almost always an EMPTY completion (context-window
+      // overflow / num_ctx too small) or a reasoning-only <think> block with no answer — distinguish them
+      // by logging the raw length + snippet instead of a bare debug line, and record a specific reason so
+      // the terminal error isn't the catch-all EXTRACTION_FAILED with lastValidationIssues: null.
+      logger?.warn?.({
+        msg: 'extraction response had no JSON object',
         attempt,
-        itemId
+        itemId,
+        rawLength: raw.length,
+        hadThinkBlock: Boolean(thinkMatch),
+        strippedLength: itemContent.length,
+        rawSnippet: truncateForLog(raw)
       });
+      lastValidationIssues = 'EMPTY_OR_NO_JSON';
+      passFailureValidationIssues = 'EMPTY_OR_NO_JSON';
 
       advanceAttempt();
       continue;

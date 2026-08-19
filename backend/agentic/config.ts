@@ -9,6 +9,15 @@ const envSchema = z.object({
   MODEL_API_KEY: z.string().min(1).optional(),
   MODEL_NAME: z.string().min(1).optional(),
   VISION_MODEL_NAME: z.string().min(1).optional(),
+  // Ollama context window (num_ctx, tokens). Ollama defaults to 2048, far below the extraction prompt
+  // (~6–7k tokens), so the prompt is silently left-truncated and the model returns an empty completion —
+  // the root cause of the "json match missing" / EXTRACTION_FAILED loop. Size to cover prompt + output;
+  // raising it costs VRAM, so it stays configurable. Applies to Ollama only.
+  MODEL_NUM_CTX: z.coerce.number().int().positive().optional(),
+  // Force the Ollama response into valid JSON (Ollama `format: "json"`). Strong guard against empty /
+  // prose completions, but it suppresses a reasoning model's <think> phase — default OFF because the
+  // extraction path handles <think> blocks. Enable only for non-reasoning models.
+  MODEL_FORMAT_JSON: z.string().optional(),
   // Raise undici's fetch header/body timeouts for the (local) model endpoint: a slow first token from a
   // cold Ollama model is a legitimate long wait, not a transport failure. 0 disables the timeout.
   MODEL_HTTP_HEADERS_TIMEOUT_MS: z.coerce.number().int().nonnegative().optional(),
@@ -150,6 +159,8 @@ const envInput: EnvSchemaInput = {
   ),
   // Vision model name for OCR — standalone only, falls back to MODEL_NAME in code
   VISION_MODEL_NAME: resolveEnvValue('VISION_MODEL_NAME'),
+  MODEL_NUM_CTX: resolveNumber('MODEL_NUM_CTX'),
+  MODEL_FORMAT_JSON: resolveEnvValue('MODEL_FORMAT_JSON'),
   MODEL_HTTP_HEADERS_TIMEOUT_MS: resolveNumber('MODEL_HTTP_HEADERS_TIMEOUT_MS'),
   MODEL_HTTP_BODY_TIMEOUT_MS: resolveNumber('MODEL_HTTP_BODY_TIMEOUT_MS'),
   TAVILY_API_KEY: resolveEnvValue('TAVILY_API_KEY'),
@@ -194,6 +205,10 @@ export interface AgenticModelConfig {
    * Falls back to textModel when unset — requires the configured model to support vision input.
    */
   visionModel?: string;
+  /** Ollama context window (num_ctx, tokens). Undefined ⇒ let Ollama use the model default. */
+  numCtx?: number;
+  /** Force Ollama responses to valid JSON (`format: "json"`). Off unless MODEL_FORMAT_JSON is truthy. */
+  formatJson: boolean;
 }
 
 export interface AgenticSearchConfig {
@@ -228,12 +243,20 @@ export interface ShopwareIntegrationConfig extends ShopwareCredentialsConfig {
 const resolvedSearchMaxPlans = parsedEnv.SEARCH_MAX_PLANS ?? 3;
 const resolvedSearchMaxAgentQueriesPerRequest = parsedEnv.SEARCH_MAX_AGENT_QUERIES_PER_REQUEST ?? 3;
 
+// Default 8192: comfortably covers the largest prompt (extraction ~6–7k tokens) plus the JSON answer,
+// while staying modest enough for a single mid-range GPU. Override via MODEL_NUM_CTX per hardware.
+const DEFAULT_MODEL_NUM_CTX = 8192;
+
 export const modelConfig: AgenticModelConfig = {
   provider: parsedEnv.MODEL_PROVIDER,
   baseUrl: parsedEnv.MODEL_BASE_URL,
   apiKey: parsedEnv.MODEL_API_KEY,
   textModel: parsedEnv.MODEL_NAME,
-  visionModel: parsedEnv.VISION_MODEL_NAME
+  visionModel: parsedEnv.VISION_MODEL_NAME,
+  numCtx: parsedEnv.MODEL_NUM_CTX ?? DEFAULT_MODEL_NUM_CTX,
+  formatJson: ['1', 'true', 'yes', 'on'].includes(
+    (parsedEnv.MODEL_FORMAT_JSON ?? '').trim().toLowerCase()
+  )
 };
 
 export const searchConfig: AgenticSearchConfig = {
