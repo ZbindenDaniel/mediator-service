@@ -34,7 +34,7 @@ function parseIntakeKey(key: string): { serial: string | null; mac: string | nul
 
 async function findOrCreateRef(
   artikelNummer: string | undefined,
-  newRef: { Hersteller: string; Kurzbeschreibung?: string; Hauptkategorien_A: number; Unterkategorien_A: number } | undefined,
+  newRef: { Hersteller: string; Artikelbeschreibung?: string; Kurzbeschreibung?: string; Hauptkategorien_A: number; Unterkategorien_A: number } | undefined,
   scannedModel?: string | null
 ): Promise<{ artikelNummer: string; unterkategorienA: number | null; hersteller: string | null; kurzbeschreibung: string | null } | null> {
   if (artikelNummer) {
@@ -59,13 +59,19 @@ async function findOrCreateRef(
   const maxArtikel = await getMaxArtikelNummer();
   const nextArtikelNummer = String((maxArtikel ? parseInt(maxArtikel, 10) : 0) + 1);
 
-  // Kurzbeschreibung is the model name; default it to the scanned model so the operator
-  // doesn't have to re-type what the station already scanned. Don't prepend the Hersteller
-  // (it's a separate first-class field) — prepending it is what produced "HP HP HP …".
-  const kurzbeschreibung = (newRef.Kurzbeschreibung ?? '').trim() || (scannedModel ?? '').trim();
-  const artikelbeschreibung = kurzbeschreibung || (newRef.Hersteller ?? '').trim();
+  // The operator types the description into the station's Artikelbeschreibung field — that value
+  // is AUTHORITATIVE and must win over the (often garbage) scanned model. Previously only
+  // `Kurzbeschreibung` was read, so the operator's typed `Artikelbeschreibung` was silently dropped
+  // and the scanned model always came through. Precedence: operator text → supplied Kurzbeschreibung
+  // → scanned model → Hersteller (last resort so the required field is never empty).
+  const operatorDesc = (newRef.Artikelbeschreibung ?? '').trim();
+  const suppliedKurz = (newRef.Kurzbeschreibung ?? '').trim();
+  const artikelbeschreibung =
+    operatorDesc || suppliedKurz || (scannedModel ?? '').trim() || (newRef.Hersteller ?? '').trim();
+  // Kurzbeschreibung stays the short model name (scan) when the operator didn't supply one.
+  const kurzbeschreibung = suppliedKurz || (scannedModel ?? '').trim() || operatorDesc;
   if (!artikelbeschreibung.trim()) {
-    throw new Error('Hersteller and Kurzbeschreibung cannot both be empty');
+    throw new Error('newRef needs a description (Artikelbeschreibung/Kurzbeschreibung), scan model, or Hersteller');
   }
   await persistItemReference({
     Artikel_Nummer: nextArtikelNummer,
@@ -289,9 +295,13 @@ const action = defineHttpAction({
 
       // Auto-resolve the questions we didn't ask (skipAtIntake / autoFill), then let the
       // submitted answers win over them, so quality + specs are complete without the operator
-      // re-entering scan-known data.
+      // re-entering scan-known data. Drop empty ("don't know") submitted answers first, so a
+      // skipped question neither clobbers a scan-derived auto-answer nor scores as a real value.
       const { autoAnswers } = resolveIntakeQuestions(mergedContractQuestions(itemRow.Unterkategorien_A), resolvedScan);
-      const mergedAnswers = { ...autoAnswers, ...qualityAnswers };
+      const submittedAnswers = Object.fromEntries(
+        Object.entries(qualityAnswers).filter(([, v]) => typeof v === 'string' && v.trim() !== '')
+      );
+      const mergedAnswers = { ...autoAnswers, ...submittedAnswers };
       const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, mergedAnswers, assemblyQualityContract);
 
       const assessment = {
