@@ -4142,3 +4142,11 @@ body.simple-mode {
         display: none;
     }
 }
+// Highlight matched search words inside the "Ähnliche Artikel prüfen" results
+// so operators can spot which parts of a candidate match their input.
+.suggestion-highlight {
+    background: #ffe38a;
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
+}
