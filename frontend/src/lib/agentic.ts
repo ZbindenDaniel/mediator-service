@@ -265,7 +265,10 @@ export async function persistAgenticRunCancellation({
     logger.warn?.(message, { artikelNummer });
     return { ok: false, status: 400, agentic: null, message };
   }
-  if (trimmedArtikelNummer.startsWith('I-') || !/^\d+$/.test(trimmedArtikelNummer)) {
+  // Artikel_Nummers are alphanumeric (e.g. "A-100", "R-300"), so no numeric-only guard here —
+  // the earlier `/^\d+$/` check silently rejected non-numeric Artikel_Nummer and made Abbrechen a
+  // no-op (same defect that broke Abschliessen; kept the I- instance guard only).
+  if (trimmedArtikelNummer.startsWith('I-')) {
     const message = `KI-Abbruch übersprungen (${context}): ungültige Artikel_Nummer`;
     logger.warn?.(message, { artikelNummer: trimmedArtikelNummer });
     return { ok: false, status: 400, agentic: null, message };
