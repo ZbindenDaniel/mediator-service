@@ -555,7 +555,20 @@ if (agenticServiceEnabled) {
   const agenticQueueDispatchIntervalMs = 5000;
   const agenticQueueDispatchLimit = 5;
   const agenticQueueDependencies = createAgenticServiceDependencies();
+  // Reentrancy guard: the concurrency cap (MAX_CONCURRENT_RUNNING_RUNS) is enforced by computing
+  // availableSlots = MAX - runningCount and claiming at most that many. That read-then-claim is NOT
+  // atomic across dispatch invocations, so if a tick's DB work outlasts the interval, the next
+  // setInterval firing overlaps it: both read the same low runningCount and both claim, promoting more
+  // than the cap into 'running' — the over-cap sweep then cancels the excess instead of letting it wait.
+  // Serializing ticks makes each claim see the previous tick's committed promotions, so the queue never
+  // over-fills.
+  let dispatchInFlight = false;
   const dispatchQueuedRuns = () => {
+    if (dispatchInFlight) {
+      // Previous tick still running; skip this firing rather than double-claim into the running slots.
+      return;
+    }
+    dispatchInFlight = true;
     // dispatchQueuedAgenticRuns is async; fire-and-forget with local error handling
     void dispatchQueuedAgenticRuns(agenticQueueDependencies, { limit: agenticQueueDispatchLimit }).then((summary) => {
       // if (summary.scheduled || summary.skipped || summary.failed) {
@@ -563,6 +576,8 @@ if (agenticServiceEnabled) {
       // }
     }).catch((err: unknown) => {
       console.error('[agentic-service] Failed to dispatch queued agentic runs', err);
+    }).finally(() => {
+      dispatchInFlight = false;
     });
   };
   setInterval(dispatchQueuedRuns, agenticQueueDispatchIntervalMs);

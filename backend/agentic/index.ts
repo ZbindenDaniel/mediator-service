@@ -1181,19 +1181,25 @@ export async function dispatchQueuedAgenticRuns(
     });
   }
 
-  // Enforce the concurrency cap: if somehow more than MAX runs are RUNNING (race, restart, manual DB edits),
-  // cancel the oldest ones so the cap is respected before the next dispatch.
+  // Enforce the concurrency cap: if somehow more than MAX runs are RUNNING (an over-claim race, a restart,
+  // or manual DB edits), push the excess back to 'queued' so they WAIT for a free slot instead of being
+  // cancelled. Over-cap is not the run's fault — it was triggered legitimately and should run once there is
+  // space — so failing it (the previous behavior) surfaced as "queued run moved to running then cancelled
+  // immediately". We keep the runs with the OLDEST LastAttemptAt running (those are the ones actually
+  // making progress in a background invocation) and requeue the freshest excess (a racing over-claim
+  // stamps LastAttemptAt = now). A requeued run whose background invocation is still mid-flight is safe:
+  // that task's promotion guard re-reads Status and bails when it is no longer 'running'.
   try {
-    const overCapRuns = await query<{ Artikel_Nummer: string; LastAttemptAt: string | null }>(
-      `SELECT "Artikel_Nummer", "LastAttemptAt"
+    const overCapRuns = await query<{ Artikel_Nummer: string; RetryCount: number | null; LastAttemptAt: string | null }>(
+      `SELECT "Artikel_Nummer", "RetryCount", "LastAttemptAt"
          FROM agentic_runs
         WHERE "Status" = 'running'
-        ORDER BY "LastAttemptAt" DESC
+        ORDER BY "LastAttemptAt" ASC
         OFFSET $1`,
       [MAX_CONCURRENT_RUNNING_RUNS]
     );
     if (overCapRuns.length > 0) {
-      logger.warn?.('[agentic-service] Over-cap running runs detected; cancelling oldest', {
+      logger.warn?.('[agentic-service] Over-cap running runs detected; requeuing freshest excess to wait', {
         count: overCapRuns.length,
         cap: MAX_CONCURRENT_RUNNING_RUNS
       });
@@ -1201,23 +1207,23 @@ export async function dispatchQueuedAgenticRuns(
       const updateQueueState = deps.updateQueuedAgenticRunQueueState ?? updateQueuedAgenticRunQueueState;
       await Promise.allSettled(overCapRuns.map(async (run) => {
         try {
+          // Promotion to the waiting queue is not an attempt, so RetryCount is preserved (not reset) and
+          // NextRetryAt stays clear so the queued→running claim can pick it up as soon as a slot frees.
           await updateQueueState({
             Artikel_Nummer: run.Artikel_Nummer,
-            Status: AGENTIC_RUN_STATUS_FAILED,
+            Status: AGENTIC_RUN_STATUS_QUEUED,
             LastModified: nowIso,
-            RetryCount: 0,
+            RetryCount: run.RetryCount ?? 0,
             NextRetryAt: null,
-            LastError: 'over-cap-cancelled',
+            LastError: null,
             LastAttemptAt: run.LastAttemptAt ?? nowIso
           });
-          await recordQueueTerminalTransition(deps, logger, {
+          logger.info?.('[agentic-service] Requeued over-cap running run to waiting queue', {
             artikelNummer: run.Artikel_Nummer,
-            fromStatus: AGENTIC_RUN_STATUS_RUNNING,
-            reason: 'over-cap-cancelled',
-            category: 'infra-cancelled'
+            cap: MAX_CONCURRENT_RUNNING_RUNS
           });
         } catch (err) {
-          logger.error?.('[agentic-service] Failed to cancel over-cap run', {
+          logger.error?.('[agentic-service] Failed to requeue over-cap run', {
             artikelNummer: run.Artikel_Nummer,
             error: toErrorMessage(err)
           });
@@ -1254,7 +1260,11 @@ export async function dispatchQueuedAgenticRuns(
     });
   } else {
     try {
-      queuedRuns = await claimQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots));
+      // Pass the running cap so the claim self-limits to the free slots atomically: availableSlots here
+      // is read non-atomically before the claim, so overlapping ticks / instances could otherwise each
+      // claim up to availableSlots and together over-fill the running slots (the excess was then cancelled
+      // by the over-cap sweep instead of waiting). The in-statement cap makes that impossible.
+      queuedRuns = await claimQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots), MAX_CONCURRENT_RUNNING_RUNS);
     } catch (err) {
       // Log and continue to the feeder rather than aborting the whole cycle.
       logger.error?.('[agentic-service] Failed to load queued agentic runs for dispatch', {
