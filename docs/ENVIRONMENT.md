@@ -208,6 +208,8 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 | `MODEL_BASE_URL` | (unset) | Legacy alias for `AGENTIC_MODEL_BASE_URL`. |
 | `MODEL_NAME` | (unset) | Legacy alias for `AGENTIC_MODEL_NAME`. |
 | `MODEL_API_KEY` | (unset) | Legacy alias for `AGENTIC_MODEL_API_KEY`. |
+| `MODEL_NUM_CTX` | `8192` | Ollama context window (`num_ctx`, tokens). Ollama's own default (2048) is far below the extraction prompt (~6-7k tokens), so the prompt is silently left-truncated and the model returns an empty completion (the `json match missing` / `EXTRACTION_FAILED` loop). Raise for larger prompts (costs VRAM), lower if the GPU can't hold it. Ollama provider only. |
+| `MODEL_FORMAT_JSON` | (off) | Force Ollama responses to valid JSON (`format: "json"`). Strong guard against empty/prose output, but suppresses a reasoning model's `<think>` phase — leave off for reasoning models. Truthy = `1`/`true`/`yes`/`on`. |
 | `MODEL_HTTP_HEADERS_TIMEOUT_MS` | `600000` | undici fetch header timeout (ms) for model calls. Raise if a cold/large local model is slow to first token and runs fail with `UND_ERR_HEADERS_TIMEOUT`; `0` disables. Applied as a global fetch dispatcher. |
 | `MODEL_HTTP_BODY_TIMEOUT_MS` | `600000` | undici fetch body timeout (ms) for model calls (inter-chunk while streaming); `0` disables. |
 | `TAVILY_API_KEY` | (unset) | Tavily API key for search enrichment. |
