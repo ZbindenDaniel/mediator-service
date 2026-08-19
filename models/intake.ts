@@ -50,7 +50,7 @@ export interface IntakeScanPayload {
 export interface IntakeRefCandidate {
   artikelNummer: string;
   hersteller: string | null;
-  kurzbeschreibung: string | null;
+  artikelbeschreibung: string | null;
   hauptkategorienA: number | null;
   unterkategorienA: number | null;
 }
@@ -91,7 +91,7 @@ export interface IntakeStartResponse {
     itemUUID: string;
     artikelNummer: string;
     hersteller: string | null;
-    kurzbeschreibung: string | null;
+    artikelbeschreibung: string | null;
     quality: number | null;
   };
 }

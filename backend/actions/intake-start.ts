@@ -25,12 +25,12 @@ async function findItemByIdentifier(serial: string | null, mac: string | null) {
     const row = await queryOne<{
       ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null;
       MacAddress: string | null; Quality: number | null; QualityId: number | null;
-      Hersteller: string | null; Kurzbeschreibung: string | null;
+      Hersteller: string | null; Artikelbeschreibung: string | null;
       Hauptkategorien_A: number | null; Unterkategorien_A: number | null;
     }>(
       `SELECT i."ItemUUID", i."Artikel_Nummer", i."SerialNumber", i."MacAddress",
               i."Quality", i."QualityId",
-              r."Hersteller", r."Kurzbeschreibung",
+              r."Hersteller", r."Artikelbeschreibung",
               r."Hauptkategorien_A"::integer AS "Hauptkategorien_A",
               r."Unterkategorien_A"::integer AS "Unterkategorien_A"
        FROM items i
@@ -44,12 +44,12 @@ async function findItemByIdentifier(serial: string | null, mac: string | null) {
     return queryOne<{
       ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null;
       MacAddress: string | null; Quality: number | null; QualityId: number | null;
-      Hersteller: string | null; Kurzbeschreibung: string | null;
+      Hersteller: string | null; Artikelbeschreibung: string | null;
       Hauptkategorien_A: number | null; Unterkategorien_A: number | null;
     }>(
       `SELECT i."ItemUUID", i."Artikel_Nummer", i."SerialNumber", i."MacAddress",
               i."Quality", i."QualityId",
-              r."Hersteller", r."Kurzbeschreibung",
+              r."Hersteller", r."Artikelbeschreibung",
               r."Hauptkategorien_A"::integer AS "Hauptkategorien_A",
               r."Unterkategorien_A"::integer AS "Unterkategorien_A"
        FROM items i
@@ -66,13 +66,12 @@ async function findRefCandidates(vendor: string | null | undefined, model: strin
   // Reuse the single reference matcher that manual item creation uses
   // (`/api/search?scope=refs`) so intake surfaces the same candidates as everywhere
   // else — token-based fuzzy match across Artikelbeschreibung/Suchbegriff/Hersteller/…,
-  // which the old Kurzbeschreibung-only substring query missed for imported refs.
   const term = [vendor, model].filter(Boolean).join(' ');
   const refs = await searchItemReferences(term);
   return refs.map(r => ({
     artikelNummer: String(r.Artikel_Nummer ?? ''),
     hersteller: (r.Hersteller as string | null) ?? null,
-    kurzbeschreibung: (r.Kurzbeschreibung as string | null) ?? null,
+    artikelbeschreibung: (r.Artikelbeschreibung as string | null) ?? null,
     hauptkategorienA: r.Hauptkategorien_A != null ? Number(r.Hauptkategorien_A) : null,
     unterkategorienA: r.Unterkategorien_A != null ? Number(r.Unterkategorien_A) : null,
   }));
@@ -168,7 +167,6 @@ const action = defineHttpAction({
         intakeKey,
         nextStep: 'select_ref',
         candidates,
-        // Echo scanned identity so the TUI can pre-fill Hersteller/Kurzbeschreibung
         scan: { vendor: scan.vendor ?? null, model: scan.model ?? null },
       };
       return sendJson(res, 200, response);
@@ -197,7 +195,7 @@ const action = defineHttpAction({
         itemUUID: item.ItemUUID,
         artikelNummer: item.Artikel_Nummer ?? '',
         hersteller: item.Hersteller,
-        kurzbeschreibung: item.Kurzbeschreibung,
+        artikelbeschreibung: item.Artikelbeschreibung,
         quality: item.Quality,
       },
     };
