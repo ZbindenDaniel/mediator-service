@@ -66,6 +66,14 @@ export interface IntakeQuestion {
   showIf?: { questionId: string; value: string };
 }
 
+// A scan-derived value the server filled in instead of asking — returned alongside the
+// questionnaire so the TUI can show the operator what the scan already answered (RAM, storage,
+// drive type, battery). Informational only; not a question.
+export interface IntakeDetectedSpecView {
+  label: string;
+  value: string;
+}
+
 export interface IntakeStartResponse {
   intakeKey: string;
   nextStep: IntakeNextStep;
@@ -76,6 +84,8 @@ export interface IntakeStartResponse {
   // quality
   itemUUID?: string;
   qualityQuestions?: IntakeQuestion[];
+  // Scan-answered specs to display (not ask) at the quality step.
+  detectedSpecs?: IntakeDetectedSpecView[];
   // phase2
   item?: {
     itemUUID: string;
@@ -117,6 +127,8 @@ export interface IntakeAnswerResponse {
   nextStep: IntakeNextStep;
   itemUUID?: string;
   qualityQuestions?: IntakeQuestion[];
+  // Scan-answered specs to display (not ask) at the quality step.
+  detectedSpecs?: IntakeDetectedSpecView[];
   summary?: {
     itemUUID: string;
     artikelNummer: string;

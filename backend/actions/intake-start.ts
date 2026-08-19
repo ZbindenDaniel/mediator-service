@@ -6,7 +6,7 @@ import { loadGeneralContract, loadSubCategoryContract, assemblyToQualityContract
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveIntakeQuestions } from '../lib/intake-quality-map';
 import { searchItemReferences } from './search';
-import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeQuestion } from '../../models/intake';
+import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeQuestion, IntakeDetectedSpecView } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -78,7 +78,10 @@ async function findRefCandidates(vendor: string | null | undefined, model: strin
   }));
 }
 
-function buildQualityQuestions(unterkategorienA: number | null, scan: IntakeScanPayload): IntakeQuestion[] {
+function buildQualityQuestions(
+  unterkategorienA: number | null,
+  scan: IntakeScanPayload
+): { ask: IntakeQuestion[]; detectedSpecs: IntakeDetectedSpecView[] } {
   try {
     const general = loadGeneralContract();
     const subCat = unterkategorienA ? loadSubCategoryContract(unterkategorienA) : null;
@@ -92,10 +95,30 @@ function buildQualityQuestions(unterkategorienA: number | null, scan: IntakeScan
       ...(assemblyQ?.questions ?? [])
     ];
     // Only return questions a human must answer; the rest are auto-resolved at the quality step.
-    return resolveIntakeQuestions(allQuestions, scan).ask;
+    const resolution = resolveIntakeQuestions(allQuestions, scan);
+    logIntakeResolution(unterkategorienA, resolution);
+    return {
+      ask: resolution.ask,
+      detectedSpecs: resolution.detected.map(d => ({ label: d.label, value: d.value })),
+    };
   } catch {
-    return [];
+    return { ask: [], detectedSpecs: [] };
   }
+}
+
+/** One structured line per questionnaire build: what the scan answered vs. what it couldn't.
+ *  A non-empty `unresolvedAutoFill` means a scan-answerable field (e.g. NVMe size) wasn't in the
+ *  scan — the fingerprint of a mis-scan (build_scan_payload), not an operator judgement call. */
+function logIntakeResolution(
+  unterkategorienA: number | null,
+  resolution: ReturnType<typeof resolveIntakeQuestions>
+): void {
+  console.log('[intake] question resolution', {
+    subCategory: unterkategorienA,
+    asked: resolution.ask.map(q => q.id),
+    detected: resolution.detected.map(d => `${d.label}=${d.value}`),
+    unresolvedAutoFill: resolution.unresolvedAutoFill,
+  });
 }
 
 const action = defineHttpAction({
@@ -153,12 +176,13 @@ const action = defineHttpAction({
 
     if (!item.QualityId) {
       // Step 2: item exists but no quality assessment yet
-      const questions = buildQualityQuestions(item.Unterkategorien_A, scan);
+      const { ask, detectedSpecs } = buildQualityQuestions(item.Unterkategorien_A, scan);
       const response: IntakeStartResponse = {
         intakeKey,
         nextStep: 'quality',
         itemUUID: item.ItemUUID,
-        qualityQuestions: questions,
+        qualityQuestions: ask,
+        detectedSpecs,
       };
       return sendJson(res, 200, response);
     }

@@ -1,11 +1,11 @@
 {
-  "version": 6,
+  "version": 7,
   "subCategory": 201,
   "questions": [
     {
       "id": "has_os",
       "type": "boolean",
-      "question": "Betriebssystem installiert?",
+      "question": "Betriebssystem installiert?"
     },
     {
       "id": "os_installed",

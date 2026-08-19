@@ -17,7 +17,7 @@ import { syncInDeviceComponents } from '../lib/in-device-components';
 import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse, assemblyToQualityContract } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveIntakeQuestions, deriveInstanceSpecsFromScan, normalizeScanComponents } from '../lib/intake-quality-map';
-import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion } from '../../models/intake';
+import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion, IntakeDetectedSpecView } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -130,18 +130,33 @@ async function ensureItem(
   return itemUUID;
 }
 
-function buildQualityQuestions(unterkategorienA: number | null, scan: IntakeScanPayload): IntakeQuestion[] {
+function buildQualityQuestions(
+  unterkategorienA: number | null,
+  scan: IntakeScanPayload
+): { ask: IntakeQuestion[]; detectedSpecs: IntakeDetectedSpecView[] } {
   try {
     const general = loadGeneralContract();
     const subCat = unterkategorienA ? loadSubCategoryContract(unterkategorienA) : null;
     const assembly = unterkategorienA ? getAssemblyContract(unterkategorienA) : null;
     const assemblyQ = assembly ? assemblyToQualityContract(assembly) : null;
-    return resolveIntakeQuestions(
+    const resolution = resolveIntakeQuestions(
       [...general.questions, ...(subCat?.questions ?? []), ...(assemblyQ?.questions ?? [])],
       scan
-    ).ask;
+    );
+    // Structured line: what the scan answered vs. what a scan-answerable field failed to answer
+    // (non-empty unresolvedAutoFill = mis-scan, e.g. NVMe size=0, not an operator judgement).
+    console.log('[intake] question resolution', {
+      subCategory: unterkategorienA,
+      asked: resolution.ask.map(q => q.id),
+      detected: resolution.detected.map(d => `${d.label}=${d.value}`),
+      unresolvedAutoFill: resolution.unresolvedAutoFill,
+    });
+    return {
+      ask: resolution.ask,
+      detectedSpecs: resolution.detected.map(d => ({ label: d.label, value: d.value })),
+    };
   } catch {
-    return [];
+    return { ask: [], detectedSpecs: [] };
   }
 }
 
@@ -211,12 +226,13 @@ const action = defineHttpAction({
         console.warn('[intake-answer] Failed to sync in-device components', { itemUUID, err });
       }
 
-      const questions = buildQualityQuestions(ref.unterkategorienA, scan);
+      const { ask, detectedSpecs } = buildQualityQuestions(ref.unterkategorienA, scan);
 
       const response: IntakeAnswerResponse = {
         nextStep: 'quality',
         itemUUID,
-        qualityQuestions: questions,
+        qualityQuestions: ask,
+        detectedSpecs,
       };
       return sendJson(res, 200, response);
     }

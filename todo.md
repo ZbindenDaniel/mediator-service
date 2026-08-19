@@ -53,6 +53,31 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0z5. **Intake asks RAM / storage despite the scan — ROOT-CAUSED; backend done, image fix handed off.**
+  Root cause (intake #915): the netboot image's `build_scan_payload` (in `common.sh`, separate repo) reads
+  disk `sizeGb` from `smartctl` `.user_capacity.bytes` — an **ATA/SATA-only** field, **empty for NVMe** and
+  on smartctl open-fail — so `sizeGb:0` on modern NVMe laptops → `storageSize` signal null → `storage_gb`
+  asked. The backend resolver and `phase1.sh` are both correct for a well-formed scan (verified). RAM
+  (`/proc/meminfo`) already resolved; storage was the visible offender.
+  - ✅ **In-repo (shipped):** `resolveIntakeQuestions` returns `detected` + `unresolvedAutoFill`; quality-step
+    responses carry `detectedSpecs` (omit-but-inform); both build paths log `[intake] question resolution`
+    (asked/detected/unresolvedAutoFill) so a mis-scan is diagnosable. Contract (`intake-image.http` + guide)
+    now requires `lsblk`-sourced disk size.
+  - ⏳ **Image repo (handed off):** patch `build_scan_payload` to source `sizeGb` from `lsblk -bdno SIZE`
+    (bytes → GB); keep smartctl for identity only. This is the change that actually stops the storage prompt.
+  - ⏳ **Optional image-side:** render the response's `detectedSpecs` as a read-only banner in `phase1.sh`.
+  - **Follow-ups:** broaden `driveTypeLabel` tolerance for exotic `type` strings (`sata`/`""`); a per-run
+    scan-quality metric off `unresolvedAutoFill`.
+
+0z6. **Intake enrichment should key on `sku`, not the DMI product name.** `dmidecode -s system-product-name`
+  returns generic junk on many HP/Lenovo laptops ("HP Notebook", "20XW"); the scan also captures `sku`
+  (system-sku-number), which HP/Dell use as a full commercial identifier. When the agentic model-name
+  enrichment runs, prefer `sku` as the lookup key over the product name. Separate from 0z5.
+
+0z7. **Add a CI JSON-lint over `contracts/`.** The invalid-JSON bug in `quality/201.json` (intake #914) was
+  invisible because both contract loaders swallow parse errors and return `null`. A cheap `node -e JSON.parse`
+  (or `jq empty`) sweep over `contracts/**/*.json` in CI would catch the next one at commit time.
+
 0z4. **AI runs optimization — phased implementation** (design: `docs/PLANNING_ai_runs_optimization.md`).
   - ✅ **Phase 1a (shipped, agentic #915).** (5) Ollama `UND_ERR_HEADERS_TIMEOUT` fixed at the root — global undici dispatcher raises `headersTimeout`/`bodyTimeout` (`ensureModelHttpTimeouts`, env `MODEL_HTTP_HEADERS_TIMEOUT_MS`/`_BODY_TIMEOUT_MS`, default 10 min); retry demoted to genuine-drop fallback. (4B) The three queue→`failed` paths now emit a structured `from→to/reason` log + an `AgenticRunFailed` item event with a `category` tag (`recordQueueTerminalTransition`).
   - ✅ **Phase 1b (shipped, agentic #916, Thread 2A).** Stored search evidence (`LastSearchLinksJson`) now surfaced in the KI tab via `AgenticSearchSources` + a `Suchergebnisse (N)` row in `ItemDetail`. Read-only; source **curation** (pin/remove, add manual link → feeds reuse+grounding) and a true per-run **query count** (needs schema, todo #24) remain follow-ups (#21/#22).

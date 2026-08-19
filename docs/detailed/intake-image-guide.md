@@ -41,6 +41,20 @@ a contract-JSON edit. (A `showIf` pointing at an auto-answered question is resol
 the dependent is asked or dropped based on the auto value — so you never need the script to know
 about auto-answers.)
 
+### `detectedSpecs` — show the operator what the scan filled in (optional to render)
+Alongside `qualityQuestions`, the `quality`-step responses (`/start` step 2 and the `ref` answer)
+now carry **`detectedSpecs: [{ label, value }]`** — the scan-answered specs the server resolved
+instead of asking (RAM, Speicher, Speichertyp, Akku). Render them as a short read-only banner so
+the operator sees the machine's known specs even though there was no question, e.g.:
+
+```
+Aus Scan übernommen:  RAM 8 GB · Speicher 256 GB · Speichertyp NVMe SSD · Akku Gut (>80%)
+```
+
+It is informational only — there is nothing to answer. If a spec you expected is **missing** from
+`detectedSpecs` (and instead appears as a question), the scan didn't carry it — see the disk-size
+warning under "The generic `components[]` object".
+
 ## 2. Specs — how to fill them
 
 Specs at intake are written to the **instance** (`items.InstanceSpecs`); ref-level
@@ -121,6 +135,24 @@ future:
   convention: `has_<slotKey>` → `"true"` and `<slotKey>_model` → its `model`. So a detected GPU
   tagged `slotKey:"gpu"` pre-answers a `has_gpu` question (operator confirms) — only if the
   subcategory's assembly contract defines that slot.
+
+### ⚠️ Disk `sizeGb` MUST come from `lsblk`, not `smartctl`
+`sizeGb` drives the `storageSize` signal that auto-answers (and drops) the `storage_gb` question.
+The server treats `sizeGb <= 0` as **unknown** and therefore **asks the operator** for storage.
+
+Source the size from the block device, not from SMART:
+
+- ✅ **`lsblk -bdno SIZE /dev/<name>`** (bytes) → `/ 1073741824 | floor`. `lsblk` reports capacity
+  for every block device — SATA, NVMe, eMMC, USB — regardless of transport.
+- ❌ **`smartctl` `.user_capacity.bytes`** is an **ATA/SATA** field. It is **empty for NVMe**
+  (SMART reports NVMe capacity under `nvme_total_capacity` / namespace fields) and empty whenever
+  `smartctl` open-fails (some USB bridges), so it yields `sizeGb: 0` on exactly the modern NVMe
+  laptops we intake — which is why storage kept being asked. Keep `smartctl` for **identity only**
+  (`serial` / `wwn` / `model` / protocol→`type`); take **size** from `lsblk`.
+
+**Self-check:** the server logs one `[intake] question resolution` line per questionnaire build. If
+`unresolvedAutoFill` contains `{ id: "storage_gb", autoFill: "storageSize" }`, the scan sent no
+usable size — fix the image, not the contract.
 
 ## 4. Putting it together — a complete quality answer
 

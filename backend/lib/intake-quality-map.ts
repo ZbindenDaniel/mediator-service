@@ -152,6 +152,28 @@ function toIntakeQuestion(q: QualityQuestion, components: IntakeComponent[]): In
   return result;
 }
 
+/** A scan-derived answer, rendered for display so the operator sees what was filled in. */
+export interface IntakeDetectedSpec {
+  id: string;
+  label: string;
+  value: string;
+}
+
+export interface IntakeQuestionResolution {
+  ask: IntakeQuestion[];
+  autoAnswers: Record<string, string>;
+  /** autoFill questions the scan answered — shown to the operator instead of asked. */
+  detected: IntakeDetectedSpec[];
+  /** autoFill questions the scan could NOT answer (signal null / value off-list), so they are
+   *  still asked. This is the diagnostic that makes a mis-scan visible (e.g. NVMe size = 0). */
+  unresolvedAutoFill: { id: string; autoFill: string }[];
+}
+
+/** Render an auto-resolved answer the way its spec value would read (e.g. "8" → "8 GB"). */
+function renderDetectedValue(q: QualityQuestion, answer: string): string {
+  return q.specValue ? q.specValue.replace('%v', answer) : answer;
+}
+
 /**
  * Split the merged contract questions into what to ASK the operator vs. what the server
  * AUTO-answers at intake. A question is auto-resolved (and dropped from `ask`) when:
@@ -159,13 +181,17 @@ function toIntakeQuestion(q: QualityQuestion, components: IntakeComponent[]): In
  *   • `autoFill` — the scan yields a value via its named signal.
  * Everything else is asked (with component-driven prefills). The caller merges `autoAnswers`
  * under the submitted answers (operator/script value wins) before scoring/spec derivation.
+ * `detected` lists the scan-answered spec questions so the caller can show them to the operator;
+ * `unresolvedAutoFill` lists autoFill questions the scan failed to answer (still asked).
  */
 export function resolveIntakeQuestions(
   questions: QualityQuestion[],
   scan: IntakeScanPayload
-): { ask: IntakeQuestion[]; autoAnswers: Record<string, string> } {
+): IntakeQuestionResolution {
   const components = normalizeScanComponents(scan);
   const autoAnswers: Record<string, string> = {};
+  const detected: IntakeDetectedSpec[] = [];
+  const unresolvedAutoFill: { id: string; autoFill: string }[] = [];
   const pending: QualityQuestion[] = [];
   for (const q of questions) {
     if (q.skipAtIntake) {
@@ -175,8 +201,14 @@ export function resolveIntakeQuestions(
     const auto = resolveAutoFill(q, scan);
     if (auto !== undefined) {
       autoAnswers[q.id] = auto;
+      // Only surface genuine spec answers (autoFill) to the operator — a skipAtIntake presence
+      // assumption ("Lüfter vorhanden: ja") is noise, not an informative detected spec.
+      detected.push({ id: q.id, label: q.specField ?? q.question, value: renderDetectedValue(q, auto) });
       continue;
     }
+    // An autoFill question that did NOT resolve is being asked despite the scan being expected to
+    // answer it — record it so the caller can log the mis-scan (the NVMe size=0 class of bug).
+    if (q.autoFill) unresolvedAutoFill.push({ id: q.id, autoFill: q.autoFill });
     pending.push(q);
   }
   // Resolve showIf against auto-answered controllers: the script never sees auto-answers, so a
@@ -191,5 +223,5 @@ export function resolveIntakeQuestions(
     }
     ask.push(iq);
   }
-  return { ask, autoAnswers };
+  return { ask, autoAnswers, detected, unresolvedAutoFill };
 }
