@@ -1395,7 +1395,14 @@ export async function runExtractionAttempts({
     if (ambiguousFieldsBlock) {
       contextSections.push(ambiguousFieldsBlock);
     }
-    contextSections.push('Current search context:', singleContextText || 'None.');
+    // When search is skipped the context block holds the previously collected search results
+    // (reused stored evidence), not a fresh search — label it so the model treats it as the
+    // authoritative evidence to extract from rather than assuming no evidence exists.
+    const searchContextLabel =
+      searchSkipped && singleContextText
+        ? 'Previously collected search results (search skipped — extract from these; do not assume no evidence):'
+        : 'Current search context:';
+    contextSections.push(searchContextLabel, singleContextText || 'None.');
     contextSections.push('Accumulated candidate (compact JSON):', compactAccumulator);
     contextSections.push(searchRequestHint);
     const baseUserContent = contextSections.join('\n\n');

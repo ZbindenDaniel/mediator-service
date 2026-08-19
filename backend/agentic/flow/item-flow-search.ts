@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import type { SearchResult } from '../tools/tavily-client';
 import { RateLimitError } from '../tools/tavily-client';
-import type { SearchSource } from '../utils/source-formatter';
+import { formatSourcesForRetry, type SearchSource } from '../utils/source-formatter';
 import { stringifyLangChainContent } from '../utils/langchain';
 import { parseJsonWithSanitizer } from '../utils/json';
 import { searchLimits } from '../config';
@@ -904,9 +904,15 @@ export async function collectSearchContexts({
 
   if (!shouldSearch) {
     // When skipSearch is active but stored sources exist, inject them so the extraction model
-    // has prior evidence to work from — sanitization runs via the buildAggregatedSearchText closure.
+    // has prior evidence to work from instead of being told only that search was skipped.
+    // Use the shared source formatter (numbered Title/URL/Description blocks) rather than a bare
+    // description join: the persisted LastSearchLinksJson shape ({url,title?,description?}) frequently
+    // carries no description, and a description-only join collapsed to an empty string there — which
+    // surfaced as "Current search context: None." even though real results had been collected. The
+    // formatter always emits the title + URL (and "Description: (none)" when absent), so every
+    // collected result is represented and the block is never empty when sources exist.
     if (Array.isArray(storedSources) && storedSources.length > 0) {
-      const storedText = storedSources.map((s) => (typeof s.description === 'string' && s.description ? s.description : typeof s.content === 'string' ? s.content : '')).filter(Boolean).join('\n\n');
+      const storedText = formatSourcesForRetry(storedSources, logger).join('\n\n');
       searchContexts.push({ query: searchTerm ?? 'stored-search-data', text: storedText, sources: storedSources });
       recordSources(storedSources);
     }
