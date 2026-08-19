@@ -4,6 +4,29 @@ Covers: AI enrichment pipeline, search, extraction, categorization, pricing, sup
 
 ---
 
+## 917. ✅ Planning: instance agentic flow (intake data → instance specs + reference reconciliation)
+**Why:** Intake produces rich per-instance data (`items.IntakeScan`, `items.InstanceSpecs`, quality
+condition answers, serial-keyed Phase-2 files) that the reference-keyed pipeline almost entirely
+ignores — only 3 keys reach it via the hardcoded `INTAKE_TO_SPEC` map, and `IntakeScan` is written but
+never read. The spec contracts also mismodel instance-varying fields (`RAM`/`Speicher`/`Akku`/OS) as
+reference-level, worked around by `ambiguousFields` + `InstanceSpecs`. Design: a separate, lightweight
+per-`ItemUUID` flow (no web search) that fills `scope:"instance"` spec fields from measured data and
+**reconciles** the physical device against its reference, emitting typed verdicts
+(`match`/`missing_on_ref`/`wrong_ref`/`instance_variance`) as propose-only operator insights.
+**Why (approach):** Add `scope`/`measuredSignal` to `SpecContractField` (default `reference`, full
+back-compat) as the single reconciliation authority, rather than a fourth ad-hoc map — the quality/
+assembly contracts stay the fill sources (they already target instances). The flow is **propose-only**:
+it never writes `item_refs` (one odd unit must not rewrite a shared reference); `wrong_ref` offers a
+"change reference" operator action and hard-blocks auto-approve for that instance. Chose a new flow
+module (reusing transcript/result-handler/schema-contract) over forking the heavy `runItemFlow`, since
+instance enrichment is grounded and mostly deterministic. Migration: update contracts, leave stored data
+as-is (operators + the future rework agent correct drift). Full design + phasing in
+[`docs/PLANNING_instance_flow.md`](../PLANNING_instance_flow.md).
+**Deferred:** Nothing built yet — this is the agreed plan. Open at build time: auto-approve hard-gate
+vs. aggregate-signal feed; one `agentic_runs` table + scope discriminator vs. a separate instance-run
+table; UI home (`ItemInstanceTab` vs. `ItemKiTab`); `wrong_ref` corroboration threshold. Phase 5 folds
+in Phase-2 test-file summarization (the long-deferred "scan.txt augmentation" todo).
+
 ## 913. ✅ Harden the agentic auto-dispatcher (demote keep-busy, kill switch, terminal failures, transient retries)
 **Why:** Incident — the auto-dispatcher burned ~1000 search queries in minutes and revived runs the operator had stopped ("no matter how many I stop there's always a few waiting"). Root causes were compounded in the keep-busy path added in #908/#909: (a) `claimIdleFillAgenticRuns` reset `RetryCount = 0` on every claim, defeating the `MAX_AUTO_RETRIES` ceiling so a permanently-failing item retried forever; (b) it claimed `failed`/`cancelled` runs, so an operator `cancelled` (and an auto-`failed`) run was auto-resurrected — a human stop was not durable; (c) the #909 "searches at most once" invariant was false for the failing items, because `collectSearchContexts` threw on the *first* failed plan **before** `persistSearchLinks` ran, so a failed search never persisted links and every retry re-billed the provider. Fast-failing Tavily errors (`200 Error: undefined`) + 3 slots + a 5s tick + no ceiling produced the burst.
 

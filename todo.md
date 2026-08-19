@@ -218,6 +218,17 @@
 
 51. **Auto-approve follow-ups.** `AUTO_APPROVE` (default off) + `AUTO_APPROVE_MIN_CONFIDENCE` (default 0.8) added (agentic changelog #892). Follow-ups: per-subcategory confidence threshold instead of one global value; optional auto-reject counterpart; a bulk "promote auto_approved → approved" action (currently uses per-item Abschliessen); and extend the KI-queue state filter to select `auto_approved` (aligns with #12 multiselect agent states).
 
+53. **Instance agentic flow (design agreed — `docs/PLANNING_instance_flow.md`).** A per-`ItemUUID`
+  flow that consumes intake data (`IntakeScan`, `InstanceSpecs`, quality answers, Phase-2 files) to
+  fill instance-scoped specs and reconcile the device against its reference, emitting propose-only
+  `wrong_ref`/`missing_on_ref` insights (never writes `item_refs`). Phasing: (1) spec-contract
+  `scope`/`measuredSignal` + deterministic instance fill (replaces the hardcoded `INTAKE_TO_SPEC`
+  map, reads `IntakeScan`, persists scanned `cpu` — closes #47); (2) instance-keyed run identity on
+  `agentic_runs` (overlaps #2); (3) the flow + reconciliation verdicts, auto-triggered on intake
+  `/complete`; (4) UI insights panel + "change reference" action + auto-approve hard gate; (5) Phase-2
+  test-file summarization (the deferred "scan.txt augmentation" item) + reconciliation→auto-approve
+  signals. Open questions carried in the planning doc §10.
+
 52. **Pre-existing failing tests (not caused by the #889–894 work; documented for cleanup).** `schema-contract-compatibility.test.ts` asserts the supervisor prompt contains `schema-contract.md`, but the current `supervisor.md` was rewritten to a description-quality focus and no longer references it — the test expectation is stale. `test/agentic-direct-dispatch.test.ts` and `test/agentic-startup-resume.test.ts` fail in the local esbuild harness because the scheduled `invokeModel` isn't observed (`toHaveBeenCalledTimes(1)` → 0); verify against CI's Postgres/jest setup. All three fail identically on a clean tree.
    - ✅ **Harness `toMatchObject` gap fixed (testing #907):** the custom harness never implemented `toMatchObject` though 16 call sites use it; added it as a recursive subset matcher. Removed one spurious failure ("moves box placement"); local failing count 10→9.
    - **Still failing locally (9):** esbuild harness can't resolve named exports from bundled `../../agentic` (`deleteAgenticRun`/`checkAgenticHealth is not a function`), plus mock/env gaps (`window is not defined`, missing `.env`/media fixtures, `ts-jest` preset not found). Suspected CI-green (jest+Postgres); needs verification against CI rather than product-code changes.
