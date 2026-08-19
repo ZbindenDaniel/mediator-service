@@ -66,6 +66,13 @@
   - ⏳ **Image repo (handed off):** patch `build_scan_payload` to source `sizeGb` from `lsblk -bdno SIZE`
     (bytes → GB); keep smartctl for identity only. This is the change that actually stops the storage prompt.
   - ⏳ **Optional image-side:** render the response's `detectedSpecs` as a read-only banner in `phase1.sh`.
+  - ✅ **Operator-typed Artikelbeschreibung honoured (intake #916).** Was dropped due to a field-name
+    mismatch (`findOrCreateRef` read `Kurzbeschreibung`, station sends `Artikelbeschreibung`) so the
+    garbage scanned model always won; operator text is now authoritative.
+  - ✅ **Every question skippable / "don't know" (intake #916).** Empty answers are treated as unanswered
+    in the derive functions (no junk `RAM: " GB"`) and dropped from the intake merge. ⏳ **Image-side:** a
+    small `phase1.sh` patch to let the operator press Enter to skip a select/boolean/text prompt (backend
+    already accepts an omitted/empty answer).
   - **Follow-ups:** broaden `driveTypeLabel` tolerance for exotic `type` strings (`sata`/`""`); a per-run
     scan-quality metric off `unresolvedAutoFill`.
 

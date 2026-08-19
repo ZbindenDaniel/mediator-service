@@ -107,6 +107,14 @@ Answer them in the same `qualityAnswers` map by question `id`. Presence answers 
 (`ram_gb`, `storage_gb`, `drive_type`, `battery_condition`) via `defaultValue` — confirm or
 override.
 
+### Every question is skippable — "don't know" is valid
+**No intake question is mandatory.** To skip one, either **omit its `id`** from `qualityAnswers`
+or send an **empty string** (`""`). The server treats both as *unanswered*: a skipped question
+never contributes to the quality score and never produces a spec (so a skipped `ram_gb` will not
+write `RAM: " GB"`). A skipped answer also never overrides a value the scan already resolved.
+The station TUI should let the operator press **Enter on an empty prompt to skip** any question
+(select, boolean, or text) — see the `phase1.sh` skip patch in the intake changelog (#916).
+
 ### Accessories as *specs* vs. accessories as *linked items*
 - Most accessories are captured as **specs/presence answers** (above) — no separate item is
   created. This is the default and avoids identity-less clutter.
