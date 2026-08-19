@@ -3,7 +3,7 @@
 ## Confirmed Decisions
 - **ERP export approval gate:** Only approved items may be exported/synced to the ERP — exporting unreviewed items is too dangerous. Enforced as a single choke point in `stageItemsExport` for `erp` mode (covers `/api/sync/erp`, `/api/export/items?mode=erp`, `/api/export/data?mode=erp`) plus an early filter in `sync-erp`. Configurable via `ERP_SYNC_REQUIRE_APPROVAL` (default `true`); backup-mode exports are unaffected.
 - **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.
-- **Item list conditional column:** A single date column slot appears only when sorting by `entryDate` or `lastSynced`, showing the relevant date. Other sort keys show no date column.
+- **Item list conditional column:** A single date column slot appears only when sorting by `entryDate`, `lastSynced`, or `agenticLastRun`, showing the relevant date. Other sort keys show no date column.
 - **Database:** PostgreSQL via `pg` (node-postgres). `DATABASE_URL` is required — no SQLite fallback. Local dev: Docker Compose Postgres service. Production: existing Postgres server, add a `mediator` database. Data migration from SQLite: `scripts/migrate-sqlite-to-postgres.ts`.
 - **Multi-instance agentic safety (Phase 2, implemented):** `claimQueuedAgenticRuns` in `backend/db.ts` uses a CTE with `FOR UPDATE SKIP LOCKED` + immediate UPDATE in one atomic statement. Call site in `backend/agentic/index.ts` updated; redundant QUEUED→RUNNING re-check removed. See agentic changelog entry 858.
 
@@ -53,7 +53,7 @@
 
 ## Priority 1 — Bugs & Active Work
 
-0z8. ✅ **Admin "Datenexport" downloaded nothing + Abbrechen was a silent no-op (erp-sync #927 / agentic #919).**
+0z9. ✅ **Admin "Datenexport" downloaded nothing + Abbrechen was a silent no-op (erp-sync #927 / agentic #919).**
   (a) `ExportCard` never sent the `actor` query param the `/api/export/items` endpoint requires, so every
   download 400'd and the `if(!res.ok) throw`→`logError` catch swallowed it (no download, no message). Now
   resolves the operator via `ensureUser()`, appends `&actor=…`, and shows an inline error on failure.
@@ -62,6 +62,18 @@
   spare-part/component refs. Guard dropped (kept `I-` instance guard). The **delete** path was investigated
   and found already correct in-tree (wired, routed, `deleteAgenticRun` unit-tested, resets stick via #876's
   `SearchQuery`-clear) — the residual silent-no-op was the cancel guard, now fixed.
+0z8. ✅ **Queued agentic runs promoted to running then cancelled immediately (should wait for a slot).**
+  Root cause: `499d8a4` ("Multi-instance agentic safety") removed the atomic running-count gate that the
+  queued→running promotion used to run *inside its own transaction* (it left an over-scheduled run `queued`
+  to wait). Cap enforcement then relied only on the dispatcher's non-atomic `availableSlots = MAX − runningCount`
+  read, and the dispatch `setInterval` (`server.ts`) has no reentrancy guard — so a tick outlasting the 5 s
+  interval overlaps the next, both read the same low count, both `claimQueuedAgenticRuns`, and together over-fill
+  the running slots; the over-cap sweep then flipped the excess to terminal `failed` (`over-cap-cancelled`). Fixed
+  in three layers: (1) reentrancy guard on the dispatch loop; (2) `claimQueuedAgenticRuns(limit, maxRunning?)` clamps
+  its `LIMIT` to the free slots inside the same atomic statement; (3) the over-cap net now **requeues** the freshest
+  excess to `queued` (keeping the oldest/in-progress running) instead of failing it, so a run that can't run yet waits.
+  See agentic changelog #919. **Deferred:** no Postgres advisory lock for a fully serializable multi-instance claim
+  (deployment is single-instance; the requeue-not-fail net covers any residual race).
 
 0z5. **Intake asks RAM / storage despite the scan — ROOT-CAUSED; backend done, image fix handed off.**
   Root cause (intake #915): the netboot image's `build_scan_payload` (in `common.sh`, separate repo) reads

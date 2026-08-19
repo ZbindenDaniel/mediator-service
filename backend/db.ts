@@ -1210,7 +1210,8 @@ export async function listItems(): Promise<any[]> {
   const rows = await query(
     `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
       "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
-      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\"",
+      "ar.\"LastAttemptAt\" AS \"AgenticLastRunAt\""
     ])}${ITEM_JOIN_WITH_BOX}
      LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
      WHERE COALESCE(i."Auf_Lager", 0) > 0
@@ -1230,7 +1231,8 @@ export async function listItemsWithFilters(filters: {
   const rows = await query(
     `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
       "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
-      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\"",
+      "ar.\"LastAttemptAt\" AS \"AgenticLastRunAt\""
     ])}${ITEM_JOIN_WITH_BOX}
      LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
      WHERE COALESCE(i."Auf_Lager", 0) > 0
@@ -1269,7 +1271,8 @@ export async function listItemReferencesWithFilters(filters: {
       r."Veröffentlicht_Status",r."Shopartikel",r."Artikeltyp",r."Einheit",r."EntityType",r."EAN",r."ShopwareProductId",
       r."LastSyncedAt",
       COALESCE(ar."Status",'notStarted') AS "AgenticStatus",
-      COALESCE(ar."ReviewState",'not_required') AS "AgenticReviewState"
+      COALESCE(ar."ReviewState",'not_required') AS "AgenticReviewState",
+      ar."LastAttemptAt" AS "AgenticLastRunAt"
      FROM item_refs r
      LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
      LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
@@ -2298,8 +2301,14 @@ export type AgenticRunQueueUpdate = {
   LastAttemptAt: string;
 };
 
-export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
+export async function claimQueuedAgenticRuns(limit = 5, maxRunning?: number): Promise<AgenticRun[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
+  // Optional hard cap on total 'running' runs, enforced inside this atomic statement. The caller's
+  // availableSlots read is not atomic with the claim, so passing the cap here makes the claim itself
+  // refuse to promote past it: LIMIT is clamped to (cap - current running count), computed in the same
+  // statement that does the promotion. This is the guarantee the removed per-invocation count-gate used
+  // to provide (see agentic index.ts), now at the claim layer. When omitted, only `limit` applies.
+  const cap = Number.isFinite(maxRunning) && (maxRunning ?? -1) >= 0 ? Math.floor(maxRunning as number) : null;
   const now = new Date().toISOString();
   try {
     // Atomic SELECT FOR UPDATE SKIP LOCKED + UPDATE in one statement so concurrent instances
@@ -2307,12 +2316,18 @@ export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
     // rather than block, and the rows are immediately moved to 'running' before any other
     // instance can see them as 'queued'.
     return query<AgenticRun>(
-      `WITH next_runs AS (
+      `WITH free_slots AS (
+         SELECT CASE
+                  WHEN $3::int IS NULL THEN $1::int
+                  ELSE LEAST($1::int, GREATEST(0, $3::int - (SELECT COUNT(*)::int FROM agentic_runs WHERE "Status" = 'running')))
+                END AS n
+       ),
+       next_runs AS (
          SELECT "Id"
          FROM agentic_runs
          WHERE "Status" = 'queued' AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= $2)
          ORDER BY "LastModified" ASC, "Id" ASC
-         LIMIT $1
+         LIMIT (SELECT n FROM free_slots)
          FOR UPDATE SKIP LOCKED
        )
        UPDATE agentic_runs
@@ -2324,7 +2339,7 @@ export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
        FROM next_runs
        WHERE agentic_runs."Id" = next_runs."Id"
        RETURNING agentic_runs.*`,
-      [effectiveLimit, now]
+      [effectiveLimit, now, cap]
     );
   } catch (err) {
     console.error('[db] Failed to claim queued agentic runs', err);

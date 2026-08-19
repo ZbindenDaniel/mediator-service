@@ -20,7 +20,7 @@
       "id": "battery_condition",
       "type": "select",
       "question": "Akkuzustand?",
-      "values": ["Gut (>80%)", "Mittel (50–80%)", "Schwach (<50%)", "Defekt"],
+      "values": ["?", "Gut (>80%)", "Mittel (50–80%)", "Schwach (<50%)", "Defekt"],
       "specField": "Akku",
       "specValue": "%v",
       "qualityImpact": {
