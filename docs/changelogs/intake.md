@@ -4,6 +4,34 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 916. ✅ Intake: operator-typed Artikelbeschreibung was ignored + make every question skippable
+**Why:** Two operator-reported issues.
+**(1) The typed Artikelbeschreibung never stuck — the scanned model always won.** Field-name
+mismatch: the station (`phase1.sh`) sends the operator's input as `newRef.Artikelbeschreibung`, but
+`findOrCreateRef` only ever read `newRef.Kurzbeschreibung`, so the typed value was dropped and the
+description fell back to `scanPayload.model` (usually garbage DMI like "HP Notebook"). Fixed: the
+create-new-ref path now honours `newRef.Artikelbeschreibung` as **authoritative**, with precedence
+operator-text → supplied `Kurzbeschreibung` → scanned model → `Hersteller` (last resort so the
+required field is never empty). `Kurzbeschreibung` still keeps the short model name from the scan
+when the operator didn't supply one. `IntakeAnswerRefBody.newRef` gained the `Artikelbeschreibung?`
+field to match what the station already sends.
+**(2) "Don't know" is now valid on any question.** The backend treated an empty answer as a real
+value — `deriveSpecsFromAnswers` rendered a skipped `ram_gb` as `RAM: " GB"` and `deriveQualityFromAnswers`
+could score it. Now an empty/whitespace answer is treated as **unanswered** in both derive functions
+(so a skip never produces a junk spec or drives the score), and the intake quality-answer merge drops
+empty submitted answers so a skip can't clobber a scan-derived auto-answer. No intake question is
+mandatory: the station may omit an `id` or send `""` to skip. (The matching TUI change — press Enter
+on an empty prompt to skip select/boolean/text — is a small `phase1.sh` patch handed to the image repo;
+the backend already accepts the result.)
+**Why (approach):** Both fixes are the *authoritative-source* principle: the operator's explicit
+input beats the scan (Artikelbeschreibung), and an explicit "don't know" is honoured rather than
+coerced into a bogus value. Guarding empty answers centrally in the two derive functions also fixes
+the same junk-spec risk in the operator review flow (`quality-review.ts`), not just intake.
+**Deferred:** The `phase1.sh` skip UX (empty-input-to-skip) is image-side. The RAM/storage prompt
+itself still needs the `build_scan_payload` lsblk fix (#915) to stop being *asked* at all on NVMe;
+skippability is the interim relief the operator asked for. No backfill of refs already created with a
+scanned-model description.
+
 ## 915. ✅ Intake "asks RAM/storage": root-caused to NVMe disk size = 0 + made the scan gap visible
 **Why:** The reported bug — intake prompts for storage the device already scanned — is **not** a
 backend-logic or missing-echo bug. Verified by reproduction: the resolver drops `ram_gb`/`storage_gb`/

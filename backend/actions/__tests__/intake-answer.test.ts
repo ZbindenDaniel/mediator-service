@@ -92,4 +92,26 @@ describe('intake-answer action', () => {
       expect.objectContaining({ Event: 'Created', EntityType: 'Item', EntityId: 'I-100-0001' })
     );
   });
+
+  it('persists the operator-typed Artikelbeschreibung, not the scanned model', async () => {
+    // The station sends the operator's text as newRef.Artikelbeschreibung; the (garbage) scanned
+    // model rides along in scanPayload.model. The operator's text must win.
+    const req = makeRequest('/api/intake/SN:SN9/answer', {
+      type: 'ref',
+      newRef: { Hersteller: 'HP', Artikelbeschreibung: 'HP EliteBook 840 G5 – i5/16GB', Hauptkategorien_A: 20, Unterkategorien_A: 201 },
+      scanPayload: { serial: 'SN9', mac: null, model: 'HP Notebook' },
+    });
+    const { res, getStatus } = createMockResponse();
+
+    await action.handle(req, res, {});
+
+    expect(getStatus()).toBe(200);
+    expect(persistItemReference).toHaveBeenCalledWith(
+      expect.objectContaining({ Artikelbeschreibung: 'HP EliteBook 840 G5 – i5/16GB' })
+    );
+    // The scanned model must NOT have become the description.
+    expect(persistItemReference).not.toHaveBeenCalledWith(
+      expect.objectContaining({ Artikelbeschreibung: 'HP Notebook' })
+    );
+  });
 });

@@ -101,7 +101,10 @@ export interface IntakeAnswerRefBody {
   artikelNummer?: string;
   newRef?: {
     Hersteller: string;
-    // Optional: defaults to the scanned model (scanPayload.model), which is the model name
+    // Operator-typed description — AUTHORITATIVE, wins over the scanned model. The station TUI
+    // sends the operator's input here (accept-suggestion or their own text).
+    Artikelbeschreibung?: string;
+    // Optional: short model name; defaults to the scanned model (scanPayload.model).
     Kurzbeschreibung?: string;
     Hauptkategorien_A: number;
     Unterkategorien_A: number;
