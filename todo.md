@@ -3,7 +3,7 @@
 ## Confirmed Decisions
 - **ERP export approval gate:** Only approved items may be exported/synced to the ERP — exporting unreviewed items is too dangerous. Enforced as a single choke point in `stageItemsExport` for `erp` mode (covers `/api/sync/erp`, `/api/export/items?mode=erp`, `/api/export/data?mode=erp`) plus an early filter in `sync-erp`. Configurable via `ERP_SYNC_REQUIRE_APPROVAL` (default `true`); backup-mode exports are unaffected.
 - **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.
-- **Item list conditional column:** A single date column slot appears only when sorting by `entryDate` or `lastSynced`, showing the relevant date. Other sort keys show no date column.
+- **Item list conditional column:** A single date column slot appears only when sorting by `entryDate`, `lastSynced`, or `agenticLastRun`, showing the relevant date. Other sort keys show no date column.
 - **Database:** PostgreSQL via `pg` (node-postgres). `DATABASE_URL` is required — no SQLite fallback. Local dev: Docker Compose Postgres service. Production: existing Postgres server, add a `mediator` database. Data migration from SQLite: `scripts/migrate-sqlite-to-postgres.ts`.
 - **Multi-instance agentic safety (Phase 2, implemented):** `claimQueuedAgenticRuns` in `backend/db.ts` uses a CTE with `FOR UPDATE SKIP LOCKED` + immediate UPDATE in one atomic statement. Call site in `backend/agentic/index.ts` updated; redundant QUEUED→RUNNING re-check removed. See agentic changelog entry 858.
 

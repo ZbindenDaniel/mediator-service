@@ -3,10 +3,12 @@
   "subCategory": 103,
   "fields": [
     { "key": "Prozessor",      "required": true,  "description": "CPU model and count (e.g. 2x Intel Xeon E5-2670)" },
-    { "key": "RAM",            "required": true,  "description": "Total memory in GB" },
-    { "key": "Speicher",       "required": true,  "description": "Storage configuration (e.g. 4x 900 GB SAS)" },
     { "key": "Speichertyp",    "required": false, "description": "Drive type (SSD, NVMe SSD, HDD, SAS HDD)" },
     { "key": "Formfaktor",     "required": false, "description": "Physical form (Rack 1U/2U/4U, Tower, Blade)" },
-    { "key": "Betriebssystem", "required": false, "description": "Operating system installed" }
+    { "key": "RAM-Slots",       "required": false, "description": "number of Ram Slots (e.g. 1, 2, 4)" },
+    { "key": "RAM-Kapazität",       "required": false, "description": "max. RAM (e.g. 16GB)" },
+    { "key": "RAM-Typ",            "required": false, "description": "Type of RAM (DDR3, DDR4, DDR5)" },
+    { "key": "Anschlüsse",     "required": false, "description": "Different interfaces like USB, HDMI, EThernet, etc." }
+
   ]
 }

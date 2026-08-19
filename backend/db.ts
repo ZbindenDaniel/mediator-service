@@ -1210,7 +1210,8 @@ export async function listItems(): Promise<any[]> {
   const rows = await query(
     `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
       "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
-      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\"",
+      "ar.\"LastAttemptAt\" AS \"AgenticLastRunAt\""
     ])}${ITEM_JOIN_WITH_BOX}
      LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
      WHERE COALESCE(i."Auf_Lager", 0) > 0
@@ -1230,7 +1231,8 @@ export async function listItemsWithFilters(filters: {
   const rows = await query(
     `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
       "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
-      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\"",
+      "ar.\"LastAttemptAt\" AS \"AgenticLastRunAt\""
     ])}${ITEM_JOIN_WITH_BOX}
      LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
      WHERE COALESCE(i."Auf_Lager", 0) > 0
@@ -1269,7 +1271,8 @@ export async function listItemReferencesWithFilters(filters: {
       r."Veröffentlicht_Status",r."Shopartikel",r."Artikeltyp",r."Einheit",r."EntityType",r."EAN",r."ShopwareProductId",
       r."LastSyncedAt",
       COALESCE(ar."Status",'notStarted') AS "AgenticStatus",
-      COALESCE(ar."ReviewState",'not_required') AS "AgenticReviewState"
+      COALESCE(ar."ReviewState",'not_required') AS "AgenticReviewState",
+      ar."LastAttemptAt" AS "AgenticLastRunAt"
      FROM item_refs r
      LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
      LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
