@@ -53,6 +53,20 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0za. ✅ **Admin "Backup" was not a restorable snapshot + emitted env-dependent HTML (erp-sync #931).**
+  The Backup button routed to `/api/export/items?mode=backup`, which emitted only items+boxes (no agentic
+  runs, no events) and resolved Langtext via `LANGTEXT_EXPORT_FORMAT` — so setting that env to `html` (for
+  the ERP boundary) made *backups* emit HTML cells that break on re-import. Fixed: Backup now routes to
+  `/api/export/data?format=zip&entities=items,boxes,agentic,events&mode=backup` (all four CSVs the importer
+  ingests); backup Langtext is **always** JSON (env override confined to ERP); backup is uncapped (was
+  truncating agentic/events at 500). Also fixed three latent `export-data` bugs (boxes/agentic/events queries
+  used unquoted CamelCase identifiers → threw against the real schema) and added `LastSearchLinksJson` to the
+  agentic export so search evidence survives restore.
+  **Follow-ups (deferred):** (a) no JSON restore importer — restore stays CSV/ZIP-based (operator's call that a
+  backup "should be CSV"); (b) `manual_import`≡`backup` and `automatic_import`≡`erp` internally — the 4-button
+  UI could be collapsed/relabeled to the 2 real regimes; (c) `/api/export/data` is unauthenticated — gate under
+  the Authentik/role model (33c) if backups need access control.
+
 0z9. ✅ **Admin "Datenexport" downloaded nothing + Abbrechen was a silent no-op (erp-sync #927 / agentic #919).**
   (a) `ExportCard` never sent the `actor` query param the `/api/export/items` endpoint requires, so every
   download 400'd and the `if(!res.ok) throw`→`logError` catch swallowed it (no download, no message). Now

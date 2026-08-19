@@ -29,6 +29,9 @@ const AGENTIC_COLUMNS = [
   'Id',
   'Artikel_Nummer',
   'SearchQuery',
+  // LastSearchLinksJson is round-tripped by ingestAgenticRunsCsv, so a backup must carry it
+  // to restore the stored search evidence — otherwise reuse-search state is lost on restore.
+  'LastSearchLinksJson',
   'Status',
   'LastModified',
   'ReviewState',
@@ -275,12 +278,14 @@ const action = defineHttpAction({
 
     if (requestedBoxes) {
       try {
+        // Identifiers must be quoted: the columns are defined as case-sensitive CamelCase
+        // ("BoxID", "CreatedAt", ...), so unquoted names fold to lowercase and error out.
         boxes = await query(`
           SELECT *
           FROM boxes
-          WHERE ($1::text IS NULL OR CreatedAt >= $1)
-            AND ($2::text IS NULL OR UpdatedAt >= $2)
-          ORDER BY BoxID
+          WHERE ($1::text IS NULL OR "CreatedAt" >= $1)
+            AND ($2::text IS NULL OR "UpdatedAt" >= $2)
+          ORDER BY "BoxID"
         `, [createdAfter || null, updatedAfter || null]);
         console.info('[export-data] Boxes export loaded', {
           count: Array.isArray(boxes) ? boxes.length : 0
@@ -343,15 +348,18 @@ const action = defineHttpAction({
 
       if (entity === 'agentic') {
         try {
+          // A backup must be complete, so it is never row-capped; other callers keep the LIMIT.
+          const unbounded = exportMode === 'backup';
           const rows = await query(`
-            SELECT Id, Artikel_Nummer, SearchQuery, Status, LastModified, ReviewState, ReviewedBy,
-                   LastReviewDecision, LastReviewNotes, RetryCount, NextRetryAt, LastError, LastAttemptAt
+            SELECT "Id", "Artikel_Nummer", "SearchQuery", "LastSearchLinksJson", "Status", "LastModified",
+                   "ReviewState", "ReviewedBy", "LastReviewDecision", "LastReviewNotes", "RetryCount",
+                   "NextRetryAt", "LastError", "LastAttemptAt"
             FROM agentic_runs
-            WHERE ($1::text IS NULL OR LastModified >= $1)
-              AND ($2::text IS NULL OR LastModified >= $2)
-            ORDER BY Id DESC
-            LIMIT $3
-          `, [createdAfter || null, updatedAfter || null, limit]);
+            WHERE ($1::text IS NULL OR "LastModified" >= $1)
+              AND ($2::text IS NULL OR "LastModified" >= $2)
+            ORDER BY "Id" DESC
+            ${unbounded ? '' : 'LIMIT $3'}
+          `, unbounded ? [createdAfter || null, updatedAfter || null] : [createdAfter || null, updatedAfter || null, limit]);
           if (format === 'json') {
             entityPayloads.agentic = rows;
           } else {
@@ -377,14 +385,16 @@ const action = defineHttpAction({
 
       if (entity === 'events') {
         try {
+          // A backup must be complete, so it is never row-capped; other callers keep the LIMIT.
+          const unbounded = exportMode === 'backup';
           const rows = await query(`
-            SELECT Id, CreatedAt, Actor, EntityType, EntityId, Event, Level, Meta
+            SELECT "Id", "CreatedAt", "Actor", "EntityType", "EntityId", "Event", "Level", "Meta"
             FROM events
-            WHERE ($1::text IS NULL OR CreatedAt >= $1)
-              AND ($2::text IS NULL OR CreatedAt >= $2)
-            ORDER BY Id DESC
-            LIMIT $3
-          `, [createdAfter || null, updatedAfter || null, limit]);
+            WHERE ($1::text IS NULL OR "CreatedAt" >= $1)
+              AND ($2::text IS NULL OR "CreatedAt" >= $2)
+            ORDER BY "Id" DESC
+            ${unbounded ? '' : 'LIMIT $3'}
+          `, unbounded ? [createdAfter || null, updatedAfter || null] : [createdAfter || null, updatedAfter || null, limit]);
           const labeledRows = rows.map((row: Record<string, unknown>) => ({
             ...row,
             EventLabel: eventLabel(String(row.Event || ''))
