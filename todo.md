@@ -53,6 +53,15 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0z9. ✅ **Admin "Datenexport" downloaded nothing + Abbrechen was a silent no-op (erp-sync #927 / agentic #919).**
+  (a) `ExportCard` never sent the `actor` query param the `/api/export/items` endpoint requires, so every
+  download 400'd and the `if(!res.ok) throw`→`logError` catch swallowed it (no download, no message). Now
+  resolves the operator via `ensureUser()`, appends `&actor=…`, and shows an inline error on failure.
+  (b) `persistAgenticRunCancellation` kept the `!/^\d+$/` numeric-only Artikel_Nummer guard (already removed
+  from close in #876) — it silently rejected non-numeric refs client-side, so "Abbrechen" did nothing on
+  spare-part/component refs. Guard dropped (kept `I-` instance guard). The **delete** path was investigated
+  and found already correct in-tree (wired, routed, `deleteAgenticRun` unit-tested, resets stick via #876's
+  `SearchQuery`-clear) — the residual silent-no-op was the cancel guard, now fixed.
 0z8. ✅ **Queued agentic runs promoted to running then cancelled immediately (should wait for a slot).**
   Root cause: `499d8a4` ("Multi-instance agentic safety") removed the atomic running-count gate that the
   queued→running promotion used to run *inside its own transaction* (it left an over-scheduled run `queued`
