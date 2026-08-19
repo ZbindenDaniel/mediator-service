@@ -12,6 +12,9 @@ import {
   AgenticRequestLogUpsert,
   AgenticRequestNotification,
   AgenticRun,
+  AgenticRunSnapshot,
+  AgenticRunSnapshotReason,
+  AgenticSnapshotFields,
   Box,
   Item,
   ItemInstance,
@@ -399,6 +402,25 @@ CREATE TABLE IF NOT EXISTS agentic_run_review_history (
 
 CREATE INDEX IF NOT EXISTS idx_agentic_run_review_history_artikel_nummer_recorded_at
   ON agentic_run_review_history ("Artikel_Nummer", "RecordedAt", "Id");
+
+-- Versioned history of an item's AI-enriched state: one row captured just before a run/rework mutates
+-- the item (plus non-destructive restore rows). Powers the KI-tab diff + restore. Retention keeps the
+-- last 4 per item plus the most recent approved-state snapshot (see pruneAgenticRunSnapshots).
+CREATE TABLE IF NOT EXISTS agentic_run_snapshots (
+  "Id"                  SERIAL PRIMARY KEY,
+  "Artikel_Nummer"      TEXT NOT NULL REFERENCES item_refs("Artikel_Nummer") ON DELETE CASCADE ON UPDATE CASCADE,
+  "RunId"               INTEGER,
+  "CreatedAt"           TEXT NOT NULL,
+  "Reason"              TEXT NOT NULL,
+  "CapturedReviewState" TEXT,
+  "Actor"               TEXT,
+  "TriggerReason"       TEXT,
+  "SchemaVersion"       INTEGER NOT NULL DEFAULT 1,
+  "FieldsJson"          TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_agentic_run_snapshots_artikel_created
+  ON agentic_run_snapshots ("Artikel_Nummer", "CreatedAt", "Id");
 
 CREATE TABLE IF NOT EXISTS user_item_marks (
   "Username"  TEXT NOT NULL,
@@ -2098,6 +2120,130 @@ export async function listRecentAgenticRunReviewHistoryBySubcategory(subcategory
     console.error('[db] Failed to list recent agentic run review history by subcategory', { subcategory: normalizedSubcategory, error: err });
     throw err;
   }
+}
+
+// --- Agentic run snapshots (versioned enriched-state history) ---
+
+const AGENTIC_SNAPSHOT_KEEP_RECENT = 4;
+
+function parseSnapshotRow(row: {
+  Id: number;
+  Artikel_Nummer: string;
+  RunId: number | null;
+  CreatedAt: string;
+  Reason: string;
+  CapturedReviewState: string | null;
+  Actor: string | null;
+  TriggerReason: string | null;
+  SchemaVersion: number;
+  FieldsJson: string;
+}): AgenticRunSnapshot {
+  let fields: AgenticSnapshotFields = {};
+  try {
+    const parsed = JSON.parse(row.FieldsJson);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      fields = parsed as AgenticSnapshotFields;
+    }
+  } catch (err) {
+    console.warn('[db] Failed to parse agentic snapshot FieldsJson', { id: row.Id, error: err });
+  }
+  return {
+    Id: row.Id,
+    Artikel_Nummer: row.Artikel_Nummer,
+    RunId: row.RunId,
+    CreatedAt: row.CreatedAt,
+    Reason: (row.Reason as AgenticRunSnapshotReason) ?? 'pre-run',
+    CapturedReviewState: row.CapturedReviewState,
+    Actor: row.Actor,
+    TriggerReason: row.TriggerReason,
+    SchemaVersion: row.SchemaVersion,
+    Fields: fields
+  };
+}
+
+export async function insertAgenticRunSnapshot(params: {
+  Artikel_Nummer: string;
+  RunId?: number | null;
+  Reason: AgenticRunSnapshotReason;
+  CapturedReviewState?: string | null;
+  Actor?: string | null;
+  TriggerReason?: string | null;
+  SchemaVersion?: number;
+  Fields: AgenticSnapshotFields;
+  CreatedAt?: string;
+}): Promise<void> {
+  const artikelNummer = typeof params.Artikel_Nummer === 'string' ? params.Artikel_Nummer.trim() : '';
+  if (!artikelNummer) return;
+  const createdAt = params.CreatedAt ?? new Date().toISOString();
+  await execute(
+    `INSERT INTO agentic_run_snapshots
+       ("Artikel_Nummer","RunId","CreatedAt","Reason","CapturedReviewState","Actor","TriggerReason","SchemaVersion","FieldsJson")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      artikelNummer,
+      params.RunId ?? null,
+      createdAt,
+      params.Reason,
+      params.CapturedReviewState ?? null,
+      params.Actor ?? null,
+      params.TriggerReason ?? null,
+      params.SchemaVersion ?? 1,
+      JSON.stringify(params.Fields ?? {})
+    ]
+  );
+}
+
+// Retention: keep the 4 most recent snapshots PLUS the most recent approved-state snapshot even if it
+// falls outside that window — so an item can always be rolled back to its last known-good state.
+export async function pruneAgenticRunSnapshots(artikelNummer: string): Promise<void> {
+  const normalized = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalized) return;
+  try {
+    await execute(
+      `DELETE FROM agentic_run_snapshots
+       WHERE "Artikel_Nummer" = $1
+         AND "Id" NOT IN (
+           SELECT "Id" FROM agentic_run_snapshots
+           WHERE "Artikel_Nummer" = $1
+           ORDER BY "CreatedAt" DESC, "Id" DESC
+           LIMIT $2
+         )
+         AND "Id" NOT IN (
+           SELECT "Id" FROM agentic_run_snapshots
+           WHERE "Artikel_Nummer" = $1
+             AND LOWER(COALESCE("CapturedReviewState", '')) IN ('approved','auto_approved')
+           ORDER BY "CreatedAt" DESC, "Id" DESC
+           LIMIT 1
+         )`,
+      [normalized, AGENTIC_SNAPSHOT_KEEP_RECENT]
+    );
+  } catch (err) {
+    console.warn('[db] Failed to prune agentic run snapshots', { artikelNummer: normalized, error: err });
+  }
+}
+
+export async function listAgenticRunSnapshots(artikelNummer: string, limit = 20): Promise<AgenticRunSnapshot[]> {
+  const normalized = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalized) return [];
+  const normalizedLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 20;
+  const rows = await query<Parameters<typeof parseSnapshotRow>[0]>(
+    `SELECT "Id","Artikel_Nummer","RunId","CreatedAt","Reason","CapturedReviewState","Actor","TriggerReason","SchemaVersion","FieldsJson"
+     FROM agentic_run_snapshots WHERE "Artikel_Nummer"=$1
+     ORDER BY "CreatedAt" DESC, "Id" DESC LIMIT $2`,
+    [normalized, normalizedLimit]
+  );
+  return rows.map(parseSnapshotRow);
+}
+
+export async function getAgenticRunSnapshotById(id: number, artikelNummer: string): Promise<AgenticRunSnapshot | null> {
+  const normalized = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalized || !Number.isInteger(id)) return null;
+  const row = await queryOne<Parameters<typeof parseSnapshotRow>[0]>(
+    `SELECT "Id","Artikel_Nummer","RunId","CreatedAt","Reason","CapturedReviewState","Actor","TriggerReason","SchemaVersion","FieldsJson"
+     FROM agentic_run_snapshots WHERE "Id"=$1 AND "Artikel_Nummer"=$2`,
+    [id, normalized]
+  );
+  return row ? parseSnapshotRow(row) : null;
 }
 
 export async function persistAgenticRunError(params: { artikelNummer: string; error: string | null; attemptAt?: string | null }): Promise<void> {

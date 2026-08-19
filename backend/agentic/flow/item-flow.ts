@@ -627,6 +627,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       pricingPrompt: pricing,
       searchInvoker,
       target,
+      searchTerm,
       reviewNotes: reviewerNotes,
       missingSpecFields: [
         ...(Array.isArray(input.missingSpecFields) ? input.missingSpecFields : []),

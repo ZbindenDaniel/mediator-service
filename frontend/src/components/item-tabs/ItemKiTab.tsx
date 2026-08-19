@@ -1,6 +1,8 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { AgenticStatusCard, type AgenticStatusCardProps } from '../AgenticStatusCard';
+import { AgenticSnapshotsPanel } from '../AgenticSnapshotsPanel';
+import type { AgenticSnapshotFields } from '../../../../models';
 import AgenticSpecFieldReviewModal, {
   AgenticContractFieldReviewModal,
   type AgenticSpecFieldOption,
@@ -46,6 +48,11 @@ interface Props {
   canDelete: boolean;
   onDelete?: () => void | Promise<void>;
   actionPending: boolean;
+  // Run-history panel (versioned enriched state): the item's Artikelnummer, its current AI-written
+  // fields (to diff against), and a callback to refresh the item after a restore.
+  snapshotArtikelNummer?: string | null;
+  snapshotCurrentFields?: AgenticSnapshotFields;
+  onSnapshotRestored?: () => void;
 }
 
 export default function ItemKiTab({
@@ -62,7 +69,10 @@ export default function ItemKiTab({
   onClose,
   canDelete,
   onDelete,
-  actionPending
+  actionPending,
+  snapshotArtikelNummer,
+  snapshotCurrentFields,
+  onSnapshotRestored
 }: Props) {
   const { canStart, canRestart, canCancel, needsReview, reviewIntent, startLabel, onStart, onRestart, onCancel, onReview } = agenticCardProps;
   const startHandler = onStart ?? onRestart;
@@ -115,6 +125,13 @@ export default function ItemKiTab({
         </div>
       )}
       <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
+      {snapshotArtikelNummer ? (
+        <AgenticSnapshotsPanel
+          artikelNummer={snapshotArtikelNummer}
+          currentFields={snapshotCurrentFields ?? {}}
+          onRestored={onSnapshotRestored}
+        />
+      ) : null}
       {specFieldModalState ? ReactDOM.createPortal(
         <AgenticSpecFieldReviewModal
           title={specFieldModalState.title}

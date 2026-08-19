@@ -21,7 +21,7 @@
     not rename it to "CPU"/"Processor"). Do not translate, abbreviate, or invent a synonym for a key
     that is already present; only introduce a new key for a genuinely new spec.
   - Field notes:
-    - Artikelbeschreibung: Correct to the precise product name stated in sources.Add a broad device type in front (e.g. 'Laptop', 'Festplatte', 'Drucker.
+    - Artikelbeschreibung: Refine to the precise product name stated in sources, but only WITHIN the known device class (see the "Known identity" note). Keep a broad device type in front (e.g. 'Laptop', 'Festplatte', 'Drucker'). Never change the device class to match sources — if the sources describe a different kind of product, keep the provided value.
     - Kurzbeschreibung: One concise paragraph; bullets only if they clarify.
     - Spezifikationen: Open JSON object of specs only; add extra informative keys whenever evidence provides them; values as strings or arrays of strings.
     - Empty string values ("") in Spezifikationen are contract placeholders — fill them when evidence is available; do not return them as empty strings.

@@ -208,6 +208,8 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 | `MODEL_BASE_URL` | (unset) | Legacy alias for `AGENTIC_MODEL_BASE_URL`. |
 | `MODEL_NAME` | (unset) | Legacy alias for `AGENTIC_MODEL_NAME`. |
 | `MODEL_API_KEY` | (unset) | Legacy alias for `AGENTIC_MODEL_API_KEY`. |
+| `MODEL_HTTP_HEADERS_TIMEOUT_MS` | `600000` | undici fetch header timeout (ms) for model calls. Raise if a cold/large local model is slow to first token and runs fail with `UND_ERR_HEADERS_TIMEOUT`; `0` disables. Applied as a global fetch dispatcher. |
+| `MODEL_HTTP_BODY_TIMEOUT_MS` | `600000` | undici fetch body timeout (ms) for model calls (inter-chunk while streaming); `0` disables. |
 | `TAVILY_API_KEY` | (unset) | Tavily API key for search enrichment. |
 | `SEARCH_RATE_LIMIT_DELAY_MS` | (unset) | Delay between search requests (ms). |
 | `SEARCH_MAX_PLANS` | `3` | Max agentic search plans per request. |

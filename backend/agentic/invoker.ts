@@ -1,4 +1,4 @@
-import { AGENTIC_REVIEW_SPEC_MAX_ENTRIES, type AgenticModelInvocationInput, type AgenticModelInvocationResult, type LangtextPayload } from '../../models';
+import { AGENTIC_REVIEW_SPEC_MAX_ENTRIES, AGENTIC_SNAPSHOT_SCHEMA_VERSION, type AgenticModelInvocationInput, type AgenticModelInvocationResult, type AgenticSnapshotFields, type LangtextPayload } from '../../models';
 import {
   getItem,
   findByMaterial,
@@ -12,6 +12,8 @@ import {
   getAgenticRequestLog,
   persistAgenticRunError,
   persistAgenticSearchLinks,
+  insertAgenticRunSnapshot,
+  pruneAgenticRunSnapshots,
   saveAgenticRequestPayload,
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure
@@ -29,6 +31,7 @@ import { FlowError } from './flow/errors';
 import { handleAgenticResult, type AgenticResultPayload } from './result-handler';
 import { parseSequentialItemUUID } from '../lib/itemIds';
 import type { SearchSource } from './utils/source-formatter';
+import { ensureModelHttpTimeouts } from './utils/http-dispatcher';
 
 // TODO(agent): Audit request payload merge rules whenever the AgenticTarget schema evolves.
 
@@ -49,9 +52,10 @@ const OLLAMA_KEEP_ALIVE = '10m';
 const LLM_RETRY_ATTEMPTS = 3;
 const LLM_RETRY_BASE_DELAY_MS = 2000;
 
-// Classify an LLM/HTTP transport failure as transient. The recurring case is undici's
-// UND_ERR_HEADERS_TIMEOUT ("fetch failed") when the model is slow to return the first response headers
-// (cold model load / GPU contention); a retry usually succeeds once the model is warm.
+// Classify an LLM/HTTP transport failure as transient. With the header/body-timeout ceiling raised
+// (ensureModelHttpTimeouts), a slow first token no longer trips UND_ERR_HEADERS_TIMEOUT — so retries
+// here now cover only genuine transport drops (reset connection, network blip), where a re-send once the
+// model is warm succeeds.
 function isTransientLlmError(err: unknown): boolean {
   const message = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase();
   const cause = (err as { cause?: { code?: string; message?: string } }).cause;
@@ -132,6 +136,33 @@ function serializeSearchSourcesForReuse(sources: SearchSource[]): string | null 
   } catch {
     return null;
   }
+}
+
+// The AI-written fields a run snapshot captures — the diff surface and what restore writes back.
+const SNAPSHOT_FIELD_KEYS = [
+  'Artikelbeschreibung',
+  'Kurzbeschreibung',
+  'Langtext',
+  'Hersteller',
+  'Länge_mm',
+  'Breite_mm',
+  'Höhe_mm',
+  'Gewicht_kg',
+  'Verkaufspreis',
+  'Hauptkategorien_A',
+  'Unterkategorien_A',
+  'Hauptkategorien_B',
+  'Unterkategorien_B'
+] as const;
+
+function buildSnapshotFields(source: Record<string, unknown>): AgenticSnapshotFields {
+  const out: Record<string, unknown> = {};
+  for (const key of SNAPSHOT_FIELD_KEYS) {
+    if (source[key] !== undefined) {
+      out[key] = source[key];
+    }
+  }
+  return out as AgenticSnapshotFields;
 }
 
 const REVIEW_SPEC_FIELD_LIMIT = AGENTIC_REVIEW_SPEC_MAX_ENTRIES;
@@ -477,6 +508,11 @@ export class AgenticModelInvoker {
 
   /** Load a model for the configured provider using the shared API settings and the given model name. */
   private async loadModel(modelName: string | undefined): Promise<ChatModel> {
+    // Move undici's fetch header/body-timeout wall BEFORE building any model client, so a slow first
+    // token from a cold model isn't misclassified as a transport failure (root fix for the recurring
+    // UND_ERR_HEADERS_TIMEOUT). Idempotent + best-effort; retry below stays as the fallback for genuine
+    // transport drops.
+    await ensureModelHttpTimeouts(this.logger);
     if (modelConfig.provider === 'ollama') {
       try {
         const module = await import('@langchain/ollama');
@@ -833,6 +869,31 @@ export class AgenticModelInvoker {
         });
         target.Artikel_Nummer = trimmedItemId;
       }
+
+      // Snapshot the pre-run enriched state (versioned history → KI-tab diff + restore) from the pure DB
+      // fields, before the request-payload merge or Artikelbeschreibung fill-in mutates them. The run's
+      // current ReviewState is captured so retention can always keep the last approved state. Best-effort:
+      // a snapshot failure must never block the run.
+      try {
+        const snapshotArtikelNummer =
+          typeof target.Artikel_Nummer === 'string' ? target.Artikel_Nummer.trim() : trimmedItemId;
+        const existingForSnapshot = await getAgenticRun(snapshotArtikelNummer);
+        await insertAgenticRunSnapshot({
+          Artikel_Nummer: snapshotArtikelNummer,
+          RunId: existingForSnapshot?.Id ?? null,
+          Reason: reworkSpecFields.length > 0 ? 'pre-rework' : 'pre-run',
+          CapturedReviewState: existingForSnapshot?.ReviewState ?? null,
+          // Actor isn't on the invocation input; the reviewer (if any) is the closest available attribution.
+          Actor: typeof input.review?.reviewedBy === 'string' && input.review.reviewedBy.trim() ? input.review.reviewedBy.trim() : null,
+          TriggerReason: typeof input.context === 'string' && input.context.trim() ? input.context.trim() : null,
+          SchemaVersion: AGENTIC_SNAPSHOT_SCHEMA_VERSION,
+          Fields: buildSnapshotFields(loadedTarget as Record<string, unknown>)
+        });
+        await pruneAgenticRunSnapshots(snapshotArtikelNummer);
+      } catch (err) {
+        this.logger.warn?.({ err, msg: 'failed to capture pre-run snapshot', itemId: trimmedItemId });
+      }
+
       if (!target.Artikelbeschreibung && input.searchQuery) {
         target.Artikelbeschreibung = input.searchQuery;
       }

@@ -357,6 +357,56 @@ function applyQueueUpdate(
   }
 }
 
+// A run can die in the queue — before it ever reaches the invoker — via three paths that previously
+// left only a terse warn: a stale/zombie `running` reclaim, an over-cap cancellation, and an empty
+// `SearchQuery`. This records each one legibly in BOTH places an operator looks: a structured
+// from→to/reason log line, and an `AgenticRunFailed` item event so the transition shows up in the item's
+// history (the queue paths emitted no event at all, hence "waiting runs fall to failed untraceably").
+// `category` distinguishes an infrastructure cancellation (capacity/zombie reclaim — not the run's
+// fault) from a genuine invalid-state failure, without yet changing the terminal status itself.
+async function recordQueueTerminalTransition(
+  deps: AgenticServiceDependencies,
+  logger: AgenticServiceLogger,
+  params: {
+    artikelNummer: string;
+    fromStatus: string | null;
+    reason: string;
+    category: 'infra-cancelled' | 'invalid-state';
+    retryCount?: number | null;
+  }
+): Promise<void> {
+  const { artikelNummer, fromStatus, reason, category, retryCount } = params;
+  logger.warn?.('[agentic-service] Queue terminal transition', {
+    artikelNummer,
+    from: fromStatus ?? null,
+    to: AGENTIC_RUN_STATUS_FAILED,
+    reason,
+    category,
+    retryCount: retryCount ?? null
+  });
+  try {
+    await deps.logEvent({
+      Actor: 'agentic-service',
+      EntityType: 'Item',
+      EntityId: artikelNummer,
+      Event: 'AgenticRunFailed',
+      Meta: JSON.stringify({
+        from: fromStatus ?? null,
+        to: AGENTIC_RUN_STATUS_FAILED,
+        reason,
+        category,
+        failedAt: new Date().toISOString()
+      })
+    });
+  } catch (eventErr) {
+    logger.error?.('[agentic-service] Failed to record queue terminal transition event', {
+      artikelNummer,
+      reason,
+      error: toErrorMessage(eventErr)
+    });
+  }
+}
+
 // TODO(agentic-id-resolution): Confirm upstream callers always send Artikel_Nummer for agentic runs.
 // TODO(agentic-run-fk-preflight): Revisit the reference preflight once agentic runs can target instance rows.
 function resolveAgenticArtikelNummer(
@@ -1117,6 +1167,13 @@ export async function dispatchQueuedAgenticRuns(
         LastError: 'stale-run-auto-cancelled',
         LastAttemptAt: staleRun.LastAttemptAt ?? nowIso
       });
+      await recordQueueTerminalTransition(deps, logger, {
+        artikelNummer: staleRun.Artikel_Nummer,
+        fromStatus: AGENTIC_RUN_STATUS_RUNNING,
+        reason: 'stale-run-auto-cancelled',
+        category: 'infra-cancelled',
+        retryCount
+      });
     }));
   } catch (err) {
     logger.error?.('[agentic-service] Failed to recover stale running runs', {
@@ -1152,6 +1209,12 @@ export async function dispatchQueuedAgenticRuns(
             NextRetryAt: null,
             LastError: 'over-cap-cancelled',
             LastAttemptAt: run.LastAttemptAt ?? nowIso
+          });
+          await recordQueueTerminalTransition(deps, logger, {
+            artikelNummer: run.Artikel_Nummer,
+            fromStatus: AGENTIC_RUN_STATUS_RUNNING,
+            reason: 'over-cap-cancelled',
+            category: 'infra-cancelled'
           });
         } catch (err) {
           logger.error?.('[agentic-service] Failed to cancel over-cap run', {
@@ -1224,11 +1287,6 @@ export async function dispatchQueuedAgenticRuns(
       const lastAttemptAt = run.LastAttemptAt ?? nowIso;
       const lastError = 'missing-search-query';
 
-      logger.warn?.('[agentic-service] Skipping queued agentic run with empty search query', {
-        artikelNummer,
-        runId: run.Id
-      });
-
       applyQueueUpdate(deps, logger, {
         Artikel_Nummer: artikelNummer,
         Status: AGENTIC_RUN_STATUS_FAILED,
@@ -1237,6 +1295,13 @@ export async function dispatchQueuedAgenticRuns(
         NextRetryAt: null,
         LastError: lastError,
         LastAttemptAt: lastAttemptAt
+      });
+      await recordQueueTerminalTransition(deps, logger, {
+        artikelNummer,
+        fromStatus: AGENTIC_RUN_STATUS_QUEUED,
+        reason: lastError,
+        category: 'invalid-state',
+        retryCount
       });
       continue;
     }

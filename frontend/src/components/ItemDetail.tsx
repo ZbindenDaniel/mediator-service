@@ -18,6 +18,7 @@ import type {
   ItemInstanceSummary,
   ItemDetailReviewAutomationSignal
 } from '../../../models';
+import type { AgenticSnapshotFields } from '../../../models';
 import type { Co2ImpactLabel } from '../../../models/co2';
 import { CO2_IMPACT_LABEL_DE } from '../../../models/co2';
 import {
@@ -114,6 +115,7 @@ import {
   type AgenticStatusDisplay,
   type AgenticStatusCardProps
 } from './AgenticStatusCard';
+import { AgenticSearchSources, parseAgenticSearchSources } from './AgenticSearchSources';
 import {
   type NormalizedDetailValue,
   DETAIL_PLACEHOLDER_TEXT,
@@ -1003,10 +1005,38 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }, [agenticSearchTerm]);
 
+  // The item's current AI-written fields, for the run-history diff (snapshot vs current). Langtext is
+  // parsed to the same object shape the snapshots store so the key-by-key diff lines up.
+  const snapshotCurrentFields: AgenticSnapshotFields = React.useMemo(() => ({
+    Artikelbeschreibung: item?.Artikelbeschreibung ?? null,
+    Kurzbeschreibung: item?.Kurzbeschreibung ?? null,
+    Langtext: item?.Langtext ? parseLangtext(item.Langtext) ?? {} : {},
+    Hersteller: item?.Hersteller ?? null,
+    Länge_mm: item?.Länge_mm ?? null,
+    Breite_mm: item?.Breite_mm ?? null,
+    Höhe_mm: item?.Höhe_mm ?? null,
+    Gewicht_kg: item?.Gewicht_kg ?? null,
+    Verkaufspreis: item?.Verkaufspreis ?? null,
+    Hauptkategorien_A: item?.Hauptkategorien_A ?? null,
+    Unterkategorien_A: item?.Unterkategorien_A ?? null,
+    Hauptkategorien_B: item?.Hauptkategorien_B ?? null,
+    Unterkategorien_B: item?.Unterkategorien_B ?? null
+  }), [item]);
+
   const agenticRows: [string, React.ReactNode][] = [];
   // TODO(agentic-transcript-ui): Keep the transcript link visible regardless of agentic run state once backend exposes it.
   if (agentic?.SearchQuery) {
     agenticRows.push(['Suchbegriff', agentic.SearchQuery]);
+  }
+  // Surface stored search evidence (LastSearchLinksJson) so operators can see whether an item already
+  // has search results, what was consulted, and that a rerun reuses them — previously persisted but
+  // never shown (todo #21).
+  const agenticSearchSources = parseAgenticSearchSources(agentic?.LastSearchLinksJson);
+  if (agenticSearchSources.length > 0) {
+    agenticRows.push([
+      `Suchergebnisse (${agenticSearchSources.length})`,
+      <AgenticSearchSources sources={agenticSearchSources} />
+    ]);
   }
   if (agentic?.LastModified) {
     agenticRows.push(['Zuletzt aktualisiert', formatDateTime(agentic.LastModified)]);
@@ -3022,6 +3052,9 @@ export default function ItemDetail({ itemId }: Props) {
             canDelete={agenticCanDelete}
             onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
             actionPending={agenticActionPending}
+            snapshotArtikelNummer={item?.Artikel_Nummer ?? null}
+            snapshotCurrentFields={snapshotCurrentFields}
+            onSnapshotRestored={() => { void load({ showSpinner: false }); }}
           />
         );
         break;
