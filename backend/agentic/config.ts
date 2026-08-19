@@ -15,8 +15,8 @@ const envSchema = z.object({
   // raising it costs VRAM, so it stays configurable. Applies to Ollama only.
   MODEL_NUM_CTX: z.coerce.number().int().positive().optional(),
   // Force the Ollama response into valid JSON (Ollama `format: "json"`). Strong guard against empty /
-  // prose completions, but it suppresses a reasoning model's <think> phase — default OFF because the
-  // extraction path handles <think> blocks. Enable only for non-reasoning models.
+  // prose completions, but it fights a reasoning model's thinking pass — default OFF, and must stay OFF
+  // for the deployed thinking model (gpt-oss). Enable only for a non-reasoning model.
   MODEL_FORMAT_JSON: z.string().optional(),
   // Raise undici's fetch header/body timeouts for the (local) model endpoint: a slow first token from a
   // cold Ollama model is a legitimate long wait, not a transport failure. 0 disables the timeout.
@@ -243,9 +243,12 @@ export interface ShopwareIntegrationConfig extends ShopwareCredentialsConfig {
 const resolvedSearchMaxPlans = parsedEnv.SEARCH_MAX_PLANS ?? 3;
 const resolvedSearchMaxAgentQueriesPerRequest = parsedEnv.SEARCH_MAX_AGENT_QUERIES_PER_REQUEST ?? 3;
 
-// Default 8192: comfortably covers the largest prompt (extraction ~6–7k tokens) plus the JSON answer,
-// while staying modest enough for a single mid-range GPU. Override via MODEL_NUM_CTX per hardware.
-const DEFAULT_MODEL_NUM_CTX = 8192;
+// Default 16384: the deployed model (gpt-oss:20b) is a THINKING model, so the window must hold the
+// prompt (extraction ~6–7k tokens) PLUS a reasoning pass (2–4k) PLUS the JSON answer — 8k was too tight
+// and truncated the final answer to empty. The model itself supports 131072, so this is the runtime
+// num_ctx (Ollama otherwise defaults to ~2–4k regardless of the model's max). Raise via MODEL_NUM_CTX
+// if VRAM allows (KV cache grows with num_ctx); lower it on a smaller GPU.
+const DEFAULT_MODEL_NUM_CTX = 16384;
 
 export const modelConfig: AgenticModelConfig = {
   provider: parsedEnv.MODEL_PROVIDER,
