@@ -28,11 +28,17 @@ type** reusing the item/box/activity list+detail+tab shell (list filterable by s
 tabs: transcript / proposed changes / reconciliation), graduating today's admin KI-queue card. Migration:
 update contracts, leave stored data as-is (operators + rework agent #50 correct drift). Full design +
 phasing in [`docs/PLANNING_instance_flow.md`](../PLANNING_instance_flow.md).
+Later refinements (same #917 design): **reconcile demoted from a mode to a final non-blocking stage**
+(after supervisor) that emits a run-level **data-quality metric** + device↔ref verdicts + optional
+ref-`rework` spawn; **data stays on the item** (whole-`Langtext` approval — per-field rejected because
+`Langtext` bundles many fields); and run **history** uses a **latest-row snapshot + append-only
+`agentic_run_history`** (existing `agentic_runs` readers untouched — avoids an in-place append migration)
+with existing data seeded as run 1.
 **Deferred:** Nothing built yet — this is the agreed plan. `InstanceText` (custom per-instance prose)
-explicitly out of scope. Open at build time: one `agentic_runs` table + `RunScope` discriminator vs. a
-separate instance-run table; `wrong_ref` corroboration threshold; the confidence bar for auto-applying a
-reconciliation-driven ref rework. Phase 5 folds in Phase-2 test-file summarization (the long-deferred
-"scan.txt augmentation" todo).
+explicitly out of scope. Open at build time: transcript jsonb-on-row vs. per-run file + retention; the
+data-quality score scale + whether low coherence force-routes to review; `wrong_ref` corroboration
+threshold; the confidence bar for auto-applying a reconciliation-driven ref rework. Phase 6 folds in
+Phase-2 test-file summarization (the long-deferred "scan.txt augmentation" todo).
 
 ## 913. ✅ Harden the agentic auto-dispatcher (demote keep-busy, kill switch, terminal failures, transient retries)
 **Why:** Incident — the auto-dispatcher burned ~1000 search queries in minutes and revived runs the operator had stopped ("no matter how many I stop there's always a few waiting"). Root causes were compounded in the keep-busy path added in #908/#909: (a) `claimIdleFillAgenticRuns` reset `RetryCount = 0` on every claim, defeating the `MAX_AUTO_RETRIES` ceiling so a permanently-failing item retried forever; (b) it claimed `failed`/`cancelled` runs, so an operator `cancelled` (and an auto-`failed`) run was auto-resurrected — a human stop was not durable; (c) the #909 "searches at most once" invariant was false for the failing items, because `collectSearchContexts` threw on the *first* failed plan **before** `persistSearchLinks` ran, so a failed search never persisted links and every retry re-billed the provider. Fast-failing Tavily errors (`200 Error: undefined`) + 3 slots + a 5s tick + no ceiling produced the burst.
