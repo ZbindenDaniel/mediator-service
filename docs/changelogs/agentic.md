@@ -13,19 +13,26 @@ reference-level, worked around by `ambiguousFields` + `InstanceSpecs`. Design: a
 per-`ItemUUID` flow (no web search) that fills `scope:"instance"` spec fields from measured data and
 **reconciles** the physical device against its reference, emitting typed verdicts
 (`match`/`missing_on_ref`/`wrong_ref`/`instance_variance`) as propose-only operator insights.
-**Why (approach):** Add `scope`/`measuredSignal` to `SpecContractField` (default `reference`, full
-back-compat) as the single reconciliation authority, rather than a fourth ad-hoc map — the quality/
-assembly contracts stay the fill sources (they already target instances). The flow is **propose-only**:
-it never writes `item_refs` (one odd unit must not rewrite a shared reference); `wrong_ref` offers a
-"change reference" operator action and hard-blocks auto-approve for that instance. Chose a new flow
-module (reusing transcript/result-handler/schema-contract) over forking the heavy `runItemFlow`, since
-instance enrichment is grounded and mostly deterministic. Migration: update contracts, leave stored data
-as-is (operators + the future rework agent correct drift). Full design + phasing in
-[`docs/PLANNING_instance_flow.md`](../PLANNING_instance_flow.md).
-**Deferred:** Nothing built yet — this is the agreed plan. Open at build time: auto-approve hard-gate
-vs. aggregate-signal feed; one `agentic_runs` table + scope discriminator vs. a separate instance-run
-table; UI home (`ItemInstanceTab` vs. `ItemKiTab`); `wrong_ref` corroboration threshold. Phase 5 folds
-in Phase-2 test-file summarization (the long-deferred "scan.txt augmentation" todo).
+**Why (approach):** Organize everything as one run engine typed by `(scope, mode)` —
+scope ∈ reference|instance, mode ∈ extract|rework|reconcile — rather than a parallel pipeline; the
+"instance flow" is just scope=instance running rework(fill)+reconcile(compare). Reuses the fact that
+`rework` is already a mode of `runItemFlow` (`applyReworkPartialUpdate`, cat/pricing skipped). Add
+`scope`/`measuredSignal` to `SpecContractField` (default `reference`, full back-compat) as the single
+reconciliation authority — the quality/assembly contracts stay the fill sources (they already target
+instances). **Reference-change rule:** the instance flow never writes `item_refs`; its only route to
+change a ref is to *trigger a `rework` run* on that ref, which flows through the existing auto-approve
+gate (#51) — this reconciles "propose-only" with "auto-update based on evidence" (auto = auto-enqueue an
+evidence-backed rework, gate decides apply vs. review). Writes only `items.InstanceSpecs` directly;
+applied changes audited as `events` diffs (no new versioning subsystem). UI is a new **`KI-Runs` list
+type** reusing the item/box/activity list+detail+tab shell (list filterable by scope/mode/status; detail
+tabs: transcript / proposed changes / reconciliation), graduating today's admin KI-queue card. Migration:
+update contracts, leave stored data as-is (operators + rework agent #50 correct drift). Full design +
+phasing in [`docs/PLANNING_instance_flow.md`](../PLANNING_instance_flow.md).
+**Deferred:** Nothing built yet — this is the agreed plan. `InstanceText` (custom per-instance prose)
+explicitly out of scope. Open at build time: one `agentic_runs` table + `RunScope` discriminator vs. a
+separate instance-run table; `wrong_ref` corroboration threshold; the confidence bar for auto-applying a
+reconciliation-driven ref rework. Phase 5 folds in Phase-2 test-file summarization (the long-deferred
+"scan.txt augmentation" todo).
 
 ## 913. ✅ Harden the agentic auto-dispatcher (demote keep-busy, kill switch, terminal failures, transient retries)
 **Why:** Incident — the auto-dispatcher burned ~1000 search queries in minutes and revived runs the operator had stopped ("no matter how many I stop there's always a few waiting"). Root causes were compounded in the keep-busy path added in #908/#909: (a) `claimIdleFillAgenticRuns` reset `RetryCount = 0` on every claim, defeating the `MAX_AUTO_RETRIES` ceiling so a permanently-failing item retried forever; (b) it claimed `failed`/`cancelled` runs, so an operator `cancelled` (and an auto-`failed`) run was auto-resurrected — a human stop was not durable; (c) the #909 "searches at most once" invariant was false for the failing items, because `collectSearchContexts` threw on the *first* failed plan **before** `persistSearchLinks` ran, so a failed search never persisted links and every retry re-billed the provider. Fast-failing Tavily errors (`200 Error: undefined`) + 3 slots + a 5s tick + no ceiling produced the burst.
