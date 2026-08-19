@@ -53,6 +53,19 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0z8. ✅ **Queued agentic runs promoted to running then cancelled immediately (should wait for a slot).**
+  Root cause: `499d8a4` ("Multi-instance agentic safety") removed the atomic running-count gate that the
+  queued→running promotion used to run *inside its own transaction* (it left an over-scheduled run `queued`
+  to wait). Cap enforcement then relied only on the dispatcher's non-atomic `availableSlots = MAX − runningCount`
+  read, and the dispatch `setInterval` (`server.ts`) has no reentrancy guard — so a tick outlasting the 5 s
+  interval overlaps the next, both read the same low count, both `claimQueuedAgenticRuns`, and together over-fill
+  the running slots; the over-cap sweep then flipped the excess to terminal `failed` (`over-cap-cancelled`). Fixed
+  in three layers: (1) reentrancy guard on the dispatch loop; (2) `claimQueuedAgenticRuns(limit, maxRunning?)` clamps
+  its `LIMIT` to the free slots inside the same atomic statement; (3) the over-cap net now **requeues** the freshest
+  excess to `queued` (keeping the oldest/in-progress running) instead of failing it, so a run that can't run yet waits.
+  See agentic changelog #919. **Deferred:** no Postgres advisory lock for a fully serializable multi-instance claim
+  (deployment is single-instance; the requeue-not-fail net covers any residual race).
+
 0z5. **Intake asks RAM / storage despite the scan — ROOT-CAUSED; backend done, image fix handed off.**
   Root cause (intake #915): the netboot image's `build_scan_payload` (in `common.sh`, separate repo) reads
   disk `sizeGb` from `smartctl` `.user_capacity.bytes` — an **ATA/SATA-only** field, **empty for NVMe** and
