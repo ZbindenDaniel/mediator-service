@@ -4,6 +4,22 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 914. ✅ Fix invalid JSON in `contracts/quality/201.json` (laptop quality questions silently dropped)
+**Why:** A trailing comma after the `has_os` question made `contracts/quality/201.json` invalid JSON.
+Both contract loaders (`lib/quality-contracts.loadSubCategoryContract` and `contracts/registry.getQualityContract`)
+`try/catch` and return `null` on a parse failure, so the entire laptop-specific quality question set
+(OS installed, keyboard layout/condition, screen condition, swollen battery, hinges, fan) was silently
+dropped — at intake **and** in the operator review flow — with no error surfaced anywhere. Removed the
+trailing comma and bumped the contract version 6 → 7 to mark the fix. Found while investigating the
+"intake still asks RAM/storage" report (that symptom is unrelated — tracked separately, see below).
+**Why (approach):** The failure was invisible because both loaders swallow parse errors by design (so one
+bad contract can't crash startup). No loader change here — the durable lesson (a contract lint/validation
+step in CI) is noted as a follow-up in `todo.md` rather than bolted on in this fix.
+**Deferred:** No CI JSON-lint for the `contracts/` tree yet (todo). The RAM/storage auto-resolution
+investigation is still open — the backend resolver and `phase1.sh` are both correct for a well-formed
+scan (verified by reproduction); the open question is whether `build_scan_payload` actually populates
+`ramMb`/`disks[]` on the affected machines (awaiting a captured scan payload).
+
 ## 913. ✅ Fix intake reference matching + "HP HP HP" brand triplication
 **Why:** The intake flow failed to surface an existing reference even for an identical device,
 pushing operators to create duplicates with mangled names ("HP HP HP ProBook 470 G4"). Two root

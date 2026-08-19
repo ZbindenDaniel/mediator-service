@@ -53,6 +53,36 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0z5. **Intake still asks RAM / storage / drive type despite the scan (OPEN — root cause upstream).**
+  Reported symptom: operator is prompted for `ram_gb` / `storage_gb` / `drive_type` at intake even though
+  the device just scanned itself. Investigation results so far:
+  - ✅ The backend resolver (`resolveIntakeQuestions` + `SCAN_SIGNALS` in `backend/lib/intake-quality-map.ts`)
+    correctly auto-resolves and **drops** all four (RAM, storage, drive type, battery) for a well-formed
+    scan — verified by reproduction against the real `contracts/assembly/201.json` with a `phase1.sh`-shaped
+    payload (`ramMb:8192`, `disks:[{sizeGb,type:"nvme"}]`, `batteryPercent`).
+  - ✅ The station script (`phase1.sh`) attaches the full `scanPayload` in `/start`, in the create-new ref
+    answer, and in the existing-ref answer — so the scan reaches the resolver at question-generation time.
+  - ⏳ **Next:** confirm what `build_scan_payload` (in the image's `common.sh`, not in this repo) actually
+    emits on the affected machines — the `--- REQUEST ---` block in `/tmp/phase1.log`. Hypothesis: `ramMb`
+    and/or `disks[]` are absent / empty / differently-keyed on those devices (vendor+model DO come through,
+    since reference matching works). If so the fix is in the image; if the scan is well-formed, the bug is a
+    backend tolerance gap (e.g. `driveTypeLabel` returns null for `type` values like `sata`/`""`).
+  - **Planned regardless of root cause:** (a) add a `detectedSpecs` (label→value) field to the intake
+    responses so the TUI can *show* the operator what the scan filled in (RAM/Speicher/Speichertyp/Akku)
+    instead of asking — omit-and-inform, per operator decision; needs a matching info-panel render line in
+    `phase1.sh`. (b) log what the scan resolved vs. couldn't at question-generation time, so a future
+    mis-scan is visible in server logs. (c) broaden `driveTypeLabel` / signal tolerance for extra `type`
+    strings.
+
+0z6. **Intake enrichment should key on `sku`, not the DMI product name.** `dmidecode -s system-product-name`
+  returns generic junk on many HP/Lenovo laptops ("HP Notebook", "20XW"); the scan also captures `sku`
+  (system-sku-number), which HP/Dell use as a full commercial identifier. When the agentic model-name
+  enrichment runs, prefer `sku` as the lookup key over the product name. Separate from 0z5.
+
+0z7. **Add a CI JSON-lint over `contracts/`.** The invalid-JSON bug in `quality/201.json` (intake #914) was
+  invisible because both contract loaders swallow parse errors and return `null`. A cheap `node -e JSON.parse`
+  (or `jq empty`) sweep over `contracts/**/*.json` in CI would catch the next one at commit time.
+
 0z4. **AI runs optimization — phased implementation** (design: `docs/PLANNING_ai_runs_optimization.md`).
   - ✅ **Phase 1a (shipped, agentic #915).** (5) Ollama `UND_ERR_HEADERS_TIMEOUT` fixed at the root — global undici dispatcher raises `headersTimeout`/`bodyTimeout` (`ensureModelHttpTimeouts`, env `MODEL_HTTP_HEADERS_TIMEOUT_MS`/`_BODY_TIMEOUT_MS`, default 10 min); retry demoted to genuine-drop fallback. (4B) The three queue→`failed` paths now emit a structured `from→to/reason` log + an `AgenticRunFailed` item event with a `category` tag (`recordQueueTerminalTransition`).
   - ✅ **Phase 1b (shipped, agentic #916, Thread 2A).** Stored search evidence (`LastSearchLinksJson`) now surfaced in the KI tab via `AgenticSearchSources` + a `Suchergebnisse (N)` row in `ItemDetail`. Read-only; source **curation** (pin/remove, add manual link → feeds reuse+grounding) and a true per-run **query count** (needs schema, todo #24) remain follow-ups (#21/#22).
