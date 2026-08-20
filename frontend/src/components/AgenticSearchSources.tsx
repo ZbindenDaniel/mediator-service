@@ -54,38 +54,60 @@ function hostnameOf(url: string): string {
 
 export interface AgenticSearchSourcesProps {
   sources: AgenticSearchSource[];
+  /** When provided, each source gets a remove control that curates the stored evidence by URL. */
+  onDelete?: (url: string) => void;
+  /** URL currently being removed — disables its control to prevent double-submits. */
+  deletingUrl?: string | null;
+  /** Disables every remove control (e.g. while another agentic action is running). */
+  disabled?: boolean;
 }
 
 /**
- * Renders the stored search evidence for an agentic run (`agentic_runs.LastSearchLinksJson`). Until now
- * these sources were persisted but never surfaced, so an operator could not tell whether an item already
- * had search evidence, what was consulted, or that a rerun would reuse it.
+ * Renders the stored search evidence for an agentic run (`agentic_runs.LastSearchLinksJson`). Operators
+ * can see whether an item already had search evidence and, when `onDelete` is wired, remove a bad result
+ * so it stops feeding the reuse/grounding path on the next run.
  */
-export function AgenticSearchSources({ sources }: AgenticSearchSourcesProps) {
+export function AgenticSearchSources({ sources, onDelete, deletingUrl, disabled }: AgenticSearchSourcesProps) {
   if (!sources.length) {
     return null;
   }
   return (
     <div className="agentic-search-sources">
       <ul className="agentic-search-sources__list">
-        {sources.map((source, index) => (
-          <li key={`${source.url}-${index}`} className="agentic-search-sources__item">
-            <a
-              className="agentic-search-sources__link"
-              href={source.url}
-              target="_blank"
-              rel="noreferrer"
-              title={source.description ?? source.url}
-            >
-              {source.title ?? hostnameOf(source.url)}
-            </a>
-            <span className="agentic-search-sources__domain">{hostnameOf(source.url)}</span>
-          </li>
-        ))}
+        {sources.map((source, index) => {
+          const isDeleting = deletingUrl === source.url;
+          return (
+            <li key={`${source.url}-${index}`} className="agentic-search-sources__item">
+              <a
+                className="agentic-search-sources__link"
+                href={source.url}
+                target="_blank"
+                rel="noreferrer"
+                title={source.description ?? source.url}
+              >
+                {source.title ?? hostnameOf(source.url)}
+              </a>
+              <span className="agentic-search-sources__domain">{hostnameOf(source.url)}</span>
+              {onDelete && (
+                <button
+                  type="button"
+                  className="agentic-search-sources__remove"
+                  onClick={() => onDelete(source.url)}
+                  disabled={disabled || isDeleting}
+                  title="Suchergebnis entfernen"
+                  aria-label={`Suchergebnis entfernen: ${source.title ?? source.url}`}
+                >
+                  {isDeleting ? '…' : '×'}
+                </button>
+              )}
+            </li>
+          );
+        })}
       </ul>
       <p className="muted agentic-search-sources__note">
         Gespeicherte Suchergebnisse — werden bei einem erneuten Lauf wiederverwendet, sofern keine
-        gezielte Nachsuche nötig ist.
+        gezielte Nachsuche nötig ist. Schlechte Treffer hier entfernen, damit sie die Pipeline nicht
+        verfälschen.
       </p>
     </div>
   );

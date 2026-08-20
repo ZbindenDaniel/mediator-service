@@ -84,6 +84,21 @@ export interface AgenticRunDeleteResult {
   reason?: string | null;
 }
 
+export interface AgenticRunSearchLinkRemoveInput {
+  itemId: string;
+  actor: string;
+  url: string;
+  request?: AgenticRequestContext | null;
+}
+
+export interface AgenticRunSearchLinkRemoveResult {
+  removed: boolean;
+  agentic: AgenticRun | null;
+  reason?: string | null;
+  /** Number of stored search links left after the removal (undefined when nothing was persisted). */
+  remaining?: number;
+}
+
 export interface AgenticRunRestartInput extends AgenticRunStartInput {
   previousStatus?: string | null;
   replaceReviewMetadata?: boolean;

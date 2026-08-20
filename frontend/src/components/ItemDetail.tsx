@@ -46,6 +46,7 @@ import {
   persistAgenticRunClose,
   persistAgenticRunCancellation,
   persistAgenticRunDeletion,
+  persistAgenticSearchLinkDeletion,
   triggerAgenticRun
 } from '../lib/agentic';
 import { parseLangtext } from '../lib/langtext';
@@ -293,6 +294,8 @@ export default function ItemDetail({ itemId }: Props) {
   // TODO(agentic-search-term): Align editable agentic search term handling with backend suggestions once available.
   const [agenticSearchTerm, setAgenticSearchTerm] = useState<string>('');
   const [agenticSearchError, setAgenticSearchError] = useState<string | null>(null);
+  // URL of the stored search result currently being removed (curation) — disables just that row's control.
+  const [deletingSearchLinkUrl, setDeletingSearchLinkUrl] = useState<string | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const [isMediaSaving, setIsMediaSaving] = useState(false);
   const [instances, setInstances] = useState<ItemInstanceSummary[]>([]);
@@ -1035,7 +1038,12 @@ export default function ItemDetail({ itemId }: Props) {
   if (agenticSearchSources.length > 0) {
     agenticRows.push([
       `Suchergebnisse (${agenticSearchSources.length})`,
-      <AgenticSearchSources sources={agenticSearchSources} />
+      <AgenticSearchSources
+        sources={agenticSearchSources}
+        onDelete={handleAgenticSearchLinkDelete}
+        deletingUrl={deletingSearchLinkUrl}
+        disabled={agenticActionPending}
+      />
     ]);
   }
   if (agentic?.LastModified) {
@@ -2737,6 +2745,83 @@ export default function ItemDetail({ itemId }: Props) {
       setAgenticError('Ki-Lauf konnte nicht gelöscht werden.');
     } finally {
       setAgenticActionPending(false);
+    }
+  }
+
+  async function handleAgenticSearchLinkDelete(url: string) {
+    const targetUrl = typeof url === 'string' ? url.trim() : '';
+    if (!targetUrl) {
+      return;
+    }
+    if (!agentic) {
+      console.warn('Search link delete requested without run data');
+      setAgenticError('Kein KI Durchlauf vorhanden.');
+      return;
+    }
+    const referenceId = agentic.Artikel_Nummer?.trim() || item?.Artikel_Nummer?.trim() || '';
+    if (!referenceId) {
+      logError('ItemDetail: Missing Artikel_Nummer for search link delete', undefined, { itemId });
+      setAgenticError('Artikelnummer fehlt für die Löschung.');
+      return;
+    }
+
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display search link delete user alert', error);
+      }
+      return;
+    }
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Suchergebnis entfernen',
+        message: 'Diesen Link aus den gespeicherten Suchergebnissen entfernen? Er wird bei künftigen Läufen nicht mehr verwendet.',
+        confirmLabel: 'Entfernen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (error) {
+      console.error('Failed to confirm search link deletion', error);
+      return;
+    }
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingSearchLinkUrl(targetUrl);
+    setAgenticError(null);
+    try {
+      const result = await persistAgenticSearchLinkDeletion({
+        artikelNummer: referenceId,
+        url: targetUrl,
+        actor,
+        context: 'item detail search-link delete'
+      });
+
+      if (result.ok) {
+        // Backend returns the refreshed run with the pruned LastSearchLinksJson — swap it in so the
+        // list re-renders without a full status refetch.
+        if (result.agentic) {
+          setAgentic(result.agentic);
+        }
+        setAgenticError(null);
+      } else {
+        const message = result.reason === 'not-found'
+          ? 'Suchergebnis wurde nicht gefunden.'
+          : 'Suchergebnis konnte nicht entfernt werden.';
+        setAgenticError(message);
+      }
+    } catch (err) {
+      logError('Suchergebnis-Löschung fehlgeschlagen', err, { referenceId, url: targetUrl });
+      setAgenticError('Suchergebnis konnte nicht entfernt werden.');
+    } finally {
+      setDeletingSearchLinkUrl(null);
     }
   }
 
