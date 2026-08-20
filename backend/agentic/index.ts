@@ -12,6 +12,8 @@ import {
   type AgenticRunCancelResult,
   type AgenticRunDeleteInput,
   type AgenticRunDeleteResult,
+  type AgenticRunSearchLinkRemoveInput,
+  type AgenticRunSearchLinkRemoveResult,
   type AgenticRunRestartInput,
   type AgenticRunReviewMetadata,
   type AgenticRunStartInput,
@@ -1891,6 +1893,155 @@ export async function deleteAgenticRun(
 
   const refreshed = await fetchAgenticRun(artikelNummer, deps, logger);
   return { deleted: true, agentic: refreshed };
+}
+
+type StoredSearchSource = { url: string; title?: string; description?: string };
+
+// Parse the stored LastSearchLinksJson blob into the canonical {url,title?,description?} shape.
+// Mirrors the defensive parsing in the frontend (parseAgenticSearchSources) and the result-handler
+// (normalizeSearchLinks): a malformed blob degrades to an empty list rather than throwing, so a bad
+// blob can't wedge the curation endpoint.
+function parseStoredSearchSources(json: string | null | undefined): StoredSearchSource[] {
+  if (!json || typeof json !== 'string') {
+    return [];
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  const out: StoredSearchSource[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== 'object') continue;
+    const candidate = entry as Record<string, unknown>;
+    const url = typeof candidate.url === 'string' ? candidate.url.trim() : '';
+    if (!url) continue;
+    const source: StoredSearchSource = { url };
+    if (typeof candidate.title === 'string' && candidate.title.trim()) {
+      source.title = candidate.title.trim();
+    }
+    if (typeof candidate.description === 'string' && candidate.description.trim()) {
+      source.description = candidate.description.trim();
+    }
+    out.push(source);
+  }
+  return out;
+}
+
+/**
+ * Remove a single stored search-result link from a run's LastSearchLinksJson so a bad result stops
+ * poisoning the reuse/grounding path (skipSearch reads this blob back verbatim). Operator-facing
+ * curation from the KI tab (todo #21). Unlike deleteAgenticRun this does NOT reset the run — it prunes
+ * one source and leaves the run's status/review state untouched.
+ */
+export async function removeAgenticSearchLink(
+  input: AgenticRunSearchLinkRemoveInput,
+  deps: AgenticServiceDependencies
+): Promise<AgenticRunSearchLinkRemoveResult> {
+  validateDependencies(deps);
+  const logger = resolveLogger(deps);
+  const request = normalizeRequestContext(input.request ?? null);
+  persistRequestPayloadSnapshot(request, logger);
+
+  const itemId = (input.itemId || '').trim();
+  if (!itemId) {
+    logger.warn?.('[agentic-service] removeAgenticSearchLink missing itemId');
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-item-id', logger);
+    return { removed: false, agentic: null, reason: 'missing-item-id' };
+  }
+  const resolved = resolveAgenticArtikelNummer(itemId, logger);
+  if (!resolved.artikelNummer) {
+    const reason = resolved.reason ?? 'missing-artikel-nummer';
+    logger.warn?.('[agentic-service] removeAgenticSearchLink failed to resolve Artikel_Nummer', { itemId, reason });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, reason, logger);
+    return { removed: false, agentic: null, reason };
+  }
+  const artikelNummer = resolved.artikelNummer;
+
+  const actor = (input.actor || '').trim();
+  if (!actor) {
+    logger.warn?.('[agentic-service] removeAgenticSearchLink missing actor', { artikelNummer });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-actor', logger);
+    return { removed: false, agentic: null, reason: 'missing-actor' };
+  }
+
+  const url = (input.url || '').trim();
+  if (!url) {
+    logger.warn?.('[agentic-service] removeAgenticSearchLink missing url', { artikelNummer });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-url', logger);
+    return { removed: false, agentic: null, reason: 'missing-url' };
+  }
+
+  const existing = await fetchAgenticRun(artikelNummer, deps, logger);
+  if (!existing) {
+    logger.warn?.('[agentic-service] removeAgenticSearchLink attempted without existing run', { artikelNummer });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'not-found', logger);
+    return { removed: false, agentic: null, reason: 'not-found' };
+  }
+
+  const sources = parseStoredSearchSources(existing.LastSearchLinksJson);
+  const remaining = sources.filter((source) => source.url !== url);
+  if (remaining.length === sources.length) {
+    logger.info?.('[agentic-service] removeAgenticSearchLink found no matching link', { artikelNummer, url });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'link-not-found', logger);
+    return { removed: false, agentic: existing, reason: 'link-not-found', remaining: sources.length };
+  }
+
+  // An emptied list persists as null so downstream reuse/grounding treats it as "no evidence" (same as
+  // a never-searched run) rather than an empty-array edge case.
+  const nextJson = remaining.length > 0 ? JSON.stringify(remaining) : null;
+  const nowIso = resolveNow(deps).toISOString();
+
+  recordRequestLogStart(request, existing.SearchQuery ?? null, logger);
+
+  try {
+    // updateAgenticRunStatus rewrites Status/LastModified/ReviewState unconditionally, so echo the
+    // run's current values back to avoid clobbering them; only LastSearchLinksJson actually changes
+    // (its IsSet flag is the only one set true).
+    await deps.updateAgenticRunStatus(
+      normalizeAgenticStatusUpdate({
+        Artikel_Nummer: artikelNummer,
+        Status: existing.Status,
+        LastModified: nowIso,
+        ReviewState: existing.ReviewState ?? 'not_required',
+        LastSearchLinksJson: nextJson,
+        LastSearchLinksJsonIsSet: true
+      })
+    );
+
+    try {
+      await deps.logEvent({
+        Actor: actor,
+        EntityType: 'Item',
+        EntityId: artikelNummer,
+        Event: 'AgenticSearchLinkRemoved',
+        Meta: JSON.stringify({ url, remaining: remaining.length, removedAt: nowIso })
+      });
+    } catch (err) {
+      // Event logging is non-fatal here: the link is already pruned, so a logging failure must not
+      // surface as a request error.
+      logger.error?.('[agentic-service] Failed to record search-link removal event', {
+        artikelNummer,
+        error: toErrorMessage(err)
+      });
+    }
+    finalizeRequestLog(request, REQUEST_STATUS_SUCCESS, null, logger);
+  } catch (err) {
+    logger.error?.('[agentic-service] Failed to remove agentic search link', {
+      artikelNummer,
+      url,
+      error: toErrorMessage(err)
+    });
+    finalizeRequestLog(request, REQUEST_STATUS_FAILED, toErrorMessage(err), logger);
+    throw err;
+  }
+
+  const refreshed = await fetchAgenticRun(artikelNummer, deps, logger);
+  return { removed: true, agentic: refreshed, remaining: remaining.length };
 }
 
 export async function restartAgenticRun(

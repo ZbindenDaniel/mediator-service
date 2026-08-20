@@ -386,6 +386,88 @@ export async function persistAgenticRunDeletion({
   }
 }
 
+export interface PersistAgenticSearchLinkDeletionOptions {
+  artikelNummer: string | null | undefined;
+  url: string | null | undefined;
+  actor?: string | null;
+  context: string;
+}
+
+export interface PersistAgenticSearchLinkDeletionResult {
+  ok: boolean;
+  status: number;
+  agentic: AgenticRun | null;
+  remaining?: number;
+  message?: string;
+  reason?: string | null;
+}
+
+// Remove a single stored search-result link from a run's LastSearchLinksJson so a bad result stops
+// feeding the reuse/grounding path. Returns the refreshed run so callers can re-render the pruned list.
+export async function persistAgenticSearchLinkDeletion({
+  artikelNummer,
+  url,
+  actor,
+  context
+}: PersistAgenticSearchLinkDeletionOptions): Promise<PersistAgenticSearchLinkDeletionResult> {
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  const trimmedUrl = typeof url === 'string' ? url.trim() : '';
+  if (!trimmedArtikelNummer) {
+    const message = `Suchergebnis-Löschung übersprungen (${context}): fehlende Artikel_Nummer`;
+    logger.warn?.(message, { artikelNummer });
+    return { ok: false, status: 400, agentic: null, message, reason: 'missing-artikel-nummer' };
+  }
+  if (!trimmedUrl) {
+    const message = `Suchergebnis-Löschung übersprungen (${context}): fehlende URL`;
+    logger.warn?.(message, { artikelNummer: trimmedArtikelNummer });
+    return { ok: false, status: 400, agentic: null, message, reason: 'missing-url' };
+  }
+
+  const sanitizedActor = actor && actor.trim() ? actor.trim() : 'system';
+
+  try {
+    const response = await fetch(
+      `/api/item-refs/${encodeURIComponent(trimmedArtikelNummer)}/agentic/search-links/delete`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor: sanitizedActor, url: trimmedUrl })
+      }
+    );
+
+    if (!response.ok) {
+      const isNotFound = response.status === 404;
+      const message = isNotFound
+        ? `Suchergebnis-Löschung übersprungen (${context}): nicht gefunden`
+        : `Suchergebnis-Löschung fehlgeschlagen (${context})`;
+      const loggerFn = isNotFound ? console.warn : console.error;
+      loggerFn(message, response.status);
+      return {
+        ok: false,
+        status: response.status,
+        agentic: null,
+        message,
+        reason: isNotFound ? 'not-found' : 'request-failed'
+      };
+    }
+
+    const data = await response
+      .json()
+      .catch((err) => {
+        console.error('Failed to parse persisted search link deletion response', err);
+        return null;
+      });
+
+    const agenticRun: AgenticRun | null = data?.agentic ?? null;
+    const remaining = typeof data?.remaining === 'number' ? data.remaining : undefined;
+    return { ok: true, status: response.status, agentic: agenticRun, remaining };
+  } catch (err) {
+    const message = `Suchergebnis-Löschung fehlgeschlagen (${context})`;
+    console.error(message, err);
+    return { ok: false, status: 0, agentic: null, message, reason: 'network-error' };
+  }
+}
+
 export interface PersistAgenticRunCloseOptions {
   artikelNummer: string | null | undefined;
   actor?: string | null;
