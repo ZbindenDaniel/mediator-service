@@ -28,21 +28,33 @@ type** reusing the item/box/activity list+detail+tab shell (list filterable by s
 tabs: transcript / proposed changes / reconciliation), graduating today's admin KI-queue card. Migration:
 update contracts, leave stored data as-is (operators + rework agent #50 correct drift). Full design +
 phasing in [`docs/PLANNING_instance_flow.md`](../PLANNING_instance_flow.md).
-Later refinements (same #917 design): **reconcile is item-read-only and dual-path** — the final
-non-blocking stage of every full run AND a standalone `mode=reconcile` run invocable on any existing
-item without re-running extraction; it writes only the run/history record + one additive item
-quality field (never Langtext / InstanceSpecs / ReviewState), so the whole backlog is reconcilable via
-a version-stamped idle `sweepReconcile` (mirroring #894, `AUTO_RECONCILE`-gated) with **no item/review
-mutation** — answering "run it everywhere it hasn't run without mutating all states" without a separate
-pipeline. **Data stays on the item** (whole-`Langtext` approval — per-field rejected because `Langtext`
-bundles many fields). Run **history** uses a **latest-row snapshot + append-only `agentic_run_history`**
-(existing `agentic_runs` readers untouched — avoids an in-place append migration) with existing data
-seeded as run 1.
-**Deferred:** Nothing built yet — this is the agreed plan. `InstanceText` (custom per-instance prose)
-explicitly out of scope. Open at build time: transcript jsonb-on-row vs. per-run file + retention; the
-data-quality score scale + whether low coherence force-routes to review; `wrong_ref` corroboration
-threshold; the confidence bar for auto-applying a reconciliation-driven ref rework. Phase 6 folds in
-Phase-2 test-file summarization (the long-deferred "scan.txt augmentation" todo).
+Later refinements (same #917 design):
+- **Scoped to compute/bootable devices** (the intake API's domain) — the contract `scope` tags and the
+  flow apply to laptops/PCs/servers/workstations, not monitors/phones/peripherals.
+- **The instance flow is not a `rework`** (that shorthand was dropped as confusing): its steps/prompts
+  differ (no web search; it compares measured netboot evidence — dmidecode/lspci/memtest/CPU-stress/
+  SMART — to the reference's already-gathered web data). Reuse-vs-dedicated-flow is an explicit
+  decision to validate (lean: a dedicated small flow oriented on the existing one).
+- **The reconciliation object is the artifact**: evidence digest, per-field comparisons
+  (match/missing_on_ref/conflict/instance_variance), human-readable findings, **operator-gated proposed
+  actions** (propose-ref-rework, relink-Artikelnummer), an informational data-quality score, and a
+  status workflow. It is also the idempotence/staleness key (timestamp + contract version).
+- **Ref changes are operator-gated with no auto-trigger**: the flow only flags; an operator approves
+  (one click) to enqueue the existing `rework`. Auto-triggering the flow and the sweeper backfill are
+  **deferred to post-MVP** — MVP is operator-initiated end to end.
+- **Reconcile is item-read-only** (writes only the reconciliation object + owned instance-spec fills +
+  the informational score), dual-path (inline + standalone `mode=reconcile`), backfillable.
+- **Data stays on the item** (whole-`Langtext` approval — per-field rejected because `Langtext` bundles
+  many fields). Run **history** via **latest-row snapshot + append-only `agentic_run_history`**
+  (transcript jsonb on the row; existing `agentic_runs` readers untouched — no in-place append
+  migration) with existing data seeded as run 1.
+**Deferred:** Nothing built yet — design still iterating. `InstanceText` explicitly out of scope. All
+**auto-triggering deferred to post-MVP** (auto-run on intake `/complete`, the `sweepReconcile` backfill,
+and any data-quality-score gate). Resolved this pass: transcript = jsonb on the history row; data-quality
+score informational only for now; ref rework always stops for an operator; `wrong_ref` is surfaced to
+operators (no auto-trigger). Open at build time: reuse-vs-dedicated instance flow (validate prompt/step
+parity); the exact reconciliation-object schema; instance-spec conflict handling; which compute
+subcategories get `scope` tags beyond 201.
 
 ## 913. ✅ Harden the agentic auto-dispatcher (demote keep-busy, kill switch, terminal failures, transient retries)
 **Why:** Incident — the auto-dispatcher burned ~1000 search queries in minutes and revived runs the operator had stopped ("no matter how many I stop there's always a few waiting"). Root causes were compounded in the keep-busy path added in #908/#909: (a) `claimIdleFillAgenticRuns` reset `RetryCount = 0` on every claim, defeating the `MAX_AUTO_RETRIES` ceiling so a permanently-failing item retried forever; (b) it claimed `failed`/`cancelled` runs, so an operator `cancelled` (and an auto-`failed`) run was auto-resurrected — a human stop was not durable; (c) the #909 "searches at most once" invariant was false for the failing items, because `collectSearchContexts` threw on the *first* failed plan **before** `persistSearchLinks` ran, so a failed search never persisted links and every retry re-billed the provider. Fast-failing Tavily errors (`200 Error: undefined`) + 3 slots + a 5s tick + no ceiling produced the burst.
