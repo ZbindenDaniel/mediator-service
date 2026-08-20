@@ -20,8 +20,13 @@ Related: intake changelog (auto-resolve #903, complete-item #900), agentic READM
 Everything is one pipeline, not a parallel flow:
 
 - **scope** ∈ `reference` | `instance` — what the run reads and *owns* (may write).
-- **mode** ∈ `extract` (full, web-search) | `rework` (partial, grounded, cat/pricing skipped).
-- **reconcile** is a **final pipeline stage** (after supervisor), not a mode — see §6.
+- **mode** ∈ `extract` (full, web-search) | `rework` (partial, grounded, cat/pricing skipped) |
+  `reconcile` (**item-read-only**, see §6).
+
+`reconcile` is special: it is both the **final stage** of every full `extract`/`rework` run (called
+inline for a free quality score) **and** a **standalone run mode** invocable on any existing item
+without re-running extraction. That dual nature is what lets us reconcile the entire backlog without
+mutating item/review state — see §6.
 
 | | reference | instance |
 |---|---|---|
@@ -83,17 +88,36 @@ the **reconciliation authority** — it names which fields are comparable betwee
 value and the reference `Langtext`. Migration: update contracts, leave stored data as-is (operators +
 rework agent #50 correct drift). No backfill.
 
-## 6. The reconcile stage
+## 6. Reconcile — an item-read-only step, inline *and* standalone
 
-Runs **after supervisor**, **non-blocking** (never fails an otherwise-good run — keep the pipeline
-productive). "Step back and big-picture the whole run against the evidence."
+Reconcile is **non-blocking** and, critically, **never writes item enrichment data**. It reads (item
+current state + evidence) and writes **only**:
+- the run/history record (verdicts + **data-quality score**), and
+- optionally a spawned `rework` proposal (already gated — not a direct write).
 
-- Emits a run-level **data-quality score** — explicitly *not* the device `Qualität` (1–5 condition);
-  this scores how well the produced data coheres with the evidence. Stored on the run/history row;
-  optionally surfaced on the item as a "last AI quality" badge.
-- When **instance evidence** exists (scope=instance), it also does the **device ↔ ref comparison** and
-  emits verdicts; a `wrong_ref` / `missing_on_ref` verdict spawns a ref `rework` (§2). For a plain
-  reference run it degrades to a self-consistency check only.
+Because it is pure w.r.t. the item's `Langtext` / `InstanceSpecs` / `ReviewState`, the same
+`reconcile()` serves two invocation paths with no state-mutation risk:
+- **Inline**: the final step of every full `extract`/`rework` run — a free quality score on fresh runs.
+- **Standalone (`mode=reconcile`)**: invoked on any existing item as its own minimal run — no
+  extraction / pricing / categorizer, no review reopen, zero item-data mutation. This is what makes
+  the **entire backlog reconcilable** without re-running the heavy flow.
+
+Outputs:
+- A run-level **data-quality score** — explicitly *not* the device `Qualität` (1–5 condition); it
+  scores how well the produced data coheres with the evidence. Source of truth is the run/history row;
+  an **additive** denormalized copy on the item snapshot (`AiDataQuality`-style field) is allowed for
+  list/filter. Reconcile's item write surface is **that one additive field only** — never Langtext /
+  InstanceSpecs / ReviewState.
+- When **instance evidence** exists, it also does the **device ↔ ref comparison** and emits verdicts;
+  a `wrong_ref` / `missing_on_ref` verdict spawns a ref `rework` (§2). On a reference-only legacy item
+  (no intake data) it degrades to a cheap self-consistency score.
+
+**Backfill without mutation:** stamp `LastReconciledAt` + `ReconcileVersion` on the snapshot row
+(exactly as `SpecContractVersion` is stamped today). An idle **`sweepReconcile`** (mirroring
+`sweepContractRework`, #894, in `dispatchQueuedAgenticRuns`) enqueues `mode=reconcile` runs where the
+stamp is null/stale — self-limiting via the stamp, capped by the running/waiting limits, gated by an
+`AUTO_RECONCILE` flag + the existing kill switch (#913). Historical items simply have a null stamp and
+drain over time. No migration, no bulk mutation.
 
 | Verdict | Meaning | Action |
 |---|---|---|
@@ -174,8 +198,11 @@ Reuses the established list/detail/tab shell (`ItemListPage` / `BoxListPage` /
 - **Phase 2 — run history + identity.** Add `agentic_run_history` (append-only, transcript on the
   row) writing on every completed run; seed existing data as run 1; relax the snapshot key to
   `(scope, Artikel_Nummer, ItemUUID)`. Existing readers untouched.
-- **Phase 3 — the reconcile stage.** Add the post-supervisor non-blocking stage: data-quality score
-  on all runs; device↔ref comparison + verdicts + ref-`rework` spawn on instance runs.
+- **Phase 3 — reconcile (item-read-only), inline + standalone + backfill.** Add `reconcile()` as the
+  post-supervisor stage of full runs AND a standalone `mode=reconcile` run; data-quality score
+  (additive item field), device↔ref verdicts + ref-`rework` spawn; `LastReconciledAt`/`ReconcileVersion`
+  stamp + `sweepReconcile` idle backfill (`AUTO_RECONCILE`) so the existing backlog is reconciled with
+  no item/review mutation.
 - **Phase 4 — the instance flow proper.** scope=instance `rework` run keyed on `ItemUUID`,
   auto-triggered on intake `/complete` (coalesced), reusing stored search only.
 - **Phase 5 — `KI-Runs` list type + run-detail tabs** (reading history) + auto-approve interplay
@@ -189,7 +216,8 @@ Reuses the established list/detail/tab shell (`ItemListPage` / `BoxListPage` /
 1. Reuse `rework` mode for every ref change — no new ref-writer.
 2. Instance flow never hits the web (reuses stored search) — grounded, cheap, safe to auto-trigger.
 3. Latest-row snapshot + history table — existing readers untouched; no in-place append migration.
-4. Reconcile is a non-blocking stage — never fails a good run.
+4. Reconcile is item-read-only + non-blocking — inline stage and standalone backfillable run; never
+   fails a good run and never mutates item enrichment/review state.
 5. Data stays on the item; whole-`Langtext` approval; no staging/merge layer.
 6. One `KI-Runs` surface (reused list/detail/tab shell), not per-capability widgets.
 7. Confidence/coherence gating reuses auto-approve (#51), not a new policy engine.
@@ -210,8 +238,11 @@ Reuses the established list/detail/tab shell (`ItemListPage` / `BoxListPage` /
 - Propose-only to the ref, but a proposal may auto-apply through the existing auto-approve gate.
 - **Data stays on the item** (as today); whole-`Langtext` approval; no per-field approval, no
   staging/merge layer.
-- **Reconcile is a final non-blocking stage** (after supervisor) emitting a run-level data-quality
-  metric + optional device↔ref verdicts + ref-`rework` spawn — not a scope/mode.
+- **Reconcile is item-read-only and dual-path**: the final non-blocking stage of every full run AND a
+  standalone `mode=reconcile` run. It writes only the run/history record + one additive item quality
+  field (never Langtext / InstanceSpecs / ReviewState), so the entire backlog can be reconciled via an
+  idle `sweepReconcile` (version-stamped, `AUTO_RECONCILE`-gated) without mutating item/review state.
+  No heavyweight separate pipeline — one `reconcile()`, two invocation paths.
 - **Run history via latest-row snapshot + append-only `agentic_run_history`** (existing readers
   untouched); existing data seeded as run 1.
 - Contracts updated; existing stored data left as-is.

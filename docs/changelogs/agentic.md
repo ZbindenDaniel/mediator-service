@@ -28,12 +28,16 @@ type** reusing the item/box/activity list+detail+tab shell (list filterable by s
 tabs: transcript / proposed changes / reconciliation), graduating today's admin KI-queue card. Migration:
 update contracts, leave stored data as-is (operators + rework agent #50 correct drift). Full design +
 phasing in [`docs/PLANNING_instance_flow.md`](../PLANNING_instance_flow.md).
-Later refinements (same #917 design): **reconcile demoted from a mode to a final non-blocking stage**
-(after supervisor) that emits a run-level **data-quality metric** + device↔ref verdicts + optional
-ref-`rework` spawn; **data stays on the item** (whole-`Langtext` approval — per-field rejected because
-`Langtext` bundles many fields); and run **history** uses a **latest-row snapshot + append-only
-`agentic_run_history`** (existing `agentic_runs` readers untouched — avoids an in-place append migration)
-with existing data seeded as run 1.
+Later refinements (same #917 design): **reconcile is item-read-only and dual-path** — the final
+non-blocking stage of every full run AND a standalone `mode=reconcile` run invocable on any existing
+item without re-running extraction; it writes only the run/history record + one additive item
+quality field (never Langtext / InstanceSpecs / ReviewState), so the whole backlog is reconcilable via
+a version-stamped idle `sweepReconcile` (mirroring #894, `AUTO_RECONCILE`-gated) with **no item/review
+mutation** — answering "run it everywhere it hasn't run without mutating all states" without a separate
+pipeline. **Data stays on the item** (whole-`Langtext` approval — per-field rejected because `Langtext`
+bundles many fields). Run **history** uses a **latest-row snapshot + append-only `agentic_run_history`**
+(existing `agentic_runs` readers untouched — avoids an in-place append migration) with existing data
+seeded as run 1.
 **Deferred:** Nothing built yet — this is the agreed plan. `InstanceText` (custom per-instance prose)
 explicitly out of scope. Open at build time: transcript jsonb-on-row vs. per-run file + retention; the
 data-quality score scale + whether low coherence force-routes to review; `wrong_ref` corroboration
