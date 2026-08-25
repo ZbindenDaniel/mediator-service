@@ -57,6 +57,17 @@ function httpStatusFromError(err: unknown): number | null {
 
 function errorMessage(err: unknown): string {
   if (err instanceof Error && err.message) {
+    // A failed fetch surfaces as a generic "fetch failed"; the actionable detail (ECONNREFUSED,
+    // ENOTFOUND, host:port) lives in the nested cause. Append it so the admin check is diagnosable.
+    const cause = (err as { cause?: unknown }).cause;
+    if (cause && typeof cause === 'object') {
+      const c = cause as { code?: string; address?: string; port?: number; hostname?: string; message?: string };
+      const target = c.address && c.port != null ? `${c.address}:${c.port}` : c.hostname;
+      const detail = [c.code, target].filter(Boolean).join(' ') || c.message;
+      if (detail) {
+        return `${err.message} (${detail})`;
+      }
+    }
     return err.message;
   }
   return typeof err === 'string' ? err : 'Unknown error';
