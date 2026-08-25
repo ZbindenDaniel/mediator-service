@@ -7,10 +7,11 @@ Shopware ERP integration — HTTP client for the Shopware API and queue manageme
 - `client.ts` — Shopware **store-api** client (read): OAuth **or** static-access-token auth, product
   search, and a `checkConnection()` probe (used by the admin connection check).
 - `adminClient.ts` — Shopware **Admin-API** client (write): resolves a product by `productNumber`,
-  creates it if missing (resolved/default tax + currency), and sets absolute stock. Bearer-token auth
+  creates it if missing (resolved/default tax + currency), sets absolute stock, and reconciles its
+  **filterable properties** from the Langtext spec map (`upsertProduct`). Bearer-token auth
   (client-credentials grant preferred; static access token accepted).
 - `syncClient.ts` — the queue dispatch client (`dispatchJob`): maps a queue job → DB snapshot →
-  `adminClient.upsertProductStock`, classifies retryable vs terminal failures, persists the new
+  `adminClient.upsertProduct`, classifies retryable vs terminal failures, persists the new
   product id back. DB access is injected so it stays unit-testable.
 - `queueClient.ts` — shared queue types + error normalizer used by the worker.
 - `queueTypes.ts` — TypeScript types for queue entries and dispatch results

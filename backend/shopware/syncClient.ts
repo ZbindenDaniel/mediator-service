@@ -4,7 +4,7 @@ import type { ShopwareQueueClient, ShopwareSyncJobDescriptor, ShopwareQueueDispa
 // Composes the Admin-API client with a DB snapshot loader into the queue's dispatch client. Kept
 // DB-free (loadSnapshot/persistProductId are injected in server.ts) so it stays unit-testable.
 export interface ShopwareSyncClientDeps {
-  adminClient: Pick<import('./adminClient').ShopwareAdminClient, 'upsertProductStock'>;
+  adminClient: Pick<import('./adminClient').ShopwareAdminClient, 'upsertProduct'>;
   loadSnapshot: (payload: unknown) => Promise<ShopwareProductSnapshot | null>;
   persistProductId?: (productNumber: string, productId: string) => Promise<void>;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
@@ -32,7 +32,7 @@ export function createShopwareSyncClient(deps: ShopwareSyncClientDeps): Shopware
       }
 
       try {
-        const result: ShopwareUpsertResult = await deps.adminClient.upsertProductStock(snapshot);
+        const result: ShopwareUpsertResult = await deps.adminClient.upsertProduct(snapshot);
         if (result.action === 'created' && deps.persistProductId) {
           // Best-effort: persisting the new id only saves a lookup next time; a failure isn't fatal.
           await deps.persistProductId(snapshot.productNumber, result.productId).catch((err) =>

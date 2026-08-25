@@ -27,10 +27,16 @@ This document captures the current architecture, required configuration, and ope
   success / retry-with-backoff / terminal failure. It is started from `backend/server.ts` on a 10s interval
   (reentrancy-guarded) whenever `SHOPWARE_SYNC_ENABLED` and the config is ready.
 - Dispatch (`backend/shopware/syncClient.ts`) resolves the job to a DB snapshot
-  (`getShopwareSyncSnapshotForPayload` → `productNumber`, name, price, **summed stock**), then calls
-  `ShopwareAdminClient.upsertProductStock` (`backend/shopware/adminClient.ts`): match by `productNumber`,
+  (`getShopwareSyncSnapshotForPayload` → `productNumber`, name, price, **summed stock**, parsed Langtext),
+  then calls `ShopwareAdminClient.upsertProduct` (`backend/shopware/adminClient.ts`): match by `productNumber`,
   `PATCH` absolute `stock` if it exists, else **create** the product (name, number, price, resolved tax +
   currency) and persist the new `ShopwareProductId` back. Absolute-stock ⇒ a missed/duplicated job self-heals.
+- **Properties (P2a):** after stock, `syncProductProperties` turns each structured Langtext entry
+  (group name → value(s)) into Shopware **filterable properties** — `ensurePropertyGroup`
+  (`filterable:true`) + `ensurePropertyOption` (both cached), then reconciles the product's option
+  associations to exactly the desired set (PATCH full list + 404-tolerant DELETE of stale links). Array
+  values become multiple options. Property failures share the retry classification; stock is written
+  first so it never depends on properties succeeding.
 - Failure classification: 4xx (except 408/429) is terminal; network / 408 / 429 / 5xx retry with exponential
   backoff. A deleted reference (no snapshot) drains as success.
 
@@ -74,11 +80,11 @@ search action, the admin surface, and the agentic tool (the former duplicate con
 
 - The sync queue is Postgres-backed (`shopware_sync_queue`). Inspect depth via the admin
   `GET /api/admin/shopware/status` card or `listShopwareSyncQueue` / `getShopwareSyncQueueCounts`.
-- With `SHOPWARE_SYNC_ENABLED=false` (default) no jobs are enqueued at all; with it true they accumulate
-  until the dispatcher ships.
-- Tests: `test/shopware-connection-check.test.ts` covers the connection probe (currently jest-ignored
-  like the other `shopware-*.test.ts` — harness gap, todo #52).
-- The server logs a reminder at startup if `SHOPWARE_SYNC_ENABLED=true` to flag the dormant worker.
+- With `SHOPWARE_SYNC_ENABLED=false` (default) no jobs are enqueued at all; with it true they are enqueued
+  and the worker dispatches them (`[server] Shopware sync worker started` at boot).
+- Tests: `test/shopware-connection-check.test.ts` (connection probe) and `test/shopware-admin-sync.test.ts`
+  (write client + property sync + dispatch), both jest-ignored like the other `shopware-*.test.ts` (harness
+  gap, todo #52); logic verified via injected-fetch mocks.
 - Keep `.env.example` aligned with the variables above so new environments are configured correctly.
 
 ## Enabling stock sync
@@ -94,7 +100,9 @@ search action, the admin surface, and the agentic tool (the former duplicate con
 ## Deferred (next phases)
 
 - **Queue retention/trim** — succeeded rows are not yet pruned.
-- **Richer product data** — custom fields (Langtext), media (images/docs), quality/CO₂ badges, accessory
+- **Property curation** — today *all* structured Langtext keys become filterable properties; using the spec
+  contracts to pick which are filterable / rename display labels / add units is a follow-up (P2b).
+- **Richer product data** — media (images/docs), quality/CO₂ badges, accessory
   cross-selling (P2–P4). Today the worker syncs stock (+ minimal create), not full catalogue data.
 - **Created products are not made visible** in a sales channel (no `visibilities` on create) — operators
   publish via the existing shop flow; auto-visibility is a follow-up.

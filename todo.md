@@ -10,8 +10,10 @@
   created products (today invisible until published via the shop flow); **max-retry ceiling** for transient
   failures; dedup the product normaliser shared by store `client.ts` / admin `adminClient.ts` / agentic
   `tools/shopware.ts`.
-  **Next (P2–P4):** custom fields (Langtext, filterable) → quality/CO₂ badges → media (images/docs) →
-  accessory cross-selling — layered on the working stock path.
+  **P2a done (#938):** Langtext/Spezifikationen → **filterable Shopware properties** (property groups+options,
+  not custom fields — native storefront filters). All structured Langtext keys become properties.
+  **Next (P2b–P4):** contract-driven property curation (which keys filterable, display labels, units) →
+  quality/CO₂ badges → media (images/docs) → accessory cross-selling — layered on the working stock+property path.
 
 - **ERP export approval gate:** Only approved items may be exported/synced to the ERP — exporting unreviewed items is too dangerous. Enforced as a single choke point in `stageItemsExport` for `erp` mode (covers `/api/sync/erp`, `/api/export/items?mode=erp`, `/api/export/data?mode=erp`) plus an early filter in `sync-erp`. Configurable via `ERP_SYNC_REQUIRE_APPROVAL` (default `true`); backup-mode exports are unaffected.
 - **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.

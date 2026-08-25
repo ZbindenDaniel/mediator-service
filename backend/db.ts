@@ -2636,6 +2636,8 @@ export interface ShopwareSyncSnapshot {
   grossPrice: number | null;
   shopwareProductId: string | null;
   stock: number;
+  // Parsed Langtext spec map (group → value(s)) for property sync; null when Langtext is freeform/empty.
+  properties: Record<string, string | string[]> | null;
 }
 
 // Current state of one item reference, mapped to what a Shopware product upsert needs. Stock is the
@@ -2647,28 +2649,34 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
     name: string;
     grossPrice: number | null;
     shopwareProductId: string | null;
+    langtext: string | null;
     stock: string | number;
   }>(
     `SELECT r."Artikel_Nummer" AS "productNumber",
             COALESCE(NULLIF(r."Kurzbeschreibung",''), NULLIF(r."Artikelbeschreibung",''), r."Artikel_Nummer") AS "name",
             r."Verkaufspreis" AS "grossPrice",
             r."ShopwareProductId" AS "shopwareProductId",
+            r."Langtext" AS "langtext",
             COALESCE(SUM(COALESCE(i."Auf_Lager",0)),0) AS "stock"
        FROM item_refs r
        LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
       WHERE r."Artikel_Nummer" = $1
-      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId"`,
+      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext"`,
     [artikelNummer]
   );
   if (!row) {
     return null;
   }
+  // Only the structured (object) Langtext form yields properties; freeform prose is not filterable.
+  const parsedLangtext = parseLangtext(row.langtext, { context: 'db:getShopwareSyncSnapshot', artikelNummer });
+  const properties = parsedLangtext && typeof parsedLangtext === 'object' ? parsedLangtext : null;
   return {
     productNumber: row.productNumber,
     name: row.name,
     grossPrice: row.grossPrice != null ? Number(row.grossPrice) : null,
     shopwareProductId: row.shopwareProductId ?? null,
-    stock: Number(row.stock) || 0
+    stock: Number(row.stock) || 0,
+    properties
   };
 }
 

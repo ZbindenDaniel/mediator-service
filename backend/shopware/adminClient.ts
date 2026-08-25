@@ -19,6 +19,8 @@ export interface ShopwareProductSnapshot {
   stock: number;
   grossPrice: number | null;
   shopwareProductId?: string | null;
+  // Parsed Langtext/Spezifikationen → filterable Shopware properties (group name → option value(s)).
+  properties?: Record<string, string | string[]> | null;
 }
 
 export interface ShopwareUpsertResult {
@@ -44,6 +46,9 @@ export class ShopwareAdminClient {
   private cachedTaxId: string | null;
   private cachedTaxRate: number | null = null;
   private cachedCurrencyId: string | null;
+  // Property group/option ids are stable once created, so cache across jobs to avoid re-resolving.
+  private readonly groupCache = new Map<string, string>();
+  private readonly optionCache = new Map<string, string>();
 
   constructor(private readonly config: ShopwareConfig, options: ShopwareAdminClientOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
@@ -198,15 +203,107 @@ export class ShopwareAdminClient {
     return id;
   }
 
-  // Idempotent: match by productNumber, update absolute stock if it exists, else create it.
-  async upsertProductStock(snapshot: ShopwareProductSnapshot): Promise<ShopwareUpsertResult> {
+  // Ensure a filterable property group exists for `name`; returns its id (cached).
+  private async ensurePropertyGroup(name: string): Promise<string> {
+    const key = name.trim();
+    const cached = this.groupCache.get(key);
+    if (cached) return cached;
+    const found = await this.request<{ data?: Array<{ id: string }> }>('POST', '/api/search/property-group', {
+      filter: [{ type: 'equals', field: 'name', value: key }],
+      includes: { property_group: ['id'] },
+      limit: 1
+    });
+    let id = found?.data?.[0]?.id ?? null;
+    if (!id) {
+      id = uuid32();
+      await this.request('POST', '/api/property-group', {
+        id,
+        name: key,
+        displayType: 'text',
+        sortingType: 'alphanumeric',
+        filterable: true
+      });
+    }
+    this.groupCache.set(key, id);
+    return id;
+  }
+
+  // Ensure an option `value` exists within a group; returns its id (cached per group+value).
+  private async ensurePropertyOption(groupId: string, value: string): Promise<string> {
+    const v = value.trim();
+    const cacheKey = `${groupId} ${v}`;
+    const cached = this.optionCache.get(cacheKey);
+    if (cached) return cached;
+    const found = await this.request<{ data?: Array<{ id: string }> }>('POST', '/api/search/property-group-option', {
+      filter: [
+        { type: 'equals', field: 'groupId', value: groupId },
+        { type: 'equals', field: 'name', value: v }
+      ],
+      includes: { property_group_option: ['id'] },
+      limit: 1
+    });
+    let id = found?.data?.[0]?.id ?? null;
+    if (!id) {
+      id = uuid32();
+      await this.request('POST', '/api/property-group-option', { id, groupId, name: v });
+    }
+    this.optionCache.set(cacheKey, id);
+    return id;
+  }
+
+  // Set the product's property associations to exactly the options implied by `payload`
+  // (group name → value(s)). Missing groups/options are created as filterable properties.
+  async syncProductProperties(productId: string, payload: Record<string, string | string[]>): Promise<void> {
+    const desired = new Set<string>();
+    for (const [group, raw] of Object.entries(payload)) {
+      const groupName = group.trim();
+      if (!groupName) continue;
+      const values = Array.isArray(raw) ? raw : [raw];
+      let groupId: string | null = null;
+      for (const value of values) {
+        const v = String(value ?? '').trim();
+        if (!v) continue;
+        groupId = groupId ?? (await this.ensurePropertyGroup(groupName));
+        desired.add(await this.ensurePropertyOption(groupId, v));
+      }
+    }
+
+    const current = await this.request<{ data?: Array<{ id: string }> }>('GET', `/api/product/${productId}/properties?limit=500`);
+    const currentIds = new Set((current?.data ?? []).map((o) => o.id));
+    const toRemove = [...currentIds].filter((id) => !desired.has(id));
+
+    // Robust to either Shopware association-write semantic: PATCH the full desired list (a "replace"
+    // build lands exactly this; an "upsert" build just adds), then explicitly delete anything stale
+    // (a no-op 404 if the replace already removed it).
+    const desiredIds = [...desired];
+    if (desiredIds.length) {
+      await this.request('PATCH', `/api/product/${productId}`, { id: productId, properties: desiredIds.map((id) => ({ id })) });
+    }
+    for (const id of toRemove) {
+      try {
+        await this.request('DELETE', `/api/product/${productId}/properties/${id}`);
+      } catch (err) {
+        if ((err as { status?: number }).status !== 404) throw err;
+      }
+    }
+  }
+
+  // Idempotent: match by productNumber, update absolute stock if it exists, else create it; then
+  // reconcile its filterable properties from the snapshot's Langtext-derived spec map.
+  async upsertProduct(snapshot: ShopwareProductSnapshot): Promise<ShopwareUpsertResult> {
     const existingId = snapshot.shopwareProductId || (await this.findProductIdByNumber(snapshot.productNumber));
+    let result: ShopwareUpsertResult;
     if (existingId) {
       await this.updateProductStock(existingId, snapshot.stock);
-      return { action: 'updated', productId: existingId };
+      result = { action: 'updated', productId: existingId };
+    } else {
+      result = { action: 'created', productId: await this.createProduct(snapshot) };
     }
-    const productId = await this.createProduct(snapshot);
-    return { action: 'created', productId };
+
+    if (snapshot.properties && Object.keys(snapshot.properties).length > 0) {
+      await this.syncProductProperties(result.productId, snapshot.properties);
+    }
+    return result;
   }
 }
 
