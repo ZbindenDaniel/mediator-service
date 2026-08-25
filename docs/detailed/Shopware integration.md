@@ -43,6 +43,14 @@ This document captures the current architecture, required configuration, and ope
   associations to exactly the desired set (PATCH full list + 404-tolerant DELETE of stale links). Array
   values become multiple options. Property failures share the retry classification; stock is written
   first so it never depends on properties succeeding.
+- **Variants (P2c).** When a ref's instances split into **≥2 distinct InstanceSpecs combinations** (and every
+  combo has specs), the product becomes a **variant parent**: `db.buildVariantGroups` groups instances by a
+  canonical spec signature (stock = summed matching instances); `adminClient.syncVariants` resolves each combo's
+  spec values to property options (P2a machinery), PATCHes the parent's `configuratorSettings` with the axis
+  options, and upserts one **child product** per combo (`productNumber = parent.<sha1(sig)>`, `parentId` +
+  `options` + summed stock, inheriting price/tax/visibility from the parent). Existing children get stock/active
+  updated; a combo that no longer exists is retired (`active:false, stock:0`). Each instance's `ShopwareVariantId`
+  is persisted. <2 combos, or any spec-less instance → the single-product path (summed stock on the ref product).
 - Failure classification: 4xx (except 408/429) is terminal; network / 408 / 429 / 5xx retry with exponential
   backoff. A deleted reference (no snapshot) drains as success.
 

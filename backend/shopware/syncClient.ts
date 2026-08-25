@@ -7,6 +7,7 @@ export interface ShopwareSyncClientDeps {
   adminClient: Pick<import('./adminClient').ShopwareAdminClient, 'upsertProduct'>;
   loadSnapshot: (payload: unknown) => Promise<ShopwareProductSnapshot | null>;
   persistProductId?: (productNumber: string, productId: string) => Promise<void>;
+  persistVariantId?: (itemUUID: string, variantId: string) => Promise<void>;
   logger?: Pick<Console, 'info' | 'warn' | 'error'>;
 }
 
@@ -40,11 +41,23 @@ export function createShopwareSyncClient(deps: ShopwareSyncClientDeps): Shopware
             logger.warn?.('[shopware-sync] Failed to persist ShopwareProductId', { productNumber: snapshot.productNumber, err })
           );
         }
+        // Persist each instance's variant (child) id so the mediator knows the Shopware variant mapping.
+        if (result.variantAssignments && deps.persistVariantId) {
+          const persist = deps.persistVariantId;
+          for (const a of result.variantAssignments) {
+            for (const itemUUID of a.instanceIds) {
+              await persist(itemUUID, a.variantId).catch((err) =>
+                logger.warn?.('[shopware-sync] Failed to persist ShopwareVariantId', { itemUUID, err })
+              );
+            }
+          }
+        }
         logger.info?.('[shopware-sync] Synced product', {
           correlationId: job.correlationId,
           productNumber: snapshot.productNumber,
           action: result.action,
-          stock: snapshot.stock
+          stock: snapshot.stock,
+          variants: result.variantAssignments?.length ?? 0
         });
         return { ok: true, correlationId: job.correlationId };
       } catch (err) {

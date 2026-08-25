@@ -123,6 +123,50 @@ describe('ShopwareAdminClient.upsertProduct', () => {
   });
 });
 
+describe('ShopwareAdminClient variant sync', () => {
+  const taxRoute = { match: (u: string) => u.includes('/api/search/tax'), res: () => ({ status: 200, body: { data: [{ id: 'tax19', taxRate: 19 }] } }) };
+  const salesChannelRoute = { match: (u: string) => u.includes('/api/search/sales-channel'), res: () => ({ status: 200, body: { data: [{ id: 'sc1', currencyId: 'chf' }] } }) };
+  const filterVal = (body: any, field: string) => (body?.filter || []).find((x: any) => x.field === field)?.value;
+
+  test('creates one child per InstanceSpecs combo, sets configurator axes, retires stale children', async () => {
+    const calls: Call[] = [];
+    const admin = createShopwareAdminClient(cfg, { logger: log, fetchImpl: mkFetch([
+      tokenRoute, taxRoute, salesChannelRoute,
+      { match: (u) => /\/api\/search\/property-group$/.test(u), res: () => ({ status: 200, body: { data: [{ id: 'GRAM' }] } }) },
+      { match: (u) => /\/api\/search\/property-group-option$/.test(u), res: () => ({ status: 200, body: { data: [] } }) },
+      { match: (u, i) => /\/api\/property-group-option$/.test(u) && i.method === 'POST', res: () => ({ status: 204 }) },
+      { match: (u) => u.includes('/api/search/product'), res: (_u, i) => {
+          const body = i.body ? JSON.parse(i.body) : undefined;
+          if (filterVal(body, 'parentId') === 'PAR') return { status: 200, body: { data: [{ id: 'STALE', productNumber: 'A.oldhash00' }] } };
+          if (filterVal(body, 'productNumber') === 'A') return { status: 200, body: { data: [{ id: 'PAR' }] } };
+          return { status: 200, body: { data: [] } };
+        } },
+      { match: (u, i) => /\/api\/product\/(PAR|STALE)$/.test(u) && i.method === 'PATCH', res: () => ({ status: 204 }) },
+      { match: (u, i) => /\/api\/product$/.test(u) && i.method === 'POST', res: () => ({ status: 204 }) }
+    ], calls) });
+
+    const result = await admin.upsertProduct({
+      productNumber: 'A', name: 'N', stock: 3, grossPrice: 100, active: true, shopEligible: true,
+      variants: [
+        { key: 'RAM=8 GB', options: { RAM: '8 GB' }, stock: 1, instanceIds: ['i1'] },
+        { key: 'RAM=16 GB', options: { RAM: '16 GB' }, stock: 2, instanceIds: ['i2', 'i3'] }
+      ]
+    });
+
+    const childCreates = calls.filter((c) => c.method === 'POST' && /\/api\/product$/.test(c.url) && c.body?.parentId === 'PAR');
+    expect(childCreates.length).toBe(2);
+    expect(childCreates.every((c) => Array.isArray(c.body.options) && c.body.options.length === 1)).toBe(true);
+    expect(childCreates.map((c) => c.body.stock).sort()).toEqual([1, 2]);
+    const cfgPatch = calls.find((c) => c.method === 'PATCH' && /\/api\/product\/PAR$/.test(c.url) && Array.isArray(c.body.configuratorSettings));
+    expect(cfgPatch?.body.configuratorSettings.length).toBe(2);
+    const stale = calls.find((c) => c.method === 'PATCH' && /\/api\/product\/STALE$/.test(c.url));
+    expect(stale?.body.active).toBe(false);
+    expect(stale?.body.stock).toBe(0);
+    expect(result.variantAssignments?.length).toBe(2);
+    expect((result.variantAssignments || []).flatMap((a) => a.instanceIds).sort()).toEqual(['i1', 'i2', 'i3']);
+  });
+});
+
 describe('createShopwareSyncClient.dispatchJob', () => {
   const snap = { productNumber: 'A-1', name: 'n', stock: 5, grossPrice: 1 };
 

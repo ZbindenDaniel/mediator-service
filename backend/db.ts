@@ -2649,6 +2649,50 @@ export interface ShopwareSyncSnapshot {
   active: boolean;
   // Parsed Langtext spec map (group → value(s)) for property sync; null when Langtext is freeform/empty.
   properties: Record<string, string | string[]> | null;
+  // Variant groups: the ref's instances grouped by distinct InstanceSpecs combination. Empty when the
+  // ref has <2 distinct spec combos (→ single-product path, using the summed `stock` above).
+  variants: ShopwareVariantGroup[];
+}
+
+// One Shopware variant = one distinct InstanceSpecs combination within a ref. Options are the spec
+// axis→value pairs; stock is the summed on-hand of the instances in the group.
+export interface ShopwareVariantGroup {
+  // Stable signature (sorted key=value) → deterministic child productNumber suffix on re-sync.
+  key: string;
+  options: Record<string, string>;
+  stock: number;
+  instanceIds: string[];
+}
+
+// Group a ref's instances by their InstanceSpecs signature. Instances with no specs collapse under an
+// empty signature. Returns groups sorted by key for stable ordering.
+export function buildVariantGroups(
+  instances: Array<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null }>,
+  artikelNummer: string
+): ShopwareVariantGroup[] {
+  const byKey = new Map<string, ShopwareVariantGroup>();
+  for (const inst of instances) {
+    const parsed = parseLangtext(inst.InstanceSpecs, { context: 'db:buildVariantGroups', artikelNummer, itemUUID: inst.ItemUUID });
+    const options: Record<string, string> = {};
+    if (parsed && typeof parsed === 'object') {
+      for (const [rawK, rawV] of Object.entries(parsed)) {
+        const k = rawK.trim();
+        // A variant axis takes a single value; join a multi-value spec deterministically.
+        const v = (Array.isArray(rawV) ? rawV.join(' / ') : String(rawV ?? '')).trim();
+        if (k && v) options[k] = v;
+      }
+    }
+    const key = Object.keys(options).sort().map((k) => `${k}=${options[k]}`).join('|');
+    const existing = byKey.get(key);
+    const stock = Math.max(0, Number(inst.Auf_Lager) || 0);
+    if (existing) {
+      existing.stock += stock;
+      existing.instanceIds.push(inst.ItemUUID);
+    } else {
+      byKey.set(key, { key, options, stock, instanceIds: [inst.ItemUUID] });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
 // Agentic approval: ReviewState is authoritative when set, else fall back to Status. Mirrors
@@ -2713,6 +2757,17 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
   const properties = parsedLangtext && typeof parsedLangtext === 'object' ? parsedLangtext : null;
   const description = row.description && row.description !== row.name ? row.description : null;
   const shopEligible = Number(row.shopartikel) === 1 && isAgenticApproved(row.agenticReviewState, row.agenticStatus);
+
+  // Variant grouping: use variants only when ≥2 distinct spec combos AND every group carries options
+  // (a group with no InstanceSpecs can't be a valid Shopware variant). Otherwise → single-product path.
+  const instances = await query<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null }>(
+    `SELECT "ItemUUID", "InstanceSpecs", "Auf_Lager" FROM items WHERE "Artikel_Nummer" = $1`,
+    [artikelNummer]
+  );
+  const allGroups = buildVariantGroups(instances, artikelNummer);
+  const useVariants = allGroups.length >= 2 && allGroups.every((g) => Object.keys(g.options).length > 0);
+  const variants = useVariants ? allGroups : [];
+
   return {
     productNumber: row.productNumber,
     name: row.name,
@@ -2726,8 +2781,14 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
     weightKg: row.weightKg != null ? Number(row.weightKg) : null,
     shopEligible,
     active: normalizePublishedValue(row.published) === 'yes',
-    properties
+    properties,
+    variants
   };
+}
+
+// Persist the resolved Shopware variant (child) id onto every instance in a variant group.
+export async function setItemShopwareVariantId(itemUUID: string, variantId: string): Promise<void> {
+  await execute(`UPDATE items SET "ShopwareVariantId"=$2 WHERE "ItemUUID"=$1`, [itemUUID, variantId]);
 }
 
 // Resolve a snapshot from a queue job's payload. item-upsert jobs carry artikelNummer directly;

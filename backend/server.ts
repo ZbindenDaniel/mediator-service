@@ -104,6 +104,7 @@ import {
   enqueueShopwareSyncJob,
   getShopwareSyncSnapshotForPayload,
   setShopwareProductId,
+  setItemShopwareVariantId,
   insertAgenticRunReviewHistoryEntry,
   listStubs,
   createStub,
@@ -612,6 +613,7 @@ if (SHOPWARE_SYNC_ENABLED) {
         adminClient: shopwareAdminClient,
         loadSnapshot: getShopwareSyncSnapshotForPayload,
         persistProductId: setShopwareProductId,
+        persistVariantId: setItemShopwareVariantId,
         logger: console
       });
       let shopwareSyncRunning = false;

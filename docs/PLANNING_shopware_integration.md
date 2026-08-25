@@ -205,7 +205,8 @@ it should be settled **before** implementation starts.
 | **0** ✅ | Enqueue gate fixed; config unified onto one source; API-key auth working; dead vars retired; docs reconciled; admin connection check added (#935–936). | risk cleanup |
 | **1** ✅ | Admin-API write client + real dispatch client + worker wired + create-if-missing + **absolute stock sync** end-to-end (#937). *Remaining: queue retention, sales-channel visibility on create, product-normaliser dedup.* | 3.1 |
 | **2a** ✅ | Langtext/Spezifikationen → **filterable properties** (property groups + options), not custom fields — native storefront filters (#938). *Remaining (2b): contract-driven curation of which keys are filterable + display labels/units.* | 3.2 |
-| **2c** | Quality/CO₂ → badges (custom field or property) | 3.5 |
+| **2c** ✅ | **Variants**: ref → parent product, distinct InstanceSpecs combos → variant children (configurator + child products, per-variant stock, `ShopwareVariantId` persisted) (#941). *Validate configurator/child-option write on a live shop.* | variants |
+| **2d** | Quality/CO₂ → badges (custom field or property) | 3.5 |
 | **3** | Media: images + docs upload/associate (dedup) | 3.3, 3.4 |
 | **4** | Accessory cross-selling (two-pass) + filterable-property config | 3.6, filter part of 3.2 |
 

@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { randomBytes, createHash } from 'crypto';
 import type { ShopwareConfig } from '../config';
 import { summarizeShopwareErrorBody } from './client';
 
@@ -33,11 +33,24 @@ export interface ShopwareProductSnapshot {
   shopwareProductId?: string | null;
   // Parsed Langtext/Spezifikationen → filterable Shopware properties (group name → option value(s)).
   properties?: Record<string, string | string[]> | null;
+  // Variant groups (instances grouped by distinct InstanceSpecs). When ≥2, the product becomes a
+  // variant parent and one child is synced per group.
+  variants?: ShopwareVariantInput[];
+}
+
+// One variant to sync: its defining spec options, stock, and the mediator instances it represents.
+export interface ShopwareVariantInput {
+  key: string;
+  options: Record<string, string>;
+  stock: number;
+  instanceIds: string[];
 }
 
 export interface ShopwareUpsertResult {
   action: 'created' | 'updated' | 'deactivated' | 'skipped';
   productId: string | null;
+  // Instance→variant(child) id assignments, so callers can persist ShopwareVariantId per instance.
+  variantAssignments?: Array<{ instanceIds: string[]; variantId: string }>;
 }
 
 function uuid32(): string {
@@ -373,7 +386,88 @@ export class ShopwareAdminClient {
     if (result.productId && snapshot.properties && Object.keys(snapshot.properties).length > 0) {
       await this.syncProductProperties(result.productId, snapshot.properties);
     }
+    if (result.productId && snapshot.variants && snapshot.variants.length >= 2) {
+      result.variantAssignments = await this.syncVariants(
+        result.productId,
+        snapshot.productNumber,
+        snapshot.variants,
+        snapshot.active ?? false
+      );
+    }
     return result;
+  }
+
+  // Turn the product into a variant parent: declare the InstanceSpecs axes on the parent's configurator,
+  // then upsert one child product per variant group (parentId + options + stock, inheriting price/tax/
+  // visibility from the parent). Stale children (a spec combo that no longer exists) are deactivated +
+  // zeroed. Returns instance→child-id assignments for ShopwareVariantId persistence.
+  private async syncVariants(
+    parentId: string,
+    parentNumber: string,
+    variants: ShopwareVariantInput[],
+    active: boolean
+  ): Promise<Array<{ instanceIds: string[]; variantId: string }>> {
+    const allOptionIds = new Set<string>();
+    const desired: Array<{ productNumber: string; optionIds: string[]; stock: number; instanceIds: string[] }> = [];
+    for (const v of variants) {
+      const optionIds: string[] = [];
+      for (const [group, value] of Object.entries(v.options)) {
+        const g = group.trim();
+        const val = String(value ?? '').trim();
+        if (!g || !val) continue;
+        const groupId = await this.ensurePropertyGroup(g);
+        const optId = await this.ensurePropertyOption(groupId, val);
+        optionIds.push(optId);
+        allOptionIds.add(optId);
+      }
+      // Deterministic child productNumber so a re-sync finds the same variant.
+      const suffix = createHash('sha1').update(v.key).digest('hex').slice(0, 10);
+      desired.push({ productNumber: `${parentNumber}.${suffix}`, optionIds, stock: v.stock, instanceIds: v.instanceIds });
+    }
+
+    // Declare which options participate as variant axes (PATCH the full set; adding axes is the common case).
+    if (allOptionIds.size) {
+      await this.request('PATCH', `/api/product/${parentId}`, {
+        id: parentId,
+        configuratorSettings: [...allOptionIds].map((optionId) => ({ optionId }))
+      });
+    }
+
+    const assignments: Array<{ instanceIds: string[]; variantId: string }> = [];
+    const desiredNumbers = new Set(desired.map((d) => d.productNumber));
+    for (const d of desired) {
+      const existingId = await this.findProductIdByNumber(d.productNumber);
+      if (existingId) {
+        // A variant's identity (its options) is fixed by its key; only stock/active change on update.
+        await this.request('PATCH', `/api/product/${existingId}`, { id: existingId, stock: Math.max(0, Math.trunc(d.stock)), active });
+        assignments.push({ instanceIds: d.instanceIds, variantId: existingId });
+      } else {
+        const id = uuid32();
+        await this.request('POST', '/api/product', {
+          id,
+          productNumber: d.productNumber,
+          parentId,
+          stock: Math.max(0, Math.trunc(d.stock)),
+          active,
+          options: d.optionIds.map((oid) => ({ id: oid }))
+        });
+        assignments.push({ instanceIds: d.instanceIds, variantId: id });
+      }
+    }
+
+    // Retire children whose spec combo no longer exists (deactivate + zero stock rather than delete).
+    const existingChildren = await this.request<{ data?: Array<{ id: string; productNumber?: string }> }>('POST', '/api/search/product', {
+      filter: [{ type: 'equals', field: 'parentId', value: parentId }],
+      includes: { product: ['id', 'productNumber'] },
+      limit: 500
+    });
+    for (const child of existingChildren?.data ?? []) {
+      if (child.productNumber && !desiredNumbers.has(child.productNumber)) {
+        await this.request('PATCH', `/api/product/${child.id}`, { id: child.id, active: false, stock: 0 });
+      }
+    }
+
+    return assignments;
   }
 }
 
