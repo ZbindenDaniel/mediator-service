@@ -45,7 +45,8 @@ describe('ShopwareAdminClient.upsertProduct', () => {
       tokenRoute,
       { match: (u) => u.includes('/api/search/product'), res: () => ({ status: 200, body: { data: [] } }) },
       { match: (u) => u.includes('/api/search/tax'), res: () => ({ status: 200, body: { data: [{ id: 'tax19', taxRate: 19 }, { id: 'tax7', taxRate: 7 }] } }) },
-      { match: (u) => u.includes('/api/search/currency'), res: () => ({ status: 200, body: { data: [{ id: 'eur' }] } }) },
+      // Currency resolves via the sales channel (its own currency, e.g. CHF), not the runtime isSystemDefault field.
+      { match: (u) => u.includes('/api/search/sales-channel'), res: () => ({ status: 200, body: { data: [{ currencyId: 'chf' }] } }) },
       { match: (u, i) => /\/api\/product$/.test(u) && i.method === 'POST', res: () => ({ status: 204 }) }
     ], calls) });
     const r = await admin.upsertProduct({ productNumber: 'B-2', name: 'New', stock: 3, grossPrice: 119 });
@@ -54,8 +55,10 @@ describe('ShopwareAdminClient.upsertProduct', () => {
     const create = calls.find((c) => c.method === 'POST' && /\/api\/product$/.test(c.url));
     expect(create?.body.taxId).toBe('tax19'); // highest rate chosen as standard
     expect(create?.body.stock).toBe(3);
-    expect(create?.body.price[0].currencyId).toBe('eur');
+    expect(create?.body.price[0].currencyId).toBe('chf'); // sales-channel currency
     expect(Math.abs(create?.body.price[0].net - 119 / 1.19)).toBeLessThan(0.01);
+    // never queries the runtime isSystemDefault field
+    expect(calls.some((c) => c.url.includes('/api/search/currency'))).toBe(false);
   });
 
   test('syncs Langtext into filterable properties: creates missing group/option, links, removes stale', async () => {

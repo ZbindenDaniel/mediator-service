@@ -32,6 +32,9 @@ function uuid32(): string {
   return randomBytes(16).toString('hex');
 }
 
+// Shopware's hard-coded system default currency id (EUR), seeded in every install (Defaults::CURRENCY).
+const SYSTEM_DEFAULT_CURRENCY_ID = 'b7d2554b0ce847cd82f3ac9bd1c0dfca';
+
 export class ShopwareAdminClient {
   private readonly fetchImpl: typeof fetch;
   private readonly logger: Pick<Console, 'info' | 'warn' | 'error'>;
@@ -40,6 +43,7 @@ export class ShopwareAdminClient {
   private readonly accessToken: string | null;
   private readonly clientId: string | null;
   private readonly clientSecret: string | null;
+  private readonly salesChannelAccessKey: string | null;
   private readonly requestTimeoutMs: number;
   private token: string | null = null;
   private tokenExpiry = 0;
@@ -70,6 +74,7 @@ export class ShopwareAdminClient {
     this.accessToken = creds.accessToken ?? null;
     this.clientId = creds.clientId ?? null;
     this.clientSecret = creds.clientSecret ?? null;
+    this.salesChannelAccessKey = config.salesChannelAccessKey ?? null;
     this.requestTimeoutMs = Math.max(1, config.requestTimeoutMs);
     this.cachedTaxId = config.defaultTaxId ?? null;
     this.cachedCurrencyId = config.defaultCurrencyId ?? null;
@@ -164,14 +169,29 @@ export class ShopwareAdminClient {
     if (this.cachedCurrencyId) {
       return this.cachedCurrencyId;
     }
-    const data = await this.request<{ data?: Array<{ id: string }> }>('POST', '/api/search/currency', {
-      filter: [{ type: 'equals', field: 'isSystemDefault', value: true }],
-      limit: 1
-    });
-    const id = data?.data?.[0]?.id ?? null;
-    // Fall back to Shopware's well-known default EUR currency id.
-    this.cachedCurrencyId = id ?? 'b7d2554b0ce847cd82f3ac9bd1c0dfca';
-    return this.cachedCurrencyId;
+    // Prefer the configured sales channel's own currency (what its storefront prices in — e.g. CHF for a
+    // Swiss shop). `isSystemDefault` is a Shopware runtime field and CANNOT be used in a search criteria,
+    // so resolve via the sales channel (accessKey is a real, filterable field) instead.
+    let id: string | null = null;
+    if (this.salesChannelAccessKey) {
+      try {
+        const sc = await this.request<{ data?: Array<{ currencyId?: string }> }>('POST', '/api/search/sales-channel', {
+          filter: [{ type: 'equals', field: 'accessKey', value: this.salesChannelAccessKey }],
+          includes: { sales_channel: ['currencyId'] },
+          limit: 1
+        });
+        id = sc?.data?.[0]?.currencyId ?? null;
+      } catch (err) {
+        this.logger.warn?.('[shopware-admin-client] Failed to resolve sales-channel currency; using system default', err);
+      }
+    }
+    if (id) {
+      this.cachedCurrencyId = id;
+      return id;
+    }
+    // Fall back to Shopware's well-known system default currency id (EUR, always seeded) WITHOUT caching,
+    // so a transient sales-channel lookup failure doesn't pin the wrong currency for the process lifetime.
+    return SYSTEM_DEFAULT_CURRENCY_ID;
   }
 
   async findProductIdByNumber(productNumber: string): Promise<string | null> {
