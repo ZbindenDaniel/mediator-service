@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { SHOPWARE_CONFIG, SHOPWARE_SYNC_ENABLED, getShopwareConfigIssues } from '../config';
 import { createShopwareClient, type ShopwareConnectionResult } from '../shopware/client';
-import { getShopwareSyncQueueCounts, enqueueShopwareSyncForShopRefs } from '../db';
+import { getShopwareSyncQueueCounts, enqueueShopwareSyncForShopRefs, enqueueShopwareSyncForItems } from '../db';
 import { requireAdminAuth } from '../utils/admin-auth';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -47,15 +47,30 @@ const action = defineHttpAction({
 
     const url = req.url || '';
 
-    // POST /sync — manual "Shop-Sync": enqueue a resync of every shop-article ref (the worker drains it).
+    // POST /sync — manual "Shop-Sync". Body { itemIds } → sync just those items' refs (list bulk-action);
+    // no body → sync every shop-article ref (backfill). The worker drains the queue.
     if (req.method === 'POST' && url.startsWith('/api/admin/shopware/sync')) {
       if (!SHOPWARE_SYNC_ENABLED) {
         sendJson(res, 200, { ok: false, reason: 'sync_disabled', enqueued: 0 });
         return;
       }
+      let itemIds: string[] = [];
       try {
-        const { enqueued, total } = await enqueueShopwareSyncForShopRefs();
-        sendJson(res, 200, { ok: true, enqueued, total });
+        let raw = '';
+        for await (const chunk of req) raw += chunk;
+        if (raw.trim()) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray((parsed as { itemIds?: unknown }).itemIds)) {
+            itemIds = ((parsed as { itemIds: unknown[] }).itemIds).filter((x): x is string => typeof x === 'string');
+          }
+        }
+      } catch {
+        sendJson(res, 400, { ok: false, error: 'Invalid JSON' });
+        return;
+      }
+      try {
+        const result = itemIds.length ? await enqueueShopwareSyncForItems(itemIds) : await enqueueShopwareSyncForShopRefs();
+        sendJson(res, 200, { ok: true, enqueued: result.enqueued, total: result.total });
       } catch (error) {
         console.error('[admin-shopware] Manual shop sync failed', error);
         sendJson(res, 500, { ok: false, error: 'Shop sync failed' });

@@ -167,9 +167,9 @@ export default function ShopwareStatusCard({ authToken, onAuthFailure }: Props) 
               className="btn"
               onClick={() => void runSync()}
               disabled={syncing}
-              title="Reiht alle Shop-Artikel zur Synchronisation mit Shopware ein"
+              title="Reiht ALLE Shop-Artikel zur Synchronisation ein (Backfill). Für einzelne Artikel: Shop-Sync in der Listenauswahl."
             >
-              {syncing ? 'Synchronisiere…' : 'Shop-Sync'}
+              {syncing ? 'Synchronisiere…' : 'Alle synchronisieren'}
             </button>
           </div>
           {syncMsg && <p className="muted" style={{ marginTop: 4, fontSize: '0.85em' }}>{syncMsg}</p>}

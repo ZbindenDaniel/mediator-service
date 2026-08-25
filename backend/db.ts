@@ -2619,6 +2619,32 @@ export async function enqueueShopwareSyncForShopRefs(): Promise<{ enqueued: numb
   return { enqueued, total: refs.length };
 }
 
+// Enqueue a Shopware sync for the refs behind the selected item instances (list bulk-action). The
+// dispatch gate then decides per ref (approved → synced, ineligible → deactivated/skipped).
+export async function enqueueShopwareSyncForItems(itemIds: string[]): Promise<{ enqueued: number; total: number }> {
+  const ids = (itemIds || []).filter((id) => typeof id === 'string' && id.trim());
+  if (!ids.length) {
+    return { enqueued: 0, total: 0 };
+  }
+  const rows = await query<{ Artikel_Nummer: string | null }>(
+    `SELECT DISTINCT "Artikel_Nummer" FROM items WHERE "ItemUUID" = ANY($1::text[]) AND "Artikel_Nummer" IS NOT NULL AND "Artikel_Nummer" <> ''`,
+    [ids]
+  );
+  const refs = rows.map((r) => r.Artikel_Nummer).filter((n): n is string => Boolean(n));
+  let enqueued = 0;
+  for (const artikelNummer of refs) {
+    try {
+      const correlationId = generateShopwareCorrelationId('manual-shop-sync', artikelNummer);
+      const payload = createShopwareQueuePayload({ artikelNummer, trigger: 'manual-shop-sync' }, 'manualShopSync');
+      const entry = await enqueueShopwareSyncJob({ CorrelationId: correlationId, JobType: 'item-upsert', Payload: payload });
+      if (entry) enqueued += 1;
+    } catch (err) {
+      console.error('[db] Failed to enqueue manual shop sync job for item', { artikelNummer, error: err });
+    }
+  }
+  return { enqueued, total: refs.length };
+}
+
 export interface ShopwareSyncQueueCounts {
   total: number;
   queued: number;
