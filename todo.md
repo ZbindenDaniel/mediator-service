@@ -10,10 +10,10 @@
   created products (today invisible until published via the shop flow); **max-retry ceiling** for transient
   failures; dedup the product normaliser shared by store `client.ts` / admin `adminClient.ts` / agentic
   `tools/shopware.ts`.
-  **P2a done (#938):** Langtext/Spezifikationen → **filterable Shopware properties** (property groups+options,
-  not custom fields — native storefront filters). All structured Langtext keys become properties.
-  **Next (P2b–P4):** contract-driven property curation (which keys filterable, display labels, units) →
-  quality/CO₂ badges → media (images/docs) → accessory cross-selling — layered on the working stock+property path.
+  **P2a done (#938):** Langtext/Spezifikationen → **filterable Shopware properties** (native storefront filters).
+  **Policy+data fixes (#940):** shop-eligibility gate (`Shopartikel=1 AND approved` — ineligible items deactivated/skipped, never published), `Veröffentlicht_Status`→`active`, full product data (name/description/price/active) on create AND update, sales-channel visibility on create.
+  **Open follow-ups:** (a) items **without agentic approval never sync** — decide if manual shop items need a path / make approval configurable like `ERP_SYNC_REQUIRE_APPROVAL`; (b) **backfill** pre-existing skeleton products (they self-correct only on next enqueue; visibility is create-only) — a bulk re-sync of shop refs; (c) name/description field mapping is a heuristic.
+  **Next (P2b–P4):** contract-driven property curation → quality/CO₂ badges → media (images/docs) → accessory cross-selling.
 
 - **ERP export approval gate:** Only approved items may be exported/synced to the ERP — exporting unreviewed items is too dangerous. Enforced as a single choke point in `stageItemsExport` for `erp` mode (covers `/api/sync/erp`, `/api/export/items?mode=erp`, `/api/export/data?mode=erp`) plus an early filter in `sync-erp`. Configurable via `ERP_SYNC_REQUIRE_APPROVAL` (default `true`); backup-mode exports are unaffected.
 - **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.

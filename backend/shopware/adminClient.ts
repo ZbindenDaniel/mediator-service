@@ -16,16 +16,23 @@ export interface ShopwareAdminClientOptions {
 export interface ShopwareProductSnapshot {
   productNumber: string;
   name: string;
+  description?: string | null;
   stock: number;
   grossPrice: number | null;
+  // Shopware product.active (from the published flag). Undefined ⇒ treated as false (not live).
+  active?: boolean;
+  // Shopartikel=1 AND approved. When explicitly false the product is never published — deactivated
+  // if it already exists, skipped otherwise. Undefined is treated as eligible (back-compat for callers
+  // that don't compute it).
+  shopEligible?: boolean;
   shopwareProductId?: string | null;
   // Parsed Langtext/Spezifikationen → filterable Shopware properties (group name → option value(s)).
   properties?: Record<string, string | string[]> | null;
 }
 
 export interface ShopwareUpsertResult {
-  action: 'created' | 'updated';
-  productId: string;
+  action: 'created' | 'updated' | 'deactivated' | 'skipped';
+  productId: string | null;
 }
 
 function uuid32(): string {
@@ -50,6 +57,7 @@ export class ShopwareAdminClient {
   private cachedTaxId: string | null;
   private cachedTaxRate: number | null = null;
   private cachedCurrencyId: string | null;
+  private cachedSalesChannel: { id: string | null; currencyId: string | null } | null = null;
   // Property group/option ids are stable once created, so cache across jobs to avoid re-resolving.
   private readonly groupCache = new Map<string, string>();
   private readonly optionCache = new Map<string, string>();
@@ -165,32 +173,42 @@ export class ShopwareAdminClient {
     return best;
   }
 
+  // Resolve the configured sales channel (its entity id + currency) by accessKey — a real, filterable
+  // field. Used for the create-time price currency AND the storefront visibility. `isSystemDefault` is a
+  // runtime field and cannot be filtered, so this is the correct way to get the channel's own currency.
+  private async resolveSalesChannel(): Promise<{ id: string | null; currencyId: string | null }> {
+    if (this.cachedSalesChannel) {
+      return this.cachedSalesChannel;
+    }
+    let resolved: { id: string | null; currencyId: string | null } = { id: null, currencyId: null };
+    if (this.salesChannelAccessKey) {
+      try {
+        const sc = await this.request<{ data?: Array<{ id?: string; currencyId?: string }> }>('POST', '/api/search/sales-channel', {
+          filter: [{ type: 'equals', field: 'accessKey', value: this.salesChannelAccessKey }],
+          includes: { sales_channel: ['id', 'currencyId'] },
+          limit: 1
+        });
+        const row = sc?.data?.[0];
+        if (row) resolved = { id: row.id ?? null, currencyId: row.currencyId ?? null };
+      } catch (err) {
+        this.logger.warn?.('[shopware-admin-client] Failed to resolve sales channel; using defaults', err);
+      }
+    }
+    // Cache only a real answer (channel id present), so a transient failure doesn't pin defaults.
+    if (resolved.id) this.cachedSalesChannel = resolved;
+    return resolved;
+  }
+
   private async resolveCurrencyId(): Promise<string> {
     if (this.cachedCurrencyId) {
       return this.cachedCurrencyId;
     }
-    // Prefer the configured sales channel's own currency (what its storefront prices in — e.g. CHF for a
-    // Swiss shop). `isSystemDefault` is a Shopware runtime field and CANNOT be used in a search criteria,
-    // so resolve via the sales channel (accessKey is a real, filterable field) instead.
-    let id: string | null = null;
-    if (this.salesChannelAccessKey) {
-      try {
-        const sc = await this.request<{ data?: Array<{ currencyId?: string }> }>('POST', '/api/search/sales-channel', {
-          filter: [{ type: 'equals', field: 'accessKey', value: this.salesChannelAccessKey }],
-          includes: { sales_channel: ['currencyId'] },
-          limit: 1
-        });
-        id = sc?.data?.[0]?.currencyId ?? null;
-      } catch (err) {
-        this.logger.warn?.('[shopware-admin-client] Failed to resolve sales-channel currency; using system default', err);
-      }
+    const channel = await this.resolveSalesChannel();
+    if (channel.currencyId) {
+      this.cachedCurrencyId = channel.currencyId;
+      return channel.currencyId;
     }
-    if (id) {
-      this.cachedCurrencyId = id;
-      return id;
-    }
-    // Fall back to Shopware's well-known system default currency id (EUR, always seeded) WITHOUT caching,
-    // so a transient sales-channel lookup failure doesn't pin the wrong currency for the process lifetime.
+    // Fall back to Shopware's well-known system default currency id (EUR, always seeded), uncached.
     return SYSTEM_DEFAULT_CURRENCY_ID;
   }
 
@@ -203,24 +221,23 @@ export class ShopwareAdminClient {
     return data?.data?.[0]?.id ?? null;
   }
 
-  async updateProductStock(productId: string, stock: number): Promise<void> {
-    await this.request('PATCH', `/api/product/${productId}`, { stock: Math.max(0, Math.trunc(stock)) });
-  }
-
-  async createProduct(snapshot: ShopwareProductSnapshot): Promise<string> {
-    const [{ id: taxId, rate }, currencyId] = await Promise.all([this.resolveTaxId(), this.resolveCurrencyId()]);
+  // The mediator-authoritative product fields (everything but stock's identity), shared by create+update
+  // so an existing product is refreshed with the same data a new one is created with — not just stock.
+  private async buildProductFields(snapshot: ShopwareProductSnapshot): Promise<Record<string, unknown>> {
+    const [{ rate }, currencyId] = await Promise.all([this.resolveTaxId(), this.resolveCurrencyId()]);
     const gross = snapshot.grossPrice ?? 0;
     const net = rate > 0 ? Number((gross / (1 + rate / 100)).toFixed(4)) : gross;
-    const id = uuid32();
-    await this.request('POST', '/api/product', {
-      id,
+    const fields: Record<string, unknown> = {
       name: snapshot.name || snapshot.productNumber,
-      productNumber: snapshot.productNumber,
       stock: Math.max(0, Math.trunc(snapshot.stock)),
-      taxId,
+      active: snapshot.active ?? false,
       price: [{ currencyId, gross, net, linked: true }]
-    });
-    return id;
+    };
+    // Only send description when we have one, so an empty mediator value doesn't clobber the product.
+    if (snapshot.description) {
+      fields.description = snapshot.description;
+    }
+    return fields;
   }
 
   // Ensure a filterable property group exists for `name`; returns its id (cached).
@@ -308,19 +325,42 @@ export class ShopwareAdminClient {
     }
   }
 
-  // Idempotent: match by productNumber, update absolute stock if it exists, else create it; then
-  // reconcile its filterable properties from the snapshot's Langtext-derived spec map.
+  // Idempotent product sync. When the item is NOT shop-eligible (not a shop article, or unapproved) it
+  // is never published: deactivated if it already exists in Shopware, skipped otherwise. When eligible,
+  // full mediator-authoritative data (name, description, price, active, stock) is written on both create
+  // and update, then its filterable properties are reconciled.
   async upsertProduct(snapshot: ShopwareProductSnapshot): Promise<ShopwareUpsertResult> {
     const existingId = snapshot.shopwareProductId || (await this.findProductIdByNumber(snapshot.productNumber));
-    let result: ShopwareUpsertResult;
-    if (existingId) {
-      await this.updateProductStock(existingId, snapshot.stock);
-      result = { action: 'updated', productId: existingId };
-    } else {
-      result = { action: 'created', productId: await this.createProduct(snapshot) };
+
+    if (snapshot.shopEligible === false) {
+      if (existingId) {
+        // Was in the shop, now must not be — unpublish rather than delete.
+        await this.request('PATCH', `/api/product/${existingId}`, { id: existingId, active: false });
+        return { action: 'deactivated', productId: existingId };
+      }
+      return { action: 'skipped', productId: null };
     }
 
-    if (snapshot.properties && Object.keys(snapshot.properties).length > 0) {
+    const fields = await this.buildProductFields(snapshot);
+    let result: ShopwareUpsertResult;
+    if (existingId) {
+      await this.request('PATCH', `/api/product/${existingId}`, { id: existingId, ...fields });
+      result = { action: 'updated', productId: existingId };
+    } else {
+      const { id: taxId } = await this.resolveTaxId();
+      const id = uuid32();
+      const createBody: Record<string, unknown> = { id, productNumber: snapshot.productNumber, taxId, ...fields };
+      // Assign storefront visibility for the configured sales channel so a published (active) product
+      // actually appears — without a visibility entry, active alone keeps it out of the storefront.
+      const channel = await this.resolveSalesChannel();
+      if (channel.id) {
+        createBody.visibilities = [{ salesChannelId: channel.id, visibility: 30 }];
+      }
+      await this.request('POST', '/api/product', createBody);
+      result = { action: 'created', productId: id };
+    }
+
+    if (result.productId && snapshot.properties && Object.keys(snapshot.properties).length > 0) {
       await this.syncProductProperties(result.productId, snapshot.properties);
     }
     return result;

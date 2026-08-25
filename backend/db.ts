@@ -2633,11 +2633,26 @@ export async function getShopwareSyncQueueCounts(): Promise<ShopwareSyncQueueCou
 export interface ShopwareSyncSnapshot {
   productNumber: string;
   name: string;
+  description: string | null;
   grossPrice: number | null;
   shopwareProductId: string | null;
   stock: number;
+  // Shop-eligibility: Shopartikel=1 AND agentically approved. When false the product must NOT be
+  // published — an unreviewed/non-shop item never lands live (deactivated if it already exists).
+  shopEligible: boolean;
+  // Maps to Shopware product.active (Veröffentlicht_Status === 'yes').
+  active: boolean;
   // Parsed Langtext spec map (group → value(s)) for property sync; null when Langtext is freeform/empty.
   properties: Record<string, string | string[]> | null;
+}
+
+// Agentic approval: ReviewState is authoritative when set, else fall back to Status. Mirrors
+// resolveAgenticApproval in actions/export-items.ts (kept inline to avoid an actions→db import cycle).
+function isAgenticApproved(reviewState: string | null, status: string | null): boolean {
+  const approvedStates = new Set(['approved', 'auto_approved']);
+  const rs = (reviewState || '').trim();
+  if (rs) return approvedStates.has(rs);
+  return approvedStates.has((status || '').trim());
 }
 
 // Current state of one item reference, mapped to what a Shopware product upsert needs. Stock is the
@@ -2647,21 +2662,33 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
   const row = await queryOne<{
     productNumber: string;
     name: string;
+    description: string | null;
     grossPrice: number | null;
     shopwareProductId: string | null;
     langtext: string | null;
+    shopartikel: number | null;
+    published: string | null;
+    agenticStatus: string | null;
+    agenticReviewState: string | null;
     stock: string | number;
   }>(
+    // Approval comes from scalar subselects (LIMIT 1) so a ref with multiple agentic_runs never
+    // multiplies the item rows and corrupts the stock SUM.
     `SELECT r."Artikel_Nummer" AS "productNumber",
             COALESCE(NULLIF(r."Kurzbeschreibung",''), NULLIF(r."Artikelbeschreibung",''), r."Artikel_Nummer") AS "name",
+            COALESCE(NULLIF(r."Artikelbeschreibung",''), NULLIF(r."Kurzbeschreibung",'')) AS "description",
             r."Verkaufspreis" AS "grossPrice",
             r."ShopwareProductId" AS "shopwareProductId",
             r."Langtext" AS "langtext",
+            r."Shopartikel" AS "shopartikel",
+            r."Veröffentlicht_Status" AS "published",
+            (SELECT ar."Status" FROM agentic_runs ar WHERE ar."Artikel_Nummer" = r."Artikel_Nummer" ORDER BY ar."LastAttemptAt" DESC NULLS LAST LIMIT 1) AS "agenticStatus",
+            (SELECT ar."ReviewState" FROM agentic_runs ar WHERE ar."Artikel_Nummer" = r."Artikel_Nummer" ORDER BY ar."LastAttemptAt" DESC NULLS LAST LIMIT 1) AS "agenticReviewState",
             COALESCE(SUM(COALESCE(i."Auf_Lager",0)),0) AS "stock"
        FROM item_refs r
        LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
       WHERE r."Artikel_Nummer" = $1
-      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext"`,
+      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext", r."Shopartikel", r."Veröffentlicht_Status"`,
     [artikelNummer]
   );
   if (!row) {
@@ -2670,12 +2697,17 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
   // Only the structured (object) Langtext form yields properties; freeform prose is not filterable.
   const parsedLangtext = parseLangtext(row.langtext, { context: 'db:getShopwareSyncSnapshot', artikelNummer });
   const properties = parsedLangtext && typeof parsedLangtext === 'object' ? parsedLangtext : null;
+  const description = row.description && row.description !== row.name ? row.description : null;
+  const shopEligible = Number(row.shopartikel) === 1 && isAgenticApproved(row.agenticReviewState, row.agenticStatus);
   return {
     productNumber: row.productNumber,
     name: row.name,
+    description,
     grossPrice: row.grossPrice != null ? Number(row.grossPrice) : null,
     shopwareProductId: row.shopwareProductId ?? null,
     stock: Number(row.stock) || 0,
+    shopEligible,
+    active: normalizePublishedValue(row.published) === 'yes',
     properties
   };
 }

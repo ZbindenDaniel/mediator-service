@@ -33,13 +33,14 @@ export function createShopwareSyncClient(deps: ShopwareSyncClientDeps): Shopware
 
       try {
         const result: ShopwareUpsertResult = await deps.adminClient.upsertProduct(snapshot);
-        if (result.action === 'created' && deps.persistProductId) {
+        if (result.action === 'created' && result.productId && deps.persistProductId) {
           // Best-effort: persisting the new id only saves a lookup next time; a failure isn't fatal.
-          await deps.persistProductId(snapshot.productNumber, result.productId).catch((err) =>
+          const newId = result.productId;
+          await deps.persistProductId(snapshot.productNumber, newId).catch((err) =>
             logger.warn?.('[shopware-sync] Failed to persist ShopwareProductId', { productNumber: snapshot.productNumber, err })
           );
         }
-        logger.info?.('[shopware-sync] Synced product stock', {
+        logger.info?.('[shopware-sync] Synced product', {
           correlationId: job.correlationId,
           productNumber: snapshot.productNumber,
           action: result.action,

@@ -25,18 +25,51 @@ function mkFetch(routes: Array<{ match: (u: string, i: any) => boolean; res: (u:
 const tokenRoute = { match: (u: string) => u.includes('/api/oauth/token'), res: () => ({ status: 200, body: { access_token: 't', expires_in: 600 } }) };
 
 describe('ShopwareAdminClient.upsertProduct', () => {
-  test('updates absolute stock on an existing product (no create)', async () => {
+  const taxRoute = { match: (u: string) => u.includes('/api/search/tax'), res: () => ({ status: 200, body: { data: [{ id: 'tax19', taxRate: 19 }] } }) };
+  const salesChannelRoute = { match: (u: string) => u.includes('/api/search/sales-channel'), res: () => ({ status: 200, body: { data: [{ id: 'sc1', currencyId: 'chf' }] } }) };
+
+  test('updates an existing product with full data (name, price, active, stock) — not just stock', async () => {
     const calls: Call[] = [];
     const admin = createShopwareAdminClient(cfg, { logger: log, fetchImpl: mkFetch([
-      tokenRoute,
+      tokenRoute, taxRoute, salesChannelRoute,
       { match: (u) => u.includes('/api/search/product'), res: () => ({ status: 200, body: { data: [{ id: 'prod123' }] } }) },
       { match: (u, i) => /\/api\/product\/prod123$/.test(u) && i.method === 'PATCH', res: () => ({ status: 204 }) }
     ], calls) });
-    const r = await admin.upsertProduct({ productNumber: 'A-1', name: 'Widget', stock: 7, grossPrice: 119 });
+    const r = await admin.upsertProduct({ productNumber: 'A-1', name: 'Widget', description: 'A nice widget', stock: 7, grossPrice: 119, active: true, shopEligible: true });
     expect(r.action).toBe('updated');
     expect(r.productId).toBe('prod123');
-    expect(calls.find((c) => c.method === 'PATCH')?.body.stock).toBe(7);
+    const patch = calls.find((c) => c.method === 'PATCH' && /\/api\/product\/prod123$/.test(c.url));
+    expect(patch?.body.stock).toBe(7);
+    expect(patch?.body.name).toBe('Widget');
+    expect(patch?.body.description).toBe('A nice widget');
+    expect(patch?.body.active).toBe(true);
+    expect(patch?.body.price[0].currencyId).toBe('chf');
     expect(calls.some((c) => c.method === 'POST' && /\/api\/product$/.test(c.url))).toBe(false);
+  });
+
+  test('does not publish an ineligible item: deactivates if it exists, skips if not', async () => {
+    // exists → deactivate
+    const calls1: Call[] = [];
+    const admin1 = createShopwareAdminClient(cfg, { logger: log, fetchImpl: mkFetch([
+      tokenRoute,
+      { match: (u) => u.includes('/api/search/product'), res: () => ({ status: 200, body: { data: [{ id: 'prodE' }] } }) },
+      { match: (u, i) => /\/api\/product\/prodE$/.test(u) && i.method === 'PATCH', res: () => ({ status: 204 }) }
+    ], calls1) });
+    const r1 = await admin1.upsertProduct({ productNumber: 'A-1', name: 'X', stock: 5, grossPrice: 10, shopEligible: false });
+    expect(r1.action).toBe('deactivated');
+    expect(calls1.find((c) => c.method === 'PATCH')?.body.active).toBe(false);
+    expect(calls1.some((c) => c.method === 'POST' && /\/api\/product$/.test(c.url))).toBe(false);
+
+    // not found → skip (no writes at all)
+    const calls2: Call[] = [];
+    const admin2 = createShopwareAdminClient(cfg, { logger: log, fetchImpl: mkFetch([
+      tokenRoute,
+      { match: (u) => u.includes('/api/search/product'), res: () => ({ status: 200, body: { data: [] } }) }
+    ], calls2) });
+    const r2 = await admin2.upsertProduct({ productNumber: 'B-9', name: 'Y', stock: 1, grossPrice: 10, shopEligible: false });
+    expect(r2.action).toBe('skipped');
+    expect(r2.productId).toBeNull();
+    expect(calls2.some((c) => c.method === 'PATCH' || (c.method === 'POST' && /\/api\/product$/.test(c.url)))).toBe(false);
   });
 
   test('creates a product when none matches, with resolved tax/currency and computed net', async () => {
@@ -45,11 +78,11 @@ describe('ShopwareAdminClient.upsertProduct', () => {
       tokenRoute,
       { match: (u) => u.includes('/api/search/product'), res: () => ({ status: 200, body: { data: [] } }) },
       { match: (u) => u.includes('/api/search/tax'), res: () => ({ status: 200, body: { data: [{ id: 'tax19', taxRate: 19 }, { id: 'tax7', taxRate: 7 }] } }) },
-      // Currency resolves via the sales channel (its own currency, e.g. CHF), not the runtime isSystemDefault field.
-      { match: (u) => u.includes('/api/search/sales-channel'), res: () => ({ status: 200, body: { data: [{ currencyId: 'chf' }] } }) },
+      // Currency + visibility resolve via the sales channel (its own currency, e.g. CHF), not the runtime isSystemDefault field.
+      { match: (u) => u.includes('/api/search/sales-channel'), res: () => ({ status: 200, body: { data: [{ id: 'sc1', currencyId: 'chf' }] } }) },
       { match: (u, i) => /\/api\/product$/.test(u) && i.method === 'POST', res: () => ({ status: 204 }) }
     ], calls) });
-    const r = await admin.upsertProduct({ productNumber: 'B-2', name: 'New', stock: 3, grossPrice: 119 });
+    const r = await admin.upsertProduct({ productNumber: 'B-2', name: 'New', stock: 3, grossPrice: 119, shopEligible: true });
     expect(r.action).toBe('created');
     expect(r.productId).toMatch(/^[0-9a-f]{32}$/);
     const create = calls.find((c) => c.method === 'POST' && /\/api\/product$/.test(c.url));
@@ -57,6 +90,7 @@ describe('ShopwareAdminClient.upsertProduct', () => {
     expect(create?.body.stock).toBe(3);
     expect(create?.body.price[0].currencyId).toBe('chf'); // sales-channel currency
     expect(Math.abs(create?.body.price[0].net - 119 / 1.19)).toBeLessThan(0.01);
+    expect(create?.body.visibilities[0].salesChannelId).toBe('sc1'); // published product gets storefront visibility
     // never queries the runtime isSystemDefault field
     expect(calls.some((c) => c.url.includes('/api/search/currency'))).toBe(false);
   });
@@ -64,7 +98,7 @@ describe('ShopwareAdminClient.upsertProduct', () => {
   test('syncs Langtext into filterable properties: creates missing group/option, links, removes stale', async () => {
     const calls: Call[] = [];
     const admin = createShopwareAdminClient(cfg, { logger: log, fetchImpl: mkFetch([
-      tokenRoute,
+      tokenRoute, taxRoute, salesChannelRoute,
       { match: (u) => u.includes('/api/search/product'), res: () => ({ status: 200, body: { data: [{ id: 'prodX' }] } }) },
       { match: (u, i) => /\/api\/product\/prodX$/.test(u) && i.method === 'PATCH', res: () => ({ status: 204 }) },
       // RAM group missing → created; option missing → created (exact-path matchers so

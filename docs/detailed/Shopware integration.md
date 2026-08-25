@@ -26,11 +26,17 @@ This document captures the current architecture, required configuration, and ope
 - `processShopwareQueue` (worker) claims a batch (`FOR UPDATE SKIP LOCKED`), dispatches each job, and records
   success / retry-with-backoff / terminal failure. It is started from `backend/server.ts` on a 10s interval
   (reentrancy-guarded) whenever `SHOPWARE_SYNC_ENABLED` and the config is ready.
+- **Shop-eligibility gate.** The snapshot computes `shopEligible = Shopartikel=1 AND agentically approved`
+  (same approval as the ERP export gate). An **ineligible** item is never published: `upsertProduct`
+  **deactivates** it (`active:false`) if it already exists in Shopware, else **skips** it. So unreviewed /
+  non-shop items never go (or stay) live. `Veröffentlicht_Status='yes'` maps to Shopware `active`.
 - Dispatch (`backend/shopware/syncClient.ts`) resolves the job to a DB snapshot
-  (`getShopwareSyncSnapshotForPayload` → `productNumber`, name, price, **summed stock**, parsed Langtext),
-  then calls `ShopwareAdminClient.upsertProduct` (`backend/shopware/adminClient.ts`): match by `productNumber`,
-  `PATCH` absolute `stock` if it exists, else **create** the product (name, number, price, resolved tax +
-  currency) and persist the new `ShopwareProductId` back. Absolute-stock ⇒ a missed/duplicated job self-heals.
+  (`getShopwareSyncSnapshotForPayload` → productNumber, name, description, price, **summed stock**, active,
+  shopEligible, parsed Langtext), then calls `ShopwareAdminClient.upsertProduct` (`adminClient.ts`): match by
+  `productNumber`; write **full data** (name, description, price [net from tax, sales-channel currency],
+  active, stock) on both **update** and **create** — not stock alone. Create also sets a sales-channel
+  **visibility** (`visibility:30`) so a published+active product actually appears in the storefront, and
+  persists the new `ShopwareProductId` back. Absolute-stock ⇒ a missed/duplicated job self-heals.
 - **Properties (P2a):** after stock, `syncProductProperties` turns each structured Langtext entry
   (group name → value(s)) into Shopware **filterable properties** — `ensurePropertyGroup`
   (`filterable:true`) + `ensurePropertyOption` (both cached), then reconciles the product's option
