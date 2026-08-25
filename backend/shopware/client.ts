@@ -52,7 +52,7 @@ export interface ShopwareSearchClient {
 // Shopware error responses are a JSON envelope { errors: [{ status, code, title, detail, trace… }] }
 // whose `trace` is a multi-KB PHP stack. Extract just the useful `code: detail` lines; fall back to a
 // bounded slice of the raw body so the admin check never dumps the whole trace.
-function summarizeShopwareErrorBody(text: string): string {
+export function summarizeShopwareErrorBody(text: string): string {
   const raw = (text || '').trim();
   if (!raw) return '';
   try {

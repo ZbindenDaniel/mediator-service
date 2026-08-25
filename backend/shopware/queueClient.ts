@@ -91,19 +91,6 @@ export function normalizeShopwareQueueClientError(
   return normalized;
 }
 
-export function createShopwareQueueClient(options: ShopwareQueueClientOptions): ShopwareQueueClient {
-  const logger = options.logger ?? console;
-  if (!options.baseUrl) {
-    logger.warn?.('[shopware-queue-client] Base URL not provided; dispatch calls will fail immediately.');
-  }
-
-  return {
-    async dispatchJob() {
-      const error = new ShopwareQueueClientError('Shopware queue client dispatchJob not implemented', {
-        retryable: false
-      });
-      logger.error?.('[shopware-queue-client] dispatchJob invoked without implementation', error);
-      throw error;
-    }
-  };
-}
+// The real dispatch client now lives in ./syncClient.ts (createShopwareSyncClient), which composes
+// the Admin-API write client with a DB snapshot loader. This module keeps the shared queue types and
+// the error normalizer used by the worker.

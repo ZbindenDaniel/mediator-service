@@ -2630,6 +2630,71 @@ export async function getShopwareSyncQueueCounts(): Promise<ShopwareSyncQueueCou
   };
 }
 
+export interface ShopwareSyncSnapshot {
+  productNumber: string;
+  name: string;
+  grossPrice: number | null;
+  shopwareProductId: string | null;
+  stock: number;
+}
+
+// Current state of one item reference, mapped to what a Shopware product upsert needs. Stock is the
+// summed on-hand quantity across all instances of the Artikel_Nummer (absolute-stock model). Returns
+// null when the reference no longer exists (e.g. deleted between enqueue and dispatch → nothing to sync).
+export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<ShopwareSyncSnapshot | null> {
+  const row = await queryOne<{
+    productNumber: string;
+    name: string;
+    grossPrice: number | null;
+    shopwareProductId: string | null;
+    stock: string | number;
+  }>(
+    `SELECT r."Artikel_Nummer" AS "productNumber",
+            COALESCE(NULLIF(r."Kurzbeschreibung",''), NULLIF(r."Artikelbeschreibung",''), r."Artikel_Nummer") AS "name",
+            r."Verkaufspreis" AS "grossPrice",
+            r."ShopwareProductId" AS "shopwareProductId",
+            COALESCE(SUM(COALESCE(i."Auf_Lager",0)),0) AS "stock"
+       FROM item_refs r
+       LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
+      WHERE r."Artikel_Nummer" = $1
+      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId"`,
+    [artikelNummer]
+  );
+  if (!row) {
+    return null;
+  }
+  return {
+    productNumber: row.productNumber,
+    name: row.name,
+    grossPrice: row.grossPrice != null ? Number(row.grossPrice) : null,
+    shopwareProductId: row.shopwareProductId ?? null,
+    stock: Number(row.stock) || 0
+  };
+}
+
+// Resolve a snapshot from a queue job's payload. item-upsert jobs carry artikelNummer directly;
+// move/stock jobs carry only itemUUID, so resolve the Artikel_Nummer from the instance first.
+export async function getShopwareSyncSnapshotForPayload(payload: unknown): Promise<ShopwareSyncSnapshot | null> {
+  const p = (payload ?? {}) as { artikelNummer?: unknown; itemUUID?: unknown };
+  let artikelNummer = typeof p.artikelNummer === 'string' && p.artikelNummer ? p.artikelNummer : null;
+  if (!artikelNummer && typeof p.itemUUID === 'string' && p.itemUUID) {
+    const row = await queryOne<{ Artikel_Nummer: string | null }>(
+      `SELECT "Artikel_Nummer" FROM items WHERE "ItemUUID"=$1`,
+      [p.itemUUID]
+    );
+    artikelNummer = row?.Artikel_Nummer ?? null;
+  }
+  if (!artikelNummer) {
+    return null;
+  }
+  return getShopwareSyncSnapshot(artikelNummer);
+}
+
+// Persist the Shopware product id back onto the reference after a create, so future syncs skip the lookup.
+export async function setShopwareProductId(artikelNummer: string, productId: string): Promise<void> {
+  await execute(`UPDATE item_refs SET "ShopwareProductId"=$2 WHERE "Artikel_Nummer"=$1`, [artikelNummer, productId]);
+}
+
 export async function enqueueShopwareSyncJob(job: ShopwareSyncQueueInsert): Promise<ShopwareSyncQueueEntry | null> {
   // Only record sync intent when the write path is enabled. Without this gate every persistItem/move/
   // stock change enqueued a row that nothing drains (dispatch is unimplemented) — an unbounded leak.

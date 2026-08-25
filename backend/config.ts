@@ -520,6 +520,9 @@ export interface ShopwareConfig {
   salesChannelAccessKey: string | null;
   requestTimeoutMs: number;
   credentials: ShopwareCredentialsConfig;
+  // Optional Admin-API write defaults for create-if-missing (else resolved from Shopware at runtime).
+  defaultTaxId?: string | null;
+  defaultCurrencyId?: string | null;
 }
 
 export const SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS = 10000;
@@ -574,7 +577,9 @@ const computedShopwareConfig: ShopwareConfig = {
   baseUrl: shopwareBaseUrl,
   salesChannelAccessKey: shopwareSalesChannelAccessKey,
   requestTimeoutMs: shopwareRequestTimeoutMs,
-  credentials: shopwareCredentials
+  credentials: shopwareCredentials,
+  defaultTaxId: resolveShopwareEnv('SHOPWARE_DEFAULT_TAX_ID') || null,
+  defaultCurrencyId: resolveShopwareEnv('SHOPWARE_DEFAULT_CURRENCY_ID') || null
 };
 
 export const SHOPWARE_CONFIG: ShopwareConfig = Object.freeze(computedShopwareConfig);

@@ -4,8 +4,8 @@ The mediator service integrates with Shopware in two distinct ways:
 
 1. **Read-only product discovery** through the `/api/shopware/search` action. This route proxies queries to Shopware's
    product search endpoint so warehouse staff can look up catalogue entries while editing items locally.
-2. **A local sync queue** that records inventory mutations and prepares jobs for eventual dispatch to Shopware. The
-   background worker that would send those jobs downstream is intentionally disabled until the HTTP client is implemented.
+2. **Stock sync** — inventory mutations enqueue jobs that a background worker dispatches to Shopware's Admin API
+   (create-if-missing product, then set absolute stock). Gated on `SHOPWARE_SYNC_ENABLED` (default off).
 
 This document captures the current architecture, required configuration, and operational expectations.
 
@@ -18,15 +18,21 @@ This document captures the current architecture, required configuration, and ope
 - Wraps outbound requests in `try/catch` blocks and logs structured context for successful and failed calls.
 - Returns `{ ok: true, products: [...] }` on success or structured error payloads on failure.
 
-### Sync Queue (`backend/db.ts` & `backend/workers/processShopwareQueue.ts`)
+### Stock sync (queue + worker + Admin-API write client) — **live**
 
-- The Postgres table `shopware_sync_queue` persists pending jobs with correlation IDs, retry counters, timestamps, and the JSON
-  payload to send to Shopware. Enqueue is gated on `SHOPWARE_SYNC_ENABLED`.
-- Helper functions in `backend/db.ts` provide enqueue (`enqueueShopwareSyncJob`), claim, success, retry, and failure mutations
-  with defensive logging.
-- `processShopwareQueue` contains the worker logic (retry backoff, result handling, and metrics hooks) but is not wired into the
-  server because the queue client currently throws a `ShopwareQueueClientError('dispatchJob not implemented')`.
-- This separation lets actions and tests cover queue behaviour without risking network calls.
+- The Postgres table `shopware_sync_queue` persists pending jobs (correlation id, retry counters, JSON payload).
+  Enqueue is gated on `SHOPWARE_SYNC_ENABLED`; item saves/moves/stock changes enqueue `item-upsert` /
+  `item-move` / `stock-decrement` jobs (thin payloads — just ids).
+- `processShopwareQueue` (worker) claims a batch (`FOR UPDATE SKIP LOCKED`), dispatches each job, and records
+  success / retry-with-backoff / terminal failure. It is started from `backend/server.ts` on a 10s interval
+  (reentrancy-guarded) whenever `SHOPWARE_SYNC_ENABLED` and the config is ready.
+- Dispatch (`backend/shopware/syncClient.ts`) resolves the job to a DB snapshot
+  (`getShopwareSyncSnapshotForPayload` → `productNumber`, name, price, **summed stock**), then calls
+  `ShopwareAdminClient.upsertProductStock` (`backend/shopware/adminClient.ts`): match by `productNumber`,
+  `PATCH` absolute `stock` if it exists, else **create** the product (name, number, price, resolved tax +
+  currency) and persist the new `ShopwareProductId` back. Absolute-stock ⇒ a missed/duplicated job self-heals.
+- Failure classification: 4xx (except 408/429) is terminal; network / 408 / 429 / 5xx retry with exponential
+  backoff. A deleted reference (no snapshot) drains as success.
 
 ### Admin connection check (`backend/actions/admin-shopware.ts`)
 
@@ -75,8 +81,21 @@ search action, the admin surface, and the agentic tool (the former duplicate con
 - The server logs a reminder at startup if `SHOPWARE_SYNC_ENABLED=true` to flag the dormant worker.
 - Keep `.env.example` aligned with the variables above so new environments are configured correctly.
 
-## Next Steps Before Enabling Sync
+## Enabling stock sync
 
-1. Implement an HTTP client in `backend/shopware/queueClient.ts` that authenticates with Shopware and delivers queue payloads.
-2. Re-enable the worker loop in `backend/server.ts`, wiring metrics to the production observability stack.
-3. Document retry/backoff expectations for operations staff and update this runbook once the dispatcher ships.
+1. Create a Shopware **integration** (Settings → System → Integrations) with write access; put its id/secret in
+   `SHOPWARE_CLIENT_ID` / `SHOPWARE_CLIENT_SECRET` (or set `SHOPWARE_ACCESS_TOKEN`). Admin writes use the bearer
+   token, not the sales-channel access key.
+2. Confirm the connection card is green, then set `SHOPWARE_SYNC_ENABLED=true` and restart. The worker logs
+   `[server] Shopware sync worker started`.
+3. Watch the queue drain on the admin card (queued → succeeded). Optionally pin `SHOPWARE_DEFAULT_TAX_ID` /
+   `SHOPWARE_DEFAULT_CURRENCY_ID` if runtime resolution picks the wrong ones.
+
+## Deferred (next phases)
+
+- **Queue retention/trim** — succeeded rows are not yet pruned.
+- **Richer product data** — custom fields (Langtext), media (images/docs), quality/CO₂ badges, accessory
+  cross-selling (P2–P4). Today the worker syncs stock (+ minimal create), not full catalogue data.
+- **Created products are not made visible** in a sales channel (no `visibilities` on create) — operators
+  publish via the existing shop flow; auto-visibility is a follow-up.
+- **No max-retry ceiling** on transient failures — a job retries with backoff until Shopware recovers.

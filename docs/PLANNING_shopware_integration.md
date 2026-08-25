@@ -108,9 +108,11 @@ persistItem / bulkMoveItems / bulkRemoveItemStock / bulkUpdateShopStatus
 
 ## 2. Gaps & risks (honest assessment)
 
-> **P0 cleanup landed (changelog #935–936).** Items 3, 5, 7 are resolved; 4 is partially resolved
-> (config unified, product-normaliser still duplicated). An admin **connection check** now exists.
-> Items 1, 2, 6 remain — they are the write path, blocked on the §4 direction decision.
+> **P0 cleanup + P1 stock sync landed (changelog #935–937).** Items 1 and 2 are now resolved — the
+> Admin-API write client exists and the worker dispatches absolute-stock upserts (direct-to-Shopware,
+> create-if-missing). Items 3, 5, 7 resolved in P0; 4 partially (config unified, product-normaliser
+> still duplicated). Item 6 (full mapping layer) is now the P2+ work: custom fields, media, badges,
+> cross-links on top of the working stock path.
 
 1. **No write client at all.** Store API (`/store-api`, sales-channel, read) is implemented; the
    **Admin API** (`/api`, OAuth admin scope, read/write) needed for products, custom fields, media,
@@ -200,8 +202,8 @@ it should be settled **before** implementation starts.
 
 | Phase | Deliverable | Goal items |
 |---|---|---|
-| **0** ✅ | Enqueue gate fixed; config unified onto one source; API-key auth working; dead vars retired; docs reconciled; admin connection check added (#935–936). *Remaining: full product-normaliser dedup, queue retention (with P1).* | risk cleanup |
-| **1** | Admin API write client + real `dispatchJob` + worker wired + product/variant resolution + **stock sync** end-to-end (staging) | 3.1 |
+| **0** ✅ | Enqueue gate fixed; config unified onto one source; API-key auth working; dead vars retired; docs reconciled; admin connection check added (#935–936). | risk cleanup |
+| **1** ✅ | Admin-API write client + real dispatch client + worker wired + create-if-missing + **absolute stock sync** end-to-end (#937). *Remaining: queue retention, sales-channel visibility on create, product-normaliser dedup.* | 3.1 |
 | **2** | Mapping layer: Langtext → custom fields; quality/CO₂ → custom fields/badges | 3.2, 3.5 |
 | **3** | Media: images + docs upload/associate (dedup) | 3.3, 3.4 |
 | **4** | Accessory cross-selling (two-pass) + filterable-property config | 3.6, filter part of 3.2 |
