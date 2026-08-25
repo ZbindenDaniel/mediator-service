@@ -2637,6 +2637,11 @@ export interface ShopwareSyncSnapshot {
   grossPrice: number | null;
   shopwareProductId: string | null;
   stock: number;
+  // Physical dimensions → Shopware length/width/height (mm) + weight (kg). Null when unset.
+  lengthMm: number | null;
+  widthMm: number | null;
+  heightMm: number | null;
+  weightKg: number | null;
   // Shop-eligibility: Shopartikel=1 AND agentically approved. When false the product must NOT be
   // published — an unreviewed/non-shop item never lands live (deactivated if it already exists).
   shopEligible: boolean;
@@ -2668,6 +2673,10 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
     langtext: string | null;
     shopartikel: number | null;
     published: string | null;
+    lengthMm: number | null;
+    widthMm: number | null;
+    heightMm: number | null;
+    weightKg: number | null;
     agenticStatus: string | null;
     agenticReviewState: string | null;
     stock: string | number;
@@ -2682,13 +2691,17 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
             r."Langtext" AS "langtext",
             r."Shopartikel" AS "shopartikel",
             r."Veröffentlicht_Status" AS "published",
+            r."Länge_mm" AS "lengthMm",
+            r."Breite_mm" AS "widthMm",
+            r."Höhe_mm" AS "heightMm",
+            r."Gewicht_kg" AS "weightKg",
             (SELECT ar."Status" FROM agentic_runs ar WHERE ar."Artikel_Nummer" = r."Artikel_Nummer" ORDER BY ar."LastAttemptAt" DESC NULLS LAST LIMIT 1) AS "agenticStatus",
             (SELECT ar."ReviewState" FROM agentic_runs ar WHERE ar."Artikel_Nummer" = r."Artikel_Nummer" ORDER BY ar."LastAttemptAt" DESC NULLS LAST LIMIT 1) AS "agenticReviewState",
             COALESCE(SUM(COALESCE(i."Auf_Lager",0)),0) AS "stock"
        FROM item_refs r
        LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
       WHERE r."Artikel_Nummer" = $1
-      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext", r."Shopartikel", r."Veröffentlicht_Status"`,
+      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext", r."Shopartikel", r."Veröffentlicht_Status", r."Länge_mm", r."Breite_mm", r."Höhe_mm", r."Gewicht_kg"`,
     [artikelNummer]
   );
   if (!row) {
@@ -2706,6 +2719,10 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
     grossPrice: row.grossPrice != null ? Number(row.grossPrice) : null,
     shopwareProductId: row.shopwareProductId ?? null,
     stock: Number(row.stock) || 0,
+    lengthMm: row.lengthMm != null ? Number(row.lengthMm) : null,
+    widthMm: row.widthMm != null ? Number(row.widthMm) : null,
+    heightMm: row.heightMm != null ? Number(row.heightMm) : null,
+    weightKg: row.weightKg != null ? Number(row.weightKg) : null,
     shopEligible,
     active: normalizePublishedValue(row.published) === 'yes',
     properties

@@ -19,6 +19,11 @@ export interface ShopwareProductSnapshot {
   description?: string | null;
   stock: number;
   grossPrice: number | null;
+  // Physical dimensions → Shopware length/width/height (mm) + weight (kg).
+  lengthMm?: number | null;
+  widthMm?: number | null;
+  heightMm?: number | null;
+  weightKg?: number | null;
   // Shopware product.active (from the published flag). Undefined ⇒ treated as false (not live).
   active?: boolean;
   // Shopartikel=1 AND approved. When explicitly false the product is never published — deactivated
@@ -237,6 +242,11 @@ export class ShopwareAdminClient {
     if (snapshot.description) {
       fields.description = snapshot.description;
     }
+    // Dimensions: send each only when set (Shopware expects mm for length/width/height, kg for weight).
+    if (snapshot.lengthMm != null) fields.length = snapshot.lengthMm;
+    if (snapshot.widthMm != null) fields.width = snapshot.widthMm;
+    if (snapshot.heightMm != null) fields.height = snapshot.heightMm;
+    if (snapshot.weightKg != null) fields.weight = snapshot.weightKg;
     return fields;
   }
 
