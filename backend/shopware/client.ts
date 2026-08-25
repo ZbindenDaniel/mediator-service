@@ -49,6 +49,34 @@ export interface ShopwareSearchClient {
   checkConnection(): Promise<ShopwareConnectionResult>;
 }
 
+// Shopware error responses are a JSON envelope { errors: [{ status, code, title, detail, trace… }] }
+// whose `trace` is a multi-KB PHP stack. Extract just the useful `code: detail` lines; fall back to a
+// bounded slice of the raw body so the admin check never dumps the whole trace.
+function summarizeShopwareErrorBody(text: string): string {
+  const raw = (text || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw);
+    const errors = Array.isArray((parsed as { errors?: unknown[] })?.errors)
+      ? (parsed as { errors: Array<Record<string, unknown>> }).errors
+      : [];
+    if (errors.length) {
+      const summary = errors
+        .map((e) => {
+          const code = typeof e.code === 'string' ? e.code : null;
+          const detail = typeof e.detail === 'string' ? e.detail : typeof e.title === 'string' ? e.title : null;
+          return [code, detail].filter(Boolean).join(': ');
+        })
+        .filter(Boolean)
+        .join('; ');
+      if (summary) return summary;
+    }
+  } catch {
+    // not JSON — fall through to the bounded raw slice
+  }
+  return raw.length > 300 ? `${raw.slice(0, 300)}…` : raw;
+}
+
 function httpStatusFromError(err: unknown): number | null {
   const message = err instanceof Error ? err.message : '';
   const match = message.match(/status (\d{3})/);
@@ -222,7 +250,7 @@ export class ShopwareClient implements ShopwareSearchClient {
 
     if (!response.ok) {
       const text = await response.text().catch(() => '<unreadable>');
-      const err = new Error(`Shopware token request failed with status ${response.status}: ${text}`);
+      const err = new Error(`Shopware token request failed with status ${response.status}: ${summarizeShopwareErrorBody(text)}`);
       this.logger.error?.('[shopware-client] Token request rejected', err);
       throw err;
     }
@@ -400,7 +428,7 @@ export class ShopwareClient implements ShopwareSearchClient {
 
     if (!response.ok) {
       const text = await response.text().catch(() => '<unreadable>');
-      const err = new Error(`Shopware search failed with status ${response.status}: ${text}`);
+      const err = new Error(`Shopware search failed with status ${response.status}: ${summarizeShopwareErrorBody(text)}`);
       this.logger.error?.('[shopware-client] Search request rejected', err);
       throw err;
     }
