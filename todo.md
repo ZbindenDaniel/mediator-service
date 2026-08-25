@@ -1,6 +1,15 @@
 # Todo
 
 ## Confirmed Decisions
+- **Shopware integration (audit + P0 done; see `docs/PLANNING_shopware_integration.md`).** Read/search
+  path works; write path is built but inert (dispatcher stub + worker not started). P0 cleanup shipped
+  (#935–936): unified config, working API-key **or** client-credentials auth, `SHOPWARE_SALES_CHANNEL_ACCESS_KEY`
+  rename (old names aliased), dead vars removed, enqueue-leak fixed (gated on `SHOPWARE_SYNC_ENABLED`),
+  admin connection check + status/queue card. **Blocked decision before P1 write client:** direct-to-Shopware
+  vs. ERP-mediated (images already flow mediator→kivitendo→WebDAV today). **Follow-ups:** dedup the product
+  normaliser shared by `client.ts`/`agentic tools/shopware.ts`; queue retention/trim (ships with the dispatcher);
+  Admin-API write client is the P1 foundation for stock sync → custom fields → media → cross-links.
+
 - **ERP export approval gate:** Only approved items may be exported/synced to the ERP — exporting unreviewed items is too dangerous. Enforced as a single choke point in `stageItemsExport` for `erp` mode (covers `/api/sync/erp`, `/api/export/items?mode=erp`, `/api/export/data?mode=erp`) plus an early filter in `sync-erp`. Configurable via `ERP_SYNC_REQUIRE_APPROVAL` (default `true`); backup-mode exports are unaffected.
 - **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.
 - **Item list conditional column:** A single date column slot appears only when sorting by `entryDate`, `lastSynced`, or `agenticLastRun`, showing the relevant date. Other sort keys show no date column.

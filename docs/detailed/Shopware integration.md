@@ -20,8 +20,8 @@ This document captures the current architecture, required configuration, and ope
 
 ### Sync Queue (`backend/db.ts` & `backend/workers/processShopwareQueue.ts`)
 
-- The SQLite table `shopware_sync_queue` persists pending jobs with correlation IDs, retry counters, timestamps, and the JSON
-  payload to send to Shopware.
+- The Postgres table `shopware_sync_queue` persists pending jobs with correlation IDs, retry counters, timestamps, and the JSON
+  payload to send to Shopware. Enqueue is gated on `SHOPWARE_SYNC_ENABLED`.
 - Helper functions in `backend/db.ts` provide enqueue (`enqueueShopwareSyncJob`), claim, success, retry, and failure mutations
   with defensive logging.
 - `processShopwareQueue` contains the worker logic (retry backoff, result handling, and metrics hooks) but is not wired into the
@@ -40,31 +40,39 @@ This document captures the current architecture, required configuration, and ope
   a failure at step 2 points at the sales-channel key.
 - Both routes require `Authorization: Bearer <ADMIN_SECRET>`. Surfaced in the SPA by `ShopwareStatusCard`
   on the Admin page.
-- **Note:** the probe exercises the read/store-api path only. Because `client.ts` authenticates with
-  client credentials and never uses an access token, an access-token-only config reports
-  `access_token_unsupported` instead of running the check.
+- **Note:** the probe exercises the read/store-api path only. Both auth modes drive it — a static
+  access token (API key) or a client-credentials pair. A config with neither reports `no_credentials`.
 
 ## Configuration
 
-- Populate the following variables to enable search. Leaving any of them blank keeps the feature disabled:
+All Shopware settings resolve from one place — `backend/config.ts` → `SHOPWARE_CONFIG` — shared by the
+search action, the admin surface, and the agentic tool (the former duplicate config in
+`backend/agentic/config.ts` was removed).
+
+- Read/search path — populate to enable (blank required fields surface as issues on the admin card):
   - `SHOPWARE_ENABLED=true`
   - `SHOPWARE_BASE_URL=https://…`
-  - `SHOPWARE_CLIENT_ID` / `SHOPWARE_CLIENT_SECRET` **or** `SHOPWARE_ACCESS_TOKEN` / `SHOPWARE_API_TOKEN`
-  - `SHOPWARE_SALES_CHANNEL_ID` (or `SHOPWARE_SALES_CHANNEL`)
-  - `SHOPWARE_REQUEST_TIMEOUT_MS` (optional override, defaults to 10 seconds)
-- Leave queue-specific flags at their defaults because the worker is inactive:
-  - `SHOPWARE_SYNC_ENABLED=false`
-  - `SHOPWARE_API_BASE_URL` empty
-  - `SHOPWARE_QUEUE_POLL_INTERVAL_MS` (unused while the worker is disabled)
-- When the HTTP dispatcher is implemented, remove the guard in `backend/server.ts` and ensure the queue client performs real
-  HTTP requests before flipping `SHOPWARE_SYNC_ENABLED=true` in production.
+  - `SHOPWARE_SALES_CHANNEL_ACCESS_KEY` — the `sw-access-key` (NOT the sales-channel UUID). Legacy
+    `SHOPWARE_SALES_CHANNEL_ID` / `SHOPWARE_SALES_CHANNEL` still accepted as deprecated aliases.
+  - Auth: **either** `SHOPWARE_ACCESS_TOKEN` (legacy alias `SHOPWARE_API_TOKEN`) **or** both
+    `SHOPWARE_CLIENT_ID` + `SHOPWARE_CLIENT_SECRET`. Both modes are fully supported by the client.
+  - `SHOPWARE_REQUEST_TIMEOUT_MS` (optional, defaults to 10 s).
+- Write path — `SHOPWARE_SYNC_ENABLED` (default false) gates sync-queue enqueue. When false, item
+  saves/moves/stock changes enqueue **nothing**; when true they record jobs the (still-unimplemented)
+  dispatcher will drain. Removed as dead: `SHOPWARE_API_BASE_URL`, `SHOPWARE_QUEUE_POLL_INTERVAL_MS`,
+  and the `SHOPWARE_QUEUE_ENABLED` alias.
+- When the dispatcher is implemented, replace the stub in `backend/shopware/queueClient.ts` and start
+  the worker in `backend/server.ts` before flipping `SHOPWARE_SYNC_ENABLED=true` in production.
 
 ## Operational Notes
 
-- Until dispatch is implemented, queued jobs accumulate safely for inspection via SQLite or helper functions
-  (e.g., `listShopwareSyncQueue`).
-- Tests under `test/shopware-sync-queue.test.ts` validate enqueue/claim semantics. Run them with `npm test -- shopware`.
-- The server logs a reminder at startup if `SHOPWARE_SYNC_ENABLED=true` to prevent accidentally running the dormant worker.
+- The sync queue is Postgres-backed (`shopware_sync_queue`). Inspect depth via the admin
+  `GET /api/admin/shopware/status` card or `listShopwareSyncQueue` / `getShopwareSyncQueueCounts`.
+- With `SHOPWARE_SYNC_ENABLED=false` (default) no jobs are enqueued at all; with it true they accumulate
+  until the dispatcher ships.
+- Tests: `test/shopware-connection-check.test.ts` covers the connection probe (currently jest-ignored
+  like the other `shopware-*.test.ts` — harness gap, todo #52).
+- The server logs a reminder at startup if `SHOPWARE_SYNC_ENABLED=true` to flag the dormant worker.
 - Keep `.env.example` aligned with the variables above so new environments are configured correctly.
 
 ## Next Steps Before Enabling Sync

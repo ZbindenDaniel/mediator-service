@@ -26,11 +26,8 @@ const envSchema = z.object({
   SEARCH_RATE_LIMIT_DELAY_MS: z.coerce.number().int().nonnegative().optional(),
   SEARCH_MAX_PLANS: z.coerce.number().int().min(1).optional(),
   SEARCH_MAX_AGENT_QUERIES_PER_REQUEST: z.coerce.number().int().min(1).optional(),
-  SHOPWARE_BASE_URL: z.string().url().optional(),
-  SHOPWARE_CLIENT_ID: z.string().min(1).optional(),
-  SHOPWARE_CLIENT_SECRET: z.string().min(1).optional(),
-  SHOPWARE_API_TOKEN: z.string().min(1).optional(),
-  SHOPWARE_SALES_CHANNEL: z.string().min(1).optional(),
+  // Shopware config now lives in the root backend config (backend/config.ts SHOPWARE_CONFIG),
+  // shared by the search action, the admin surface, and the agentic tool.
   AGENT_ACTOR_ID: z.string().min(1).optional()
 });
 
@@ -167,11 +164,6 @@ const envInput: EnvSchemaInput = {
   SEARCH_RATE_LIMIT_DELAY_MS: resolveNumber('SEARCH_RATE_LIMIT_DELAY_MS'),
   SEARCH_MAX_PLANS: resolveNumber('SEARCH_MAX_PLANS'),
   SEARCH_MAX_AGENT_QUERIES_PER_REQUEST: resolveNumber('SEARCH_MAX_AGENT_QUERIES_PER_REQUEST'),
-  SHOPWARE_BASE_URL: resolveEnvValue('SHOPWARE_BASE_URL'),
-  SHOPWARE_CLIENT_ID: resolveEnvValue('SHOPWARE_CLIENT_ID'),
-  SHOPWARE_CLIENT_SECRET: resolveEnvValue('SHOPWARE_CLIENT_SECRET'),
-  SHOPWARE_API_TOKEN: resolveEnvValue('SHOPWARE_API_TOKEN', 'SHOPWARE_ACCESS_TOKEN'),
-  SHOPWARE_SALES_CHANNEL: resolveEnvValue('SHOPWARE_SALES_CHANNEL', 'SHOPWARE_SALES_CHANNEL_ID'),
   AGENT_ACTOR_ID: resolveEnvValue('AGENT_ACTOR_ID')
 };
 
@@ -228,17 +220,6 @@ export interface AgenticSearchLimitsConfig {
   maxAgentQueriesPerRequest: number;
 }
 
-export interface ShopwareCredentialsConfig {
-  clientId?: string;
-  clientSecret?: string;
-  apiToken?: string;
-}
-
-export interface ShopwareIntegrationConfig extends ShopwareCredentialsConfig {
-  baseUrl: string;
-  salesChannel: string;
-}
-
 // TODO(agent): Validate configured search limits against production runbooks once env overrides are available.
 const resolvedSearchMaxPlans = parsedEnv.SEARCH_MAX_PLANS ?? 3;
 const resolvedSearchMaxAgentQueriesPerRequest = parsedEnv.SEARCH_MAX_AGENT_QUERIES_PER_REQUEST ?? 3;
@@ -276,55 +257,6 @@ export const searchLimits: AgenticSearchLimitsConfig = {
   maxPlans: resolvedSearchMaxPlans,
   maxAgentQueriesPerRequest: resolvedSearchMaxAgentQueriesPerRequest
 };
-
-const shopwareConfigSchema = z
-  .object({
-    baseUrl: z.string().url(),
-    clientId: z.string().min(1).optional(),
-    clientSecret: z.string().min(1).optional(),
-    apiToken: z.string().min(1).optional(),
-    salesChannel: z.string().min(1)
-  })
-  .refine(
-    (data) => Boolean(data.apiToken) || (Boolean(data.clientId) && Boolean(data.clientSecret)),
-    {
-      message: 'Provide either SHOPWARE_API_TOKEN or both SHOPWARE_CLIENT_ID and SHOPWARE_CLIENT_SECRET',
-      path: ['apiToken']
-    }
-  );
-
-const rawShopwareConfig = {
-  baseUrl: parsedEnv.SHOPWARE_BASE_URL,
-  clientId: parsedEnv.SHOPWARE_CLIENT_ID,
-  clientSecret: parsedEnv.SHOPWARE_CLIENT_SECRET,
-  apiToken: parsedEnv.SHOPWARE_API_TOKEN,
-  salesChannel: parsedEnv.SHOPWARE_SALES_CHANNEL
-};
-
-const hasShopwareBase = Boolean(rawShopwareConfig.baseUrl && rawShopwareConfig.salesChannel);
-const hasShopwareApiToken = Boolean(rawShopwareConfig.apiToken);
-const hasShopwareClientCredentials = Boolean(
-  rawShopwareConfig.clientId && rawShopwareConfig.clientSecret
-);
-
-let resolvedShopwareConfig: ShopwareIntegrationConfig | null = null;
-
-if (hasShopwareBase && (hasShopwareApiToken || hasShopwareClientCredentials)) {
-  resolvedShopwareConfig = shopwareConfigSchema.parse(rawShopwareConfig);
-} else if (
-  rawShopwareConfig.baseUrl ||
-  rawShopwareConfig.salesChannel ||
-  rawShopwareConfig.clientId ||
-  rawShopwareConfig.clientSecret ||
-  rawShopwareConfig.apiToken
-) {
-  console.info?.({
-    msg: 'Skipping Shopware configuration due to incomplete settings',
-    providedKeys: sanitizeEnvForLogging(rawShopwareConfig as Record<string, unknown>)
-  });
-}
-
-export const shopwareConfig: ShopwareIntegrationConfig | null = resolvedShopwareConfig;
 
 export const agentActorId: string = parsedEnv.AGENT_ACTOR_ID?.trim() || 'item-flow-service';
 

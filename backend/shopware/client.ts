@@ -104,9 +104,11 @@ export class ShopwareClient implements ShopwareSearchClient {
   private tokenExpiry = 0;
   private tokenSignature: string | null = null;
   private readonly baseUrl: string;
-  private readonly clientId: string;
-  private readonly clientSecret: string;
-  private readonly salesChannelId: string;
+  // Auth is one of two modes: a static access token (API key), or client-credentials OAuth.
+  private readonly accessToken: string | null;
+  private readonly clientId: string | null;
+  private readonly clientSecret: string | null;
+  private readonly salesChannelAccessKey: string;
   private readonly requestTimeoutMs: number;
 
   constructor(private readonly config: ShopwareConfig, options: ShopwareClientOptions = {}) {
@@ -124,28 +126,32 @@ export class ShopwareClient implements ShopwareSearchClient {
     }
 
     const credentials = this.config.credentials ?? {};
-    const clientId = credentials.clientId;
-    const clientSecret = credentials.clientSecret;
-    if (!clientId || !clientSecret) {
-      this.logger.error?.('[shopware-client] Missing client credentials in Shopware configuration');
-      throw new Error('Shopware client credentials must be configured');
+    const accessToken = credentials.accessToken ?? null;
+    const clientId = credentials.clientId ?? null;
+    const clientSecret = credentials.clientSecret ?? null;
+    const hasClientCredentials = Boolean(clientId && clientSecret);
+    // Accept either a static access token OR a full client-credentials pair — not neither.
+    if (!accessToken && !hasClientCredentials) {
+      this.logger.error?.('[shopware-client] Missing credentials: provide an access token or client id + secret');
+      throw new Error('Shopware credentials must be configured (access token or client id + secret)');
     }
 
-    const salesChannelId = this.config.salesChannelId;
-    if (!salesChannelId) {
-      this.logger.error?.('[shopware-client] Missing sales channel identifier in Shopware configuration');
-      throw new Error('Shopware sales channel identifier must be configured');
+    const salesChannelAccessKey = this.config.salesChannelAccessKey;
+    if (!salesChannelAccessKey) {
+      this.logger.error?.('[shopware-client] Missing sales channel access key in Shopware configuration');
+      throw new Error('Shopware sales channel access key must be configured');
     }
 
     this.baseUrl = baseUrl;
+    this.accessToken = accessToken;
     this.clientId = clientId;
     this.clientSecret = clientSecret;
-    this.salesChannelId = salesChannelId;
+    this.salesChannelAccessKey = salesChannelAccessKey;
     this.requestTimeoutMs = Math.max(1, this.config.requestTimeoutMs);
   }
 
   private get tokenCacheKey(): string {
-    return [this.baseUrl, this.clientId, this.clientSecret].join('|');
+    return [this.baseUrl, this.clientId ?? '', this.clientSecret ?? ''].join('|');
   }
 
   private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
@@ -167,6 +173,11 @@ export class ShopwareClient implements ShopwareSearchClient {
   }
 
   private async getToken(): Promise<string> {
+    // Static access token (API key) takes precedence — no OAuth round-trip needed.
+    if (this.accessToken) {
+      return this.accessToken;
+    }
+
     const now = this.now();
     const signature = this.tokenCacheKey;
 
@@ -175,10 +186,11 @@ export class ShopwareClient implements ShopwareSearchClient {
     }
 
     const tokenUrl = new URL('/api/oauth/token', this.baseUrl);
+    // Reached only when no static access token is set, so client credentials are guaranteed present.
     const body = new URLSearchParams({
       grant_type: 'client_credentials',
-      client_id: this.clientId,
-      client_secret: this.clientSecret
+      client_id: this.clientId ?? '',
+      client_secret: this.clientSecret ?? ''
     });
 
     this.logger.info?.('[shopware-client] Requesting OAuth token');
@@ -366,7 +378,7 @@ export class ShopwareClient implements ShopwareSearchClient {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'sw-access-key': this.salesChannelId
+          'sw-access-key': this.salesChannelAccessKey
         },
         body: JSON.stringify({ search: trimmed, limit: boundedLimit })
       });

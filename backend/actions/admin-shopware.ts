@@ -25,13 +25,12 @@ function buildConfigSummary() {
   return {
     enabled: SHOPWARE_CONFIG.enabled,
     baseUrl: SHOPWARE_CONFIG.baseUrl,
-    salesChannelConfigured: Boolean(SHOPWARE_CONFIG.salesChannelId),
+    salesChannelConfigured: Boolean(SHOPWARE_CONFIG.salesChannelAccessKey),
     credentialMode,
     requestTimeoutMs: SHOPWARE_CONFIG.requestTimeoutMs,
     issues: getShopwareConfigIssues(),
-    // The search client (backend/shopware/client.ts) authenticates with client credentials and never
-    // uses an access token, so access_token_only cannot drive a live check today. Surface that plainly.
-    checkSupported: SHOPWARE_CONFIG.enabled && credentialMode === 'client_credentials'
+    // Both auth modes (client credentials and a static access token) can drive a live check.
+    checkSupported: SHOPWARE_CONFIG.enabled && credentialMode !== 'none'
   };
 }
 
@@ -67,12 +66,8 @@ const action = defineHttpAction({
         sendJson(res, 200, { ok: false, reason: 'disabled', config: summary });
         return;
       }
-      if (summary.credentialMode !== 'client_credentials') {
-        sendJson(res, 200, {
-          ok: false,
-          reason: summary.credentialMode === 'none' ? 'no_credentials' : 'access_token_unsupported',
-          config: summary
-        });
+      if (summary.credentialMode === 'none') {
+        sendJson(res, 200, { ok: false, reason: 'no_credentials', config: summary });
         return;
       }
 

@@ -135,7 +135,7 @@ function clearCsvIngestionOptions(absPath: string): void {
 let shopwareConfig: ShopwareConfig = {
   enabled: false,
   baseUrl: null,
-  salesChannelId: null,
+  salesChannelAccessKey: null,
   requestTimeoutMs: SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
   credentials: {}
 };

@@ -12,9 +12,17 @@ import type { ShopwareConfig } from '../backend/config';
 const baseConfig: ShopwareConfig = {
   enabled: true,
   baseUrl: 'https://shop.example',
-  salesChannelId: 'SWSCTESTKEY',
+  salesChannelAccessKey: 'SWSCTESTKEY',
   requestTimeoutMs: 5000,
   credentials: { clientId: 'cid', clientSecret: 'csecret' }
+};
+
+const accessTokenConfig: ShopwareConfig = {
+  enabled: true,
+  baseUrl: 'https://shop.example',
+  salesChannelAccessKey: 'SWSCTESTKEY',
+  requestTimeoutMs: 5000,
+  credentials: { accessToken: 'static-api-key' }
 };
 
 const silentLogger = { info() {}, warn() {}, error() {} };
@@ -62,6 +70,23 @@ describe('ShopwareClient.checkConnection', () => {
     expect(result.steps[0].name).toBe('auth');
     expect(result.steps[0].ok).toBe(false);
     expect(result.steps[0].status).toBe(401);
+  });
+
+  test('authenticates with a static access token (API key) without an OAuth round-trip', async () => {
+    let tokenCalls = 0;
+    const client = createShopwareClient(accessTokenConfig, {
+      logger: silentLogger,
+      fetchImpl: mockFetch((url) => {
+        if (url.includes('/api/oauth/token')) { tokenCalls += 1; return { status: 500, body: 'should not be called' }; }
+        return { status: 200, body: { elements: [] } };
+      })
+    });
+
+    const result = await client.checkConnection();
+
+    expect(result.ok).toBe(true);
+    expect(tokenCalls).toBe(0); // static token ⇒ no /api/oauth/token request
+    expect(result.steps.map((s) => s.name)).toEqual(['auth', 'search']);
   });
 
   test('marks the search step failed when the sales-channel key is rejected', async () => {

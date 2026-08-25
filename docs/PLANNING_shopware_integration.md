@@ -108,25 +108,26 @@ persistItem / bulkMoveItems / bulkRemoveItemStock / bulkUpdateShopStatus
 
 ## 2. Gaps & risks (honest assessment)
 
+> **P0 cleanup landed (changelog #935–936).** Items 3, 5, 7 are resolved; 4 is partially resolved
+> (config unified, product-normaliser still duplicated). An admin **connection check** now exists.
+> Items 1, 2, 6 remain — they are the write path, blocked on the §4 direction decision.
+
 1. **No write client at all.** Store API (`/store-api`, sales-channel, read) is implemented; the
    **Admin API** (`/api`, OAuth admin scope, read/write) needed for products, custom fields, media,
-   documents, cross-selling is **not**. `SHOPWARE_API_BASE_URL` exists but is unused.
+   documents, cross-selling is **not**. *(open — P1)*
 2. **Dispatcher is a stub** (`queueClient.dispatchJob` throws) and the **worker is not started**.
-   Enabling `SHOPWARE_SYNC_ENABLED` today does nothing but print a warning.
-3. **Unbounded queue growth (latent prod issue).** `enqueueShopwareSyncJob` runs on *every*
-   `persistItem` with **no config gate**; `listShopwareSyncQueue`/`clearShopwareSyncQueue` are used
-   only by tests. Nothing drains or trims the table. Fix the gate + add retention regardless of which
-   direction we pick.
-4. **Duplicated client code** (`shopware/client.ts` vs `agentic/tools/shopware.ts`) — two token
-   caches, two normalisers, drift risk. Should collapse to one client when the write layer lands.
-5. **Auth muddle.** Both clients fetch an **admin** OAuth token but call the **store-api** endpoint
-   with *both* `Authorization: Bearer` *and* `sw-access-key`. Store API needs only `sw-access-key`;
-   Admin API needs only the Bearer. Works by luck for search; must be cleaned up before writing.
+   *(open — P1)*
+3. ✅ **~~Unbounded queue growth~~** — fixed (#936): `enqueueShopwareSyncJob` now no-ops unless
+   `SHOPWARE_SYNC_ENABLED`. Retention/trim still deferred to the dispatcher.
+4. ⚠️ **Duplicated client code** — config unified onto one `SHOPWARE_CONFIG` (#936); the two token
+   caches are gone, but `client.ts` and `agentic/tools/shopware.ts` still have separate product
+   normalisers. Collapse fully when the write layer lands.
+5. ✅ **~~Auth muddle~~** — the client now authenticates with **either** a static access token (API
+   key) **or** client credentials, cleanly (#936). Store-api still receives both headers, which is
+   harmless; the Admin-API write client (P1) will use the bearer alone.
 6. **No mapping layer.** There is no `Item → Shopware product` translator (field names, price/tax,
-   variant resolution, custom-field keys). This is the real bulk of the work.
-7. **Stale docs.** `backend/shopware/README.md` says the client does product create/update and calls
-   the queue "Postgres-backed" while `docs/detailed/Shopware integration.md` still says "SQLite" — both
-   need reconciling.
+   variant resolution, custom-field keys). This is the real bulk of the work. *(open — P2+)*
+7. ✅ **~~Stale docs~~** — README, runbook, `.env.example`, `setup.md`, `ENVIRONMENT.md` reconciled (#936).
 
 ---
 
@@ -137,7 +138,8 @@ Assumes the **direct-to-Shopware** direction (see §4). Effort is relative (S/M/
 ### 3.1 Sync stock — the foundation (L)
 The prerequisite for everything else. Build the **Admin API write client** + a real `dispatchJob`,
 start the worker, and add job handlers:
-- OAuth admin token (client_credentials, `/api/oauth/token`) against `SHOPWARE_API_BASE_URL`.
+- OAuth admin token (client_credentials, `/api/oauth/token`) against `SHOPWARE_BASE_URL` — or reuse
+  the existing `ShopwareClient` static-access-token path.
 - Resolve product/variant by `ShopwareProductId`/`ShopwareVariantId` (or `productNumber` = Artikel_Nummer),
   create if missing (decision: create vs. skip-unknown).
 - Job handlers for `stock-decrement`/`item-move`/`item-upsert` → `PATCH /api/product/{id}` (stock,
@@ -198,7 +200,7 @@ it should be settled **before** implementation starts.
 
 | Phase | Deliverable | Goal items |
 |---|---|---|
-| **0** | Fix enqueue gate + queue retention; reconcile READMEs; collapse the two clients | risk cleanup |
+| **0** ✅ | Enqueue gate fixed; config unified onto one source; API-key auth working; dead vars retired; docs reconciled; admin connection check added (#935–936). *Remaining: full product-normaliser dedup, queue retention (with P1).* | risk cleanup |
 | **1** | Admin API write client + real `dispatchJob` + worker wired + product/variant resolution + **stock sync** end-to-end (staging) | 3.1 |
 | **2** | Mapping layer: Langtext → custom fields; quality/CO₂ → custom fields/badges | 3.2, 3.5 |
 | **3** | Media: images + docs upload/associate (dedup) | 3.3, 3.4 |

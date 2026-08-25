@@ -45,8 +45,7 @@ interface CheckResult {
 const STEP_LABEL: Record<string, string> = { auth: 'Admin-Token (OAuth)', search: 'Store-API Suche' };
 const REASON_LABEL: Record<string, string> = {
   disabled: 'Shopware ist deaktiviert (SHOPWARE_ENABLED=false).',
-  no_credentials: 'Keine Zugangsdaten konfiguriert.',
-  access_token_unsupported: 'Nur ein Access-Token gesetzt — der Such-Client benötigt CLIENT_ID + CLIENT_SECRET.',
+  no_credentials: 'Keine Zugangsdaten konfiguriert (Access-Token oder Client-ID + Secret nötig).',
   config_error: 'Konfigurationsfehler beim Erstellen des Clients.'
 };
 

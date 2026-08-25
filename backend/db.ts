@@ -1,5 +1,6 @@
 import { randomBytes } from 'crypto';
 import { query, queryOne, execute, insert, withTransaction, namedQuery, namedQueryOne, namedExecute, getPoolInstance, execBatch } from './db-client';
+import { SHOPWARE_SYNC_ENABLED } from './config';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
   ShopwareSyncQueueEntry,
@@ -2629,7 +2630,12 @@ export async function getShopwareSyncQueueCounts(): Promise<ShopwareSyncQueueCou
   };
 }
 
-export async function enqueueShopwareSyncJob(job: ShopwareSyncQueueInsert): Promise<ShopwareSyncQueueEntry> {
+export async function enqueueShopwareSyncJob(job: ShopwareSyncQueueInsert): Promise<ShopwareSyncQueueEntry | null> {
+  // Only record sync intent when the write path is enabled. Without this gate every persistItem/move/
+  // stock change enqueued a row that nothing drains (dispatch is unimplemented) — an unbounded leak.
+  if (!SHOPWARE_SYNC_ENABLED) {
+    return null;
+  }
   const now = new Date().toISOString();
   const entry = {
     CorrelationId: job.CorrelationId,
