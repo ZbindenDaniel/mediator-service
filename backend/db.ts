@@ -2683,9 +2683,10 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
   }>(
     // Approval comes from scalar subselects (LIMIT 1) so a ref with multiple agentic_runs never
     // multiplies the item rows and corrupts the stock SUM.
+    // Name = Artikelbeschreibung (the ERP article title); description = Kurzbeschreibung (notes).
     `SELECT r."Artikel_Nummer" AS "productNumber",
-            COALESCE(NULLIF(r."Kurzbeschreibung",''), NULLIF(r."Artikelbeschreibung",''), r."Artikel_Nummer") AS "name",
-            COALESCE(NULLIF(r."Artikelbeschreibung",''), NULLIF(r."Kurzbeschreibung",'')) AS "description",
+            COALESCE(NULLIF(r."Artikelbeschreibung",''), NULLIF(r."Kurzbeschreibung",''), r."Artikel_Nummer") AS "name",
+            COALESCE(NULLIF(r."Kurzbeschreibung",''), NULLIF(r."Artikelbeschreibung",'')) AS "description",
             r."Verkaufspreis" AS "grossPrice",
             r."ShopwareProductId" AS "shopwareProductId",
             r."Langtext" AS "langtext",
