@@ -2596,6 +2596,39 @@ export async function listShopwareSyncQueue(): Promise<ShopwareSyncQueueEntry[]>
   return query<ShopwareSyncQueueEntry>(`SELECT * FROM shopware_sync_queue ORDER BY "Id"`);
 }
 
+export interface ShopwareSyncQueueCounts {
+  total: number;
+  queued: number;
+  processing: number;
+  succeeded: number;
+  failed: number;
+  oldestQueuedAt: string | null;
+}
+
+// Lightweight queue-depth summary for the admin surface. Because dispatch is not yet implemented,
+// this is how an operator confirms jobs are only accumulating (queued grows, processing/succeeded stay 0).
+export async function getShopwareSyncQueueCounts(): Promise<ShopwareSyncQueueCounts> {
+  const rows = await query<{ Status: string; count: string }>(
+    `SELECT "Status", COUNT(*)::int AS count FROM shopware_sync_queue GROUP BY "Status"`
+  );
+  const byStatus = new Map(rows.map((r) => [r.Status, Number(r.count)]));
+  const oldest = await queryOne<{ CreatedAt: string }>(
+    `SELECT "CreatedAt" FROM shopware_sync_queue WHERE "Status"='queued' ORDER BY "CreatedAt" ASC, "Id" ASC LIMIT 1`
+  );
+  const queued = byStatus.get('queued') ?? 0;
+  const processing = byStatus.get('processing') ?? 0;
+  const succeeded = byStatus.get('succeeded') ?? 0;
+  const failed = byStatus.get('failed') ?? 0;
+  return {
+    total: queued + processing + succeeded + failed,
+    queued,
+    processing,
+    succeeded,
+    failed,
+    oldestQueuedAt: oldest?.CreatedAt ?? null
+  };
+}
+
 export async function enqueueShopwareSyncJob(job: ShopwareSyncQueueInsert): Promise<ShopwareSyncQueueEntry> {
   const now = new Date().toISOString();
   const entry = {

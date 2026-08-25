@@ -26,8 +26,40 @@ export interface ShopwareClientOptions {
   now?: () => number;
 }
 
+export interface ShopwareConnectionStep {
+  name: 'auth' | 'search';
+  ok: boolean;
+  status: number | null;
+  durationMs: number;
+  error?: string;
+}
+
+export interface ShopwareConnectionResult {
+  ok: boolean;
+  steps: ShopwareConnectionStep[];
+  productSampleCount: number | null;
+  checkedAt: string;
+}
+
 export interface ShopwareSearchClient {
   searchProducts(query: string, limit?: number): Promise<ShopwareSearchProduct[]>;
+  // Actively probe the two auth surfaces the read path depends on: the admin OAuth token
+  // endpoint (/api/oauth/token) and the sales-channel store-api search. Reports per-step so a
+  // failure is attributable to credentials vs. sales-channel key vs. reachability.
+  checkConnection(): Promise<ShopwareConnectionResult>;
+}
+
+function httpStatusFromError(err: unknown): number | null {
+  const message = err instanceof Error ? err.message : '';
+  const match = message.match(/status (\d{3})/);
+  return match ? Number(match[1]) : null;
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) {
+    return err.message;
+  }
+  return typeof err === 'string' ? err : 'Unknown error';
 }
 
 function normaliseNumber(value: unknown): number | null {
@@ -369,6 +401,43 @@ export class ShopwareClient implements ShopwareSearchClient {
     });
 
     return products;
+  }
+
+  async checkConnection(): Promise<ShopwareConnectionResult> {
+    const steps: ShopwareConnectionStep[] = [];
+
+    const authStart = this.now();
+    try {
+      await this.getToken();
+      steps.push({ name: 'auth', ok: true, status: null, durationMs: this.now() - authStart });
+    } catch (error) {
+      steps.push({
+        name: 'auth',
+        ok: false,
+        status: httpStatusFromError(error),
+        durationMs: this.now() - authStart,
+        error: errorMessage(error)
+      });
+      // No token ⇒ the store-api step cannot be attributed cleanly, so stop here.
+      return { ok: false, steps, productSampleCount: null, checkedAt: new Date().toISOString() };
+    }
+
+    const searchStart = this.now();
+    try {
+      // Innocuous probe query with limit 1 — we only care that the sales-channel key authenticates.
+      const products = await this.searchProducts('__connection_check__', 1);
+      steps.push({ name: 'search', ok: true, status: null, durationMs: this.now() - searchStart });
+      return { ok: true, steps, productSampleCount: products.length, checkedAt: new Date().toISOString() };
+    } catch (error) {
+      steps.push({
+        name: 'search',
+        ok: false,
+        status: httpStatusFromError(error),
+        durationMs: this.now() - searchStart,
+        error: errorMessage(error)
+      });
+      return { ok: false, steps, productSampleCount: null, checkedAt: new Date().toISOString() };
+    }
   }
 }
 

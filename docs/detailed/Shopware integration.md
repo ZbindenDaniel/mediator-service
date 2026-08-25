@@ -28,6 +28,22 @@ This document captures the current architecture, required configuration, and ope
   server because the queue client currently throws a `ShopwareQueueClientError('dispatchJob not implemented')`.
 - This separation lets actions and tests cover queue behaviour without risking network calls.
 
+### Admin connection check (`backend/actions/admin-shopware.ts`)
+
+- `GET /api/admin/shopware/status` — secret-free config summary (`enabled`, `baseUrl`,
+  `salesChannelConfigured`, `credentialMode`, `issues[]`, `checkSupported`) plus `shopware_sync_queue`
+  depth counts (`getShopwareSyncQueueCounts`). The queue counts are how an operator confirms jobs are
+  only accumulating while dispatch remains unimplemented.
+- `POST /api/admin/shopware/check` — actively probes the connection via `ShopwareClient.checkConnection()`:
+  step 1 fetches an admin OAuth token (`/api/oauth/token`), step 2 runs a store-api search. Returns
+  per-step `{ ok, status, durationMs, error }`. A failure at step 1 points at admin credentials/base URL;
+  a failure at step 2 points at the sales-channel key.
+- Both routes require `Authorization: Bearer <ADMIN_SECRET>`. Surfaced in the SPA by `ShopwareStatusCard`
+  on the Admin page.
+- **Note:** the probe exercises the read/store-api path only. Because `client.ts` authenticates with
+  client credentials and never uses an access token, an access-token-only config reports
+  `access_token_unsupported` instead of running the check.
+
 ## Configuration
 
 - Populate the following variables to enable search. Leaving any of them blank keeps the feature disabled:
