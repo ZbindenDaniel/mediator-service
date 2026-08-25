@@ -55,6 +55,8 @@ export default function ShopwareStatusCard({ authToken, onAuthFailure }: Props) 
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
   const [result, setResult] = useState<CheckResult | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const authHeaders: Record<string, string> = authToken ? { Authorization: `Bearer ${authToken}` } : {};
@@ -94,6 +96,31 @@ export default function ShopwareStatusCard({ authToken, onAuthFailure }: Props) 
     }
   }
 
+  async function runSync() {
+    try {
+      setSyncing(true);
+      setError(null);
+      setSyncMsg(null);
+      const res = await fetch('/api/admin/shopware/sync', { method: 'POST', headers: authHeaders });
+      if (res.status === 401) { onAuthFailure?.(); return; }
+      if (!res.ok) { setError('Shop-Sync fehlgeschlagen'); return; }
+      const data = await res.json() as { ok: boolean; reason?: string; enqueued?: number; total?: number };
+      if (data.ok) {
+        setSyncMsg(`${data.enqueued} von ${data.total} Shop-Artikeln zur Synchronisation eingereiht.`);
+      } else if (data.reason === 'sync_disabled') {
+        setSyncMsg('Shop-Sync ist deaktiviert (SHOPWARE_SYNC_ENABLED=false).');
+      } else {
+        setError('Shop-Sync fehlgeschlagen');
+      }
+      void load(); // refresh queue counts
+    } catch (err) {
+      logError('Shopware manual sync failed', err);
+      setError('Shop-Sync fehlgeschlagen');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   useEffect(() => { void load(); }, []);
 
   return (
@@ -125,7 +152,7 @@ export default function ShopwareStatusCard({ authToken, onAuthFailure }: Props) 
             </div>
           )}
 
-          <div className="admin-status-row" style={{ marginTop: 8 }}>
+          <div className="admin-status-row" style={{ marginTop: 8, gap: 8 }}>
             <button
               type="button"
               className="btn"
@@ -135,7 +162,17 @@ export default function ShopwareStatusCard({ authToken, onAuthFailure }: Props) 
             >
               {checking ? 'Teste…' : 'Verbindung testen'}
             </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void runSync()}
+              disabled={syncing}
+              title="Reiht alle Shop-Artikel zur Synchronisation mit Shopware ein"
+            >
+              {syncing ? 'Synchronisiere…' : 'Shop-Sync'}
+            </button>
           </div>
+          {syncMsg && <p className="muted" style={{ marginTop: 4, fontSize: '0.85em' }}>{syncMsg}</p>}
 
           {result && (
             <div style={{ marginTop: 8, fontSize: '0.85em' }}>

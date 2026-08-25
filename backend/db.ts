@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import { query, queryOne, execute, insert, withTransaction, namedQuery, namedQueryOne, namedExecute, getPoolInstance, execBatch } from './db-client';
 import { SHOPWARE_SYNC_ENABLED } from './config';
+import { describeQuality } from '../models/quality';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
   ShopwareSyncQueueEntry,
@@ -2597,6 +2598,27 @@ export async function listShopwareSyncQueue(): Promise<ShopwareSyncQueueEntry[]>
   return query<ShopwareSyncQueueEntry>(`SELECT * FROM shopware_sync_queue ORDER BY "Id"`);
 }
 
+// Manual "Shop-Sync": enqueue an item-upsert for every shop-article ref. The dispatch gate handles
+// eligibility (approved → synced, unapproved/de-flagged → deactivated), so this also backfills existing
+// products and cleans up pre-gate skeletons. No-op (returns 0) when SHOPWARE_SYNC_ENABLED is off.
+export async function enqueueShopwareSyncForShopRefs(): Promise<{ enqueued: number; total: number }> {
+  const refs = await query<{ Artikel_Nummer: string }>(
+    `SELECT "Artikel_Nummer" FROM item_refs WHERE "Shopartikel" = 1 AND "Artikel_Nummer" IS NOT NULL AND "Artikel_Nummer" <> ''`
+  );
+  let enqueued = 0;
+  for (const ref of refs) {
+    try {
+      const correlationId = generateShopwareCorrelationId('manual-shop-sync', ref.Artikel_Nummer);
+      const payload = createShopwareQueuePayload({ artikelNummer: ref.Artikel_Nummer, trigger: 'manual-shop-sync' }, 'manualShopSync');
+      const entry = await enqueueShopwareSyncJob({ CorrelationId: correlationId, JobType: 'item-upsert', Payload: payload });
+      if (entry) enqueued += 1;
+    } catch (err) {
+      console.error('[db] Failed to enqueue manual shop sync job', { artikelNummer: ref.Artikel_Nummer, error: err });
+    }
+  }
+  return { enqueued, total: refs.length };
+}
+
 export interface ShopwareSyncQueueCounts {
   total: number;
   queued: number;
@@ -2667,7 +2689,7 @@ export interface ShopwareVariantGroup {
 // Group a ref's instances by their InstanceSpecs signature. Instances with no specs collapse under an
 // empty signature. Returns groups sorted by key for stable ordering.
 export function buildVariantGroups(
-  instances: Array<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null }>,
+  instances: Array<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null; Quality?: number | null }>,
   artikelNummer: string
 ): ShopwareVariantGroup[] {
   const byKey = new Map<string, ShopwareVariantGroup>();
@@ -2681,6 +2703,12 @@ export function buildVariantGroups(
         const v = (Array.isArray(rawV) ? rawV.join(' / ') : String(rawV ?? '')).trim();
         if (k && v) options[k] = v;
       }
+    }
+    // Quality is a variant axis too ("Zustand"), so instances differing only in condition split into
+    // separate variants. Skip unknown quality (label '?') so it doesn't become a junk option.
+    const qualityLabel = describeQuality(inst.Quality ?? null).label;
+    if (qualityLabel && qualityLabel !== '?') {
+      options.Zustand = qualityLabel;
     }
     const key = Object.keys(options).sort().map((k) => `${k}=${options[k]}`).join('|');
     const existing = byKey.get(key);
@@ -2760,8 +2788,8 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
 
   // Variant grouping: use variants only when ≥2 distinct spec combos AND every group carries options
   // (a group with no InstanceSpecs can't be a valid Shopware variant). Otherwise → single-product path.
-  const instances = await query<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null }>(
-    `SELECT "ItemUUID", "InstanceSpecs", "Auf_Lager" FROM items WHERE "Artikel_Nummer" = $1`,
+  const instances = await query<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null; Quality: number | null }>(
+    `SELECT "ItemUUID", "InstanceSpecs", "Auf_Lager", "Quality" FROM items WHERE "Artikel_Nummer" = $1`,
     [artikelNummer]
   );
   const allGroups = buildVariantGroups(instances, artikelNummer);

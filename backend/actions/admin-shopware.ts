@@ -1,8 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { SHOPWARE_CONFIG, getShopwareConfigIssues } from '../config';
+import { SHOPWARE_CONFIG, SHOPWARE_SYNC_ENABLED, getShopwareConfigIssues } from '../config';
 import { createShopwareClient, type ShopwareConnectionResult } from '../shopware/client';
-import { getShopwareSyncQueueCounts } from '../db';
+import { getShopwareSyncQueueCounts, enqueueShopwareSyncForShopRefs } from '../db';
 import { requireAdminAuth } from '../utils/admin-auth';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -40,11 +40,28 @@ const action = defineHttpAction({
   appliesTo: () => false,
   matches: (path, method) =>
     (path === '/api/admin/shopware/status' && method === 'GET') ||
-    (path === '/api/admin/shopware/check' && method === 'POST'),
+    (path === '/api/admin/shopware/check' && method === 'POST') ||
+    (path === '/api/admin/shopware/sync' && method === 'POST'),
   async handle(req: IncomingMessage, res: ServerResponse) {
     if (!requireAdminAuth(req, res)) return;
 
     const url = req.url || '';
+
+    // POST /sync — manual "Shop-Sync": enqueue a resync of every shop-article ref (the worker drains it).
+    if (req.method === 'POST' && url.startsWith('/api/admin/shopware/sync')) {
+      if (!SHOPWARE_SYNC_ENABLED) {
+        sendJson(res, 200, { ok: false, reason: 'sync_disabled', enqueued: 0 });
+        return;
+      }
+      try {
+        const { enqueued, total } = await enqueueShopwareSyncForShopRefs();
+        sendJson(res, 200, { ok: true, enqueued, total });
+      } catch (error) {
+        console.error('[admin-shopware] Manual shop sync failed', error);
+        sendJson(res, 500, { ok: false, error: 'Shop sync failed' });
+      }
+      return;
+    }
 
     // GET /status — cheap summary, no outbound network. Also reports queue depth so an operator can
     // watch jobs accumulate (proof the dispatcher is not yet implemented).

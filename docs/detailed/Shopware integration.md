@@ -111,6 +111,24 @@ search action, the admin surface, and the agentic tool (the former duplicate con
 3. Watch the queue drain on the admin card (queued → succeeded). Optionally pin `SHOPWARE_DEFAULT_TAX_ID` /
    `SHOPWARE_DEFAULT_CURRENCY_ID` if runtime resolution picks the wrong ones.
 
+## Reverse sync — getting stock changes back (design, not yet built)
+
+The mediator → Shopware path is outbound only. When an order is placed in Shopware, the sold unit
+must be booked out of mediator stock. Options:
+
+- **Recommended: `checkout.order.placed` webhook.** Register a Shopware webhook (Admin API
+  `/api/webhook`) pointing at a mediator endpoint. On each order, read the line items' product/variant
+  ids → map to the mediator instance(s) via `items.ShopwareVariantId` (a variant = a spec/quality combo;
+  decrement one matching instance's `Auf_Lager` per ordered qty) → book out stock. Needs a
+  publicly-reachable endpoint + webhook signature verification.
+- **Poll fallback.** Periodically query the Admin API for orders since a cursor (or per-product
+  `availableStock`) and reconcile decreases. No inbound endpoint required; higher latency.
+
+Open questions: which mediator instance to book out when a variant groups several (FIFO by entry date?),
+how to reflect Shopware-side stock corrections, and whether to also pull order metadata (buyer, order id)
+onto the item. Recommendation: start with the webhook + a simple "decrement one instance of the ordered
+variant" rule, behind a flag.
+
 ## Deferred (next phases)
 
 - **Queue retention/trim** — succeeded rows are not yet pruned.
