@@ -53,6 +53,15 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0zc. ✅ **Intake can match a booted device onto a pre-existing instance instead of forcing a duplicate (intake #935).**
+  Pre-intake-API / hand-catalogued items have no serial/MAC, so `/start`'s identifier lookup missed and the
+  operator was forced to create a duplicate at `select_ref`. Now each candidate carries `matchableInstances`
+  (serial-less, non-component, in-stock instances of the ref) and the `type:'ref'` answer accepts `useItemUUID`
+  to bind the scanned identity + scan onto the chosen instance (guarded, idempotent; logs `InstanceMatched`).
+  Fully additive — a station that ignores the new fields behaves as before.
+  **Follow-up (image-side):** `phase1.sh` should render the "new device or one of these existing ones?" prompt
+  from `matchableInstances` and send `useItemUUID` for "existing". Backend fields are ignored harmlessly until then.
+
 0za. ✅ **Admin "Backup" was not a restorable snapshot + emitted env-dependent HTML (erp-sync #931).**
   The Backup button routed to `/api/export/items?mode=backup`, which emitted only items+boxes (no agentic
   runs, no events) and resolved Langtext via `LANGTEXT_EXPORT_FORMAT` — so setting that env to `html` (for

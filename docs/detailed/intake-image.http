@@ -103,7 +103,24 @@ Content-Type: application/json
 }
 
 ###
-# 2a) Answer select_ref by picking an EXISTING reference.
+# select_ref RESPONSE shape — each candidate may carry `matchableInstances`: existing instances of
+# that reference with NO serial/MAC on file (devices catalogued before the intake API, or by hand)
+# that the scanned unit might actually BE. When present, the TUI should ask the operator
+# "new or existing?" and, for "existing", send `useItemUUID` (2a-existing below).
+#   {
+#     "nextStep": "select_ref",
+#     "candidates": [
+#       { "artikelNummer": "12345", "hersteller": "HP", "artikelbeschreibung": "EliteBook 840 G5",
+#         "hauptkategorienA": 20, "unterkategorienA": 201,
+#         "matchableInstances": [
+#           { "itemUUID": "I-12345-0007", "artikelNummer": "12345", "boxId": "B-42",
+#             "boxLabel": "Regal A3", "location": "A3", "quality": 4, "datumErfasst": "2024-01-01" }
+#         ] }
+#     ]
+#   }
+
+###
+# 2a) Answer select_ref by picking an EXISTING reference (creates a NEW instance).
 POST {{host}}/api/intake/{{intakeKey}}/answer
 X-Intake-Token: {{intakeToken}}
 Content-Type: application/json
@@ -118,6 +135,27 @@ Content-Type: application/json
       { "name": "nvme0n1", "sizeGb": 256, "type": "nvme", "serial": "{{disk0Serial}}" },
       { "name": "sda",     "sizeGb": 500, "type": "hdd",  "serial": "{{disk1Serial}}" }
     ],
+    "batteryPercent": 87
+  }
+}
+
+###
+# 2a-existing) …or MATCH the scanned device onto a pre-existing instance instead of creating a new
+#     one. Pass `useItemUUID` (from the candidate's `matchableInstances`) alongside `artikelNummer`.
+#     The scanned serial/MAC + scan are bound to that instance; the flow then continues to `quality`.
+#     Guards: the instance must belong to `artikelNummer` and must not already carry a DIFFERENT
+#     serial/MAC (409). Re-sending the same identity is idempotent.
+POST {{host}}/api/intake/{{intakeKey}}/answer
+X-Intake-Token: {{intakeToken}}
+Content-Type: application/json
+
+{
+  "type": "ref",
+  "artikelNummer": "12345",
+  "useItemUUID": "I-12345-0007",
+  "scanPayload": {
+    "serial": "{{machineSerial}}", "mac": "{{mac}}", "vendor": "HP", "model": "EliteBook 840 G5",
+    "cpu": "Intel i5-8350U", "ramMb": 8192,
     "batteryPercent": 87
   }
 }

@@ -136,6 +136,44 @@ async function ensureItem(
   return itemUUID;
 }
 
+// The operator chose "existing": bind the scanned serial/MAC to a pre-existing (pre-intake)
+// instance instead of minting a duplicate. Guards keep the match safe — the instance must belong to
+// the selected reference and must not already carry a *different* identity (that would be another
+// physical unit). Re-submitting the same identity is idempotent.
+async function attachIntakeToExistingInstance(
+  itemUUID: string,
+  artikelNummer: string,
+  serial: string | null,
+  mac: string | null
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const row = await queryOne<{ Artikel_Nummer: string | null; SerialNumber: string | null; MacAddress: string | null }>(
+    `SELECT "Artikel_Nummer", "SerialNumber", "MacAddress" FROM items WHERE "ItemUUID" = $1 LIMIT 1`,
+    [itemUUID]
+  );
+  if (!row) return { ok: false, status: 404, error: 'instance not found' };
+  if ((row.Artikel_Nummer ?? '') !== artikelNummer) {
+    return { ok: false, status: 409, error: 'instance does not belong to the selected reference' };
+  }
+  const sameIdentity = (row.SerialNumber ?? null) === (serial ?? null) && (row.MacAddress ?? null) === (mac ?? null);
+  if ((row.SerialNumber || row.MacAddress) && !sameIdentity) {
+    return { ok: false, status: 409, error: 'instance already has a different serial/MAC — cannot re-match' };
+  }
+  if (!sameIdentity) {
+    await execute(
+      `UPDATE items SET "SerialNumber" = $1, "MacAddress" = $2, "UpdatedAt" = $3 WHERE "ItemUUID" = $4`,
+      [serial, mac, new Date().toISOString(), itemUUID]
+    );
+    await logEvent({
+      Actor: 'intake-station',
+      EntityType: 'Item',
+      EntityId: itemUUID,
+      Event: 'InstanceMatched',
+      Meta: JSON.stringify({ source: 'intake', artikelNummer, serial: serial ?? null, mac: mac ?? null }),
+    });
+  }
+  return { ok: true };
+}
+
 function buildQualityQuestions(
   unterkategorienA: number | null,
   scan: IntakeScanPayload
@@ -213,7 +251,18 @@ const action = defineHttpAction({
         return sendJson(res, 422, { error: 'artikelNummer or newRef required' });
       }
 
-      const itemUUID = await ensureItem(ref.artikelNummer, serial, mac);
+      // Operator chose "existing" — reuse a pre-intake instance instead of creating a duplicate.
+      // Only valid against an existing reference (a brand-new ref has no prior instances to reuse).
+      let itemUUID: string;
+      if (refBody.useItemUUID) {
+        const attached = await attachIntakeToExistingInstance(refBody.useItemUUID, ref.artikelNummer, serial, mac);
+        if (!attached.ok) {
+          return sendJson(res, attached.status, { error: attached.error });
+        }
+        itemUUID = refBody.useItemUUID;
+      } else {
+        itemUUID = await ensureItem(ref.artikelNummer, serial, mac);
+      }
 
       // Persist the raw scan so the later quality step can auto-resolve scan-answerable questions
       // without the script re-sending it. Non-fatal.
