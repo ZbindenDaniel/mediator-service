@@ -3,6 +3,7 @@ import { defineHttpAction } from './index';
 import { restartAgenticRun, startAgenticRun, type AgenticServiceDependencies } from '../agentic';
 import {
   AGENTIC_RUN_ACTIVE_STATUSES,
+  AGENTIC_RUN_STATUS_NOT_STARTED,
   normalizeAgenticRunStatus,
   type AgenticRunReviewMetadata
 } from '../../models';
@@ -170,9 +171,15 @@ export async function forwardAgenticTrigger(
     if (!result.queued && result.reason === 'already-exists') {
       const existingStatus = normalizeAgenticRunStatus(result.agentic?.Status);
       const hasActiveRun = Boolean(result.agentic) && AGENTIC_RUN_ACTIVE_STATUSES.has(existingStatus);
+      // Only a notStarted run may be (re)started from this automatic trigger path. Creating another
+      // instance of an existing reference (or any repeat trigger) must never restart a run that is
+      // active, awaiting review, approved, or otherwise settled — doing so clobbered approved/in-review
+      // results (the reported bug). Enrichment is shared at the Artikel_Nummer level, so a new instance
+      // needs no fresh run. Explicit operator restarts go through the dedicated /agentic/restart path.
+      const isUnstarted = existingStatus === AGENTIC_RUN_STATUS_NOT_STARTED;
 
-      if (hasActiveRun) {
-        logger.info?.('[agentic-trigger] Existing active agentic run detected; returning canonical run', {
+      if (hasActiveRun || !isUnstarted) {
+        logger.info?.('[agentic-trigger] Existing agentic run detected; leaving it untouched', {
           context,
           artikelNummer,
           status: result.agentic?.Status ?? null
@@ -185,7 +192,7 @@ export async function forwardAgenticTrigger(
         };
       }
 
-      logger.info?.('[agentic-trigger] Existing non-active agentic run detected; attempting restart', {
+      logger.info?.('[agentic-trigger] Existing notStarted agentic run detected; attempting restart', {
         context,
         artikelNummer,
         status: result.agentic?.Status ?? null
