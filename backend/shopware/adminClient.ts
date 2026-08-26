@@ -38,6 +38,9 @@ export interface ShopwareProductSnapshot {
   // Variant groups (instances grouped by distinct InstanceSpecs). When ≥2, the product becomes a
   // variant parent and one child is synced per group.
   variants?: ShopwareVariantInput[];
+  // Category display names to link the product to. Only EXISTING Shopware categories of these names are
+  // linked (never created); an unmatched name is skipped. Additive — existing links are not removed.
+  categories?: string[];
 }
 
 // One product image: uploadable bytes + a deterministic Shopware media file name (extension separate).
@@ -91,6 +94,8 @@ export class ShopwareAdminClient {
   // Property group/option ids are stable once created, so cache across jobs to avoid re-resolving.
   private readonly groupCache = new Map<string, string>();
   private readonly optionCache = new Map<string, string>();
+  // Category-name → id (or null when no such category exists). Cached across jobs; the tree is user-owned.
+  private readonly categoryCache = new Map<string, string | null>();
 
   constructor(private readonly config: ShopwareConfig, options: ShopwareAdminClientOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
@@ -380,6 +385,48 @@ export class ShopwareAdminClient {
     }
   }
 
+  // Resolve a category id by its name (default language). Returns null (cached) when no such category
+  // exists — categories are user-owned, so we link to existing ones and never create.
+  private async resolveCategoryIdByName(name: string): Promise<string | null> {
+    const key = name.trim();
+    if (!key) return null;
+    if (this.categoryCache.has(key)) return this.categoryCache.get(key) ?? null;
+    const res = await this.request<{ data?: Array<{ id: string }> }>('POST', '/api/search/category', {
+      filter: [{ type: 'equals', field: 'name', value: key }],
+      includes: { category: ['id'] },
+      limit: 2
+    });
+    const rows = res?.data ?? [];
+    if (!rows.length) {
+      this.logger.warn?.('[shopware-admin-client] No Shopware category named "%s"; skipping link', key);
+      this.categoryCache.set(key, null);
+      return null;
+    }
+    if (rows.length > 1) {
+      // Name isn't unique across the tree; take the first and note the ambiguity so it can be mapped.
+      this.logger.warn?.('[shopware-admin-client] Multiple Shopware categories named "%s"; linking the first', key);
+    }
+    const id = rows[0].id;
+    this.categoryCache.set(key, id);
+    return id;
+  }
+
+  // Link the product to existing Shopware categories matching `names`. Additive: we PATCH the desired
+  // links but never remove existing ones (the category tree is user-owned — a manual assignment must
+  // survive). Unmatched names are skipped (self-heals on re-sync once the category exists).
+  async syncProductCategories(productId: string, names: string[]): Promise<void> {
+    const ids = new Set<string>();
+    for (const name of names) {
+      const id = await this.resolveCategoryIdByName(name);
+      if (id) ids.add(id);
+    }
+    if (!ids.size) return;
+    await this.request('PATCH', `/api/product/${productId}`, {
+      id: productId,
+      categories: [...ids].map((id) => ({ id }))
+    });
+  }
+
   // Ensure a Shopware media entity exists for the image (search by fileName; create + upload the binary
   // if missing), returning its media id. Idempotent: a re-sync reuses the existing media.
   private async ensureMedia(image: ShopwareImageInput): Promise<string | null> {
@@ -480,6 +527,9 @@ export class ShopwareAdminClient {
 
     if (result.productId && snapshot.properties && Object.keys(snapshot.properties).length > 0) {
       await this.syncProductProperties(result.productId, snapshot.properties);
+    }
+    if (result.productId && snapshot.categories && snapshot.categories.length > 0) {
+      await this.syncProductCategories(result.productId, snapshot.categories);
     }
     if (result.productId && snapshot.images && snapshot.images.length > 0) {
       await this.syncProductImages(result.productId, snapshot.images);

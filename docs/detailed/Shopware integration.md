@@ -43,6 +43,15 @@ This document captures the current architecture, required configuration, and ope
   associations to exactly the desired set (PATCH full list + 404-tolerant DELETE of stale links). Array
   values become multiple options. Property failures share the retry classification; stock is written
   first so it never depends on properties succeeding.
+- **Categories.** After properties, `syncProductCategories` (on the parent) links the product to **existing**
+  Shopware categories. The snapshot's `categories` are display names resolved from the ref's category codes
+  (`db.resolveShopwareCategoryNames`): for the primary **A** and secondary **B** pairs, each `Unterkategorien`
+  code → its sub label + its parent main label (main labels de-underscored, e.g. `Laptop_und_Zubehör` →
+  `Laptop und Zubehör`), via the static `models/item-category-lookups` taxonomy. The client resolves each name
+  to a category id (`/api/search/category` on `name`, cached; **never creates** — the tree is user-owned) and
+  PATCHes `product.categories`. **Additive:** existing links are not removed, so a manual assignment survives;
+  an unmatched name is skipped (self-heals on re-sync once the category exists). Ambiguous names (same name in
+  two branches) link the first and log.
 - **Images (P3).** `syncProductImages` (on the parent, after properties) uploads each of the ref's images
   as **binary** to Shopware — resolved from `Grafikname` (cover) + `ImageNames` via `lib/shopware-media.ts`
   (on-disk files under the media root, folder = 6-digit Artikel_Nummer). `ensureMedia` searches `media` by a

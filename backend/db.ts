@@ -2,6 +2,7 @@ import { randomBytes } from 'crypto';
 import { query, queryOne, execute, insert, withTransaction, namedQuery, namedQueryOne, namedExecute, getPoolInstance, execBatch } from './db-client';
 import { SHOPWARE_SYNC_ENABLED } from './config';
 import { describeQuality } from '../models/quality';
+import { buildItemCategoryLookups } from '../models/item-category-lookups';
 import { resolveShopwareImageInputs } from './lib/shopware-media';
 import type { ShopwareImageInput } from './shopware/adminClient';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
@@ -2704,6 +2705,9 @@ export interface ShopwareSyncSnapshot {
   // Variant groups: the ref's instances grouped by distinct InstanceSpecs combination. Empty when the
   // ref has <2 distinct spec combos (→ single-product path, using the summed `stock` above).
   variants: ShopwareVariantGroup[];
+  // Category display names (main + sub, for the primary A and secondary B pairs) resolved from the ref's
+  // category codes. The Shopware client links the product to EXISTING categories of these names (never creates).
+  categories: string[];
 }
 
 // One Shopware variant = one physical instance of a ref (itemUUID axis makes the signature unique per
@@ -2757,6 +2761,39 @@ export function buildVariantGroups(
   return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
 }
 
+// Category code → label lookups, built once (module load) since the taxonomy is static.
+const CATEGORY_LOOKUPS = buildItemCategoryLookups();
+
+// Resolve a ref's category codes to Shopware category display names. Main labels are canonicalized with
+// underscores (e.g. "Laptop_und_Zubehör"); Shopware category names use spaces, so de-underscore them.
+// For each pair (primary A, secondary B): add the sub's own label + its parent main label; if only the
+// main code resolves, add just the main. De-duplicated. The Shopware client links to categories of these
+// names that already exist (never creates), so an unmatched label is simply skipped.
+export function resolveShopwareCategoryNames(
+  hauptA: number | null, unterA: number | null,
+  hauptB: number | null, unterB: number | null
+): string[] {
+  const names = new Set<string>();
+  const deUnderscore = (s: string) => s.replace(/_/g, ' ').trim();
+  const addPair = (haupt: number | null, unter: number | null) => {
+    if (unter != null) {
+      const sub = CATEGORY_LOOKUPS.unter.get(Number(unter));
+      if (sub) {
+        if (sub.parentLabel) names.add(deUnderscore(sub.parentLabel));
+        if (sub.label) names.add(deUnderscore(sub.label));
+        return;
+      }
+    }
+    if (haupt != null) {
+      const main = CATEGORY_LOOKUPS.haupt.get(Number(haupt));
+      if (main?.label) names.add(deUnderscore(main.label));
+    }
+  };
+  addPair(hauptA, unterA);
+  addPair(hauptB, unterB);
+  return [...names];
+}
+
 // Agentic approval: ReviewState is authoritative when set, else fall back to Status. Mirrors
 // resolveAgenticApproval in actions/export-items.ts (kept inline to avoid an actions→db import cycle).
 function isAgenticApproved(reviewState: string | null, status: string | null): boolean {
@@ -2787,6 +2824,10 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
     weightKg: number | null;
     agenticStatus: string | null;
     agenticReviewState: string | null;
+    hauptA: number | null;
+    unterA: number | null;
+    hauptB: number | null;
+    unterB: number | null;
     stock: string | number;
   }>(
     // Approval comes from scalar subselects (LIMIT 1) so a ref with multiple agentic_runs never
@@ -2808,11 +2849,15 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
             r."Gewicht_kg" AS "weightKg",
             (SELECT ar."Status" FROM agentic_runs ar WHERE ar."Artikel_Nummer" = r."Artikel_Nummer" ORDER BY ar."LastAttemptAt" DESC NULLS LAST LIMIT 1) AS "agenticStatus",
             (SELECT ar."ReviewState" FROM agentic_runs ar WHERE ar."Artikel_Nummer" = r."Artikel_Nummer" ORDER BY ar."LastAttemptAt" DESC NULLS LAST LIMIT 1) AS "agenticReviewState",
+            ROUND(NULLIF(r."Hauptkategorien_A", '')::NUMERIC)::INTEGER AS "hauptA",
+            ROUND(NULLIF(r."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "unterA",
+            ROUND(NULLIF(r."Hauptkategorien_B", '')::NUMERIC)::INTEGER AS "hauptB",
+            ROUND(NULLIF(r."Unterkategorien_B", '')::NUMERIC)::INTEGER AS "unterB",
             COALESCE(SUM(COALESCE(i."Auf_Lager",0)),0) AS "stock"
        FROM item_refs r
        LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
       WHERE r."Artikel_Nummer" = $1
-      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext", r."Grafikname", r."ImageNames", r."Shopartikel", r."Veröffentlicht_Status", r."Länge_mm", r."Breite_mm", r."Höhe_mm", r."Gewicht_kg"`,
+      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext", r."Grafikname", r."ImageNames", r."Shopartikel", r."Veröffentlicht_Status", r."Länge_mm", r."Breite_mm", r."Höhe_mm", r."Gewicht_kg", r."Hauptkategorien_A", r."Unterkategorien_A", r."Hauptkategorien_B", r."Unterkategorien_B"`,
     [artikelNummer]
   );
   if (!row) {
@@ -2849,7 +2894,8 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
     active: normalizePublishedValue(row.published) === 'yes',
     properties,
     images: resolveShopwareImageInputs(row.productNumber, row.grafikname, row.imageNames),
-    variants
+    variants,
+    categories: resolveShopwareCategoryNames(row.hauptA, row.unterA, row.hauptB, row.unterB)
   };
 }
 
