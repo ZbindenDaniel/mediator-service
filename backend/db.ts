@@ -2706,18 +2706,18 @@ export interface ShopwareSyncSnapshot {
   variants: ShopwareVariantGroup[];
 }
 
-// One Shopware variant = one distinct InstanceSpecs combination within a ref. Options are the spec
-// axis→value pairs; stock is the summed on-hand of the instances in the group.
+// One Shopware variant = one physical instance of a ref (itemUUID axis makes the signature unique per
+// instance). Options are the spec axis→value pairs plus Zustand + itemUUID; stock is the instance's on-hand.
 export interface ShopwareVariantGroup {
-  // Stable signature (sorted key=value) → deterministic child productNumber suffix on re-sync.
+  // Stable signature (sorted key=value, incl. itemUUID) → deterministic child productNumber suffix on re-sync.
   key: string;
   options: Record<string, string>;
   stock: number;
   instanceIds: string[];
 }
 
-// Group a ref's instances by their InstanceSpecs signature. Instances with no specs collapse under an
-// empty signature. Returns groups sorted by key for stable ordering.
+// Build one variant group per instance: options are the InstanceSpecs axes + Zustand + itemUUID. The
+// itemUUID axis makes every signature unique, so instances never merge. Returns groups sorted by key.
 export function buildVariantGroups(
   instances: Array<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null; Quality?: number | null }>,
   artikelNummer: string
@@ -2740,6 +2740,10 @@ export function buildVariantGroups(
     if (qualityLabel && qualityLabel !== '?') {
       options.Zustand = qualityLabel;
     }
+    // itemUUID is a variant axis so each physical instance is its own selectable variant (1:1) — the
+    // operator switches variants on this property in Shopware and groups the spec axes as descriptive.
+    // Because the UUID is unique per instance, instances no longer merge: a variant = exactly one item.
+    options.itemUUID = inst.ItemUUID;
     const key = Object.keys(options).sort().map((k) => `${k}=${options[k]}`).join('|');
     const existing = byKey.get(key);
     const stock = Math.max(0, Number(inst.Auf_Lager) || 0);
@@ -2820,8 +2824,8 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
   const description = row.description && row.description !== row.name ? row.description : null;
   const shopEligible = Number(row.shopartikel) === 1 && isAgenticApproved(row.agenticReviewState, row.agenticStatus);
 
-  // Variant grouping: use variants only when ≥2 distinct spec combos AND every group carries options
-  // (a group with no InstanceSpecs can't be a valid Shopware variant). Otherwise → single-product path.
+  // Variant grouping: itemUUID is always an axis, so each instance is its own variant. Use the variant
+  // path when a ref has ≥2 instances; a single-instance ref stays a plain product (no needless parent).
   const instances = await query<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null; Quality: number | null }>(
     `SELECT "ItemUUID", "InstanceSpecs", "Auf_Lager", "Quality" FROM items WHERE "Artikel_Nummer" = $1`,
     [artikelNummer]

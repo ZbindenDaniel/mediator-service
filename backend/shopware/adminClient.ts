@@ -86,6 +86,8 @@ export class ShopwareAdminClient {
   private cachedTaxRate: number | null = null;
   private cachedCurrencyId: string | null;
   private cachedSalesChannel: { id: string | null; currencyId: string | null } | null = null;
+  // Product-media default folder id (resolved once). null = resolved-but-absent; undefined = not yet tried.
+  private cachedProductMediaFolderId: string | null | undefined = undefined;
   // Property group/option ids are stable once created, so cache across jobs to avoid re-resolving.
   private readonly groupCache = new Map<string, string>();
   private readonly optionCache = new Map<string, string>();
@@ -225,6 +227,26 @@ export class ShopwareAdminClient {
     // Cache only a real answer (channel id present), so a transient failure doesn't pin defaults.
     if (resolved.id) this.cachedSalesChannel = resolved;
     return resolved;
+  }
+
+  // Resolve the "Product Media" default folder id. Media created outside a folder has no thumbnail
+  // configuration, so Shopware never generates thumbnails for it and admin/storefront previews render
+  // blank — placing product images in this folder is what makes the preview work.
+  private async resolveProductMediaFolderId(): Promise<string | null> {
+    if (this.cachedProductMediaFolderId !== undefined) return this.cachedProductMediaFolderId;
+    let folderId: string | null = null;
+    try {
+      const res = await this.request<{ data?: Array<{ id?: string }> }>('POST', '/api/search/media-folder', {
+        filter: [{ type: 'equals', field: 'defaultFolder.entity', value: 'product' }],
+        includes: { media_folder: ['id'] },
+        limit: 1
+      });
+      folderId = res?.data?.[0]?.id ?? null;
+    } catch (err) {
+      this.logger.warn?.('[shopware-admin-client] Failed to resolve product media folder; uploading unassigned', err);
+    }
+    this.cachedProductMediaFolderId = folderId;
+    return folderId;
   }
 
   private async resolveCurrencyId(): Promise<string> {
@@ -370,7 +392,9 @@ export class ShopwareAdminClient {
     if (existing) return existing;
 
     const mediaId = uuid32();
-    await this.request('POST', '/api/media', { id: mediaId }); // empty media entity
+    // Assign the product-media folder so Shopware generates thumbnails (else the preview is blank).
+    const mediaFolderId = await this.resolveProductMediaFolderId();
+    await this.request('POST', '/api/media', mediaFolderId ? { id: mediaId, mediaFolderId } : { id: mediaId });
     let bytes: Buffer;
     try {
       bytes = await image.load();

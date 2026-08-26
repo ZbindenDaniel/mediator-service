@@ -46,17 +46,22 @@ This document captures the current architecture, required configuration, and ope
 - **Images (P3).** `syncProductImages` (on the parent, after properties) uploads each of the ref's images
   as **binary** to Shopware — resolved from `Grafikname` (cover) + `ImageNames` via `lib/shopware-media.ts`
   (on-disk files under the media root, folder = 6-digit Artikel_Nummer). `ensureMedia` searches `media` by a
-  deterministic fileName (reuse) else creates + uploads (`POST /api/_action/media/{id}/upload`, raw bytes);
-  the product's `media` list is PATCHed with `coverId` = the first image. Variant children inherit parent media.
-- **Variants (P2c).** When a ref's instances split into **≥2 distinct InstanceSpecs combinations** (and every
-  combo has specs), the product becomes a **variant parent**: `db.buildVariantGroups` groups instances by a
-  canonical spec signature (stock = summed matching instances); `adminClient.syncVariants` resolves each combo's
-  spec values to property options (P2a machinery), PATCHes the parent's `configuratorSettings` with the axis
+  deterministic fileName (reuse) else creates the entity **in the Product Media default folder**
+  (`mediaFolderId` resolved once via `/api/search/media-folder` on `defaultFolder.entity=product`, cached) so
+  Shopware generates thumbnails and the preview renders — then uploads (`POST /api/_action/media/{id}/upload`,
+  raw bytes); the product's `media` list is PATCHed with `coverId` = the first image. Variant children inherit parent media.
+- **Variants (P2c).** Each instance carries its `ItemUUID` as a variant axis, so **one variant = one physical
+  instance** (the UUID makes every signature unique — instances never merge). When a ref has **≥2 instances** the
+  product becomes a **variant parent**: `db.buildVariantGroups` builds one group per instance with options =
+  InstanceSpecs axes + `Zustand` (quality) + `itemUUID`; `adminClient.syncVariants` resolves each group's option
+  values to property options (P2a machinery), PATCHes the parent's `configuratorSettings` with the axis
   options (each entry carries a **deterministic id** `sha1(parentId:optionId)` so a re-sync upserts the same
-  configurator row instead of re-inserting it and violating `uniq.product_configurator_setting`), and upserts one **child product** per combo (`productNumber = parent.<sha1(sig)>`, `parentId` +
-  `options` + summed stock, inheriting price/tax/visibility from the parent). Existing children get stock/active
-  updated; a combo that no longer exists is retired (`active:false, stock:0`). Each instance's `ShopwareVariantId`
-  is persisted. <2 combos, or any spec-less instance → the single-product path (summed stock on the ref product).
+  configurator row instead of re-inserting it and violating `uniq.product_configurator_setting`), and upserts one
+  **child product** per instance (`productNumber = parent.<sha1(sig)>`, `parentId` + `options` + the instance's
+  stock, inheriting price/tax/visibility from the parent). Existing children get stock/active updated; an instance
+  that no longer exists is retired (`active:false, stock:0`). Each instance's `ShopwareVariantId` is persisted.
+  A single-instance ref → the single-product path (summed stock on the ref product). The operator switches the
+  storefront configurator on `itemUUID` and groups the spec axes as descriptive (they aren't customer-configurable).
 - Failure classification: 4xx (except 408/429) is terminal; network / 408 / 429 / 5xx retry with exponential
   backoff. A deleted reference (no snapshot) drains as success.
 
