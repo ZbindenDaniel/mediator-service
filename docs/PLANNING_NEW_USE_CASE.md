@@ -91,7 +91,7 @@ This is the ready layer.
 ### Contract gaps
 - **G‑K1** Contracts are keyed to **subcategory codes**. They are "ready" only if the new use case reuses that keying. A use case that does not fit the numeric subcategory model has no contract dimension to hang off.
 - **G‑K2** Same global‑namespace problem as categories: contract files are global, not scoped per use case. Two use cases sharing an instance would collide on `<subcode>.json`.
-- **G‑K3** Doc drift: `contracts/README.md` refers to a `disassembly/` folder, but the directory on disk is `assembly/`. Update the README when touching this area.
+- **G‑K3** ✅ *Resolved on main* — the `disassembly/`→`assembly/` doc drift (`contracts/README.md` and related READMEs) was fixed by the intake-image/contract-docs sync work. No action left.
 
 ---
 
@@ -161,9 +161,9 @@ out of code so a new deployment is a config/data change, not a fork.
 3. **Turn the remaining §4 domain hardcodes into config** as needed:
    shelf locations, ERP booking group / import‑form fields, CO₂ scoring — only
    those the new use case actually diverges on.
-4. **Cheap wins regardless:** fix the `disassembly/` vs `assembly/` doc drift
-   (G‑K3); add the taxonomy generator (step 1) since it de‑risks any category
-   change even for the existing deployment.
+4. **Cheap win regardless:** add the taxonomy generator (step 1) since it
+   de‑risks any category change even for the existing deployment. (The
+   `disassembly/`→`assembly/` doc drift, G‑K3, is already fixed on main.)
 
 ---
 
@@ -298,7 +298,7 @@ the current architecture, so neither needs to be sprinkled across handlers.
 ### 12.1 The two leverage points that make this cheap
 
 - **Backend chokepoint.** Every API request resolves through *one* line —
-  `backend/server.ts:960` finds the matching action and calls
+  `backend/server.ts:971` finds the matching action and calls
   `action.handle(req, res, ctx)` with a single `ctx` object. Anything injected
   into `ctx`, or any gate placed *before* `handle`, applies to the entire API for
   free.
@@ -324,7 +324,7 @@ subsystem), not per-endpoint. This is the 80/20.
 **Backend enforcement (hard gate, at the chokepoint):**
 - Extend the `Action` interface with an optional `feature?: string` tag; each
   action file declares which feature it belongs to (most declare none = always on).
-- At `server.ts:960`, skip / `404` any action whose `feature` is disabled. One
+- At `server.ts:971`, skip / `404` any action whose `feature` is disabled. One
   gate covers every route. Background jobs (nightly sync, print worker, agentic
   dispatch) check the same manifest at their entry point.
 - This *supersedes* the scattered `*_ENABLED` env vars (`SHOPWARE_SYNC_ENABLED`,

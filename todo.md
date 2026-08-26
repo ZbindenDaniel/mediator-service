@@ -374,7 +374,7 @@
    - **G‑FF1 Feature-flag / capability system.** No unified toggle exists (ad-hoc
      `*_ENABLED` env vars + client-side "simple mode" CSS). **Proposed (plan
      §12.2):** one capability manifest → backend hard-gate at the dispatch
-     chokepoint (`server.ts:960`, `feature?` tag on `Action`) + frontend soft-hide
+     chokepoint (`server.ts:971`, `feature?` tag on `Action`) + frontend soft-hide
      via a served `GET /api/app-config` and a `useFeature` hook reusing the
      `simpleMode` CSS-class pattern. Coarse (1 flag/subsystem); prerequisite for
      opting out AI / printing / shopware / intake / stubs / kivitendo.
@@ -391,8 +391,8 @@
      scoping, so two use cases cannot coexist on one instance without new design.
    - **G‑F1 / G‑F2** No use‑case/domain/tenant dimension exists in config at all;
      "change the config for a use case" is greenfield.
-   - **G‑K3** (cheap) `contracts/README.md` says `disassembly/` but the dir is
-     `assembly/` — fix the doc drift.
+   - **G‑K3** ✅ resolved on main (the `disassembly/`→`assembly/` doc drift was
+     fixed by the intake-image/contract-docs sync work).
    - Domain hardcodes to revisit for a new use case: `models/shelf-locations.ts`
      (revamp sites), ERP booking group `453` (`backend/config.ts:366`),
      `ERP_IMPORT_FORM_*`, `contracts/impact/co2.json`.
