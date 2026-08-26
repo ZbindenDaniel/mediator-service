@@ -410,7 +410,7 @@ export class ShopwareAdminClient {
     const res = await this.fetchWithTimeout(url.toString(), {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': image.contentType },
-      body: bytes
+      body: bytes as BodyInit
     });
     if (!res.ok) {
       const text = await res.text().catch(() => '');
