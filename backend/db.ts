@@ -2,6 +2,8 @@ import { randomBytes } from 'crypto';
 import { query, queryOne, execute, insert, withTransaction, namedQuery, namedQueryOne, namedExecute, getPoolInstance, execBatch } from './db-client';
 import { SHOPWARE_SYNC_ENABLED } from './config';
 import { describeQuality } from '../models/quality';
+import { resolveShopwareImageInputs } from './lib/shopware-media';
+import type { ShopwareImageInput } from './shopware/adminClient';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
   ShopwareSyncQueueEntry,
@@ -2697,6 +2699,8 @@ export interface ShopwareSyncSnapshot {
   active: boolean;
   // Parsed Langtext spec map (group → value(s)) for property sync; null when Langtext is freeform/empty.
   properties: Record<string, string | string[]> | null;
+  // Product images (cover first) resolved from Grafikname/ImageNames to uploadable descriptors.
+  images: ShopwareImageInput[];
   // Variant groups: the ref's instances grouped by distinct InstanceSpecs combination. Empty when the
   // ref has <2 distinct spec combos (→ single-product path, using the summed `stock` above).
   variants: ShopwareVariantGroup[];
@@ -2769,6 +2773,8 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
     grossPrice: number | null;
     shopwareProductId: string | null;
     langtext: string | null;
+    grafikname: string | null;
+    imageNames: string | null;
     shopartikel: number | null;
     published: string | null;
     lengthMm: number | null;
@@ -2788,6 +2794,8 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
             r."Verkaufspreis" AS "grossPrice",
             r."ShopwareProductId" AS "shopwareProductId",
             r."Langtext" AS "langtext",
+            r."Grafikname" AS "grafikname",
+            r."ImageNames" AS "imageNames",
             r."Shopartikel" AS "shopartikel",
             r."Veröffentlicht_Status" AS "published",
             r."Länge_mm" AS "lengthMm",
@@ -2800,7 +2808,7 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
        FROM item_refs r
        LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
       WHERE r."Artikel_Nummer" = $1
-      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext", r."Shopartikel", r."Veröffentlicht_Status", r."Länge_mm", r."Breite_mm", r."Höhe_mm", r."Gewicht_kg"`,
+      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext", r."Grafikname", r."ImageNames", r."Shopartikel", r."Veröffentlicht_Status", r."Länge_mm", r."Breite_mm", r."Höhe_mm", r."Gewicht_kg"`,
     [artikelNummer]
   );
   if (!row) {
@@ -2836,6 +2844,7 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
     shopEligible,
     active: normalizePublishedValue(row.published) === 'yes',
     properties,
+    images: resolveShopwareImageInputs(row.productNumber, row.grafikname, row.imageNames),
     variants
   };
 }

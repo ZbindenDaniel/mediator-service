@@ -43,6 +43,11 @@ This document captures the current architecture, required configuration, and ope
   associations to exactly the desired set (PATCH full list + 404-tolerant DELETE of stale links). Array
   values become multiple options. Property failures share the retry classification; stock is written
   first so it never depends on properties succeeding.
+- **Images (P3).** `syncProductImages` (on the parent, after properties) uploads each of the ref's images
+  as **binary** to Shopware — resolved from `Grafikname` (cover) + `ImageNames` via `lib/shopware-media.ts`
+  (on-disk files under the media root, folder = 6-digit Artikel_Nummer). `ensureMedia` searches `media` by a
+  deterministic fileName (reuse) else creates + uploads (`POST /api/_action/media/{id}/upload`, raw bytes);
+  the product's `media` list is PATCHed with `coverId` = the first image. Variant children inherit parent media.
 - **Variants (P2c).** When a ref's instances split into **≥2 distinct InstanceSpecs combinations** (and every
   combo has specs), the product becomes a **variant parent**: `db.buildVariantGroups` groups instances by a
   canonical spec signature (stock = summed matching instances); `adminClient.syncVariants` resolves each combo's

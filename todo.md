@@ -17,7 +17,9 @@
   **Variant follow-ups:** validate `configuratorSettings`/child-`options` write semantics on a live Shopware (as with P2a m2n); ragged specs (instance missing an axis) fall back to single-product; a lone combo's InstanceSpecs aren't surfaced as parent properties; no per-variant price.
   **#942:** quality → variant axis (`Zustand`); admin **Shop-Sync** button + `POST /api/admin/shopware/sync` (enqueues all shop refs, also backfills). Contracts + CO₂ badges **dropped** (all properties come from items; no benefit).
   **Open — reverse/stock-back sync:** orders in Shopware must book out mediator stock. Recommended: `checkout.order.placed` webhook → map ordered variant → decrement a matching instance's `Auf_Lager`; poll fallback. Design in the runbook ("Reverse sync"); not built. Open: which instance to book out when a variant groups several (FIFO?), Shopware-side corrections.
-  **Next (P3+):** media (images/docs) → accessory cross-selling → reverse stock-back sync.
+  **#943 (P3 images done):** product images uploaded as binary (`lib/shopware-media.ts` + `adminClient.syncProductImages`), cover = Grafikname. Validate the `media` m2n + `coverId` write on a live shop; stale-image removal deferred.
+  **Documents (decision pending):** (a) Shopware product downloads (customer-facing manuals), (b) media + custom-field link list, or (c) don't upload — external links in a custom field (internal docs). Not built.
+  **Next (P4+):** accessory cross-selling → reverse stock-back sync.
 
 - **ERP export approval gate:** Only approved items may be exported/synced to the ERP — exporting unreviewed items is too dangerous. Enforced as a single choke point in `stageItemsExport` for `erp` mode (covers `/api/sync/erp`, `/api/export/items?mode=erp`, `/api/export/data?mode=erp`) plus an early filter in `sync-erp`. Configurable via `ERP_SYNC_REQUIRE_APPROVAL` (default `true`); backup-mode exports are unaffected.
 - **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.

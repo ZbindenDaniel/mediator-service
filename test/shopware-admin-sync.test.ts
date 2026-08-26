@@ -16,7 +16,9 @@ interface Call { url: string; method: string; body?: any }
 function mkFetch(routes: Array<{ match: (u: string, i: any) => boolean; res: (u: string, i: any) => { status: number; body?: any } }>, calls: Call[]) {
   return async (url: unknown, init: any = {}) => {
     const u = String(url);
-    calls.push({ url: u, method: init.method || 'GET', body: init.body ? JSON.parse(init.body) : undefined });
+    // Only JSON requests have a string body; binary media uploads send a Buffer — leave body undefined.
+    const parsedBody = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
+    calls.push({ url: u, method: init.method || 'GET', body: parsedBody });
     const r = routes.find((x) => x.match(u, init));
     const { status, body } = r ? r.res(u, init) : { status: 404, body: { errors: [{ code: 'NO_MATCH' }] } };
     return { ok: status >= 200 && status < 300, status, async json() { return body ?? {}; }, async text() { return JSON.stringify(body ?? {}); } } as unknown as Response;
@@ -120,6 +122,35 @@ describe('ShopwareAdminClient.upsertProduct', () => {
     const propPatch = calls.filter((c) => c.method === 'PATCH' && /\/api\/product\/prodX$/.test(c.url)).find((c) => Array.isArray(c.body.properties));
     expect(propPatch?.body.properties.length).toBe(1);
     expect(calls.some((c) => c.method === 'DELETE' && /properties\/staleopt$/.test(c.url))).toBe(true);
+  });
+});
+
+describe('ShopwareAdminClient image sync', () => {
+  test('uploads new images (binary), reuses existing media, links with cover = first', async () => {
+    const calls: Call[] = [];
+    const fv = (body: any, f: string) => (body?.filter || []).find((x: any) => x.field === f)?.value;
+    const admin = createShopwareAdminClient(cfg, { logger: log, fetchImpl: mkFetch([
+      tokenRoute,
+      { match: (u) => u.includes('/api/search/media'), res: (_u, i) => {
+          const body = i.body ? JSON.parse(i.body) : undefined;
+          return fv(body, 'fileName') === '000123-b' ? { status: 200, body: { data: [{ id: 'MED_B' }] } } : { status: 200, body: { data: [] } };
+        } },
+      { match: (u, i) => /\/api\/media$/.test(u) && i.method === 'POST', res: () => ({ status: 204 }) },
+      { match: (u) => u.includes('/_action/media/') && u.includes('/upload'), res: () => ({ status: 204 }) },
+      { match: (u, i) => /\/api\/product\/PROD$/.test(u) && i.method === 'PATCH', res: () => ({ status: 204 }) }
+    ], calls) });
+
+    await (admin as unknown as { syncProductImages: (id: string, imgs: unknown[]) => Promise<void> }).syncProductImages('PROD', [
+      { mediaFileName: '000123-a', extension: 'jpg', contentType: 'image/jpeg', load: async () => Buffer.from('AAA') },
+      { mediaFileName: '000123-b', extension: 'png', contentType: 'image/png', load: async () => Buffer.from('BBB') }
+    ]);
+
+    expect(calls.filter((c) => c.method === 'POST' && /\/api\/media$/.test(c.url)).length).toBe(1); // img2 reused
+    expect(calls.some((c) => c.url.includes('/upload') && c.url.includes('fileName=000123-a'))).toBe(true);
+    const patch = calls.find((c) => c.method === 'PATCH' && /\/api\/product\/PROD$/.test(c.url));
+    expect(patch?.body.media.length).toBe(2);
+    expect(patch?.body.coverId).toBe(patch?.body.media[0].id);
+    expect(patch?.body.media.some((m: any) => m.mediaId === 'MED_B')).toBe(true);
   });
 });
 

@@ -33,9 +33,19 @@ export interface ShopwareProductSnapshot {
   shopwareProductId?: string | null;
   // Parsed Langtext/Spezifikationen → filterable Shopware properties (group name → option value(s)).
   properties?: Record<string, string | string[]> | null;
+  // Product images (cover first), uploaded as binary and associated to the product.
+  images?: ShopwareImageInput[];
   // Variant groups (instances grouped by distinct InstanceSpecs). When ≥2, the product becomes a
   // variant parent and one child is synced per group.
   variants?: ShopwareVariantInput[];
+}
+
+// One product image: uploadable bytes + a deterministic Shopware media file name (extension separate).
+export interface ShopwareImageInput {
+  mediaFileName: string;
+  extension: string;
+  contentType: string;
+  load: () => Promise<Buffer>;
 }
 
 // One variant to sync: its defining spec options, stock, and the mediator instances it represents.
@@ -348,6 +358,67 @@ export class ShopwareAdminClient {
     }
   }
 
+  // Ensure a Shopware media entity exists for the image (search by fileName; create + upload the binary
+  // if missing), returning its media id. Idempotent: a re-sync reuses the existing media.
+  private async ensureMedia(image: ShopwareImageInput): Promise<string | null> {
+    const found = await this.request<{ data?: Array<{ id: string }> }>('POST', '/api/search/media', {
+      filter: [{ type: 'equals', field: 'fileName', value: image.mediaFileName }],
+      includes: { media: ['id'] },
+      limit: 1
+    });
+    const existing = found?.data?.[0]?.id;
+    if (existing) return existing;
+
+    const mediaId = uuid32();
+    await this.request('POST', '/api/media', { id: mediaId }); // empty media entity
+    let bytes: Buffer;
+    try {
+      bytes = await image.load();
+    } catch (err) {
+      this.logger.warn?.('[shopware-admin-client] Failed to read image bytes; skipping', { fileName: image.mediaFileName, err });
+      return null;
+    }
+    // Binary upload: raw bytes with the image content type; Shopware names it via query params.
+    const url = new URL(`/api/_action/media/${mediaId}/upload`, this.baseUrl);
+    url.searchParams.set('extension', image.extension);
+    url.searchParams.set('fileName', image.mediaFileName);
+    const token = await this.getToken();
+    const res = await this.fetchWithTimeout(url.toString(), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': image.contentType },
+      body: bytes
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      this.logger.warn?.('[shopware-admin-client] Media upload failed; skipping image', {
+        fileName: image.mediaFileName,
+        status: res.status,
+        detail: summarizeShopwareErrorBody(text)
+      });
+      return null;
+    }
+    return mediaId;
+  }
+
+  // Upload each image and set the product's media list (cover = first). Deterministic product_media ids
+  // keep it idempotent. A failed image is skipped, never fatal to the rest of the sync.
+  async syncProductImages(productId: string, images: ShopwareImageInput[]): Promise<void> {
+    const media: Array<{ id: string; mediaId: string; position: number }> = [];
+    let position = 0;
+    for (const image of images) {
+      const mediaId = await this.ensureMedia(image);
+      if (!mediaId) continue;
+      const productMediaId = createHash('sha1').update(`${productId}:${mediaId}`).digest('hex').slice(0, 32);
+      media.push({ id: productMediaId, mediaId, position: position++ });
+    }
+    if (!media.length) return;
+    await this.request('PATCH', `/api/product/${productId}`, {
+      id: productId,
+      media,
+      coverId: media[0].id
+    });
+  }
+
   // Idempotent product sync. When the item is NOT shop-eligible (not a shop article, or unapproved) it
   // is never published: deactivated if it already exists in Shopware, skipped otherwise. When eligible,
   // full mediator-authoritative data (name, description, price, active, stock) is written on both create
@@ -385,6 +456,9 @@ export class ShopwareAdminClient {
 
     if (result.productId && snapshot.properties && Object.keys(snapshot.properties).length > 0) {
       await this.syncProductProperties(result.productId, snapshot.properties);
+    }
+    if (result.productId && snapshot.images && snapshot.images.length > 0) {
+      await this.syncProductImages(result.productId, snapshot.images);
     }
     if (result.productId && snapshot.variants && snapshot.variants.length >= 2) {
       result.variantAssignments = await this.syncVariants(
