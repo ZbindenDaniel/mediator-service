@@ -1,12 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { requireIntakeAuth } from '../utils/intake-auth';
-import { queryOne } from '../db-client';
+import { queryOne, query } from '../db-client';
+import { IN_DEVICE_COMPONENT_SQL } from '../db';
 import { loadGeneralContract, loadSubCategoryContract, assemblyToQualityContract } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveIntakeQuestions } from '../lib/intake-quality-map';
 import { searchItemReferences } from './search';
-import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeQuestion, IntakeDetectedSpecView } from '../../models/intake';
+import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeInstanceCandidate, IntakeQuestion, IntakeDetectedSpecView } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -68,13 +69,71 @@ async function findRefCandidates(vendor: string | null | undefined, model: strin
   // else — token-based fuzzy match across Artikelbeschreibung/Suchbegriff/Hersteller/…,
   const term = [vendor, model].filter(Boolean).join(' ');
   const refs = await searchItemReferences(term);
-  return refs.map(r => ({
+  const candidates: IntakeRefCandidate[] = refs.map(r => ({
     artikelNummer: String(r.Artikel_Nummer ?? ''),
     hersteller: (r.Hersteller as string | null) ?? null,
     artikelbeschreibung: (r.Artikelbeschreibung as string | null) ?? null,
     hauptkategorienA: r.Hauptkategorien_A != null ? Number(r.Hauptkategorien_A) : null,
     unterkategorienA: r.Unterkategorien_A != null ? Number(r.Unterkategorien_A) : null,
   }));
+  await attachMatchableInstances(candidates);
+  return candidates;
+}
+
+// Cap the number of matchable instances surfaced per reference — a ref with many serial-less
+// instances is unusual, and the operator only needs a short "is it one of these?" list.
+const MAX_MATCHABLE_INSTANCES_PER_REF = 10;
+
+// For each candidate reference, find existing instances with NO serial and NO MAC on file — the
+// devices catalogued before the intake API (or by hand) that the scanned unit might actually be.
+// An instance with a serial/MAC would have matched by identifier already (step 1) or is a genuinely
+// different unit, so it is excluded. In-device components and zero-stock (removed) items are excluded.
+async function attachMatchableInstances(candidates: IntakeRefCandidate[]): Promise<void> {
+  const nums = candidates.map(c => c.artikelNummer).filter(Boolean);
+  if (nums.length === 0) return;
+  let rows: Array<{
+    ItemUUID: string; Artikel_Nummer: string | null; BoxID: string | null;
+    BoxLabel: string | null; Location: string | null; Quality: number | null; Datum_erfasst: string | null;
+  }> = [];
+  try {
+    rows = await query(
+      `SELECT i."ItemUUID", i."Artikel_Nummer", i."BoxID", b."Label" AS "BoxLabel",
+              i."Location", i."Quality", i."Datum_erfasst"
+       FROM items i
+       LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
+       WHERE i."Artikel_Nummer" = ANY($1)
+         AND i."SerialNumber" IS NULL
+         AND i."MacAddress" IS NULL
+         AND COALESCE(i."Auf_Lager", 0) > 0
+         AND NOT ${IN_DEVICE_COMPONENT_SQL}
+       ORDER BY i."Datum_erfasst" DESC NULLS LAST`,
+      [nums]
+    );
+  } catch (err) {
+    // Matching is an aid, not a gate — a lookup failure must not block the select_ref step.
+    console.warn('[intake-start] Failed to load matchable instances', err);
+    return;
+  }
+  const byRef = new Map<string, IntakeInstanceCandidate[]>();
+  for (const row of rows) {
+    const key = String(row.Artikel_Nummer ?? '');
+    const list = byRef.get(key) ?? [];
+    if (list.length >= MAX_MATCHABLE_INSTANCES_PER_REF) continue;
+    list.push({
+      itemUUID: row.ItemUUID,
+      artikelNummer: key,
+      boxId: row.BoxID,
+      boxLabel: row.BoxLabel,
+      location: row.Location,
+      quality: row.Quality != null ? Number(row.Quality) : null,
+      datumErfasst: row.Datum_erfasst,
+    });
+    byRef.set(key, list);
+  }
+  for (const c of candidates) {
+    const list = byRef.get(c.artikelNummer);
+    if (list && list.length > 0) c.matchableInstances = list;
+  }
 }
 
 function buildQualityQuestions(
