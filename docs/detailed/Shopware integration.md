@@ -52,7 +52,8 @@ This document captures the current architecture, required configuration, and ope
   combo has specs), the product becomes a **variant parent**: `db.buildVariantGroups` groups instances by a
   canonical spec signature (stock = summed matching instances); `adminClient.syncVariants` resolves each combo's
   spec values to property options (P2a machinery), PATCHes the parent's `configuratorSettings` with the axis
-  options, and upserts one **child product** per combo (`productNumber = parent.<sha1(sig)>`, `parentId` +
+  options (each entry carries a **deterministic id** `sha1(parentId:optionId)` so a re-sync upserts the same
+  configurator row instead of re-inserting it and violating `uniq.product_configurator_setting`), and upserts one **child product** per combo (`productNumber = parent.<sha1(sig)>`, `parentId` +
   `options` + summed stock, inheriting price/tax/visibility from the parent). Existing children get stock/active
   updated; a combo that no longer exists is retired (`active:false, stock:0`). Each instance's `ShopwareVariantId`
   is persisted. <2 combos, or any spec-less instance → the single-product path (summed stock on the ref product).

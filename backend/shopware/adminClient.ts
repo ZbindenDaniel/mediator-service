@@ -500,10 +500,15 @@ export class ShopwareAdminClient {
     }
 
     // Declare which options participate as variant axes (PATCH the full set; adding axes is the common case).
+    // Deterministic id per (parent, option) so a re-sync upserts the same configurator row by primary key
+    // instead of re-inserting it and violating uniq.product_configurator_setting (product+version+option).
     if (allOptionIds.size) {
       await this.request('PATCH', `/api/product/${parentId}`, {
         id: parentId,
-        configuratorSettings: [...allOptionIds].map((optionId) => ({ optionId }))
+        configuratorSettings: [...allOptionIds].map((optionId) => ({
+          id: createHash('sha1').update(`${parentId}:${optionId}`).digest('hex').slice(0, 32),
+          optionId
+        }))
       });
     }
 
