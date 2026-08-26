@@ -14,6 +14,15 @@
 #     Phase-2 reports are uploaded under SN:<driveSerial>/ (not the machine SN).
 #   • Phase-2 uploads split into machine-level (SN:<machineSerial>) and
 #     per-component (SN:<driveSerial>) targets.
+#
+# REQUIRED — disk `sizeGb` source:
+#   • `sizeGb` MUST be the block-device capacity from `lsblk -bdno SIZE /dev/<name>`
+#     (bytes → / 1073741824 | floor), NOT smartctl `.user_capacity.bytes`.
+#     `user_capacity` is an ATA/SATA field: it is EMPTY for NVMe (and on smartctl
+#     open-fail), yielding sizeGb:0 → the server treats 0 as "unknown" and ASKS the
+#     operator for storage. Keep smartctl for identity only (serial/wwn/model/type).
+#     The server logs `[intake] question resolution` with `unresolvedAutoFill`
+#     naming `storage_gb` when the scan sent no usable size.
 
 @host = http://localhost:8080
 @intakeToken = dev-intake-token
@@ -35,6 +44,26 @@
 # Category dropdown for the "create new reference" TUI step (bootable devices only).
 GET {{host}}/api/intake/categories
 X-Intake-Token: {{intakeToken}}
+
+###
+# Contracts (open — no token). The quality step already returns the merged qualityQuestions,
+# but the script can also fetch contracts directly, e.g. to know the required spec keys.
+# @subcat = the item's Unterkategorien_A (201 = laptop).
+
+# Required/optional spec keys for completeness (send instanceSpecs with these exact keys).
+GET {{host}}/api/contracts/specs/201
+
+###
+# General quality questions (apply to every device).
+GET {{host}}/api/contracts/quality/general
+
+###
+# Subcategory quality questions.
+GET {{host}}/api/contracts/quality/201
+
+###
+# Assembly (accessory) contract — parts become the accessory questions in the quality step.
+GET {{host}}/api/contracts/assembly/201
 
 
 ###############################################################################
@@ -62,6 +91,13 @@ Content-Type: application/json
   "disks": [
     { "name": "nvme0n1", "sizeGb": 256, "type": "nvme", "serial": "{{disk0Serial}}", "wwn": "eui.0025385...", "model": "SAMSUNG MZVLB256" },
     { "name": "sda",     "sizeGb": 500, "type": "hdd",  "serial": "{{disk1Serial}}", "wwn": "5000c500...",   "model": "ST500LM021" }
+  ],
+  "components": [
+    // Generic, extensible sub-device list. A component with a usable serial is auto-created as an
+    // in-device item (like disks); a serialless one (typical PCI card) is NOT created — its
+    // slotKey pre-fills the matching assembly presence/spec questions (has_<slotKey>, <slotKey>_model).
+    { "kind": "gpu",     "slotKey": "gpu",     "vendor": "NVIDIA",  "model": "GeForce GT 710" },
+    { "kind": "network", "slotKey": "nic",     "vendor": "Realtek", "model": "RTL8111" }
   ],
   "batteryPercent": 87
 }
@@ -112,7 +148,11 @@ Content-Type: application/json
 }
 
 ###
-# 3) Answer the quality step. instanceSpecs carries per-unit spec confirmations.
+# 3) Answer the quality step. Includes quality + accessory (assembly) answers, full specs, and
+#    an echoed scanPayload so required specs back-fill. Accessory questions come back in the
+#    ref-step response's qualityQuestions (or GET /api/contracts/assembly/{subcat}).
+#    instanceSpecs keys must match contracts/specs/{subcat}.json (canonical, exact) — see
+#    intake-image-guide.md. Precedence: scanPayload < questionnaire < instanceSpecs.
 POST {{host}}/api/intake/{{intakeKey}}/answer
 X-Intake-Token: {{intakeToken}}
 Content-Type: application/json
@@ -120,15 +160,28 @@ Content-Type: application/json
 {
   "type": "quality",
   "qualityAnswers": {
-    "is_functional": "true",
-    "is_complete": "true",
-    "has_defects": "false",
     "cosmetic": "B",
-    "drive_type": "NVMe SSD"
+    "has_fan": "true",
+    "has_keyboard": "true",
+    "keyboard_layout": "CH",
+    "has_display": "true",
+    "battery_condition": "Gut (>80%)",
+    "ram_gb": "8",
+    "storage_gb": "256",
+    "drive_type": "NVMe SSD",
+    "has_mainboard": "true"
   },
   "instanceSpecs": {
+    "Prozessor": "Intel i5-8350U",
     "RAM": "8 GB DDR4",
-    "SSD": "256 GB NVMe"
+    "Speicher": "256 GB NVMe",
+    "Display": "14\" FHD (1920x1080)",
+    "Betriebssystem": "—"
+  },
+  "scanPayload": {
+    "serial": "{{machineSerial}}", "cpu": "Intel i5-8350U", "ramMb": 8192,
+    "disks": [{ "name": "nvme0n1", "sizeGb": 256, "type": "nvme", "serial": "{{disk0Serial}}" }],
+    "batteryPercent": 87
   }
 }
 
@@ -147,6 +200,13 @@ Content-Type: application/json
 #   Reuses the external-docs write endpoint. The SN: prefix skips the DB lookup
 #   and resolves the storage path from the serial directly — the item (machine
 #   or component) does not need to exist yet. Files land at {mountPath}/{serial}/.
+#
+#   MAC: fallback — a drive with no readable serial (some USB bridges) and
+#   machine-level / orphan reports are keyed by the machine MAC instead:
+#   POST .../external-docs/wipe-reports with itemUUID = MAC:{{mac-no-colons}}.
+#   The prefix declares the identifier type, so the MAC key is accepted even
+#   though wipe-reports is a serialNumber-typed dir; the file lands at
+#   {mountPath}/{MAC}/. Always prefer SN: when a drive serial is available.
 ###############################################################################
 
 # --- Machine-level reports → aggregate on the MACHINE item ------------------

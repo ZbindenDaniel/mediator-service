@@ -1,8 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { ALT_DOC_DIRS } from '../config';
-import { resolveAltDocDirPath, buildExternalDocUrl } from '../lib/alt-doc-resolver';
-import { listFilesInAltDocDirectory } from '../lib/media-request';
+import { buildExternalDocSummary } from '../lib/external-docs';
 import type { ExternalDocSummary } from '../../models/external-doc';
 import { queryOne } from '../db-client';
 
@@ -45,57 +44,9 @@ const action = defineHttpAction({
       artikelNummer: itemRow.Artikel_Nummer ?? null
     };
 
-    const docs: ExternalDocSummary[] = ALT_DOC_DIRS.map((dirConfig) => {
-      const resolved = resolveAltDocDirPath(ctx2, dirConfig);
-
-      if (!resolved) {
-        return {
-          name: dirConfig.name,
-          docType: dirConfig.docType ?? null,
-          identifierType: dirConfig.identifierType,
-          identifierValue: null,
-          available: false,
-          reason: 'identifier_not_set',
-          fileCount: 0,
-          files: [],
-          writable: dirConfig.writable ?? false,
-          deletable: dirConfig.deletable ?? false
-        };
-      }
-
-      let fileNames: string[];
-      try {
-        fileNames = listFilesInAltDocDirectory(dirConfig.mountPath, resolved.identifierValue);
-      } catch {
-        return {
-          name: dirConfig.name,
-          docType: dirConfig.docType ?? null,
-          identifierType: dirConfig.identifierType,
-          identifierValue: resolved.identifierValue,
-          available: false,
-          reason: 'directory_unavailable',
-          fileCount: 0,
-          files: [],
-          writable: dirConfig.writable ?? false,
-          deletable: dirConfig.deletable ?? false
-        };
-      }
-
-      return {
-        name: dirConfig.name,
-        docType: dirConfig.docType ?? null,
-        identifierType: dirConfig.identifierType,
-        identifierValue: resolved.identifierValue,
-        available: true,
-        fileCount: fileNames.length,
-        files: fileNames.map((fileName) => ({
-          fileName,
-          url: buildExternalDocUrl(dirConfig.name, itemUUID, fileName)
-        })),
-        writable: dirConfig.writable ?? false,
-        deletable: dirConfig.deletable ?? false
-      };
-    });
+    const docs: ExternalDocSummary[] = ALT_DOC_DIRS.map((dirConfig) =>
+      buildExternalDocSummary(dirConfig, ctx2, itemUUID)
+    );
 
     return sendJson(res, 200, { docs });
   }

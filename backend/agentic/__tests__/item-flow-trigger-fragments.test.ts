@@ -130,6 +130,53 @@ describe('runExtractionAttempts review trigger prompt fragment injection', () =>
     }));
   });
 
+  it('injects the identity grounding anchor into extraction and supervisor, not the categorizer', async () => {
+    const target = buildTarget();
+    const validExtraction =
+      '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
+      '"Langtext":{"Veröffentlicht":"","Stromversorgung":""},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
+      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1,"Unterkategorien_A":11,"Hauptkategorien_B":2,' +
+      '"Unterkategorien_B":22}';
+    const llm: ChatModel = {
+      invoke: jest.fn(async () => ({ content: asJsonBlock(validExtraction) }))
+    };
+
+    await runExtractionAttempts({
+      llm,
+      logger: { warn: jest.fn(), info: jest.fn(), debug: jest.fn(), error: jest.fn() },
+      itemId: target.Artikel_Nummer,
+      maxAttempts: 1,
+      searchContexts: [],
+      aggregatedSources: [],
+      recordSources: jest.fn(),
+      buildAggregatedSearchText: () => '',
+      extractPrompt: 'extract {{EXTRACTION_REVIEW}}',
+      correctionPrompt: 'repair json',
+      targetFormat: '{}',
+      supervisorPrompt: 'supervisor {{SUPERVISOR_REVIEW}}',
+      categorizerPrompt: 'categorizer {{CATEGORIZER_REVIEW}}',
+      pricingPrompt: 'pricing',
+      searchInvoker: jest.fn(async () => ({ text: '', sources: [] })),
+      target,
+      searchTerm: 'Dell Latitude Laptop',
+      reviewNotes: null,
+      skipSearch: true,
+      transcriptWriter: null
+    });
+
+    const extractionMessages = (llm.invoke as jest.Mock).mock.calls[0]?.[0];
+    const supervisorMessages = (llm.invoke as jest.Mock).mock.calls[1]?.[0];
+    // Assert on quote-free substrings so JSON.stringify escaping doesn't hide the match.
+    const groundingLead = 'Known identity (ground truth from cataloguing)';
+    const groundingAnchor = 'Dell Latitude Laptop';
+    const groundingRule = 'Your output MUST describe THIS device';
+    expect(JSON.stringify(extractionMessages)).toContain(groundingLead);
+    expect(JSON.stringify(extractionMessages)).toContain(groundingAnchor);
+    expect(JSON.stringify(extractionMessages)).toContain(groundingRule);
+    expect(JSON.stringify(supervisorMessages)).toContain(groundingLead);
+    expect(JSON.stringify(supervisorMessages)).toContain(groundingAnchor);
+  });
+
   it('injects completeness fragment when information_present_low_trigger is active', async () => {
     mockedLoadSubcategoryReviewAutomationSignals.mockReturnValue({
       ...baseSignals,
@@ -234,6 +281,47 @@ describe('runExtractionAttempts review trigger prompt fragment injection', () =>
         })
       })
     }));
+  });
+
+  it('injects category guidance into extraction and supervisor review placeholders', async () => {
+    const target = buildTarget();
+    const validExtraction =
+      '{"Artikel_Nummer":"item-1","Artikelbeschreibung":"Widget","Verkaufspreis":10,"Kurzbeschreibung":"Short description",' +
+      '"Langtext":{"Veröffentlicht":"","Stromversorgung":""},"Hersteller":"Acme","Länge_mm":null,"Breite_mm":null,' +
+      '"Höhe_mm":null,"Gewicht_kg":null,"Hauptkategorien_A":1,"Unterkategorien_A":11,"Hauptkategorien_B":2,' +
+      '"Unterkategorien_B":22}';
+    const llm: ChatModel = {
+      invoke: jest.fn(async () => ({ content: asJsonBlock(validExtraction) }))
+    };
+    const guidance = 'Do not mention the operating system in the prose description.';
+
+    await runExtractionAttempts({
+      llm,
+      logger: console,
+      itemId: target.Artikel_Nummer,
+      maxAttempts: 1,
+      searchContexts: [],
+      aggregatedSources: [],
+      recordSources: jest.fn(),
+      buildAggregatedSearchText: () => '',
+      extractPrompt: 'extract {{EXTRACTION_REVIEW}}',
+      correctionPrompt: 'repair json',
+      targetFormat: '{}',
+      supervisorPrompt: 'supervisor {{SUPERVISOR_REVIEW}}',
+      categorizerPrompt: 'categorizer',
+      pricingPrompt: 'pricing',
+      searchInvoker: jest.fn(async () => ({ text: '', sources: [] })),
+      target,
+      reviewNotes: null,
+      categoryGuidance: [guidance],
+      skipSearch: true,
+      transcriptWriter: null
+    });
+
+    const extractionMessages = (llm.invoke as jest.Mock).mock.calls[0]?.[0];
+    const supervisorMessages = (llm.invoke as jest.Mock).mock.calls[1]?.[0];
+    expect(JSON.stringify(extractionMessages)).toContain(guidance);
+    expect(JSON.stringify(supervisorMessages)).toContain(guidance);
   });
 
   it('applies missing/unneeded spec guidance to injected target snapshot content', async () => {

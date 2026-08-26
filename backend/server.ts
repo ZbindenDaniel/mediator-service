@@ -116,8 +116,8 @@ import { htmlForBox, htmlForItem, htmlForShelf } from './lib/labelHtml';
 import type { ItemLabelPayload } from './lib/labelHtml';
 import { EVENT_LABELS, eventLabel } from '../models/event-labels';
 import { generateItemUUID as generateSequentialItemUUID } from './lib/itemIds';
-import { resolveExistingMediaPaths, resolveSafeMediaRelativePath, listFilesInAltDocDirectory } from './lib/media-request';
-import { resolveAltDocDirPath } from './lib/alt-doc-resolver';
+import { resolveExistingMediaPaths, resolveSafeMediaRelativePath } from './lib/media-request';
+import { resolveExternalDocFileForServe } from './lib/external-docs';
 import { emitMediaAudit } from './lib/media-audit';
 
 const actions = loadActions();
@@ -555,7 +555,20 @@ if (agenticServiceEnabled) {
   const agenticQueueDispatchIntervalMs = 5000;
   const agenticQueueDispatchLimit = 5;
   const agenticQueueDependencies = createAgenticServiceDependencies();
+  // Reentrancy guard: the concurrency cap (MAX_CONCURRENT_RUNNING_RUNS) is enforced by computing
+  // availableSlots = MAX - runningCount and claiming at most that many. That read-then-claim is NOT
+  // atomic across dispatch invocations, so if a tick's DB work outlasts the interval, the next
+  // setInterval firing overlaps it: both read the same low runningCount and both claim, promoting more
+  // than the cap into 'running' — the over-cap sweep then cancels the excess instead of letting it wait.
+  // Serializing ticks makes each claim see the previous tick's committed promotions, so the queue never
+  // over-fills.
+  let dispatchInFlight = false;
   const dispatchQueuedRuns = () => {
+    if (dispatchInFlight) {
+      // Previous tick still running; skip this firing rather than double-claim into the running slots.
+      return;
+    }
+    dispatchInFlight = true;
     // dispatchQueuedAgenticRuns is async; fire-and-forget with local error handling
     void dispatchQueuedAgenticRuns(agenticQueueDependencies, { limit: agenticQueueDispatchLimit }).then((summary) => {
       // if (summary.scheduled || summary.skipped || summary.failed) {
@@ -563,6 +576,8 @@ if (agenticServiceEnabled) {
       // }
     }).catch((err: unknown) => {
       console.error('[agentic-service] Failed to dispatch queued agentic runs', err);
+    }).finally(() => {
+      dispatchInFlight = false;
     });
   };
   setInterval(dispatchQueuedRuns, agenticQueueDispatchIntervalMs);
@@ -883,15 +898,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         artikelNummer: itemRow.Artikel_Nummer ?? null
       };
 
-      const resolved = resolveAltDocDirPath(resolveCtx, dirConfig);
+      // Fallback-chain dirs can hold files under more than one folder (e.g. serial + MAC), so find
+      // the accepted-type folder that actually contains this file rather than assuming the primary.
+      const resolved = resolveExternalDocFileForServe(dirConfig, resolveCtx, safeFileName);
       if (!resolved) {
-        console.warn('[external-docs] Could not resolve identifier for item', { itemUUID, dirName });
-        res.writeHead(404); return res.end('Not found');
-      }
-
-      const files = listFilesInAltDocDirectory(dirConfig.mountPath, resolved.identifierValue);
-      if (!files.includes(safeFileName)) {
-        console.warn('[external-docs] Requested file not in directory listing', { safeFileName, dirName, itemUUID });
+        console.warn('[external-docs] Requested file not resolvable for item', { safeFileName, dirName, itemUUID });
         res.writeHead(404); return res.end('Not found');
       }
 
@@ -907,7 +918,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         emitMediaAudit({
           action: 'fetch',
           scope: 'external-docs',
-          identifier: { itemUUID, artikelNummer: null, altIdentifierType: dirConfig.identifierType, altIdentifierValue: resolved.identifierValue },
+          identifier: { itemUUID, artikelNummer: null, altIdentifierType: resolved.identifierType, altIdentifierValue: resolved.identifierValue },
           path: filePath,
           root: dirConfig.mountPath,
           outcome: 'success',

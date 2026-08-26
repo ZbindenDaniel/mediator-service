@@ -56,10 +56,12 @@ State machine router. Body: `IntakeScanPayload` + `serial`/`mac`.
   "batteryPercent": 87 }
 ```
 
-Each `disks[]` entry should carry a per-drive `serial` (with `wwn`/`model` as fallback keys):
-at the **ref** step the server materializes one in-device component per disk with a usable
-serial (see [component lifecycle](component-lifecycle.md)). The full image request contract is
-in [`intake-image.http`](intake-image.http).
+Detected sub-devices are reported in a generic `components[]` array (`disks[]` is a shorthand
+for `kind:'disk'`, folded in server-side). Each should carry a `serial` (with `wwn`/`model` as
+fallback keys) when it has one: at the **ref** step the server materializes one in-device
+component per sub-device **with a usable serial** (see [component lifecycle](component-lifecycle.md));
+serialless ones (e.g. PCI cards) fill assembly info via question pre-fill instead. The full image
+request contract is in [`intake-image.http`](intake-image.http).
 
 The `select_ref` response echoes the scanned identity as `scan: { vendor, model }` so the
 TUI can pre-fill the new-reference fields from what was already scanned.
@@ -139,13 +141,39 @@ The `/api/items/*` external-docs endpoint uses its existing auth — no change.
 
 ## Quality questions
 
-When routing to the `quality` step, the server pre-fills `defaultValue` on questions whose `specField` overlaps with reliable scan fields:
+`qualityQuestions` merges three contracts for the item's subcategory: the **general** quality
+contract, the **subcategory** quality contract, and the **assembly (accessory)** contract
+(`contracts/assembly/{subcat}.json`) — the latter contributes accessory questions (presence +
+spec) so the quality step drives both quality and specs, producing a complete item. The same
+contracts are individually fetchable at `GET /api/contracts/{quality|specs|assembly}/…` (open,
+no token). Answers come back in `qualityAnswers` (keyed by question `id`); `instanceSpecs` carries
+free-form specs using the canonical `contracts/specs/{subcat}.json` keys. Full script-author
+reference incl. the contract→script sync surface: [`intake-image-guide.md`](intake-image-guide.md).
 
-| Question ID | Scan field | Mapping |
-|-------------|-----------|---------|
-| `drive_type` | `disks[0].type` | `nvme` → `NVMe SSD`, `ssd` → `SSD`, `hdd` → `HDD`, `emmc` → `eMMC` |
+**Auto-resolution — only human-judgment questions are returned.** The server answers what it
+already knows and drops those questions, via two contract-declared fields (`resolveIntakeQuestions`
+in `intake-quality-map.ts`):
 
-The operator confirms or overrides each pre-filled value in the TUI.
+- **`autoFill: "<signal>"`** on a question → auto-answered from the scan. Named signals map the
+  scan payload to a value; numeric ones snap to the question's own `values` (no hardcoded arrays):
+
+  | Signal | Scan source | Notes |
+  |---|---|---|
+  | `ram` | `ramMb` / 1024 | snapped to the question's `values` |
+  | `storageSize` | first disk `sizeGb` | snapped to the question's `values` |
+  | `storageType` | first disk `type` | `nvme→NVMe SSD`, `ssd→SSD`, `hdd→HDD`, `emmc→eMMC` |
+  | `battery` | `batteryPercent` | ≥80 `Gut (>80%)`, ≥50 `Mittel (50–80%)`, else `Schwach (<50%)` |
+
+- **`skipAtIntake: true`** on a question → "a booted device implies it"; assumed present (`true`
+  for booleans) and dropped (e.g. `has_fan`, `has_display`, `has_keyboard`, `has_mainboard`).
+
+Auto-answers are applied server-side (merged **under** any submitted answer, so operator/script
+values win) before quality scoring + spec derivation. The raw scan is persisted at the ref step
+(`items.IntakeScan`), so the quality step resolves without the script re-sending it (echoing
+`scanPayload` still works and takes precedence). Which questions are auto-resolved is entirely in
+the contract JSON — adding/removing one is not a code change. Component-detected slots still
+pre-fill kept questions (`has_<slotKey>`) as a confirmable `defaultValue`. Full author reference:
+[`intake-image-guide.md`](intake-image-guide.md).
 
 ## Concurrent devices
 

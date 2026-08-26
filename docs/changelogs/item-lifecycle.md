@@ -4,8 +4,41 @@ Covers: item creation, editing, quality assessment, specs, accessories, spare pa
 
 ---
 
-## 895. ✅ Reference-less item instances + write-once identity at graduation
-**Why:** Supports deferred-identity components (see intake changelog #895) at the item-lifecycle
+## 911. ✅ Editable instance specs
+**Why:** `items.InstanceSpecs` (per-instance specs like RAM/Speicher/Speichertyp) could only be
+written by the intake API (`intake-answer` → `updateItemInstanceSpecs`) and quality review; a wrong
+or missing value had no correction path once the device left the station. Extended the existing
+"Instanz bearbeiten" card (`EditInstanceCard`) with a key/value spec editor (add/edit/remove rows),
+and taught `PATCH /api/items/:id/instance` (`edit-item-instance`) to accept an optional
+`InstanceSpecs` object alongside `SerialNumber`/`MacAddress`/`Quality`.
+**Why (approach):** The PATCH uses **full-replace** semantics — the frontend sends the complete
+desired spec map and the handler overwrites the column (via `stringifyLangtext`), setting it to
+`NULL` when the object is empty — deliberately *not* reusing the intake merge helper
+`updateItemInstanceSpecs`, because a merge can never delete a wrongly-added spec. Normalization
+trims keys/values and drops empty-key/empty-value rows; a non-object `InstanceSpecs` is ignored
+(treated as not provided) rather than clearing the column. The change stayed on the already-wired
+instance-edit endpoint/event (`InstanceUpdated`), so no new route, migration, or DB helper was
+needed.
+**Deferred:** No InstanceSpecs sync across ref-sharing instances (still the open item in `todo.md`
+Priority 2 "Intake: InstanceSpecs sync"). No key autocomplete against the subcategory spec contract —
+keys are free-form text, matching the existing free-form spec model. `Menge` (bulk) instances can
+also edit specs; not restricted since InstanceSpecs is per-instance data.
+
+## 901. ✅ Consolidate the assembly slot key onto item_relations."SlotKey"
+**Why:** Slot keys were split across two columns: intake-created components (#899) wrote the
+new `item_relations."SlotKey"` column, but `catalog-spare-part` still overloaded it onto
+`"Notes"` and the spare-parts read (`GET /spare-parts`, consumed by `ZubehoerCard`) read
+`"Notes"` — so an intake disk's slot key wouldn't surface in the spare-parts list. Consolidated:
+both `catalog-spare-part` POST paths write `"SlotKey"` and the read selects `"SlotKey"`
+directly. `"Notes"` remains for genuine `Zubehör` relation notes (the `item-relations` PATCH
+still updates it).
+**Why (approach):** Clean cutover with no backfill/fallback — the feature was only tested and
+carries no production slot data worth preserving, so a permanent legacy compatibility path
+(COALESCE read + one-time `Notes`→`SlotKey` migration) wasn't worth keeping.
+**Deferred:** Nothing.
+
+## 899. ✅ Reference-less item instances + write-once identity at graduation
+**Why:** Supports deferred-identity components (see intake changelog #899) at the item-lifecycle
 layer. An instance may now exist with `Artikel_Nummer` NULL (an in-device component) and later
 have its identity **set once** at Zerlegung — the reference goes NULL → value and is never
 changed, so there is no "change reference" operation to make safe. Graduation
@@ -22,7 +55,7 @@ id) keeps graduated components indistinguishable from ordinary items; it is chea
 before history accrues and reports are serial-keyed. Reused the `Zerlegt_aus` + `BoxID IS NULL`
 convention so spare-part deletion/relocation paths were unchanged.
 **Deferred:** re-link/change-reference (out of scope by construction); severing the provenance
-link on sale/stock-removal (kept for now). See intake changelog #895 for the full deferred list.
+link on sale/stock-removal (kept for now). See intake changelog #899 for the full deferred list.
 
 ## 888. ✅ Close event-log coverage gaps so items and boxes reliably have a history
 **Why:** Items and boxes often had zero events, which should be near-impossible. Root cause: event emission is wired per-endpoint (the persistence helpers don't emit), and the two biggest creation sources were never wired — device **intake** (`intake-answer.ts` created the instance via `ensureItem`/`persistItemInstance` and often a new ref, with no `logEvent`) and the **CSV importer** (`importer.ts` `persistItem` in the row loop). Boxes born from `import-item`'s `runUpsertBox` and stubs (`create-stub.ts`) also logged nothing; only relocations did, which is why moved items were the only ones with history. Fixes: intake now logs Item `Created` (Meta `source:'intake'`) on new-instance mint and `QualityAssessed` on the quality step; the CSV importer logs `Created`/`Updated` per instance (`source:'csv-import'`); `import-item` logs a Box `Created` for boxes newly created during import (existence-checked via `ctx.getBox`); `create-stub` logs `StubCreated` keyed to the shelf; `quality-review` logs `QualityAssessed`. Added event keys `QualityAssessed` and `StubCreated` to `models/event-resources.json`. Also fixed the keying bug where reference-level agentic events (`AgenticSearchQueued`, keyed by Artikel_Nummer) never showed on item history: `listEventsForItem(itemId, artikelNummer?)` now also matches the item's Artikel_Nummer. Drive-by: `bulk-move-items.ts` called the async `bulkMoveItems` without `await`, so `results.map` threw a 500 — now awaited (the Moved events were already emitted by the DB layer).

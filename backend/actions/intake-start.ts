@@ -1,10 +1,12 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { requireIntakeAuth } from '../utils/intake-auth';
-import { query, queryOne } from '../db-client';
-import { loadGeneralContract, loadSubCategoryContract } from '../lib/quality-contracts';
-import { preFillQualityQuestions } from '../lib/intake-quality-map';
-import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeQuestion } from '../../models/intake';
+import { queryOne } from '../db-client';
+import { loadGeneralContract, loadSubCategoryContract, assemblyToQualityContract } from '../lib/quality-contracts';
+import { getAssemblyContract } from '../contracts/registry';
+import { resolveIntakeQuestions } from '../lib/intake-quality-map';
+import { searchItemReferences } from './search';
+import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeQuestion, IntakeDetectedSpecView } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -23,12 +25,12 @@ async function findItemByIdentifier(serial: string | null, mac: string | null) {
     const row = await queryOne<{
       ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null;
       MacAddress: string | null; Quality: number | null; QualityId: number | null;
-      Hersteller: string | null; Kurzbeschreibung: string | null;
+      Hersteller: string | null; Artikelbeschreibung: string | null;
       Hauptkategorien_A: number | null; Unterkategorien_A: number | null;
     }>(
       `SELECT i."ItemUUID", i."Artikel_Nummer", i."SerialNumber", i."MacAddress",
               i."Quality", i."QualityId",
-              r."Hersteller", r."Kurzbeschreibung",
+              r."Hersteller", r."Artikelbeschreibung",
               r."Hauptkategorien_A"::integer AS "Hauptkategorien_A",
               r."Unterkategorien_A"::integer AS "Unterkategorien_A"
        FROM items i
@@ -42,12 +44,12 @@ async function findItemByIdentifier(serial: string | null, mac: string | null) {
     return queryOne<{
       ItemUUID: string; Artikel_Nummer: string | null; SerialNumber: string | null;
       MacAddress: string | null; Quality: number | null; QualityId: number | null;
-      Hersteller: string | null; Kurzbeschreibung: string | null;
+      Hersteller: string | null; Artikelbeschreibung: string | null;
       Hauptkategorien_A: number | null; Unterkategorien_A: number | null;
     }>(
       `SELECT i."ItemUUID", i."Artikel_Nummer", i."SerialNumber", i."MacAddress",
               i."Quality", i."QualityId",
-              r."Hersteller", r."Kurzbeschreibung",
+              r."Hersteller", r."Artikelbeschreibung",
               r."Hauptkategorien_A"::integer AS "Hauptkategorien_A",
               r."Unterkategorien_A"::integer AS "Unterkategorien_A"
        FROM items i
@@ -61,45 +63,61 @@ async function findItemByIdentifier(serial: string | null, mac: string | null) {
 
 async function findRefCandidates(vendor: string | null | undefined, model: string | null | undefined): Promise<IntakeRefCandidate[]> {
   if (!vendor && !model) return [];
-  const vendorTerm = vendor ? `%${vendor}%` : null;
-  const modelTerm = model ? `%${model}%` : null;
-  // Search model in Kurzbeschreibung and vendor in Hersteller separately —
-  // combined term would never match since the fields store them independently
-  const rows = await query<{
-    Artikel_Nummer: string; Hersteller: string | null;
-    Kurzbeschreibung: string | null; Hauptkategorien_A: string | null; Unterkategorien_A: string | null;
-  }>(
-    `SELECT r."Artikel_Nummer", r."Hersteller", r."Kurzbeschreibung",
-            r."Hauptkategorien_A", r."Unterkategorien_A"
-     FROM item_refs r
-     WHERE (
-       ($1::text IS NULL OR r."Kurzbeschreibung" ILIKE $1)
-       AND ($2::text IS NULL OR r."Hersteller" ILIKE $2)
-     )
-     ORDER BY r."Artikel_Nummer" DESC LIMIT 10`,
-    [modelTerm, vendorTerm]
-  );
-  return rows.map(r => ({
-    artikelNummer: r.Artikel_Nummer,
-    hersteller: r.Hersteller,
-    kurzbeschreibung: r.Kurzbeschreibung,
-    hauptkategorienA: r.Hauptkategorien_A ? Number(r.Hauptkategorien_A) : null,
-    unterkategorienA: r.Unterkategorien_A ? Number(r.Unterkategorien_A) : null,
+  // Reuse the single reference matcher that manual item creation uses
+  // (`/api/search?scope=refs`) so intake surfaces the same candidates as everywhere
+  // else — token-based fuzzy match across Artikelbeschreibung/Suchbegriff/Hersteller/…,
+  const term = [vendor, model].filter(Boolean).join(' ');
+  const refs = await searchItemReferences(term);
+  return refs.map(r => ({
+    artikelNummer: String(r.Artikel_Nummer ?? ''),
+    hersteller: (r.Hersteller as string | null) ?? null,
+    artikelbeschreibung: (r.Artikelbeschreibung as string | null) ?? null,
+    hauptkategorienA: r.Hauptkategorien_A != null ? Number(r.Hauptkategorien_A) : null,
+    unterkategorienA: r.Unterkategorien_A != null ? Number(r.Unterkategorien_A) : null,
   }));
 }
 
-function buildQualityQuestions(unterkategorienA: number | null, scan: IntakeScanPayload): IntakeQuestion[] {
+function buildQualityQuestions(
+  unterkategorienA: number | null,
+  scan: IntakeScanPayload
+): { ask: IntakeQuestion[]; detectedSpecs: IntakeDetectedSpecView[] } {
   try {
     const general = loadGeneralContract();
     const subCat = unterkategorienA ? loadSubCategoryContract(unterkategorienA) : null;
+    // Assembly (accessory) questions ask about parts — presence drives quality, spec answers
+    // fill specs — so the intake questionnaire can produce a complete item, not just quality.
+    const assembly = unterkategorienA ? getAssemblyContract(unterkategorienA) : null;
+    const assemblyQ = assembly ? assemblyToQualityContract(assembly) : null;
     const allQuestions = [
       ...general.questions,
-      ...(subCat?.questions ?? [])
+      ...(subCat?.questions ?? []),
+      ...(assemblyQ?.questions ?? [])
     ];
-    return preFillQualityQuestions(allQuestions, scan);
+    // Only return questions a human must answer; the rest are auto-resolved at the quality step.
+    const resolution = resolveIntakeQuestions(allQuestions, scan);
+    logIntakeResolution(unterkategorienA, resolution);
+    return {
+      ask: resolution.ask,
+      detectedSpecs: resolution.detected.map(d => ({ label: d.label, value: d.value })),
+    };
   } catch {
-    return [];
+    return { ask: [], detectedSpecs: [] };
   }
+}
+
+/** One structured line per questionnaire build: what the scan answered vs. what it couldn't.
+ *  A non-empty `unresolvedAutoFill` means a scan-answerable field (e.g. NVMe size) wasn't in the
+ *  scan — the fingerprint of a mis-scan (build_scan_payload), not an operator judgement call. */
+function logIntakeResolution(
+  unterkategorienA: number | null,
+  resolution: ReturnType<typeof resolveIntakeQuestions>
+): void {
+  console.log('[intake] question resolution', {
+    subCategory: unterkategorienA,
+    asked: resolution.ask.map(q => q.id),
+    detected: resolution.detected.map(d => `${d.label}=${d.value}`),
+    unresolvedAutoFill: resolution.unresolvedAutoFill,
+  });
 }
 
 const action = defineHttpAction({
@@ -132,6 +150,10 @@ const action = defineHttpAction({
       model: body.model ?? null,
       cpu: body.cpu ?? null,
       ramMb: body.ramMb ?? null,
+      // Forward BOTH sub-device shapes: `components[]` is the canonical list, `disks[]` the
+      // shorthand. Dropping `components` here made storageSize/storageType signals return null,
+      // so a drive reported only via components[] wrongly triggered the storage/drive-type questions.
+      components: body.components ?? null,
       disks: body.disks ?? null,
       batteryPercent: body.batteryPercent ?? null,
     };
@@ -145,7 +167,6 @@ const action = defineHttpAction({
         intakeKey,
         nextStep: 'select_ref',
         candidates,
-        // Echo scanned identity so the TUI can pre-fill Hersteller/Kurzbeschreibung
         scan: { vendor: scan.vendor ?? null, model: scan.model ?? null },
       };
       return sendJson(res, 200, response);
@@ -153,12 +174,13 @@ const action = defineHttpAction({
 
     if (!item.QualityId) {
       // Step 2: item exists but no quality assessment yet
-      const questions = buildQualityQuestions(item.Unterkategorien_A, scan);
+      const { ask, detectedSpecs } = buildQualityQuestions(item.Unterkategorien_A, scan);
       const response: IntakeStartResponse = {
         intakeKey,
         nextStep: 'quality',
         itemUUID: item.ItemUUID,
-        qualityQuestions: questions,
+        qualityQuestions: ask,
+        detectedSpecs,
       };
       return sendJson(res, 200, response);
     }
@@ -173,7 +195,7 @@ const action = defineHttpAction({
         itemUUID: item.ItemUUID,
         artikelNummer: item.Artikel_Nummer ?? '',
         hersteller: item.Hersteller,
-        kurzbeschreibung: item.Kurzbeschreibung,
+        artikelbeschreibung: item.Artikelbeschreibung,
         quality: item.Quality,
       },
     };

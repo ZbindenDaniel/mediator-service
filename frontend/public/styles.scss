@@ -2014,6 +2014,22 @@ button:focus {
     }
 }
 
+.edit-instance-spec-row {
+    display: flex;
+    gap: var(--pad);
+    align-items: center;
+    padding: 3px 0;
+
+    input {
+        flex: 1 1 0;
+        min-width: 0;
+    }
+
+    .btn--small {
+        flex: 0 0 auto;
+    }
+}
+
 // TODO(qr-scan-button): Reconfirm search row spacing once the QR scan button is validated on narrow screens.
 // TODO(qr-scan-button): Verify QR button hit target inside the input wrapper on touch devices.
 .search-row {
@@ -2684,6 +2700,11 @@ button:focus {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+.col-location {
+    font-size: 10px; // Make it a bit smaller so it does not bloat the row to much
+    max-height: 32px;
 }
 
 @media (min-width: 960px) {
@@ -3396,6 +3417,122 @@ button:focus {
     align-items: center;
 }
 
+.agentic-search-sources__list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.agentic-search-sources__item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.agentic-search-sources__link {
+    overflow-wrap: anywhere;
+}
+
+.agentic-search-sources__domain {
+    font-size: 0.8em;
+    color: var(--muted);
+}
+
+.agentic-search-sources__remove {
+    margin-left: auto;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1.1em;
+    line-height: 1;
+    padding: 0 4px;
+    border-radius: 4px;
+}
+
+.agentic-search-sources__remove:hover:not(:disabled) {
+    color: var(--danger, #c0392b);
+    background: var(--surface-hover, rgba(192, 57, 43, 0.1));
+}
+
+.agentic-search-sources__remove:disabled {
+    cursor: default;
+    opacity: 0.5;
+}
+
+.agentic-search-sources__note {
+    margin-top: 6px;
+    font-size: 0.85em;
+}
+
+.agentic-snapshots {
+    margin-top: 12px;
+}
+
+.agentic-snapshots__heading {
+    margin: 0 0 8px;
+}
+
+.agentic-snapshots__list {
+    list-style: none;
+    margin: 0 0 12px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.agentic-snapshots__item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 4px;
+
+    &.is-selected {
+        background: var(--surface-2, rgba(127, 127, 127, 0.12));
+    }
+}
+
+.agentic-snapshots__select {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    background: none;
+    border: none;
+    padding: 2px 0;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+}
+
+.agentic-snapshots__reason,
+.agentic-snapshots__state {
+    font-size: 0.8em;
+    color: var(--muted);
+}
+
+.agentic-snapshots__restore {
+    flex: 0 0 auto;
+}
+
+.agentic-snapshots__diff-table .agentic-snapshots__before {
+    color: var(--muted);
+    text-decoration: line-through;
+}
+
+.agentic-snapshots__diff-row.is-added .agentic-snapshots__before,
+.agentic-snapshots__diff-row.is-removed .agentic-snapshots__after {
+    opacity: 0.6;
+}
+
 @media (max-width: 800px) {
     .details {
         width: 100%;
@@ -4026,4 +4163,12 @@ body.simple-mode {
     .detail-tab-bar__tab:not([data-simple-keep]) {
         display: none;
     }
+}
+// Highlight matched search words inside the "Ähnliche Artikel prüfen" results
+// so operators can spot which parts of a candidate match their input.
+.suggestion-highlight {
+    background: #ffe38a;
+    color: inherit;
+    border-radius: 2px;
+    padding: 0 1px;
 }

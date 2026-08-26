@@ -368,6 +368,23 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       return (aValue - bValue) * direction;
     }
 
+    if (sortKey === 'agenticLastRun') {
+      const lastRunTimestampFor = (group: GroupedItemDisplay) => {
+        const val = group.representative?.AgenticLastRunAt;
+        const itemId = group.summary.representativeItemId ?? group.representative?.ItemUUID ?? null;
+        return resolveEntryTimestamp(val ?? '', { field: 'AgenticLastRunAt' as any, itemId });
+      };
+      const aRun = lastRunTimestampFor(a);
+      const bRun = lastRunTimestampFor(b);
+      if (aRun === bRun) {
+        return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
+      }
+      // null (never run) sorts to bottom in desc, top in asc
+      const aValue = aRun ?? Number.NEGATIVE_INFINITY;
+      const bValue = bRun ?? Number.NEGATIVE_INFINITY;
+      return (aValue - bValue) * direction;
+    }
+
     const valueFor = (group: GroupedItemDisplay) => {
       switch (sortKey) {
         case 'artikelnummer':
@@ -424,6 +441,8 @@ export default function ItemListPage() {
   const [boxFilter, setBoxFilter] = useState(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
   const [boxInput, setBoxInput] = useState(ITEM_LIST_DEFAULT_FILTERS.boxFilter);
   const [agenticStatusFilter, setAgenticStatusFilter] = useState<AgenticRunStatus[]>(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
+  // Draft selection shown while the "Ki-Status" multiselect is open; only committed to agenticStatusFilter on close so the list doesn't re-filter on every checkbox click.
+  const [agenticStatusDraft, setAgenticStatusDraft] = useState<AgenticRunStatus[]>(ITEM_LIST_DEFAULT_FILTERS.agenticStatusFilter);
   // TODO(shop-publication-filter-ui): Consider replacing dropdown with segmented quick filter if additional states are introduced.
   const [shopPublicationFilter, setShopPublicationFilter] = useState<ItemListFilters['shopPublicationFilter']>(ITEM_LIST_DEFAULT_FILTERS.shopPublicationFilter);
   const [entityFilter, setEntityFilter] = useState<ItemListFilters['entityFilter']>(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
@@ -520,6 +539,10 @@ export default function ItemListPage() {
     window.addEventListener(ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT, handleFilterReset);
     return () => window.removeEventListener(ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT, handleFilterReset);
   }, []);
+
+  useEffect(() => {
+    setAgenticStatusDraft(agenticStatusFilter);
+  }, [agenticStatusFilter]);
 
   const currentFilters: ItemListFilters = useMemo(() => ({
     searchTerm,
@@ -921,7 +944,7 @@ export default function ItemListPage() {
   }, [clearMultiSelection, setBulkSelection]);
 
   const handleAgenticStatusToggle = useCallback((status: AgenticRunStatus, checked: boolean) => {
-    setAgenticStatusFilter((prev) => {
+    setAgenticStatusDraft((prev) => {
       const next = new Set(prev);
       if (checked) {
         next.add(status);
@@ -933,11 +956,17 @@ export default function ItemListPage() {
     });
   }, []);
   const handleAgenticStatusSelectAll = useCallback(() => {
-    setAgenticStatusFilter([...AGENTIC_RUN_STATUSES]);
+    setAgenticStatusDraft([...AGENTIC_RUN_STATUSES]);
   }, []);
   const handleAgenticStatusSelectNone = useCallback(() => {
-    setAgenticStatusFilter([]);
+    setAgenticStatusDraft([]);
   }, []);
+  // Apply the draft selection only when the multiselect closes, not on every checkbox click.
+  const handleAgenticStatusDetailsToggle = useCallback((event: React.SyntheticEvent<HTMLDetailsElement>) => {
+    if (!event.currentTarget.open) {
+      setAgenticStatusFilter(agenticStatusDraft);
+    }
+  }, [agenticStatusDraft]);
 
   const handleClearFiltersClick = useCallback(() => {
     window.dispatchEvent(new Event(ITEM_LIST_FILTERS_RESET_REQUESTED_EVENT));
@@ -1008,6 +1037,7 @@ export default function ItemListPage() {
                     <option value="box">Behälter</option>
                     <option value="entryDate">Erfasst am</option>
                     <option value="lastSynced">Zuletzt synchronisiert</option>
+                    <option value="agenticLastRun">KI-Datum</option>
                     <option value="agenticStatus">Ki-Status</option>
                     <option value="quality">Qualität</option>
                     <option value="uuid">UUID</option>
@@ -1099,7 +1129,7 @@ export default function ItemListPage() {
               <div className="filter-grid__item">
                 <div className="filter-control">
                   <span>Ki-Status</span>
-                  <details className="filter-multiselect">
+                  <details className="filter-multiselect" onToggle={handleAgenticStatusDetailsToggle}>
                     <summary aria-label="Ki-Status filtern">{agenticStatusSummaryLabel}</summary>
                     <div className="filter-multiselect__panel" role="group" aria-label="Ki-Status Auswahl">
                       <div className="filter-multiselect__actions">
@@ -1110,7 +1140,7 @@ export default function ItemListPage() {
                         <label key={option.value} className="filter-multiselect__option">
                           <input
                             type="checkbox"
-                            checked={agenticStatusFilter.includes(option.value)}
+                            checked={agenticStatusDraft.includes(option.value)}
                             onChange={(event) => handleAgenticStatusToggle(option.value, event.target.checked)}
                           />
                           <span>{option.label}</span>

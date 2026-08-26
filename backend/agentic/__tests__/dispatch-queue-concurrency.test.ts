@@ -88,7 +88,8 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
 
     await dispatchQueuedAgenticRuns(deps, { limit: 5 });
 
-    expect(fetchQueuedSpy).toHaveBeenCalledWith(1);
+    // Second arg is the running cap, passed so the claim self-limits to free slots atomically.
+    expect(fetchQueuedSpy).toHaveBeenCalledWith(1, 3);
   });
 
   it('limits queued fetch to all 3 available slots when nothing is running', async () => {
@@ -96,12 +97,12 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
     const deps = createDeps();
     (dbClientMod.queryOne as jest.Mock).mockResolvedValueOnce({ runningcount: 0 });
     const fetchQueuedSpy = jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
-    // idle-fill runs when scheduled=0 and remainingSlots = 3-0-0-1 = 2 > 0
-    jest.spyOn(agenticDb, 'fetchIdleFillAgenticRuns').mockResolvedValue([]);
+    // The auto-feeder also runs; stub it out so it doesn't hit the mocked db.
+    jest.spyOn(agenticDb, 'claimNotStartedAgenticRuns').mockResolvedValue([]);
 
     await dispatchQueuedAgenticRuns(deps, { limit: 5 });
 
-    expect(fetchQueuedSpy).toHaveBeenCalledWith(3);
+    expect(fetchQueuedSpy).toHaveBeenCalledWith(3, 3);
   });
 
   it('limits queued fetch to effective limit when limit is less than available slots', async () => {
@@ -109,12 +110,87 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
     const deps = createDeps();
     (dbClientMod.queryOne as jest.Mock).mockResolvedValueOnce({ runningcount: 0 });
     const fetchQueuedSpy = jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
-    // idle-fill also called when scheduled=0 and remainingSlots > 0
-    jest.spyOn(agenticDb, 'fetchIdleFillAgenticRuns').mockResolvedValue([]);
+    // The auto-feeder also runs; stub it out so it doesn't hit the mocked db.
+    jest.spyOn(agenticDb, 'claimNotStartedAgenticRuns').mockResolvedValue([]);
 
     await dispatchQueuedAgenticRuns(deps, { limit: 2 });
 
-    expect(fetchQueuedSpy).toHaveBeenCalledWith(2);
+    expect(fetchQueuedSpy).toHaveBeenCalledWith(2, 3);
+  });
+
+  it('auto-feeder promotes notStarted runs into the waiting queue up to the cap, without invoking the model', async () => {
+    // The demoted keep-busy feeder only tops up the WAITING queue ('notStarted' → 'queued'); it never
+    // promotes straight to running or invokes the model, and it never touches failed/cancelled runs.
+    const deps = createDeps();
+    const invokeModel = jest.fn().mockResolvedValue({ ok: true, message: null });
+    deps.invokeModel = invokeModel;
+
+    // runningcount:0 for every queryOne read (running count AND queued/waiting count → 0).
+    (dbClientMod.queryOne as jest.Mock).mockResolvedValue({ runningcount: 0 });
+    jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
+    const feedSpy = jest
+      .spyOn(agenticDb, 'claimNotStartedAgenticRuns')
+      .mockResolvedValue([makeRun({ Status: AGENTIC_RUN_STATUS_QUEUED, SearchQuery: 'fed query' })]);
+
+    await dispatchQueuedAgenticRuns(deps, { limit: 5 });
+    // Allow any background microtasks to settle.
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // Waiting cap = MAX_WAITING_RUNS (3); current waiting = 0 → feed up to 3.
+    expect(feedSpy).toHaveBeenCalledWith(3);
+    // The feeder does not invoke the model — the newly-queued run runs on a later tick via the
+    // queued→running claim.
+    expect(invokeModel).not.toHaveBeenCalled();
+  });
+
+  it('does not auto-feed when the auto-dispatch kill switch is off', async () => {
+    const deps = createDeps();
+    (dbClientMod.queryOne as jest.Mock).mockResolvedValue({ runningcount: 0 });
+    jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
+    // Kill switch: getSystemSetting('agentic_auto_dispatch_enabled') === 'false'
+    jest.spyOn(agenticDb, 'getSystemSetting').mockResolvedValue('false');
+    const feedSpy = jest.spyOn(agenticDb, 'claimNotStartedAgenticRuns').mockResolvedValue([]);
+
+    await dispatchQueuedAgenticRuns(deps, { limit: 5 });
+
+    expect(feedSpy).not.toHaveBeenCalled();
+  });
+
+  it('requeues over-cap running runs to wait instead of cancelling them', async () => {
+    // Regression: an over-claim (overlapping ticks / racing instances) once left >cap runs 'running';
+    // the safety net cancelled the excess to 'failed', so a just-promoted queued run appeared to be
+    // "moved to running then cancelled immediately". It must be pushed back to 'queued' to wait instead.
+    const deps = createDeps();
+    const updateSpy = jest.fn(async () => undefined);
+    deps.updateQueuedAgenticRunQueueState = updateSpy;
+
+    // The over-cap SELECT (via db-client.query) returns two excess running runs; every other query is [].
+    (dbClientMod.query as jest.Mock).mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes("\"Status\" = 'running'") && sql.includes('OFFSET')) {
+        return [
+          { Artikel_Nummer: 'R-EXCESS-1', RetryCount: 0, LastAttemptAt: '2024-01-01T00:00:00.000Z' },
+          { Artikel_Nummer: 'R-EXCESS-2', RetryCount: 2, LastAttemptAt: '2024-01-01T00:00:01.000Z' }
+        ];
+      }
+      return [];
+    });
+    (dbClientMod.queryOne as jest.Mock).mockResolvedValue({ runningcount: 3 });
+    jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
+    jest.spyOn(agenticDb, 'claimNotStartedAgenticRuns').mockResolvedValue([]);
+
+    await dispatchQueuedAgenticRuns(deps, { limit: 5 });
+
+    // Both excess runs are requeued (not failed/cancelled), preserving RetryCount and clearing LastError.
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ Artikel_Nummer: 'R-EXCESS-1', Status: AGENTIC_RUN_STATUS_QUEUED, LastError: null, RetryCount: 0 })
+    );
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ Artikel_Nummer: 'R-EXCESS-2', Status: AGENTIC_RUN_STATUS_QUEUED, LastError: null, RetryCount: 2 })
+    );
+    // No terminal-failure event was emitted for the requeued runs.
+    expect(deps.logEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ Event: 'AgenticRunFailed' })
+    );
   });
 });
 

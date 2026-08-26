@@ -1,4 +1,4 @@
-import { AGENTIC_REVIEW_SPEC_MAX_ENTRIES, type AgenticModelInvocationInput, type AgenticModelInvocationResult, type LangtextPayload } from '../../models';
+import { AGENTIC_REVIEW_SPEC_MAX_ENTRIES, AGENTIC_SNAPSHOT_SCHEMA_VERSION, type AgenticModelInvocationInput, type AgenticModelInvocationResult, type AgenticSnapshotFields, type LangtextPayload } from '../../models';
 import {
   getItem,
   findByMaterial,
@@ -11,6 +11,9 @@ import {
   logEvent,
   getAgenticRequestLog,
   persistAgenticRunError,
+  persistAgenticSearchLinks,
+  insertAgenticRunSnapshot,
+  pruneAgenticRunSnapshots,
   saveAgenticRequestPayload,
   markAgenticRequestNotificationSuccess,
   markAgenticRequestNotificationFailure
@@ -28,6 +31,7 @@ import { FlowError } from './flow/errors';
 import { handleAgenticResult, type AgenticResultPayload } from './result-handler';
 import { parseSequentialItemUUID } from '../lib/itemIds';
 import type { SearchSource } from './utils/source-formatter';
+import { ensureModelHttpTimeouts } from './utils/http-dispatcher';
 
 // TODO(agent): Audit request payload merge rules whenever the AgenticTarget schema evolves.
 
@@ -42,6 +46,50 @@ export interface AgenticModelInvokerOptions {
   logger?: AgenticModelInvokerLogger;
 }
 
+// Keep the local model resident between calls so a cold VRAM load doesn't trip the request timeout on
+// every invocation. Value is the Ollama keep-alive duration.
+const OLLAMA_KEEP_ALIVE = '10m';
+const LLM_RETRY_ATTEMPTS = 3;
+const LLM_RETRY_BASE_DELAY_MS = 2000;
+
+// Classify an LLM/HTTP transport failure as transient. With the header/body-timeout ceiling raised
+// (ensureModelHttpTimeouts), a slow first token no longer trips UND_ERR_HEADERS_TIMEOUT — so retries
+// here now cover only genuine transport drops (reset connection, network blip), where a re-send once the
+// model is warm succeeds.
+function isTransientLlmError(err: unknown): boolean {
+  const message = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase();
+  const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+  const code = String((err as { code?: string }).code ?? cause?.code ?? '').toLowerCase();
+  if (code && /headers_timeout|und_err|econnreset|etimedout|econnrefused|eai_again|enotfound|body_timeout/.test(code)) {
+    return true;
+  }
+  const causeMessage = (cause?.message ?? '').toLowerCase();
+  return /fetch failed|headers timeout|body timeout|timed out|timeout|socket hang up|econnreset|network|terminated/
+    .test(`${message} ${causeMessage}`);
+}
+
+async function withLlmRetry<T>(
+  op: () => Promise<T>,
+  logger: AgenticModelInvokerLogger | undefined,
+  label: string
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= LLM_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await op();
+    } catch (err) {
+      lastErr = err;
+      if (attempt >= LLM_RETRY_ATTEMPTS || !isTransientLlmError(err)) {
+        throw err;
+      }
+      const backoffMs = LLM_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+      logger?.warn?.({ err, msg: 'LLM transient failure; retrying', label, attempt, backoffMs });
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    }
+  }
+  throw lastErr ?? new Error('LLM invocation failed');
+}
+
 function normalizeNullableNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
     return null;
@@ -52,6 +100,69 @@ function normalizeNullableNumber(value: unknown): number | null {
 
 function normalizeString(value: unknown): string {
   return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value);
+}
+
+// Serialize retrieved search results to the LastSearchLinksJson shape that skipSearch reads back
+// (a SearchSource[] with at least a description). Deduped by URL and capped, mirroring the terminal
+// result-handler write so both writers store a uniform shape.
+function serializeSearchSourcesForReuse(sources: SearchSource[]): string | null {
+  if (!Array.isArray(sources) || sources.length === 0) {
+    return null;
+  }
+  const normalized: Array<{ url: string; title?: string; description?: string }> = [];
+  const seen = new Set<string>();
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue;
+    const url = typeof source.url === 'string' ? source.url.trim() : '';
+    if (!url) continue;
+    const key = url.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const title = typeof source.title === 'string' && source.title.trim() ? source.title.trim() : undefined;
+    const description =
+      typeof source.description === 'string' && source.description.trim()
+        ? source.description.trim()
+        : typeof source.content === 'string' && source.content.trim()
+          ? source.content.trim()
+          : undefined;
+    normalized.push({ url, title, description });
+    if (normalized.length >= 25) break;
+  }
+  if (normalized.length === 0) {
+    return null;
+  }
+  try {
+    return JSON.stringify(normalized);
+  } catch {
+    return null;
+  }
+}
+
+// The AI-written fields a run snapshot captures — the diff surface and what restore writes back.
+const SNAPSHOT_FIELD_KEYS = [
+  'Artikelbeschreibung',
+  'Kurzbeschreibung',
+  'Langtext',
+  'Hersteller',
+  'Länge_mm',
+  'Breite_mm',
+  'Höhe_mm',
+  'Gewicht_kg',
+  'Verkaufspreis',
+  'Hauptkategorien_A',
+  'Unterkategorien_A',
+  'Hauptkategorien_B',
+  'Unterkategorien_B'
+] as const;
+
+function buildSnapshotFields(source: Record<string, unknown>): AgenticSnapshotFields {
+  const out: Record<string, unknown> = {};
+  for (const key of SNAPSHOT_FIELD_KEYS) {
+    if (source[key] !== undefined) {
+      out[key] = source[key];
+    }
+  }
+  return out as AgenticSnapshotFields;
 }
 
 const REVIEW_SPEC_FIELD_LIMIT = AGENTIC_REVIEW_SPEC_MAX_ENTRIES;
@@ -339,8 +450,8 @@ export class AgenticModelInvoker {
         ar."LastModified" AS "ReviewedAt"
       FROM item_refs r
       JOIN agentic_runs ar ON ar."Artikel_Nummer" = r."Artikel_Nummer"
-      WHERE CAST(r."Unterkategorien_A" AS INTEGER) = (
-        SELECT CAST(base."Unterkategorien_A" AS INTEGER)
+      WHERE ROUND(NULLIF(r."Unterkategorien_A", '')::NUMERIC)::INTEGER = (
+        SELECT ROUND(NULLIF(base."Unterkategorien_A", '')::NUMERIC)::INTEGER
         FROM item_refs base
         WHERE base."Artikel_Nummer" = $1
       )
@@ -397,6 +508,11 @@ export class AgenticModelInvoker {
 
   /** Load a model for the configured provider using the shared API settings and the given model name. */
   private async loadModel(modelName: string | undefined): Promise<ChatModel> {
+    // Move undici's fetch header/body-timeout wall BEFORE building any model client, so a slow first
+    // token from a cold model isn't misclassified as a transport failure (root fix for the recurring
+    // UND_ERR_HEADERS_TIMEOUT). Idempotent + best-effort; retry below stays as the fallback for genuine
+    // transport drops.
+    await ensureModelHttpTimeouts(this.logger);
     if (modelConfig.provider === 'ollama') {
       try {
         const module = await import('@langchain/ollama');
@@ -404,9 +520,25 @@ export class AgenticModelInvoker {
         if (typeof ChatOllama !== 'function') {
           throw new Error('ChatOllama constructor unavailable');
         }
+        // keepAlive keeps the model resident so subsequent calls skip the cold VRAM load that trips the
+        // request timeout. Cast the options: keepAlive is a valid ChatOllama field but not always in the
+        // published constructor typings.
+        // numCtx: Ollama defaults to 2048 tokens, well below the extraction prompt (~6–7k tokens); the
+        // prompt was silently left-truncated and the model returned an empty completion (the root cause of
+        // the "json match missing"/EXTRACTION_FAILED loop). format: 'json' is an opt-in hard guard against
+        // empty/prose output (off by default so a reasoning model's <think> phase isn't suppressed).
         const client = new ChatOllama({
           baseUrl: modelConfig.baseUrl,
-          model: modelName
+          model: modelName,
+          keepAlive: OLLAMA_KEEP_ALIVE,
+          ...(typeof modelConfig.numCtx === 'number' ? { numCtx: modelConfig.numCtx } : {}),
+          ...(modelConfig.formatJson ? { format: 'json' } : {})
+        } as ConstructorParameters<typeof ChatOllama>[0]);
+        this.logger.info?.({
+          msg: 'loaded ollama chat model',
+          model: modelName,
+          numCtx: modelConfig.numCtx ?? null,
+          formatJson: modelConfig.formatJson
         });
         const rawInvoke = (client as {
           invoke?: (messages: Array<{ role: string; content: unknown }>) => Promise<{ content?: unknown }>;
@@ -416,9 +548,12 @@ export class AgenticModelInvoker {
           this.logger.error?.({ err, msg: 'ollama client missing invoke method' });
           throw err;
         }
+        const logger = this.logger;
         return {
           async invoke(messages) {
-            const response = await rawInvoke.call(client, messages);
+            // Retry transient transport failures (e.g. undici headers-timeout on a cold model load) so a
+            // slow first token doesn't permanently fail the run now that failed runs are terminal.
+            const response = await withLlmRetry(() => rawInvoke.call(client, messages), logger, 'ollama.invoke');
             return { content: response?.content };
           }
         } satisfies ChatModel;
@@ -746,6 +881,31 @@ export class AgenticModelInvoker {
         });
         target.Artikel_Nummer = trimmedItemId;
       }
+
+      // Snapshot the pre-run enriched state (versioned history → KI-tab diff + restore) from the pure DB
+      // fields, before the request-payload merge or Artikelbeschreibung fill-in mutates them. The run's
+      // current ReviewState is captured so retention can always keep the last approved state. Best-effort:
+      // a snapshot failure must never block the run.
+      try {
+        const snapshotArtikelNummer =
+          typeof target.Artikel_Nummer === 'string' ? target.Artikel_Nummer.trim() : trimmedItemId;
+        const existingForSnapshot = await getAgenticRun(snapshotArtikelNummer);
+        await insertAgenticRunSnapshot({
+          Artikel_Nummer: snapshotArtikelNummer,
+          RunId: existingForSnapshot?.Id ?? null,
+          Reason: reworkSpecFields.length > 0 ? 'pre-rework' : 'pre-run',
+          CapturedReviewState: existingForSnapshot?.ReviewState ?? null,
+          // Actor isn't on the invocation input; the reviewer (if any) is the closest available attribution.
+          Actor: typeof input.review?.reviewedBy === 'string' && input.review.reviewedBy.trim() ? input.review.reviewedBy.trim() : null,
+          TriggerReason: typeof input.context === 'string' && input.context.trim() ? input.context.trim() : null,
+          SchemaVersion: AGENTIC_SNAPSHOT_SCHEMA_VERSION,
+          Fields: buildSnapshotFields(loadedTarget as Record<string, unknown>)
+        });
+        await pruneAgenticRunSnapshots(snapshotArtikelNummer);
+      } catch (err) {
+        this.logger.warn?.({ err, msg: 'failed to capture pre-run snapshot', itemId: trimmedItemId });
+      }
+
       if (!target.Artikelbeschreibung && input.searchQuery) {
         target.Artikelbeschreibung = input.searchQuery;
       }
@@ -776,8 +936,16 @@ export class AgenticModelInvoker {
         exampleItemBlock = STATIC_EXAMPLE_ITEM_BLOCK;
       }
 
+      // Reuse stored search results whenever we have them and no targeted re-search is warranted, so
+      // the search provider is hit only when actually needed — no stored results yet, or a reviewer
+      // asked us to find specific missing fields. This is the single decision point for search-vs-reuse
+      // and so covers every path uniformly (first run, in-cycle retry after a failure, and the keep-busy
+      // retry of a failed/cancelled run): a given item searches at most once until it is reset. A live
+      // search persists its results immediately (deps.persistSearchLinks), so even a run that later
+      // fails leaves them stored for the next, search-free attempt.
+      const wantsFreshTargetedSearch = normalizedMissingSpecFields.length > 0;
       let storedSources: SearchSource[] | undefined;
-      if (requestedSkipSearch) {
+      if (!wantsFreshTargetedSearch) {
         try {
           const existingRun = await getAgenticRun(trimmedItemId);
           if (existingRun?.LastSearchLinksJson) {
@@ -787,18 +955,21 @@ export class AgenticModelInvoker {
             }
           }
         } catch (err) {
-          this.logger.warn?.({ err, msg: 'failed to load stored search sources for skipSearch run', itemId: trimmedItemId });
+          this.logger.warn?.({ err, msg: 'failed to load stored search sources', itemId: trimmedItemId });
         }
       }
 
-      // Only honour skipSearch when there is actually a stored search to reuse. Otherwise a skip would
-      // extract with zero evidence and no fallback — so we downgrade to a normal live search.
-      const skipSearch = requestedSkipSearch && Array.isArray(storedSources) && storedSources.length > 0;
-      if (requestedSkipSearch && !skipSearch) {
+      // Skip the live search only when there is actually a stored search to reuse; otherwise fall back
+      // to a live search (a skip with zero evidence would extract nothing).
+      const skipSearch = Array.isArray(storedSources) && storedSources.length > 0;
+      if ((requestedSkipSearch || storedSources !== undefined) && !skipSearch) {
         this.logger.info?.({
-          msg: 'skipSearch requested but no stored search found; falling back to live search',
-          itemId: trimmedItemId
+          msg: 'no stored search to reuse; performing a live search',
+          itemId: trimmedItemId,
+          requestedSkipSearch
         });
+      } else if (skipSearch && !requestedSkipSearch) {
+        this.logger.info?.({ msg: 'reusing stored search results (no live search needed)', itemId: trimmedItemId });
       }
 
       const payload = await runItemFlow(
@@ -829,7 +1000,14 @@ export class AgenticModelInvoker {
           saveRequestPayload: saveAgenticRequestPayload,
           markNotificationSuccess: markAgenticRequestNotificationSuccess,
           markNotificationFailure: markAgenticRequestNotificationFailure,
-          persistLastError: this.persistAgenticRunError
+          persistLastError: this.persistAgenticRunError,
+          persistSearchLinks: async (id: string, sources: SearchSource[]) => {
+            try {
+              await persistAgenticSearchLinks(id, serializeSearchSourcesForReuse(sources));
+            } catch (err) {
+              this.logger.warn?.({ err, msg: 'failed to persist search links for reuse', itemId: id });
+            }
+          }
         }
       );
 

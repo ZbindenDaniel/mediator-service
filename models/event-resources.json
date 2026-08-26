@@ -24,6 +24,7 @@
   { "key": "AgenticReviewApproved", "label": "Ki-Ergebnis freigegeben", "level": "info", "topic": "agentic" },
   { "key": "AgenticReviewRejected", "label": "Ki-Ergebnis abgelehnt", "level": "important", "topic": "agentic" },
   { "key": "AgenticRunReset", "label": "KI-Lauf zurückgesetzt", "level": "info", "topic": "agentic" },
+  { "key": "AgenticSearchLinkRemoved", "label": "Suchergebnis entfernt", "level": "important", "topic": "agentic" },
   { "key": "AgenticRunQueued", "label": "KI-Lauf eingereiht", "level": "info", "topic": "agentic" },
   { "key": "AgenticRunRequeued", "label": "KI-Lauf erneut eingereiht", "level": "info", "topic": "agentic" },
   { "key": "AccessoryLinked", "label": "Zubehör verknüpft", "level": "info", "topic": "logistics" },

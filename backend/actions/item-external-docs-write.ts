@@ -3,7 +3,7 @@ import path from 'path';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { ALT_DOC_DIRS } from '../config';
-import { resolveAltDocDirPath, buildExternalDocUrl } from '../lib/alt-doc-resolver';
+import { resolveAltDocDirPath, resolveAltDocDirPaths, buildExternalDocUrl } from '../lib/alt-doc-resolver';
 import { resolvePathWithinRoot } from '../lib/path-guard';
 import { emitMediaAudit } from '../lib/media-audit';
 import { queryOne } from '../db-client';
@@ -39,9 +39,14 @@ const action = defineHttpAction({
     // SN:/MAC: prefix bypasses DB lookup so Phase 2 can upload before item creation
     let ctx2: { itemUUID: string; ean: string | null; serialNumber: string | null; macAddress: string | null; artikelNummer: string | null };
     let resolvedArtikelNummer: string | null = null;
+    // When a prefix is present it declares the identity directly; that declared type must
+    // win over the dir's default identifierType so e.g. a serialNumber-typed dir (wipe-reports)
+    // still accepts MAC-keyed uploads for drives with no readable serial.
+    let identifierTypeOverride: 'serialNumber' | 'macAddress' | undefined;
     if (itemUUID.startsWith('SN:') || itemUUID.startsWith('MAC:')) {
       const isSN = itemUUID.startsWith('SN:');
       const identifierValue = itemUUID.slice(isSN ? 3 : 4);
+      identifierTypeOverride = isSN ? 'serialNumber' : 'macAddress';
       ctx2 = {
         itemUUID,
         ean: null,
@@ -65,13 +70,24 @@ const action = defineHttpAction({
       };
     }
 
-    const resolved = resolveAltDocDirPath(ctx2, dirConfig);
+    // Prefixed uploads pin the type the caller declared; a real-item upload targets the first
+    // accepted type present on the item (the preferred folder of the fallback chain).
+    let resolved: { dirPath: string; identifierValue: string } | null;
+    let effectiveType: typeof dirConfig.identifierType;
+    if (identifierTypeOverride) {
+      resolved = resolveAltDocDirPath(ctx2, dirConfig, identifierTypeOverride);
+      effectiveType = identifierTypeOverride;
+    } else {
+      const preferred = resolveAltDocDirPaths(ctx2, dirConfig)[0] ?? null;
+      resolved = preferred;
+      effectiveType = preferred?.identifierType ?? dirConfig.identifierType;
+    }
     if (!resolved) return sendJson(res, 422, { error: 'identifier_not_set' });
 
     const identifier = {
       artikelNummer: resolvedArtikelNummer,
       itemUUID,
-      altIdentifierType: dirConfig.identifierType,
+      altIdentifierType: effectiveType,
       altIdentifierValue: resolved.identifierValue
     };
 

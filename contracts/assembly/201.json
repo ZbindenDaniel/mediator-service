@@ -10,6 +10,7 @@
         "id": "has_fan",
         "type": "boolean",
         "question": "Lüfter vorhanden?",
+        "skipAtIntake": true,
         "qualityImpact": { "false": 1 }
       }
     },
@@ -21,15 +22,8 @@
         "id": "has_keyboard",
         "type": "boolean",
         "question": "Tastatur vorhanden?",
+        "skipAtIntake": true,
         "qualityImpact": { "false": 1 }
-      },
-      "specQuestion": {
-        "id": "keyboard_layout",
-        "type": "select",
-        "question": "Tastatur-Layout?",
-        "values": ["CH", "DE", "US", "Anderes"],
-        "specField": "Tastatur-Layout",
-        "specValue": "%v"
       }
     },
     {
@@ -40,6 +34,7 @@
         "id": "has_display",
         "type": "boolean",
         "question": "Display vorhanden?",
+        "skipAtIntake": true,
         "qualityImpact": { "false": 1 }
       }
     },
@@ -51,6 +46,7 @@
         "id": "battery_condition",
         "type": "select",
         "question": "Akkuzustand?",
+        "autoFill": "battery",
         "values": ["Gut (>80%)", "Mittel (50–80%)", "Schwach (<50%)", "Defekt", "Nicht vorhanden"],
         "qualityImpact": {
           "Gut (>80%)": 5,
@@ -72,6 +68,7 @@
         "id": "ram_gb",
         "type": "select",
         "question": "Wie viel RAM ist verbaut?",
+        "autoFill": "ram",
         "values": ["2", "4", "8", "16", "32", "64"],
         "specField": "RAM",
         "specValue": "%v GB"
@@ -87,6 +84,7 @@
         "id": "storage_gb",
         "type": "select",
         "question": "Speicher (SSD/HDD)?",
+        "autoFill": "storageSize",
         "values": ["128", "256", "512", "1000", "2000"],
         "specField": "Speicher",
         "specValue": "%v GB"
@@ -95,6 +93,7 @@
         "id": "drive_type",
         "type": "select",
         "question": "Speichertyp?",
+        "autoFill": "storageType",
         "values": ["SSD", "NVMe SSD", "HDD", "SSD + HDD", "eMMC"],
         "specField": "Speichertyp",
         "specValue": "%v"
@@ -108,6 +107,7 @@
         "id": "has_mainboard",
         "type": "boolean",
         "question": "Mainboard vorhanden?",
+        "skipAtIntake": true,
         "qualityImpact": { "false": 1 }
       }
     }

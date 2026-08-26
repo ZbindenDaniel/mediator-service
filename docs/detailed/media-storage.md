@@ -190,11 +190,30 @@ Set `ALT_DOC_DIRS_FILE=/etc/mediator/alt-doc-dirs.json` in `.env`. The file cont
 |---|---|---|
 | `name` | Yes | Unique key used in API URLs (`/external-docs/<name>/…`) — alphanumeric, hyphens, underscores |
 | `mountPath` | Yes | Absolute filesystem path to the mounted root |
-| `identifierType` | Yes | `ean`, `serialNumber`, `macAddress`, or `artikelNummer` |
-| `normalize` | No | Optional transform before using value as folder name: `uppercase`, `lowercase`, `strip-colons` |
+| `identifierType` | Yes | Primary/preferred key type: `ean`, `serialNumber`, `macAddress`, or `artikelNummer` |
+| `identifierTypes` | No | Ordered **fallback chain** of accepted types, e.g. `["serialNumber","macAddress"]`. When set, files are listed/served/uploaded under every type present on the item; the first resolving type is the preferred write target. Defaults to `[identifierType]`; the primary type is always included and first. See below. |
+| `normalize` | No | Optional transform before using value as folder name: `uppercase`, `lowercase`, `strip-colons`. Ignored for `macAddress` values, which are always canonicalized (separators stripped, upper-cased). |
 | `docType` | No | Human-readable label shown in the UI and API responses (e.g. `Löschprotokoll`) |
-| `writable` | No | `true` to allow uploading new files via the UI (default: `false`). The upload modal shows this dir as a binding option only when `writable: true` and the item has the required identifier. |
+| `writable` | No | `true` to allow uploading new files via the UI (default: `false`). The upload modal shows this dir as a binding option only when `writable: true` and the item has an accepted identifier. |
 | `deletable` | No | `true` to allow deleting individual files via the UI (default: `false`). Files are never deleted automatically — only explicit per-file UI actions are gated by this flag. |
+
+#### Fallback-chain directories (`identifierTypes`)
+
+A device's identity is not always a single field — intake stores a machine as "serial if present,
+else MAC", and some drives expose no readable serial. A directory can therefore accept an **ordered
+list** of identifier types. With `identifierTypes: ["serialNumber","macAddress"]` on `wipe-reports`:
+
+- **List / item detail** — files are **unioned** across every accepted type the item has. A machine
+  with only a MAC surfaces its `MAC:`-keyed reports; one with both a serial and MAC-keyed
+  machine-level reports shows both sets under one directory section. The section header shows the
+  first (preferred) resolving type.
+- **Upload (UI)** — writes to the first accepted type present on the item (serial if it has one,
+  otherwise MAC). The netboot image can still pin a type explicitly via the `SN:`/`MAC:` prefix.
+- **Serve** — the file server checks each accepted-type folder in order and serves the first that
+  contains the requested file, so files under either folder are reachable.
+- **MAC canonicalization** — `macAddress` folder names are always `separators-stripped + UPPERCASED`
+  (`40:16:7e:aa:9e:6b` and `40167eaa9e6b` both → `40167EAA9E6B`), so the netboot image's key and the
+  item's stored MAC resolve to the same folder regardless of colon/case form.
 
 ### API surface
 
@@ -256,6 +275,16 @@ POST /api/items/:itemUUID/external-docs/:dirName
 Uploads a file to the external mount. Requires `writable: true` on the dir config — returns `403`
 otherwise. Body: raw file bytes. Required header: `X-Filename`. The file is written to
 `<mountPath>/<identifierValue>/<safeName>`. Returns `{ ok: true, fileName, url }`.
+
+**Prefix-keyed uploads (Phase 2 intake).** When `:itemUUID` carries an `SN:` or `MAC:` prefix
+(e.g. `SN:ST940814AS`, `MAC:40167eaa9e6b`), the DB lookup is skipped and the folder is keyed
+directly from the prefixed value — this lets the netboot intake image upload before the item
+exists. The **prefix declares the identifier type**, and that declared type wins over the dir's
+default `identifierType`. So a `serialNumber`-typed directory (e.g. `wipe-reports`) still accepts a
+`MAC:`-keyed upload — needed because machine-level and orphan wipe reports are keyed by the machine
+MAC when the drive exposes no readable serial. The prefixed value is validated against the
+declared type's pattern (below) and path-guarded exactly as a DB-resolved value is. Returns `422
+identifier_not_set` only when the declared identifier is empty or fails validation.
 
 ```
 DELETE /api/items/:itemUUID/external-docs/:dirName/:fileName

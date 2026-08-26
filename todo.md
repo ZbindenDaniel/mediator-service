@@ -3,7 +3,7 @@
 ## Confirmed Decisions
 - **ERP export approval gate:** Only approved items may be exported/synced to the ERP — exporting unreviewed items is too dangerous. Enforced as a single choke point in `stageItemsExport` for `erp` mode (covers `/api/sync/erp`, `/api/export/items?mode=erp`, `/api/export/data?mode=erp`) plus an early filter in `sync-erp`. Configurable via `ERP_SYNC_REQUIRE_APPROVAL` (default `true`); backup-mode exports are unaffected.
 - **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.
-- **Item list conditional column:** A single date column slot appears only when sorting by `entryDate` or `lastSynced`, showing the relevant date. Other sort keys show no date column.
+- **Item list conditional column:** A single date column slot appears only when sorting by `entryDate`, `lastSynced`, or `agenticLastRun`, showing the relevant date. Other sort keys show no date column.
 - **Database:** PostgreSQL via `pg` (node-postgres). `DATABASE_URL` is required — no SQLite fallback. Local dev: Docker Compose Postgres service. Production: existing Postgres server, add a `mediator` database. Data migration from SQLite: `scripts/migrate-sqlite-to-postgres.ts`.
 - **Multi-instance agentic safety (Phase 2, implemented):** `claimQueuedAgenticRuns` in `backend/db.ts` uses a CTE with `FOR UPDATE SKIP LOCKED` + immediate UPDATE in one atomic statement. Call site in `backend/agentic/index.ts` updated; redundant QUEUED→RUNNING re-check removed. See agentic changelog entry 858.
 
@@ -33,13 +33,111 @@
 - **Components: verify intake image can read per-drive serials.** The serial (with `wwn`/`model`
   fallback) is the identity/report key; confirm the netboot image reads it for every drive type
   on the bench (some USB bridges hide it). Contract: [`intake-image.http`](docs/detailed/intake-image.http).
+  Note: MAC-keyed uploads work as the serial-less fallback and now surface in the UI/serve too
+  (media #915 upload, #916 fallback-chain listing) — a drive with no readable serial and
+  machine-level/orphan wipe reports upload under `MAC:<mac>` and appear on the machine item.
+- ✅ **External docs: surface MAC-keyed reports on the machine item.** Resolved via the fallback-chain
+  model (media #916): `wipe-reports` is now `identifierTypes: ["serialNumber","macAddress"]`; the list,
+  item-detail, and serve paths union files across accepted types via the shared `lib/external-docs.ts`.
+  **Follow-ups:** (a) `intake-scans` has the same serial-less exposure for machine-level scans
+  (memtest/battery) — opt it into the chain (config-only, no code) once confirmed the image keys those
+  by MAC for serial-less devices; (b) filename collision across the serial and MAC folder lists both
+  rows but serve returns the first type-order match — annotate the file URL with its identifier to fully
+  disambiguate if it ever bites; (c) the list section header shows one identifier value even when files
+  span both folders.
 - **Intake: scan.txt augmentation of agentic extraction.** When `/complete` fires, if `items.SerialNumber` is set, look for Phase 2 test result files in `{intake-scans mountPath}/{serial}/` and prepend a summarized block (≤2000 chars) to the extraction prompt. Requires modifying `backend/agentic/flow/item-flow-extraction.ts`.
 - **Intake: operator notification on completion.** Notify the operator (push notification or TUI display) when a device finishes the full pipeline (quality done + agentic run queued).
-- **Intake: InstanceSpecs sync.** When a quality answer drives a spec change on a ref-sharing instance, propagate to all instances sharing the same Artikelnummer (pre-existing open question for the quality review flow too).
+- **Intake: InstanceSpecs sync.** When a quality answer drives a spec change on a ref-sharing instance, propagate to all instances sharing the same Artikelnummer (pre-existing open question for the quality review flow too). Note: operators can now manually correct/add/delete a single instance's specs via the "Instanz bearbeiten" card (`PATCH /api/items/:id/instance` `InstanceSpecs`, full-replace — item-lifecycle #911); this edit is per-instance only and does not propagate.
 
 ---
 
 ## Priority 1 — Bugs & Active Work
+
+0za. ✅ **Admin "Backup" was not a restorable snapshot + emitted env-dependent HTML (erp-sync #931).**
+  The Backup button routed to `/api/export/items?mode=backup`, which emitted only items+boxes (no agentic
+  runs, no events) and resolved Langtext via `LANGTEXT_EXPORT_FORMAT` — so setting that env to `html` (for
+  the ERP boundary) made *backups* emit HTML cells that break on re-import. Fixed: Backup now routes to
+  `/api/export/data?format=zip&entities=items,boxes,agentic,events&mode=backup` (all four CSVs the importer
+  ingests); backup Langtext is **always** JSON (env override confined to ERP); backup is uncapped (was
+  truncating agentic/events at 500). Also fixed three latent `export-data` bugs (boxes/agentic/events queries
+  used unquoted CamelCase identifiers → threw against the real schema) and added `LastSearchLinksJson` to the
+  agentic export so search evidence survives restore.
+  **Follow-ups (deferred):** (a) no JSON restore importer — restore stays CSV/ZIP-based (operator's call that a
+  backup "should be CSV"); (b) `manual_import`≡`backup` and `automatic_import`≡`erp` internally — the 4-button
+  UI could be collapsed/relabeled to the 2 real regimes; (c) `/api/export/data` is unauthenticated — gate under
+  the Authentik/role model (33c) if backups need access control.
+
+0z9. ✅ **Admin "Datenexport" downloaded nothing + Abbrechen was a silent no-op (erp-sync #927 / agentic #919).**
+  (a) `ExportCard` never sent the `actor` query param the `/api/export/items` endpoint requires, so every
+  download 400'd and the `if(!res.ok) throw`→`logError` catch swallowed it (no download, no message). Now
+  resolves the operator via `ensureUser()`, appends `&actor=…`, and shows an inline error on failure.
+  (b) `persistAgenticRunCancellation` kept the `!/^\d+$/` numeric-only Artikel_Nummer guard (already removed
+  from close in #876) — it silently rejected non-numeric refs client-side, so "Abbrechen" did nothing on
+  spare-part/component refs. Guard dropped (kept `I-` instance guard). The **delete** path was investigated
+  and found already correct in-tree (wired, routed, `deleteAgenticRun` unit-tested, resets stick via #876's
+  `SearchQuery`-clear) — the residual silent-no-op was the cancel guard, now fixed.
+0z8. ✅ **Queued agentic runs promoted to running then cancelled immediately (should wait for a slot).**
+  Root cause: `499d8a4` ("Multi-instance agentic safety") removed the atomic running-count gate that the
+  queued→running promotion used to run *inside its own transaction* (it left an over-scheduled run `queued`
+  to wait). Cap enforcement then relied only on the dispatcher's non-atomic `availableSlots = MAX − runningCount`
+  read, and the dispatch `setInterval` (`server.ts`) has no reentrancy guard — so a tick outlasting the 5 s
+  interval overlaps the next, both read the same low count, both `claimQueuedAgenticRuns`, and together over-fill
+  the running slots; the over-cap sweep then flipped the excess to terminal `failed` (`over-cap-cancelled`). Fixed
+  in three layers: (1) reentrancy guard on the dispatch loop; (2) `claimQueuedAgenticRuns(limit, maxRunning?)` clamps
+  its `LIMIT` to the free slots inside the same atomic statement; (3) the over-cap net now **requeues** the freshest
+  excess to `queued` (keeping the oldest/in-progress running) instead of failing it, so a run that can't run yet waits.
+  See agentic changelog #919. **Deferred:** no Postgres advisory lock for a fully serializable multi-instance claim
+  (deployment is single-instance; the requeue-not-fail net covers any residual race).
+
+0z5. **Intake asks RAM / storage despite the scan — ROOT-CAUSED; backend done, image fix handed off.**
+  Root cause (intake #915): the netboot image's `build_scan_payload` (in `common.sh`, separate repo) reads
+  disk `sizeGb` from `smartctl` `.user_capacity.bytes` — an **ATA/SATA-only** field, **empty for NVMe** and
+  on smartctl open-fail — so `sizeGb:0` on modern NVMe laptops → `storageSize` signal null → `storage_gb`
+  asked. The backend resolver and `phase1.sh` are both correct for a well-formed scan (verified). RAM
+  (`/proc/meminfo`) already resolved; storage was the visible offender.
+  - ✅ **In-repo (shipped):** `resolveIntakeQuestions` returns `detected` + `unresolvedAutoFill`; quality-step
+    responses carry `detectedSpecs` (omit-but-inform); both build paths log `[intake] question resolution`
+    (asked/detected/unresolvedAutoFill) so a mis-scan is diagnosable. Contract (`intake-image.http` + guide)
+    now requires `lsblk`-sourced disk size.
+  - ⏳ **Image repo (handed off):** patch `build_scan_payload` to source `sizeGb` from `lsblk -bdno SIZE`
+    (bytes → GB); keep smartctl for identity only. This is the change that actually stops the storage prompt.
+  - ⏳ **Optional image-side:** render the response's `detectedSpecs` as a read-only banner in `phase1.sh`.
+  - ✅ **Operator-typed Artikelbeschreibung honoured (intake #916).** Was dropped due to a field-name
+    mismatch (`findOrCreateRef` read `Kurzbeschreibung`, station sends `Artikelbeschreibung`) so the
+    garbage scanned model always won; operator text is now authoritative.
+  - ✅ **Every question skippable / "don't know" (intake #916).** Empty answers are treated as unanswered
+    in the derive functions (no junk `RAM: " GB"`) and dropped from the intake merge. ⏳ **Image-side:** a
+    small `phase1.sh` patch to let the operator press Enter to skip a select/boolean/text prompt (backend
+    already accepts an omitted/empty answer).
+  - **Follow-ups:** broaden `driveTypeLabel` tolerance for exotic `type` strings (`sata`/`""`); a per-run
+    scan-quality metric off `unresolvedAutoFill`.
+
+0z6. **Intake enrichment should key on `sku`, not the DMI product name.** `dmidecode -s system-product-name`
+  returns generic junk on many HP/Lenovo laptops ("HP Notebook", "20XW"); the scan also captures `sku`
+  (system-sku-number), which HP/Dell use as a full commercial identifier. When the agentic model-name
+  enrichment runs, prefer `sku` as the lookup key over the product name. Separate from 0z5.
+
+0z7. **Add a CI JSON-lint over `contracts/`.** The invalid-JSON bug in `quality/201.json` (intake #914) was
+  invisible because both contract loaders swallow parse errors and return `null`. A cheap `node -e JSON.parse`
+  (or `jq empty`) sweep over `contracts/**/*.json` in CI would catch the next one at commit time.
+
+0z4. **AI runs optimization — phased implementation** (design: `docs/PLANNING_ai_runs_optimization.md`).
+  - ✅ **Phase 1a (shipped, agentic #915).** (5) Ollama `UND_ERR_HEADERS_TIMEOUT` fixed at the root — global undici dispatcher raises `headersTimeout`/`bodyTimeout` (`ensureModelHttpTimeouts`, env `MODEL_HTTP_HEADERS_TIMEOUT_MS`/`_BODY_TIMEOUT_MS`, default 10 min); retry demoted to genuine-drop fallback. (4B) The three queue→`failed` paths now emit a structured `from→to/reason` log + an `AgenticRunFailed` item event with a `category` tag (`recordQueueTerminalTransition`).
+  - ✅ **Phase 1b (shipped, agentic #916, Thread 2A).** Stored search evidence (`LastSearchLinksJson`) now surfaced in the KI tab via `AgenticSearchSources` + a `Suchergebnisse (N)` row in `ItemDetail`. Source **removal** now shipped (agentic #923 — delete a bad link so it stops feeding reuse+grounding); pin/reorder + add-manual-link curation and a true per-run **query count** (needs schema, todo #24) remain follow-ups (#21/#22).
+  - ✅ **Phase 3 (shipped, agentic #917, Thread 1/3).** Identity grounding: no new schema — reuses the run's `SearchQuery` anchor + known subcategory label to inject a "stay in the known device class" fragment into extraction + supervisor prompts, and reworded `extract.md` so it no longer licenses changing the device class. Stops the "PC → Pokémon card set" drift. Deferred: post-search relevance gate.
+  - ✅ **Phase 4 (shipped, agentic #918, Thread 4).** Run history: `agentic_run_snapshots` (snapshot-before-run, retention keep-4 + always-last-approved), KI-tab "KI-Verlauf" timeline + field-level `computeSnapshotDiff` (Langtext key-by-key), and non-destructive manual restore (`GET/POST …/agentic/snapshots[/:id/restore]`). **Follow-up:** extend the same history to instance/intake fields (`InstanceSpecs`, serial/MAC) — operator confirmed this will be needed.
+  - **Then — Phase 2 (state-machine, decision still open):** failure-aware queue (classify infra/transient/permanent + health window + throttle + bounded re-queue). Decide first-cut scope (full breaker vs bounded-requeue-only vs keep-terminal) when starting it.
+  - **Open questions** (from the doc) still to brainstorm before their phases: grounding-anchor precedence, relevance-gate outcome, over-cap re-queue semantics, transition-trail storage, rework pre-state memory.
+
+0z1. ✅ **Agentic search-token burn + auto-retry of failed/cancelled runs.** (a) The keep-busy dispatcher used a plain `SELECT` (`fetchIdleFillAgenticRuns`) that re-selected the same `notStarted`+`SearchQuery` runs on every 5s tick, re-billing identical Tavily searches; replaced with an atomic `claimIdleFillAgenticRuns` (`FOR UPDATE SKIP LOCKED`) so each run is claimed/dispatched exactly once (changelog #908). (b) Keep-busy now also retries settled `failed`/`cancelled` runs (cooldown-gated), and search reuse moved into the invoker as one decision — reuse stored `LastSearchLinksJson` when present, search live only when none exist (or a reviewer flagged missing specs). Search results are persisted the moment they're retrieved (`persistAgenticSearchLinks`) so a later failure still leaves them for a search-free retry. An item hits the search provider at most once until reset (changelog #909). **Deferred:** `retryCooldownMinutes` (60) not yet config-exposed; no hard cap on total auto-retries of a permanently-broken item; auto-retrying user-`cancelled` runs may want a flag. **Superseded by #913** (see 0z2): the auto-dispatcher no longer retries `failed`/`cancelled` runs at all (so operator stops are durable and there is no unbounded retry), failures are terminal, and the deferred cooldown/ceiling concerns no longer apply.
+
+0z2. ✅ **Agentic auto-dispatcher hardening (incident: ~1000 queries in minutes + un-stoppable runs).** Demoted keep-busy to feed **only** `notStarted` → `queued` (`claimNotStartedAgenticRuns`), capped at N running + N waiting (`MAX_WAITING_RUNS = MAX_CONCURRENT_RUNNING_RUNS`); it no longer resurrects `failed`/`cancelled` runs (operator stops now hold) and no longer resets `RetryCount`. Failed runs (and stale-run recovery) are now **terminal** — no auto-requeue. Added admin kill switch `agentic_auto_dispatch_enabled` (`/api/admin/agentic-dispatch` + Admin page card). In-process resilience added so terminal-failure doesn't over-fail on transient blips: Tavily retry + shorter timeout, per-plan tolerance in `collectSearchContexts` (partial results survive + persist), Ollama `keepAlive` + transient-retry (undici header timeout). See changelog #913. **Deferred:** kill switch scopes to the auto-feeder only (no global dispatch emergency-stop); `MAX_WAITING_RUNS` hardwired to the running cap; Ollama undici `headersTimeout` mitigated via keepAlive+retry rather than a custom dispatcher (✅ now resolved in #915 — a global undici dispatcher raises the timeout); failed runs need manual re-trigger (intentional).
+
+0z2. ✅ **Intake reference matching failed on identical names + "HP HP HP" brand triplication.** `/api/intake/start`'s `findRefCandidates` ran a bespoke `Kurzbeschreibung`-only substring query, but imported refs keep the model in `Artikelbeschreibung` (importer maps `notes → Kurzbeschreibung`), so every ERP-imported ref missed — the operator was pushed to create a duplicate. Compounded by an unconditional `[Hersteller, model].join(' ')` that prepended the brand onto a model that already contained it. Fixed: intake now **reuses the same reference matcher as manual creation** — the token-based fuzzy search behind `/api/search?scope=refs` was extracted to `searchItemReferences()` (in `backend/actions/search.ts`) and `findRefCandidates` calls it; the new-ref name (and the `intake-complete` agentic hand-off) no longer prepend `Hersteller`. No token-dedup workaround was added — the duplicated brand in `model` is a source bug (see 0z3). See intake changelog #913. **Deferred:** no backfill of existing duplicate refs.
+
+0z3. **Intake netboot image / station TUI emits a duplicated brand in `model`.** The scan reports `vendor="HP"` with the brand also embedded (sometimes doubled) inside `model` (e.g. `model="HP HP ProBook 470 G4"`), and the external station TUI further combines the echoed `vendor`+`model` when pre-filling the new-ref form. The backend deliberately no longer masks this (see 0z2) — fix it at the source: the netboot intake image should emit a clean `model` (brand once, or brand-free with `vendor` separate), and the TUI should stop concatenating `vendor` into the pre-filled `Kurzbeschreibung`. Contract: [`intake-image.http`](docs/detailed/intake-image.http).
+
+0z1. ✅ **Agentic search-token burn + auto-retry of failed/cancelled runs.** (a) The keep-busy dispatcher used a plain `SELECT` (`fetchIdleFillAgenticRuns`) that re-selected the same `notStarted`+`SearchQuery` runs on every 5s tick, re-billing identical Tavily searches; replaced with an atomic `claimIdleFillAgenticRuns` (`FOR UPDATE SKIP LOCKED`) so each run is claimed/dispatched exactly once (changelog #908). (b) Keep-busy now also retries settled `failed`/`cancelled` runs (cooldown-gated), and search reuse moved into the invoker as one decision — reuse stored `LastSearchLinksJson` when present, search live only when none exist (or a reviewer flagged missing specs). Search results are persisted the moment they're retrieved (`persistAgenticSearchLinks`) so a later failure still leaves them for a search-free retry. An item hits the search provider at most once until reset (changelog #909). **Deferred:** `retryCooldownMinutes` (60) not yet config-exposed; no hard cap on total auto-retries of a permanently-broken item; auto-retrying user-`cancelled` runs may want a flag.
 
 0z0. ✅ **Hardware barcode scanners submitted the focused form on scan.** Keyboard-wedge scanners type the barcode then send a trailing Enter, which triggered native form submission across ~15 screens. Fixed with a global capture-phase `keydown` guard in `App.tsx` backed by a pure keystroke-timing detector (`frontend/src/utils/scannerDetection.ts`): a machine-fast burst ending in Enter is detected and only that Enter is cancelled, so the value fills but nothing submits; human Enter-to-submit is unchanged. See scanning changelog #882.
 
@@ -58,14 +156,16 @@
 0r. **Ersatzteile: "Hinzufügen" popup needs a close-on-backdrop-click escape for accessibility** — the new portal dialog closes on backdrop click already; verify with screen reader that `aria-modal` and focus-trap work correctly.
 
 0u. **Assembly contract: multipleAllowed full UI.** The `multipleAllowed` flag on assembly parts (RAM, storage) is supported in the data model and ZubehoerCard shows a "+ weiteres" button when one is cataloged, but the multi-instance slot list (showing each linked instance separately) is not yet implemented.
+0v2. **Run `scripts/normalize-category-values.js` against production once (op step).** The read-side casts (agentic #906) now tolerate float-formatted category strings like `"201.0"`, but the legacy TEXT values are still non-canonical in the DB. Run the one-time cleanup on prod (`DATABASE_URL=… node scripts/normalize-category-values.js`) to canonicalize them; idempotent and safe to re-run.
 0v. **Specs/201.json: remove duplicate component fields.** `RAM`, `Speicher`, and `Akku` remain in `contracts/specs/201.json` even though assembly answers now drive these. Safe for now but should be cleaned up to avoid confusion in agentic extraction.
+0v3. **Seed category `guidance[]` for remaining subcategories.** The spec-contract `guidance[]` field (agentic #908) injects per-category prompt snippets into extraction + supervisor; only `201.json` (laptops) is seeded so far. Collect the recurring LLM mistakes per subcategory (e.g. HDD/monitor dimensions, server form factors) from operators/review history and add snippets to the other `contracts/specs/*.json`. No `version` bump needed (guidance is advisory). Consider promoting "do not mention X"-style suppression to a hard supervisor gate if prompt guidance proves leaky.
 0w. **keyboard_layout specQuestion in keyboard slot.** Architecture supports `specQuestion` wiring for inline answers (e.g., keyboard layout in the keyboard slot), but the frontend ZubehoerCard does not yet render `specQuestion` inline — only the primary `question` is shown.
 
 0k. ✅ **Test suite re-hardened: 637 tests passing.** Added coverage for `cancellation.ts`, `utils/json.ts`, `flow/prompts.ts`, `lib/itemGrouping.ts`, `result-handler.ts`, `forward-agentic-trigger.ts`, `models/quality.ts`. Fixed inverted `deriveAiPriorityFromAssessment` (high quality was mapped to low priority). 9 skipped; 0 failing.
 0l. ✅ **Test rewrites complete (14 files).** All csv-ingest-* and related test files rewritten to Postgres mock pattern and removed from `testPathIgnorePatterns`. `export-items.test.ts` remains excluded (requires live Postgres). The `describe.skip` suites (kivitendo-schema, produkt-schema, shared-artikelnummer, langtext-contract, list-items-for-export-order, item-category-roundtrip, item-persistence-reference-behavior, save-item-quality) need a Postgres test DB in CI to be meaningful — tracked as a future item. Many frontend component tests still deferred (React + complex deps).
 0m. **Ersatzteile Entnehmen: add "direkt verkaufen" path.** Currently Entnehmen always requires a Behälter-ID (storage location). When a spare part is sold immediately, no storage location is needed — instead the quantity should go to 0. UI change: show "Wird der Artikel eingelagert?" prompt in the Entnehmen flow; "Ja" → existing relocate flow; "Nein" → set Qty=0, no location required.
 0n. **Ersatzteile: instance reference re-linking.** When a spare part instance is created via Hinzufügen but linked to the wrong item reference (wrong Artikelnummer), there's no way to re-link the instance to the correct reference without deleting it. Implement a "Referenz ändern" option in the Zerlegen slot (visible post-cataloging, before/after removal).
-0-1. **Investigate whether the categorizer's empty-completion failure is actually context-window overflow.** Production log showed the categorizer returning a fully empty response (`raw: ''`), which fails as `CATEGORIZER_INVALID_JSON` — a different failure mode than the shape bugs in 0y/0z. `invoker.ts` sets no explicit `numCtx`/`maxTokens` for the Ollama/OpenAI client; an empty completion is a known symptom of context overflow given the categorizer builds the heaviest prompt of any stage. Reduced the taxonomy reference ~34% (see changelog #874) as a no-downside mitigation, but this is unconfirmed — needs production log correlation (does it happen more on items with longer Spezifikationen/longer taxonomy context?) or an explicit `num_ctx` override to actually verify/fix the root cause.
+0-1. ✅ **Confirmed: empty-completion failures ARE context-window overflow (root-caused via extraction, agentic #922).** The same failure mode surfaced across the pipeline — `EXTRACTION_FAILED` with `lastValidationIssues: null` + `itemContentPreview: ''` + repeated `json match missing`. Two causes: (a) `invoker.ts`'s `ChatOllama` set **no `num_ctx`**, so Ollama's default 2048-token window silently left-truncated the ~6-7k-token prompt → empty completion; (b) extraction was fed the **raw, unbounded** search blob (16k+ chars) while the categorizer got the sanitized aggregate. Fixed: `MODEL_NUM_CTX` (default 8192) + optional `MODEL_FORMAT_JSON` on the Ollama client; deterministic `condenseSearchText` (spec-line-preserving, 12k-char budget) on the extraction context; and traceability (`json match missing` → `warn` with `rawLength`/`hadThinkBlock`/snippet, terminal reason `EMPTY_OR_NO_JSON` not null). **Follow-up:** verify the categorizer path benefits too (it already uses the sanitized aggregate, but confirm 8192 `num_ctx` clears its residual empty-completion cases); consider the deferred LLM summarize stage only if condensation telemetry shows lost signal.
 
 1i. ✅ **Extraction discarded fully-good responses when a later search-context pass drifted off-schema.** Production log: extraction succeeded on pass 1, then failed schema validation on pass 2 across all 3 retry attempts, with output keys degrading German-synonym → mixed-case → fully-English datasheet labels rather than converging — burning the whole run despite the data being present under wrong key names. Added `attemptSchemaCorrection()` that reuses the existing JSON-correction agent (no new agent) to salvage a wrong-shaped-but-complete response inline without consuming an extraction attempt; `json-correction.md`'s rule was reframed from "do not rename fields" to "conform to the canonical schema", which permits remapping onto canonical keys. Also replaced the raw zod-issue JSON dump in retry messages with a plain-language "Missing required field(s): X, Y — use these EXACT key names" hint. See changelog #875.
 0z. ✅ **Prompt audit found spec-contract field descriptions were computed and discarded.** `contracts/specs/<subcategory>.json` fields carry a `description` per key, loaded by `buildSpecContext()`, but only the bare key name reached the extraction prompt's "missing_spec" guidance (e.g. model saw `RAM` with no hint of expected format). Fixed: `SpecContext.missingFieldDescriptions` threaded through to `deriveReviewAdjustedTargetSchemaFormat`, which now renders `RAM (Memory in GB)`. Audited every other prompt file for the same output-shape ambiguity that caused 0y below — only `categorizer.md` had it. See changelog #873.
@@ -114,6 +214,9 @@
 1b. ✅ **Restore bulk-action controls.** `BulkItemActionBar` restored inside `MultiItemDetailPanel` in Layout; reads `selectedIds` from PanelContext and `selectedItems/onClearSelection/onActionComplete` from `BulkSelectionContext`.
 
 2. **Fix agentic runs for references.** Agentic runs are broken for reference items. Runs can be started and run but immediately fall back to not started
+   - **Investigation (needs runtime repro):** Traced start (`startAgenticRun` → `hasAgenticReference`), dispatch (`claimQueuedAgenticRuns` — no `items` JOIN, so reference-only rows *are* claimable), status read (`getAgenticStatus` → `getAgenticRun` by `Artikel_Nummer`), and list display (`listItemReferencesWithFilters`, `LEFT JOIN agentic_runs ... COALESCE(i."Artikel_Nummer", r."Artikel_Nummer")`). All handle a **numeric** `Artikel_Nummer` reference correctly on static reading — the "fall back to notStarted" is a display artifact of `COALESCE(ar."Status",'notStarted')` when the run-row JOIN misses. Suspected residual cases: (a) references with a **non-numeric / specially-formatted** `Artikel_Nummer` (e.g. created via `catalog-spare-part`/`remove-from-device`), or (b) already largely resolved by the #876 SearchQuery-reset / numeric-guard fixes and this entry is stale. Next step: reproduce against a real reference item and capture the exact id passed by the frontend + the `agentic_runs."Artikel_Nummer"` actually written.
+
+2a. ✅ **Creating an instance of an existing reference re-ran an approved/in-review agentic run (agentic #924).** `import-item` correctly declined to re-seed (`hasExistingAgenticRun` guard), so the frontend fired its own `POST /api/agentic/run`; `forwardAgenticTrigger` restarted every non-active run — including `approved`/`review`/`auto_approved` — clobbering the result. Now it restarts only a `notStarted` run from that automatic path; active/settled runs are returned untouched (200). Explicit operator restarts (dedicated `…/agentic/restart` → `restartAgenticRun`) are unaffected. Note: bulk "KI starten" and the ItemDetail start button share this choke point and now likewise skip settled runs instead of restarting them (aligned with "failures are terminal, restart is explicit").
 
 3. **Ensure waiting agentic runs restart on application restart.** All runs in a waiting state should automatically resume when the app restarts. Waiting runs should wait (max. parallel runs has to be respected)
 
@@ -194,6 +297,9 @@
 51. **Auto-approve follow-ups.** `AUTO_APPROVE` (default off) + `AUTO_APPROVE_MIN_CONFIDENCE` (default 0.8) added (agentic changelog #892). Follow-ups: per-subcategory confidence threshold instead of one global value; optional auto-reject counterpart; a bulk "promote auto_approved → approved" action (currently uses per-item Abschliessen); and extend the KI-queue state filter to select `auto_approved` (aligns with #12 multiselect agent states).
 
 52. **Pre-existing failing tests (not caused by the #889–894 work; documented for cleanup).** `schema-contract-compatibility.test.ts` asserts the supervisor prompt contains `schema-contract.md`, but the current `supervisor.md` was rewritten to a description-quality focus and no longer references it — the test expectation is stale. `test/agentic-direct-dispatch.test.ts` and `test/agentic-startup-resume.test.ts` fail in the local esbuild harness because the scheduled `invokeModel` isn't observed (`toHaveBeenCalledTimes(1)` → 0); verify against CI's Postgres/jest setup. All three fail identically on a clean tree.
+   - ✅ **Harness `toMatchObject` gap fixed (testing #907):** the custom harness never implemented `toMatchObject` though 16 call sites use it; added it as a recursive subset matcher. Removed one spurious failure ("moves box placement"); local failing count 10→9.
+   - **Still failing locally (9):** esbuild harness can't resolve named exports from bundled `../../agentic` (`deleteAgenticRun`/`checkAgenticHealth is not a function`), plus mock/env gaps (`window is not defined`, missing `.env`/media fixtures, `ts-jest` preset not found). Suspected CI-green (jest+Postgres); needs verification against CI rather than product-code changes.
+   - **`intake-specs-assembly.test.ts` — "human-judgment condition questions" fails on a clean tree** (found during intake #912). `loadSubCategoryContract(201)` (the `lib/quality-contracts` loader) returns `null` under jest so `sub!.questions` throws, while the `contracts/registry` loader used by the same suite resolves fine — a path-resolution mismatch between the two contract loaders in the test env, not a product bug. Reconcile the loaders' base-dir resolution (or the test's expectation) so the subcategory contract loads under jest.
 
 41. ✅ **Quality re-check from ItemDetail.** "Neu bewerten" button added to instance tab `tab-actions`; opens `QualityReviewModal` wrapping `QualityReviewStep`. Results stored in `items.InstanceSpecs` (per-instance) and `quality_assessments`.
 
@@ -210,6 +316,8 @@
 20. **Enhance partial imports functionality.** Large imports currently fail completely on a single item error. Add granular error reporting and selective retry. **Goal:** make bulk import workflows resilient with clear per-item failure reporting.
 
 21. **Make search links available in item UI.** Surface agentic search result links in item detail views and enable manual link management for references. **Goal:** improve agentic result transparency and allow manual curation.
+   - ✅ **Surface (agentic #916):** stored `LastSearchLinksJson` shown in the KI tab as `Suchergebnisse (N)` via `AgenticSearchSources`.
+   - ✅ **Remove (agentic #923):** operators can delete a bad search-result link so it stops feeding the reuse/grounding pipeline — `POST /api/item-refs/:id/agentic/search-links/delete` + `removeAgenticSearchLink` (targeted prune, does not reset the run). **Still deferred:** pin/reorder and **adding** a manual link (feeds the structured `WebLinks` field, #22); no URL normalization/dedupe on match.
 
 22. **Add WebLinks field to ItemRef structure.** Extend ItemRef with structured WebLinks (Manual, Heise, Dell, etc.). **Goal:** standardize reference link storage with clear categorization and UI management.
 

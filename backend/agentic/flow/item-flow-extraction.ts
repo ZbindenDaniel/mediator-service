@@ -2,6 +2,7 @@ import { RateLimitError } from '../tools/tavily-client';
 import { stringifyLangChainContent } from '../utils/langchain';
 import type { SearchSource } from '../utils/source-formatter';
 import { parseJsonWithSanitizer } from '../utils/json';
+import { condenseSearchText } from '../utils/search-condense';
 import { searchLimits } from '../config';
 import { FlowError } from './errors';
 import type { AgenticOutput, AgenticTarget } from './item-flow-schemas';
@@ -10,6 +11,7 @@ import { runCategorizerStage } from './item-flow-categorizer';
 import { isUsablePrice, runPricingStage } from './item-flow-pricing';
 import type { SearchInvoker } from './item-flow-search';
 import { listRecentAgenticRunReviewHistoryBySubcategory, getItemReference } from '../../db';
+import { getSubcategoryLabelFromCode } from '../../../models';
 import { loadSubcategoryReviewAutomationSignals } from '../review-automation-signals';
 import {
   appendPlaceholderFragment,
@@ -50,11 +52,18 @@ export interface RunExtractionOptions {
   pricingPrompt: string;
   searchInvoker: SearchInvoker;
   target: AgenticTarget;
+  // The run's SearchQuery — a stable identity anchor the pipeline does not overwrite mid-run. Used to
+  // ground extraction/supervisor so an off-topic search result can't flip the device class (Thread 3).
+  searchTerm?: string;
   reviewNotes?: string | null;
   missingSpecFields?: string[];
   // Spec-contract `description` per missing field key (contracts/specs/<subcategory>.json), so the
   // extraction prompt can explain what a bare key name expects instead of leaving it to guesswork.
   missingSpecFieldDescriptions?: Record<string, string>;
+  // Human-authored, category-level prompt snippets (contracts/specs/<subcategory>.json `guidance`),
+  // injected into the extraction and supervisor review placeholders to steer the model on things it
+  // often gets wrong for this subcategory.
+  categoryGuidance?: string[];
   ambiguousFields?: Record<string, { itemValue: string; intakeValue: string }>;
   unneededSpecFields?: string[];
   // Targeted rework: keys to regenerate + operator instruction. Non-empty ⇒ rework mode — the prompt
@@ -83,6 +92,12 @@ const MAX_RETRY_SUMMARY_LENGTH = 260;
 // TODO(migration): Remove legacy identifier logging/stripping once all agent outputs are Artikel_Nummer-only.
 const LEGACY_IDENTIFIER_KEYS = ['itemUUid', 'itemId', 'id'] as const;
 const TARGET_SNAPSHOT_MAX_LENGTH = 2000;
+// Budget (chars) for the search context fed into the extraction prompt. Unlike the categorizer (which
+// gets the heavily-sanitized buildAggregatedSearchText output), extraction was handed the full raw
+// context — a 16k+ char blob for one item overflowed even a raised num_ctx and produced empty
+// completions. condenseSearchText keeps spec-bearing lines within this budget rather than truncating.
+// ~12k chars ≈ ~3k tokens, leaving room for system+schema+snapshot+answer inside an 8k-token window.
+const EXTRACTION_CONTEXT_MAX_LENGTH = 12000;
 const ACCUMULATOR_TEXT_MAX_LENGTH = 280;
 const ACCUMULATOR_SUMMARY_MAX_LENGTH = 2400;
 const ACCUMULATOR_OUTLINE_VALUE_MAX_LENGTH = 90;
@@ -498,6 +513,60 @@ function validateSecondCategoryRequirement(payload: AgenticOutput): CategoryVali
   };
 }
 
+// Identity grounding (Thread 3). Builds a short "this is what the item IS" instruction from the run's
+// stable SearchQuery anchor + the known subcategory label, so an off-topic search result cannot flip
+// the device class during extraction (the "PC catalogued as a Pokémon card set" failure). Returns null
+// when we have no usable identity signal — grounding is best-effort, never a hard gate here.
+function buildIdentityGroundingFragment(params: {
+  target: AgenticTarget;
+  searchTerm?: string;
+  logger?: ExtractionLogger;
+  itemId: string;
+}): string | null {
+  const { target, searchTerm, logger, itemId } = params;
+  try {
+    const record = target as Record<string, unknown>;
+    // Anchor: prefer the run's stable SearchQuery; fall back to the original Artikelbeschreibung
+    // (which, at extraction start, still holds the operator/intake value before any model rewrite).
+    const anchorSource =
+      typeof searchTerm === 'string' && searchTerm.trim()
+        ? searchTerm.trim()
+        : typeof record.Artikelbeschreibung === 'string'
+          ? (record.Artikelbeschreibung as string).trim()
+          : '';
+    const anchor = anchorSource.length > 160 ? `${anchorSource.slice(0, 160)}…` : anchorSource;
+
+    // Tolerate float-formatted category strings like "201.0" (see agentic #906).
+    const rawSub = record.Unterkategorien_A;
+    const subNumber =
+      typeof rawSub === 'number'
+        ? rawSub
+        : typeof rawSub === 'string' && rawSub.trim()
+          ? Number(rawSub)
+          : NaN;
+    const label = Number.isFinite(subNumber) ? getSubcategoryLabelFromCode(Math.round(subNumber)) ?? null : null;
+
+    if (!anchor && !label) {
+      return null;
+    }
+    const identityParts: string[] = [];
+    if (label) {
+      identityParts.push(`device class "${label}"`);
+    }
+    if (anchor) {
+      identityParts.push(`catalogued as "${anchor}"`);
+    }
+    return [
+      `Known identity (ground truth from cataloguing): ${identityParts.join(', ')}.`,
+      'Your output MUST describe THIS device. Refine the product name only WITHIN this device class — never change the device class.',
+      'If the search results describe a different kind of product, keep the provided value or use null rather than contradicting the known identity.'
+    ].join(' ');
+  } catch (err) {
+    logger?.warn?.({ err, msg: 'failed to build identity grounding fragment', itemId });
+    return null;
+  }
+}
+
 // TODO(agent): Consolidate LLM-facing field alias helpers across extraction/categorizer/pricing stages.
 function mapLangtextToSpezifikationenForLlm(
   payload: unknown,
@@ -804,9 +873,11 @@ export async function runExtractionAttempts({
   pricingPrompt,
   searchInvoker,
   target,
+  searchTerm,
   reviewNotes,
   missingSpecFields,
   missingSpecFieldDescriptions,
+  categoryGuidance,
   ambiguousFields,
   unneededSpecFields,
   reworkSpecFields,
@@ -1111,11 +1182,42 @@ export async function runExtractionAttempts({
     logger?.warn?.({ err, msg: 'failed to inject review automation signal placeholder fragments', itemId });
   }
 
+  // Identity grounding goes FIRST (before reviewer notes / category guidance) so the "stay in the known
+  // device class" constraint frames everything that follows. Extraction + supervisor only — the
+  // categorizer decides the category itself, so grounding it on the prior category would bias it.
+  const identityGroundingFragment = buildIdentityGroundingFragment({ target, searchTerm, logger, itemId });
+  if (identityGroundingFragment) {
+    appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.extractionReview, identityGroundingFragment);
+    appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.supervisorReview, identityGroundingFragment);
+    logger?.info?.({ msg: 'identity grounding injected', itemId, hasAnchor: Boolean(searchTerm) });
+  }
+
   // TODO(agentic-schema-injection): Revisit whether categorizer/supervisor require reduced schema slices once prompt sizes are measured.
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.extractionReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.categorizerReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.supervisorReview, sanitizedReviewerNotes);
   appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.targetSchemaFormat, adjustedTargetSchemaFormat);
+
+  // Category-level guidance snippets (contracts/specs/<subcategory>.json `guidance`) go to extraction
+  // (factual hints) and supervisor (enforcement) — not the categorizer, which decides category, not content.
+  const categoryGuidanceEntries = Array.isArray(categoryGuidance)
+    ? categoryGuidance.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    : [];
+  let injectedCategoryGuidanceCount = 0;
+  for (const guidanceEntry of categoryGuidanceEntries) {
+    appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.extractionReview, guidanceEntry);
+    appendPlaceholderFragment(basePromptFragments, PROMPT_PLACEHOLDERS.supervisorReview, guidanceEntry);
+    injectedCategoryGuidanceCount += 1;
+  }
+  if (categoryGuidanceEntries.length > 0) {
+    logger?.info?.({
+      msg: 'category guidance prompt injection complete',
+      itemId,
+      injectedCategoryGuidanceCount,
+      providedCount: categoryGuidance?.length ?? 0
+    });
+  }
+
   const resolvedExampleItemBlock = typeof exampleItemBlock === 'string' ? exampleItemBlock.trim() : '';
   if (resolvedExampleItemBlock) {
     basePromptFragments.set(PROMPT_PLACEHOLDERS.exampleItem, [resolvedExampleItemBlock]);
@@ -1180,7 +1282,18 @@ export async function runExtractionAttempts({
       }
     })();
     const activeContext = searchContexts[contextCursor] ?? { query: 'aggregated-fallback', text: fallbackContextText, sources: [] };
-    const singleContextText = typeof activeContext?.text === 'string' ? activeContext.text : '';
+    const rawContextText = typeof activeContext?.text === 'string' ? activeContext.text : '';
+    // Condense an oversized raw context so it can't overflow the model window (empty completion →
+    // "json match missing"). This keeps the spec-bearing lines and drops boilerplate rather than blindly
+    // truncating, so quality is preserved; num_ctx sizing is the primary control and this the safety net.
+    // Small contexts (already within budget) pass through unchanged.
+    const condensedContext = condenseSearchText(rawContextText, {
+      maxLength: EXTRACTION_CONTEXT_MAX_LENGTH,
+      logger,
+      itemId,
+      query: activeContext?.query
+    });
+    const singleContextText = condensedContext.text;
     const accumulatorSummary = serializeExtractionAccumulator(extractionAccumulator);
     const compactAccumulator = accumulatorSummary.summary;
 
@@ -1300,7 +1413,14 @@ export async function runExtractionAttempts({
     if (ambiguousFieldsBlock) {
       contextSections.push(ambiguousFieldsBlock);
     }
-    contextSections.push('Current search context:', singleContextText || 'None.');
+    // When search is skipped the context block holds the previously collected search results
+    // (reused stored evidence), not a fresh search — label it so the model treats it as the
+    // authoritative evidence to extract from rather than assuming no evidence exists.
+    const searchContextLabel =
+      searchSkipped && singleContextText
+        ? 'Previously collected search results (search skipped — extract from these; do not assume no evidence):'
+        : 'Current search context:';
+    contextSections.push(searchContextLabel, singleContextText || 'None.');
     contextSections.push('Accumulated candidate (compact JSON):', compactAccumulator);
     contextSections.push(searchRequestHint);
     const baseUserContent = contextSections.join('\n\n');
@@ -1534,11 +1654,21 @@ export async function runExtractionAttempts({
         itemContent = jsonContent;
       }
     } else {
-      logger?.debug?.({
-        msg: 'json match missing. Trying again',
+      // No JSON object in the response at all. This is almost always an EMPTY completion (context-window
+      // overflow / num_ctx too small) or a reasoning-only <think> block with no answer — distinguish them
+      // by logging the raw length + snippet instead of a bare debug line, and record a specific reason so
+      // the terminal error isn't the catch-all EXTRACTION_FAILED with lastValidationIssues: null.
+      logger?.warn?.({
+        msg: 'extraction response had no JSON object',
         attempt,
-        itemId
+        itemId,
+        rawLength: raw.length,
+        hadThinkBlock: Boolean(thinkMatch),
+        strippedLength: itemContent.length,
+        rawSnippet: truncateForLog(raw)
       });
+      lastValidationIssues = 'EMPTY_OR_NO_JSON';
+      passFailureValidationIssues = 'EMPTY_OR_NO_JSON';
 
       advanceAttempt();
       continue;

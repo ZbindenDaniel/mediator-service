@@ -33,6 +33,13 @@ function buildCtxFromPrefix(itemUUID: string) {
   };
 }
 
+// Mirrors the write action: the prefix declares the identifier type explicitly.
+function prefixIdentifierType(itemUUID: string): 'serialNumber' | 'macAddress' | undefined {
+  if (itemUUID.startsWith('SN:')) return 'serialNumber';
+  if (itemUUID.startsWith('MAC:')) return 'macAddress';
+  return undefined;
+}
+
 describe('SN:/MAC: prefix parsing', () => {
   it('detects SN: prefix and extracts serial', () => {
     const ctx = buildCtxFromPrefix('SN:PF1ABCDE');
@@ -79,11 +86,43 @@ describe('alt-doc path resolution with SN: prefix', () => {
     expect(result).toBeNull();
   });
 
-  it('returns null when identifierType does not match prefix type', () => {
-    // Serial in context but config wants mac
+  it('returns null when identifierType does not match prefix type (no override)', () => {
+    // Serial in context but config wants mac, and no explicit override is passed
     const ctx = buildCtxFromPrefix('SN:PF1ABCDE')!;
     const config = makeConfig({ mountPath: '/mnt/intake', identifierType: 'macAddress' });
     const result = resolveAltDocDirPath(ctx, config);
     expect(result).toBeNull();
+  });
+});
+
+describe('alt-doc path resolution honors the prefix-declared identifier type', () => {
+  it('accepts a MAC-keyed upload into a serialNumber-typed dir when the prefix overrides', () => {
+    // Regression: machine-level / orphan wipe reports are keyed by MAC because the
+    // drive has no readable serial, but wipe-reports is configured serialNumber.
+    const itemUUID = 'MAC:40167eaa9e6b';
+    const ctx = buildCtxFromPrefix(itemUUID)!;
+    const config = makeConfig({ name: 'wipe-reports', mountPath: '/mnt/wipe', identifierType: 'serialNumber', normalize: 'uppercase' });
+    const result = resolveAltDocDirPath(ctx, config, prefixIdentifierType(itemUUID));
+    expect(result).not.toBeNull();
+    expect(result!.identifierValue).toBe('40167EAA9E6B');
+    expect(result!.dirPath).toBe('/mnt/wipe/40167EAA9E6B');
+  });
+
+  it('still validates the overridden value against the declared type', () => {
+    // A MAC prefix with a value that fails the MAC pattern is rejected, not path-escaped.
+    const itemUUID = 'MAC:../etc/passwd';
+    const ctx = buildCtxFromPrefix(itemUUID)!;
+    const config = makeConfig({ name: 'wipe-reports', mountPath: '/mnt/wipe', identifierType: 'serialNumber' });
+    const result = resolveAltDocDirPath(ctx, config, prefixIdentifierType(itemUUID));
+    expect(result).toBeNull();
+  });
+
+  it('serial-keyed uploads into the same dir keep resolving as before', () => {
+    const itemUUID = 'SN:ST940814AS';
+    const ctx = buildCtxFromPrefix(itemUUID)!;
+    const config = makeConfig({ name: 'wipe-reports', mountPath: '/mnt/wipe', identifierType: 'serialNumber', normalize: 'uppercase' });
+    const result = resolveAltDocDirPath(ctx, config, prefixIdentifierType(itemUUID));
+    expect(result).not.toBeNull();
+    expect(result!.identifierValue).toBe('ST940814AS');
   });
 });

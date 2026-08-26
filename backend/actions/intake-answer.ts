@@ -11,12 +11,13 @@ import {
   getMaxItemId,
   logEvent,
 } from '../db';
-import { queryOne } from '../db-client';
+import { queryOne, execute } from '../db-client';
 import { generateItemUUID } from '../lib/itemIds';
 import { syncInDeviceComponents } from '../lib/in-device-components';
-import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse } from '../lib/quality-contracts';
-import { preFillQualityQuestions } from '../lib/intake-quality-map';
-import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion } from '../../models/intake';
+import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse, assemblyToQualityContract } from '../lib/quality-contracts';
+import { getAssemblyContract } from '../contracts/registry';
+import { resolveIntakeQuestions, deriveInstanceSpecsFromScan, normalizeScanComponents } from '../lib/intake-quality-map';
+import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion, IntakeDetectedSpecView } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -33,7 +34,7 @@ function parseIntakeKey(key: string): { serial: string | null; mac: string | nul
 
 async function findOrCreateRef(
   artikelNummer: string | undefined,
-  newRef: { Hersteller: string; Kurzbeschreibung?: string; Hauptkategorien_A: number; Unterkategorien_A: number } | undefined,
+  newRef: { Hersteller: string; Artikelbeschreibung?: string; Kurzbeschreibung?: string; Hauptkategorien_A: number; Unterkategorien_A: number } | undefined,
   scannedModel?: string | null
 ): Promise<{ artikelNummer: string; unterkategorienA: number | null; hersteller: string | null; kurzbeschreibung: string | null } | null> {
   if (artikelNummer) {
@@ -58,12 +59,19 @@ async function findOrCreateRef(
   const maxArtikel = await getMaxArtikelNummer();
   const nextArtikelNummer = String((maxArtikel ? parseInt(maxArtikel, 10) : 0) + 1);
 
-  // Kurzbeschreibung is the model name; default it to the scanned model so the operator
-  // doesn't have to re-type what the station already scanned.
-  const kurzbeschreibung = (newRef.Kurzbeschreibung ?? '').trim() || (scannedModel ?? '').trim();
-  const artikelbeschreibung = [newRef.Hersteller, kurzbeschreibung].filter(Boolean).join(' ');
+  // The operator types the description into the station's Artikelbeschreibung field — that value
+  // is AUTHORITATIVE and must win over the (often garbage) scanned model. Previously only
+  // `Kurzbeschreibung` was read, so the operator's typed `Artikelbeschreibung` was silently dropped
+  // and the scanned model always came through. Precedence: operator text → supplied Kurzbeschreibung
+  // → scanned model → Hersteller (last resort so the required field is never empty).
+  const operatorDesc = (newRef.Artikelbeschreibung ?? '').trim();
+  const suppliedKurz = (newRef.Kurzbeschreibung ?? '').trim();
+  const artikelbeschreibung =
+    operatorDesc || suppliedKurz || (scannedModel ?? '').trim() || (newRef.Hersteller ?? '').trim();
+  // Kurzbeschreibung stays the short model name (scan) when the operator didn't supply one.
+  const kurzbeschreibung = suppliedKurz || (scannedModel ?? '').trim() || operatorDesc;
   if (!artikelbeschreibung.trim()) {
-    throw new Error('Hersteller and Kurzbeschreibung cannot both be empty');
+    throw new Error('newRef needs a description (Artikelbeschreibung/Kurzbeschreibung), scan model, or Hersteller');
   }
   await persistItemReference({
     Artikel_Nummer: nextArtikelNummer,
@@ -128,14 +136,44 @@ async function ensureItem(
   return itemUUID;
 }
 
-function buildQualityQuestions(unterkategorienA: number | null, scan: IntakeScanPayload): IntakeQuestion[] {
+function buildQualityQuestions(
+  unterkategorienA: number | null,
+  scan: IntakeScanPayload
+): { ask: IntakeQuestion[]; detectedSpecs: IntakeDetectedSpecView[] } {
   try {
     const general = loadGeneralContract();
     const subCat = unterkategorienA ? loadSubCategoryContract(unterkategorienA) : null;
-    return preFillQualityQuestions([...general.questions, ...(subCat?.questions ?? [])], scan);
+    const assembly = unterkategorienA ? getAssemblyContract(unterkategorienA) : null;
+    const assemblyQ = assembly ? assemblyToQualityContract(assembly) : null;
+    const resolution = resolveIntakeQuestions(
+      [...general.questions, ...(subCat?.questions ?? []), ...(assemblyQ?.questions ?? [])],
+      scan
+    );
+    // Structured line: what the scan answered vs. what a scan-answerable field failed to answer
+    // (non-empty unresolvedAutoFill = mis-scan, e.g. NVMe size=0, not an operator judgement).
+    console.log('[intake] question resolution', {
+      subCategory: unterkategorienA,
+      asked: resolution.ask.map(q => q.id),
+      detected: resolution.detected.map(d => `${d.label}=${d.value}`),
+      unresolvedAutoFill: resolution.unresolvedAutoFill,
+    });
+    return {
+      ask: resolution.ask,
+      detectedSpecs: resolution.detected.map(d => ({ label: d.label, value: d.value })),
+    };
   } catch {
-    return [];
+    return { ask: [], detectedSpecs: [] };
   }
+}
+
+// Merged contract questions for a subcategory — used to compute the auto-answers at the
+// quality step (same set the questionnaire was built from).
+function mergedContractQuestions(unterkategorienA: number | null) {
+  const general = loadGeneralContract();
+  const subCat = unterkategorienA ? loadSubCategoryContract(unterkategorienA) : null;
+  const assembly = unterkategorienA ? getAssemblyContract(unterkategorienA) : null;
+  const assemblyQ = assembly ? assemblyToQualityContract(assembly) : null;
+  return [...general.questions, ...(subCat?.questions ?? []), ...(assemblyQ?.questions ?? [])];
 }
 
 const ROUTE_RE = /^\/api\/intake\/([^/]+)\/answer$/;
@@ -177,20 +215,30 @@ const action = defineHttpAction({
 
       const itemUUID = await ensureItem(ref.artikelNummer, serial, mac);
 
-      // Once the parent machine item exists, materialize its scanned sub-devices as in-device
-      // components (idempotent on re-scan). Non-fatal: a failure here must not block catalog.
+      // Persist the raw scan so the later quality step can auto-resolve scan-answerable questions
+      // without the script re-sending it. Non-fatal.
       try {
-        await syncInDeviceComponents(itemUUID, scan.disks, { logEvent });
+        await execute(`UPDATE items SET "IntakeScan" = $1 WHERE "ItemUUID" = $2`, [JSON.stringify(scan), itemUUID]);
+      } catch (err) {
+        console.warn('[intake-answer] Failed to persist intake scan', { itemUUID, err });
+      }
+
+      // Once the parent machine item exists, materialize its scanned sub-devices that have a
+      // usable serial as in-device components (idempotent on re-scan). Serialless components
+      // (e.g. PCI cards) fill assembly info instead. Non-fatal: a failure must not block catalog.
+      try {
+        await syncInDeviceComponents(itemUUID, normalizeScanComponents(scan), { logEvent });
       } catch (err) {
         console.warn('[intake-answer] Failed to sync in-device components', { itemUUID, err });
       }
 
-      const questions = buildQualityQuestions(ref.unterkategorienA, scan);
+      const { ask, detectedSpecs } = buildQualityQuestions(ref.unterkategorienA, scan);
 
       const response: IntakeAnswerResponse = {
         nextStep: 'quality',
         itemUUID,
-        qualityQuestions: questions,
+        qualityQuestions: ask,
+        detectedSpecs,
       };
       return sendJson(res, 200, response);
     }
@@ -204,15 +252,15 @@ const action = defineHttpAction({
       const itemRow = await queryOne<{
         ItemUUID: string; Artikel_Nummer: string | null;
         Hersteller: string | null; Kurzbeschreibung: string | null;
-        Unterkategorien_A: number | null;
+        Unterkategorien_A: number | null; IntakeScan: string | null;
       }>(
         serial
           ? `SELECT i."ItemUUID", i."Artikel_Nummer", r."Hersteller", r."Kurzbeschreibung",
-                    r."Unterkategorien_A"::integer AS "Unterkategorien_A"
+                    r."Unterkategorien_A"::integer AS "Unterkategorien_A", i."IntakeScan"
              FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
              WHERE i."SerialNumber" = $1 LIMIT 1`
           : `SELECT i."ItemUUID", i."Artikel_Nummer", r."Hersteller", r."Kurzbeschreibung",
-                    r."Unterkategorien_A"::integer AS "Unterkategorien_A"
+                    r."Unterkategorien_A"::integer AS "Unterkategorien_A", i."IntakeScan"
              FROM items i LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
              WHERE i."MacAddress" = $1 LIMIT 1`,
         [serial ?? mac]
@@ -220,6 +268,15 @@ const action = defineHttpAction({
 
       if (!itemRow) {
         return sendJson(res, 404, { error: 'item not found — complete ref step first' });
+      }
+
+      // Resolve the scan for auto-answering: prefer an echoed scanPayload, else the one persisted
+      // at the ref step. Falls back to just the intake key so we never crash on a missing scan.
+      let resolvedScan: IntakeScanPayload = { serial, mac };
+      if (qualBody.scanPayload) {
+        resolvedScan = qualBody.scanPayload;
+      } else if (itemRow.IntakeScan) {
+        try { resolvedScan = JSON.parse(itemRow.IntakeScan); } catch { /* keep fallback */ }
       }
 
       let generalContract;
@@ -232,7 +289,20 @@ const action = defineHttpAction({
       const subCatContract = itemRow.Unterkategorien_A
         ? loadSubCategoryContract(itemRow.Unterkategorien_A)
         : null;
-      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, qualityAnswers);
+      // Accessory questions contribute to both quality (presence) and specs (spec answers).
+      const assemblyContract = itemRow.Unterkategorien_A ? getAssemblyContract(itemRow.Unterkategorien_A) : null;
+      const assemblyQualityContract = assemblyContract ? assemblyToQualityContract(assemblyContract) : null;
+
+      // Auto-resolve the questions we didn't ask (skipAtIntake / autoFill), then let the
+      // submitted answers win over them, so quality + specs are complete without the operator
+      // re-entering scan-known data. Drop empty ("don't know") submitted answers first, so a
+      // skipped question neither clobbers a scan-derived auto-answer nor scores as a real value.
+      const { autoAnswers } = resolveIntakeQuestions(mergedContractQuestions(itemRow.Unterkategorien_A), resolvedScan);
+      const submittedAnswers = Object.fromEntries(
+        Object.entries(qualityAnswers).filter(([, v]) => typeof v === 'string' && v.trim() !== '')
+      );
+      const mergedAnswers = { ...autoAnswers, ...submittedAnswers };
+      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, mergedAnswers, assemblyQualityContract);
 
       const assessment = {
         tag: checkResponse.qualityTag as import('../../models/quality').QualityTag,
@@ -261,7 +331,10 @@ const action = defineHttpAction({
         }),
       });
 
-      const mergedSpecs = { ...checkResponse.derivedSpecs, ...(instanceSpecs ?? {}) };
+      // Spec precedence (lowest → highest): scan-derived (device booted, so present) <
+      // questionnaire-derived < explicit script/operator instanceSpecs.
+      const scanSpecs = deriveInstanceSpecsFromScan(resolvedScan);
+      const mergedSpecs = { ...scanSpecs, ...checkResponse.derivedSpecs, ...(instanceSpecs ?? {}) };
       if (Object.keys(mergedSpecs).length > 0) {
         await updateItemInstanceSpecs(itemRow.ItemUUID, mergedSpecs).catch((err) => {
           console.warn('[intake-answer] Failed to store derived specs', { itemUUID: itemRow.ItemUUID, err });

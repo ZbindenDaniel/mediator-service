@@ -1,12 +1,11 @@
 {
-  "version": 5,
+  "version": 7,
   "subCategory": 201,
   "questions": [
     {
       "id": "has_os",
       "type": "boolean",
-      "question": "Betriebssystem installiert?",
-      "qualityImpact": { "true": 5, "false": 4 }
+      "question": "Betriebssystem installiert?"
     },
     {
       "id": "os_installed",
@@ -27,6 +26,50 @@
       "specField": "Betriebssystem",
       "specValue": "%v",
       "showIf": { "questionId": "has_os", "value": "true" }
+    },
+    {
+      "id": "keyboard_layout",
+      "type": "select",
+      "question": "Tastatur-Layout?",
+      "values": ["CH", "DE", "US", "Anderes"],
+      "specField": "Tastatur-Layout",
+      "specValue": "%v"
+    },
+    {
+      "id": "keyboard_condition",
+      "type": "select",
+      "question": "Tastatur-Zustand?",
+      "values": ["Gut", "Abgenutzt", "Beschädigt"],
+      "specField": "Tastatur-Zustand",
+      "specValue": "%v",
+      "qualityImpact": { "Gut": 5, "Abgenutzt": 4, "Beschädigt": 2 }
+    },
+    {
+      "id": "screen_condition",
+      "type": "select",
+      "question": "Display-Zustand?",
+      "values": ["Einwandfrei", "Kratzer", "Flecken/Pixelfehler"],
+      "specField": "Display-Zustand",
+      "specValue": "%v",
+      "qualityImpact": { "Einwandfrei": 5, "Kratzer": 4, "Flecken/Pixelfehler": 3 }
+    },
+    {
+      "id": "battery_swollen",
+      "type": "boolean",
+      "question": "Akku aufgebläht oder verformt?",
+      "qualityImpact": { "true": 1, "false": 5 }
+    },
+    {
+      "id": "hinges_ok",
+      "type": "boolean",
+      "question": "Scharniere in Ordnung?",
+      "qualityImpact": { "true": 5, "false": 2 }
+    },
+    {
+      "id": "fan_dusty",
+      "type": "boolean",
+      "question": "Lüfter verstaubt?",
+      "qualityImpact": { "true": 5, "false": 4 }
     }
   ]
 }

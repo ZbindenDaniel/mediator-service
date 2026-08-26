@@ -93,6 +93,9 @@ export interface ItemFlowDependencies {
   markNotificationFailure: (itemId: string, errorMessage: string) => Promise<void> | void;
   shopwareSearch?: (query: string, limit: number, logger?: ItemFlowLogger) => Promise<ShopwareSearchResult>;
   persistLastError?: (itemId: string, errorMessage: string, attemptAt?: string) => Promise<void> | void;
+  // Persist retrieved search results immediately (before extraction), so a later failure still leaves
+  // them stored for a search-free automatic retry.
+  persistSearchLinks?: (itemId: string, sources: SearchSource[]) => Promise<void> | void;
 }
 
 export interface RunItemFlowInput {
@@ -503,6 +506,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     // Spec contract version this run runs against — stamped on the run so an idle sweep can later detect
     // items enriched against an outdated contract (getSpecContract is cached, so this is cheap).
     const specContractVersion = subcategoryCode ? (getSpecContract(subcategoryCode)?.version ?? null) : null;
+    const categoryGuidance = subcategoryCode ? (getSpecContract(subcategoryCode)?.guidance ?? []) : [];
     const specCtx = buildSpecContext(target, subcategoryCode, instanceSpecs);
     logger.debug?.({ msg: 'spec context built', itemId, subcategoryCode, missingRequired: specCtx.missingRequired, missingDesired: specCtx.missingDesired, ambiguousCount: Object.keys(specCtx.ambiguousFields).length });
 
@@ -592,6 +596,17 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       transcriptWriter
     });
 
+    // Persist the freshly retrieved search results now (only when a live search actually ran), so a
+    // downstream failure still leaves them stored for a search-free automatic retry. A skipSearch run
+    // reused already-stored results, so there is nothing new to write.
+    if (finalShouldSearch && Array.isArray(aggregatedSources) && aggregatedSources.length > 0) {
+      try {
+        await deps.persistSearchLinks?.(itemId, aggregatedSources);
+      } catch (persistErr) {
+        logger.warn?.({ err: persistErr, msg: 'failed to persist retrieved search links', itemId });
+      }
+    }
+
     checkCancellation();
 
     const extractionResult = await runExtractionAttempts({
@@ -612,6 +627,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       pricingPrompt: pricing,
       searchInvoker,
       target,
+      searchTerm,
       reviewNotes: reviewerNotes,
       missingSpecFields: [
         ...(Array.isArray(input.missingSpecFields) ? input.missingSpecFields : []),
@@ -619,6 +635,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       ],
       ambiguousFields: specCtx.ambiguousFields,
       missingSpecFieldDescriptions: specCtx.missingFieldDescriptions,
+      categoryGuidance,
       unneededSpecFields: Array.isArray(input.unneededSpecFields) ? input.unneededSpecFields : [],
       reworkSpecFields,
       reworkInstructions,

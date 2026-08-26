@@ -31,7 +31,7 @@ const action = defineHttpAction({
       if (!parentUuid) return sendJson(res, 400, { error: 'invalid item id' });
 
       const spareParts = await query(`
-        SELECT ir."ChildItemUUID" AS "ItemUUID", ir."Notes" AS "slotKey",
+        SELECT ir."ChildItemUUID" AS "ItemUUID", ir."SlotKey" AS "slotKey",
                i."Artikel_Nummer", i."BoxID", i."Location",
                r."Artikelbeschreibung", r."Kurzbeschreibung"
         FROM item_relations ir
@@ -124,7 +124,7 @@ const action = defineHttpAction({
         );
 
         await client.query(
-          `INSERT INTO item_relations ("ParentItemUUID","ChildItemUUID","RelationType","Notes","CreatedAt","UpdatedAt")
+          `INSERT INTO item_relations ("ParentItemUUID","ChildItemUUID","RelationType","SlotKey","CreatedAt","UpdatedAt")
            VALUES ($1,$2,'Zerlegt_aus',$3,NOW(),NOW())`,
           [parentUuid, newItemUUID, slotKey || null]
         );
@@ -196,7 +196,7 @@ const action = defineHttpAction({
         );
 
         await client.query(
-          `INSERT INTO item_relations ("ParentItemUUID","ChildItemUUID","RelationType","Notes","CreatedAt","UpdatedAt")
+          `INSERT INTO item_relations ("ParentItemUUID","ChildItemUUID","RelationType","SlotKey","CreatedAt","UpdatedAt")
            VALUES ($1,$2,'Zerlegt_aus',$3,NOW(),NOW())`,
           [parentUuid, newItemUUID, slotKey || null]
         );

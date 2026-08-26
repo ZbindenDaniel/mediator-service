@@ -34,6 +34,7 @@ Orchestration, prompting, and LLM interaction only. Item DB persistence belongs 
 - **Transcript-based observability**: each run writes a structured transcript (via `flow/transcript.ts`) so failures can be diagnosed without re-running
 - **Supervisor stage**: added after extraction quality was inconsistent; supervisor validates extracted data and can trigger re-extraction before committing
 - **Postgres for the queue**: SQLite's write lock blocked concurrent run dispatches; Postgres `withTransaction` serializes queue operations correctly
+- **Auto-dispatcher feeds `notStarted` only (demoted, #913)**: the keep-busy feeder (`claimNotStartedAgenticRuns`) promotes only `notStarted` → `queued`, capped at `MAX_WAITING_RUNS` (= running cap), and never re-claims `failed`/`cancelled` runs — an operator stop is durable and a permanently-failing item cannot loop. Failures are terminal (no auto-requeue); transient hiccups are absorbed by in-process retries within a run (Tavily/Ollama), not by resurrecting runs. Admin-disablable via the `agentic_auto_dispatch_enabled` system setting.
 
 ## See also
 - [docs/detailed/agentic-basics.md](../../docs/detailed/agentic-basics.md) — run lifecycle, state machine, observability guide

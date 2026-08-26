@@ -8,6 +8,7 @@ import PrinterSettingsCard from './admin/PrinterSettingsCard';
 import AgenticOverviewCard from './admin/AgenticOverviewCard';
 import SystemStatusCard from './admin/SystemStatusCard';
 import NightlyErpSyncCard from './admin/NightlyErpSyncCard';
+import AgenticDispatchCard from './admin/AgenticDispatchCard';
 import AdminGate from './admin/AdminGate';
 
 type AuthStatus = 'checking' | 'ok' | 'locked';
@@ -76,6 +77,7 @@ export default function AdminPage() {
         <PrinterQueuesCard authToken={token} onAuthFailure={handleAuthFailure} />
         <PrinterSettingsCard authToken={token} onAuthFailure={handleAuthFailure} />
         <AgenticOverviewCard />
+        <AgenticDispatchCard authToken={token} onAuthFailure={handleAuthFailure} />
         <SystemStatusCard authToken={token} onAuthFailure={handleAuthFailure} />
         <NightlyErpSyncCard authToken={token} onAuthFailure={handleAuthFailure} />
       </div>

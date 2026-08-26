@@ -123,6 +123,14 @@ describe('catalog-spare-part action', () => {
       expect(getStatus()).toBe(201);
       expect(getBody().itemUUID).toBe('SPARE-001');
       expect(mockWithTransaction).toHaveBeenCalledTimes(1);
+      // Slot key is written to the dedicated SlotKey column, not overloaded onto Notes.
+      const relInsert = mockTransactionClient.query.mock.calls.find(
+        (c: any[]) => typeof c[0] === 'string' && c[0].includes('INSERT INTO item_relations')
+      );
+      expect(relInsert).toBeDefined();
+      expect(relInsert[0]).toContain('"SlotKey"');
+      expect(relInsert[0]).not.toContain('"Notes"');
+      expect(relInsert[1]).toContain('fan');
     });
 
     it('logs SparePartCataloged event with correct fields', async () => {

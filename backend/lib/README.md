@@ -5,7 +5,7 @@ Domain service utilities — the shared logic layer between action handlers and 
 
 ## Contents
 - `media.ts` / `media-request.ts` / `media-audit.ts` / `media-health.ts` — item photo and file storage operations; resolves local vs WebDAV paths
-- `quality-contracts.ts` — loads and caches quality/spec/disassembly JSON contracts from `../../contracts/`
+- `quality-contracts.ts` — loads quality/spec/assembly JSON contracts from `../../contracts/` (assembly loading also in `backend/contracts/registry.ts`)
 - `langtext.ts` — Langtext (product description) formatting and serialization
 - `labelHtml.ts` / `labelTemplateLoader.ts` — label HTML generation and template resolution
 - `co2Calculator.ts` — CO₂ recovery potential scoring

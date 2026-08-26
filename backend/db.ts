@@ -12,6 +12,9 @@ import {
   AgenticRequestLogUpsert,
   AgenticRequestNotification,
   AgenticRun,
+  AgenticRunSnapshot,
+  AgenticRunSnapshotReason,
+  AgenticSnapshotFields,
   Box,
   Item,
   ItemInstance,
@@ -400,6 +403,25 @@ CREATE TABLE IF NOT EXISTS agentic_run_review_history (
 CREATE INDEX IF NOT EXISTS idx_agentic_run_review_history_artikel_nummer_recorded_at
   ON agentic_run_review_history ("Artikel_Nummer", "RecordedAt", "Id");
 
+-- Versioned history of an item's AI-enriched state: one row captured just before a run/rework mutates
+-- the item (plus non-destructive restore rows). Powers the KI-tab diff + restore. Retention keeps the
+-- last 4 per item plus the most recent approved-state snapshot (see pruneAgenticRunSnapshots).
+CREATE TABLE IF NOT EXISTS agentic_run_snapshots (
+  "Id"                  SERIAL PRIMARY KEY,
+  "Artikel_Nummer"      TEXT NOT NULL REFERENCES item_refs("Artikel_Nummer") ON DELETE CASCADE ON UPDATE CASCADE,
+  "RunId"               INTEGER,
+  "CreatedAt"           TEXT NOT NULL,
+  "Reason"              TEXT NOT NULL,
+  "CapturedReviewState" TEXT,
+  "Actor"               TEXT,
+  "TriggerReason"       TEXT,
+  "SchemaVersion"       INTEGER NOT NULL DEFAULT 1,
+  "FieldsJson"          TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_agentic_run_snapshots_artikel_created
+  ON agentic_run_snapshots ("Artikel_Nummer", "CreatedAt", "Id");
+
 CREATE TABLE IF NOT EXISTS user_item_marks (
   "Username"  TEXT NOT NULL,
   "ItemUUID"  TEXT NOT NULL,
@@ -437,9 +459,12 @@ ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "SpecContractVersion" INTEGER;
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Scope" TEXT NOT NULL DEFAULT 'instance';
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Artikel_Nummer" TEXT;
 CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
--- Explicit slot key for assembly relations, so it stops being overloaded onto "Notes".
--- Existing rows keep their slot in "Notes"; new component-creation writes "SlotKey".
+-- Explicit slot key for assembly relations, so it stops being overloaded onto "Notes"
+-- ("Notes" stays for genuine Zubehör relation notes). All slot writes/reads target "SlotKey".
 ALTER TABLE item_relations ADD COLUMN IF NOT EXISTS "SlotKey" TEXT;
+-- Raw intake scan payload (JSON), stored when the item is created at intake so the later quality
+-- step can auto-resolve scan-answerable questions without the script re-sending the scan.
+ALTER TABLE items ADD COLUMN IF NOT EXISTS "IntakeScan" TEXT;
 -- The graduation UUID-swap re-points an in-device component's PK to its I- id. user_item_marks
 -- is the only UUID FK without ON UPDATE CASCADE, so add it (drop + re-add by discovered name)
 -- to let the swap cascade cleanly instead of stranding or blocking on a mark.
@@ -1185,7 +1210,8 @@ export async function listItems(): Promise<any[]> {
   const rows = await query(
     `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
       "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
-      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\"",
+      "ar.\"LastAttemptAt\" AS \"AgenticLastRunAt\""
     ])}${ITEM_JOIN_WITH_BOX}
      LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
      WHERE COALESCE(i."Auf_Lager", 0) > 0
@@ -1205,7 +1231,8 @@ export async function listItemsWithFilters(filters: {
   const rows = await query(
     `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
       "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
-      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\"",
+      "ar.\"LastAttemptAt\" AS \"AgenticLastRunAt\""
     ])}${ITEM_JOIN_WITH_BOX}
      LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
      WHERE COALESCE(i."Auf_Lager", 0) > 0
@@ -1244,7 +1271,8 @@ export async function listItemReferencesWithFilters(filters: {
       r."Veröffentlicht_Status",r."Shopartikel",r."Artikeltyp",r."Einheit",r."EntityType",r."EAN",r."ShopwareProductId",
       r."LastSyncedAt",
       COALESCE(ar."Status",'notStarted') AS "AgenticStatus",
-      COALESCE(ar."ReviewState",'not_required') AS "AgenticReviewState"
+      COALESCE(ar."ReviewState",'not_required') AS "AgenticReviewState",
+      ar."LastAttemptAt" AS "AgenticLastRunAt"
      FROM item_refs r
      LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
      LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
@@ -1950,7 +1978,7 @@ export async function listContractAuditCandidates(limit: number): Promise<Array<
 }>> {
   return query(
     `SELECT r."Artikel_Nummer", r."SpecContractVersion",
-            i."Langtext", CAST(i."Unterkategorien_A" AS INTEGER) AS "SubCategory",
+            i."Langtext", ROUND(NULLIF(i."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "SubCategory",
             i."Artikelbeschreibung"
      FROM agentic_runs r
      JOIN item_refs i ON i."Artikel_Nummer" = r."Artikel_Nummer"
@@ -2097,6 +2125,130 @@ export async function listRecentAgenticRunReviewHistoryBySubcategory(subcategory
   }
 }
 
+// --- Agentic run snapshots (versioned enriched-state history) ---
+
+const AGENTIC_SNAPSHOT_KEEP_RECENT = 4;
+
+function parseSnapshotRow(row: {
+  Id: number;
+  Artikel_Nummer: string;
+  RunId: number | null;
+  CreatedAt: string;
+  Reason: string;
+  CapturedReviewState: string | null;
+  Actor: string | null;
+  TriggerReason: string | null;
+  SchemaVersion: number;
+  FieldsJson: string;
+}): AgenticRunSnapshot {
+  let fields: AgenticSnapshotFields = {};
+  try {
+    const parsed = JSON.parse(row.FieldsJson);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      fields = parsed as AgenticSnapshotFields;
+    }
+  } catch (err) {
+    console.warn('[db] Failed to parse agentic snapshot FieldsJson', { id: row.Id, error: err });
+  }
+  return {
+    Id: row.Id,
+    Artikel_Nummer: row.Artikel_Nummer,
+    RunId: row.RunId,
+    CreatedAt: row.CreatedAt,
+    Reason: (row.Reason as AgenticRunSnapshotReason) ?? 'pre-run',
+    CapturedReviewState: row.CapturedReviewState,
+    Actor: row.Actor,
+    TriggerReason: row.TriggerReason,
+    SchemaVersion: row.SchemaVersion,
+    Fields: fields
+  };
+}
+
+export async function insertAgenticRunSnapshot(params: {
+  Artikel_Nummer: string;
+  RunId?: number | null;
+  Reason: AgenticRunSnapshotReason;
+  CapturedReviewState?: string | null;
+  Actor?: string | null;
+  TriggerReason?: string | null;
+  SchemaVersion?: number;
+  Fields: AgenticSnapshotFields;
+  CreatedAt?: string;
+}): Promise<void> {
+  const artikelNummer = typeof params.Artikel_Nummer === 'string' ? params.Artikel_Nummer.trim() : '';
+  if (!artikelNummer) return;
+  const createdAt = params.CreatedAt ?? new Date().toISOString();
+  await execute(
+    `INSERT INTO agentic_run_snapshots
+       ("Artikel_Nummer","RunId","CreatedAt","Reason","CapturedReviewState","Actor","TriggerReason","SchemaVersion","FieldsJson")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      artikelNummer,
+      params.RunId ?? null,
+      createdAt,
+      params.Reason,
+      params.CapturedReviewState ?? null,
+      params.Actor ?? null,
+      params.TriggerReason ?? null,
+      params.SchemaVersion ?? 1,
+      JSON.stringify(params.Fields ?? {})
+    ]
+  );
+}
+
+// Retention: keep the 4 most recent snapshots PLUS the most recent approved-state snapshot even if it
+// falls outside that window — so an item can always be rolled back to its last known-good state.
+export async function pruneAgenticRunSnapshots(artikelNummer: string): Promise<void> {
+  const normalized = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalized) return;
+  try {
+    await execute(
+      `DELETE FROM agentic_run_snapshots
+       WHERE "Artikel_Nummer" = $1
+         AND "Id" NOT IN (
+           SELECT "Id" FROM agentic_run_snapshots
+           WHERE "Artikel_Nummer" = $1
+           ORDER BY "CreatedAt" DESC, "Id" DESC
+           LIMIT $2
+         )
+         AND "Id" NOT IN (
+           SELECT "Id" FROM agentic_run_snapshots
+           WHERE "Artikel_Nummer" = $1
+             AND LOWER(COALESCE("CapturedReviewState", '')) IN ('approved','auto_approved')
+           ORDER BY "CreatedAt" DESC, "Id" DESC
+           LIMIT 1
+         )`,
+      [normalized, AGENTIC_SNAPSHOT_KEEP_RECENT]
+    );
+  } catch (err) {
+    console.warn('[db] Failed to prune agentic run snapshots', { artikelNummer: normalized, error: err });
+  }
+}
+
+export async function listAgenticRunSnapshots(artikelNummer: string, limit = 20): Promise<AgenticRunSnapshot[]> {
+  const normalized = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalized) return [];
+  const normalizedLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 20;
+  const rows = await query<Parameters<typeof parseSnapshotRow>[0]>(
+    `SELECT "Id","Artikel_Nummer","RunId","CreatedAt","Reason","CapturedReviewState","Actor","TriggerReason","SchemaVersion","FieldsJson"
+     FROM agentic_run_snapshots WHERE "Artikel_Nummer"=$1
+     ORDER BY "CreatedAt" DESC, "Id" DESC LIMIT $2`,
+    [normalized, normalizedLimit]
+  );
+  return rows.map(parseSnapshotRow);
+}
+
+export async function getAgenticRunSnapshotById(id: number, artikelNummer: string): Promise<AgenticRunSnapshot | null> {
+  const normalized = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalized || !Number.isInteger(id)) return null;
+  const row = await queryOne<Parameters<typeof parseSnapshotRow>[0]>(
+    `SELECT "Id","Artikel_Nummer","RunId","CreatedAt","Reason","CapturedReviewState","Actor","TriggerReason","SchemaVersion","FieldsJson"
+     FROM agentic_run_snapshots WHERE "Id"=$1 AND "Artikel_Nummer"=$2`,
+    [id, normalized]
+  );
+  return row ? parseSnapshotRow(row) : null;
+}
+
 export async function persistAgenticRunError(params: { artikelNummer: string; error: string | null; attemptAt?: string | null }): Promise<void> {
   const artikelNummer = typeof params.artikelNummer === 'string' ? params.artikelNummer.trim() : '';
   if (!artikelNummer) {
@@ -2121,6 +2273,24 @@ export async function persistAgenticRunError(params: { artikelNummer: string; er
   }
 }
 
+// Persist the search results for a run as soon as they are retrieved, independent of the run's
+// status/outcome. This is what lets an automatic retry of a failed/cancelled run reuse the stored
+// search (skipSearch) instead of re-billing the search provider — the normal LastSearchLinksJson
+// write only happens on the terminal result dispatch, which a failed run never reaches.
+export async function persistAgenticSearchLinks(artikelNummer: string, linksJson: string | null): Promise<void> {
+  const trimmed = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!trimmed) return;
+  try {
+    await execute(
+      `UPDATE agentic_runs SET "LastSearchLinksJson"=$2 WHERE "Artikel_Nummer"=$1`,
+      [trimmed, linksJson ?? null]
+    );
+  } catch (err) {
+    console.error('[db] Failed to persist agentic search links', { artikelNummer: trimmed, error: err });
+    throw err;
+  }
+}
+
 export type AgenticRunQueueUpdate = {
   Artikel_Nummer: string;
   Status?: string | null;
@@ -2131,8 +2301,14 @@ export type AgenticRunQueueUpdate = {
   LastAttemptAt: string;
 };
 
-export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
+export async function claimQueuedAgenticRuns(limit = 5, maxRunning?: number): Promise<AgenticRun[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
+  // Optional hard cap on total 'running' runs, enforced inside this atomic statement. The caller's
+  // availableSlots read is not atomic with the claim, so passing the cap here makes the claim itself
+  // refuse to promote past it: LIMIT is clamped to (cap - current running count), computed in the same
+  // statement that does the promotion. This is the guarantee the removed per-invocation count-gate used
+  // to provide (see agentic index.ts), now at the claim layer. When omitted, only `limit` applies.
+  const cap = Number.isFinite(maxRunning) && (maxRunning ?? -1) >= 0 ? Math.floor(maxRunning as number) : null;
   const now = new Date().toISOString();
   try {
     // Atomic SELECT FOR UPDATE SKIP LOCKED + UPDATE in one statement so concurrent instances
@@ -2140,12 +2316,18 @@ export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
     // rather than block, and the rows are immediately moved to 'running' before any other
     // instance can see them as 'queued'.
     return query<AgenticRun>(
-      `WITH next_runs AS (
+      `WITH free_slots AS (
+         SELECT CASE
+                  WHEN $3::int IS NULL THEN $1::int
+                  ELSE LEAST($1::int, GREATEST(0, $3::int - (SELECT COUNT(*)::int FROM agentic_runs WHERE "Status" = 'running')))
+                END AS n
+       ),
+       next_runs AS (
          SELECT "Id"
          FROM agentic_runs
          WHERE "Status" = 'queued' AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= $2)
          ORDER BY "LastModified" ASC, "Id" ASC
-         LIMIT $1
+         LIMIT (SELECT n FROM free_slots)
          FOR UPDATE SKIP LOCKED
        )
        UPDATE agentic_runs
@@ -2157,7 +2339,7 @@ export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
        FROM next_runs
        WHERE agentic_runs."Id" = next_runs."Id"
        RETURNING agentic_runs.*`,
-      [effectiveLimit, now]
+      [effectiveLimit, now, cap]
     );
   } catch (err) {
     console.error('[db] Failed to claim queued agentic runs', err);
@@ -2165,19 +2347,39 @@ export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
   }
 }
 
-export async function fetchIdleFillAgenticRuns(limit = 3): Promise<AgenticRun[]> {
+export async function claimNotStartedAgenticRuns(limit = 3): Promise<AgenticRun[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
+  const now = new Date().toISOString();
   try {
+    // Keep-busy auto-feeder: promote never-started runs into the waiting queue ('notStarted' → 'queued')
+    // so the normal queued→running dispatch can drain them. Deliberately limited to 'notStarted': a
+    // 'failed' run is terminal until manually re-triggered and a 'cancelled' run is an explicit operator
+    // stop — auto-resurrecting either one caused an unstoppable retry storm, so all other states stay
+    // idle. Promotion to 'queued' is not an attempt, so RetryCount/LastAttemptAt are left untouched; the
+    // queued→running claim records the attempt when it actually runs. FOR UPDATE SKIP LOCKED keeps
+    // concurrent dispatchers from claiming the same row.
     return query<AgenticRun>(
-      `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
-              "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt"
-       FROM agentic_runs
-       WHERE "Status"='notStarted' AND "SearchQuery" IS NOT NULL AND TRIM("SearchQuery") != ''
-       ORDER BY "LastModified" ASC, "Id" ASC LIMIT $1`,
-      [effectiveLimit]
+      `WITH next_runs AS (
+         SELECT "Id"
+         FROM agentic_runs
+         WHERE "Status" = 'notStarted'
+           AND "SearchQuery" IS NOT NULL AND TRIM("SearchQuery") != ''
+         ORDER BY "LastModified" ASC, "Id" ASC
+         LIMIT $1
+         FOR UPDATE SKIP LOCKED
+       )
+       UPDATE agentic_runs
+       SET "Status" = 'queued',
+           "LastModified" = $2,
+           "NextRetryAt" = NULL,
+           "LastError" = NULL
+       FROM next_runs
+       WHERE agentic_runs."Id" = next_runs."Id"
+       RETURNING agentic_runs.*`,
+      [effectiveLimit, now]
     );
   } catch (err) {
-    console.error('[db] Failed to fetch idle-fill agentic runs', err);
+    console.error('[db] Failed to claim notStarted agentic runs for queue', err);
     throw err;
   }
 }

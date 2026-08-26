@@ -18,6 +18,7 @@ import type {
   ItemInstanceSummary,
   ItemDetailReviewAutomationSignal
 } from '../../../models';
+import type { AgenticSnapshotFields } from '../../../models';
 import type { Co2ImpactLabel } from '../../../models/co2';
 import { CO2_IMPACT_LABEL_DE } from '../../../models/co2';
 import {
@@ -45,6 +46,7 @@ import {
   persistAgenticRunClose,
   persistAgenticRunCancellation,
   persistAgenticRunDeletion,
+  persistAgenticSearchLinkDeletion,
   triggerAgenticRun
 } from '../lib/agentic';
 import { parseLangtext } from '../lib/langtext';
@@ -114,6 +116,7 @@ import {
   type AgenticStatusDisplay,
   type AgenticStatusCardProps
 } from './AgenticStatusCard';
+import { AgenticSearchSources, parseAgenticSearchSources } from './AgenticSearchSources';
 import {
   type NormalizedDetailValue,
   DETAIL_PLACEHOLDER_TEXT,
@@ -291,6 +294,8 @@ export default function ItemDetail({ itemId }: Props) {
   // TODO(agentic-search-term): Align editable agentic search term handling with backend suggestions once available.
   const [agenticSearchTerm, setAgenticSearchTerm] = useState<string>('');
   const [agenticSearchError, setAgenticSearchError] = useState<string | null>(null);
+  // URL of the stored search result currently being removed (curation) — disables just that row's control.
+  const [deletingSearchLinkUrl, setDeletingSearchLinkUrl] = useState<string | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const [isMediaSaving, setIsMediaSaving] = useState(false);
   const [instances, setInstances] = useState<ItemInstanceSummary[]>([]);
@@ -1003,10 +1008,43 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }, [agenticSearchTerm]);
 
+  // The item's current AI-written fields, for the run-history diff (snapshot vs current). Langtext is
+  // parsed to the same object shape the snapshots store so the key-by-key diff lines up.
+  const snapshotCurrentFields: AgenticSnapshotFields = React.useMemo(() => ({
+    Artikelbeschreibung: item?.Artikelbeschreibung ?? null,
+    Kurzbeschreibung: item?.Kurzbeschreibung ?? null,
+    Langtext: item?.Langtext ? parseLangtext(item.Langtext) ?? {} : {},
+    Hersteller: item?.Hersteller ?? null,
+    Länge_mm: item?.Länge_mm ?? null,
+    Breite_mm: item?.Breite_mm ?? null,
+    Höhe_mm: item?.Höhe_mm ?? null,
+    Gewicht_kg: item?.Gewicht_kg ?? null,
+    Verkaufspreis: item?.Verkaufspreis ?? null,
+    Hauptkategorien_A: item?.Hauptkategorien_A ?? null,
+    Unterkategorien_A: item?.Unterkategorien_A ?? null,
+    Hauptkategorien_B: item?.Hauptkategorien_B ?? null,
+    Unterkategorien_B: item?.Unterkategorien_B ?? null
+  }), [item]);
+
   const agenticRows: [string, React.ReactNode][] = [];
   // TODO(agentic-transcript-ui): Keep the transcript link visible regardless of agentic run state once backend exposes it.
   if (agentic?.SearchQuery) {
     agenticRows.push(['Suchbegriff', agentic.SearchQuery]);
+  }
+  // Surface stored search evidence (LastSearchLinksJson) so operators can see whether an item already
+  // has search results, what was consulted, and that a rerun reuses them — previously persisted but
+  // never shown (todo #21).
+  const agenticSearchSources = parseAgenticSearchSources(agentic?.LastSearchLinksJson);
+  if (agenticSearchSources.length > 0) {
+    agenticRows.push([
+      `Suchergebnisse (${agenticSearchSources.length})`,
+      <AgenticSearchSources
+        sources={agenticSearchSources}
+        onDelete={handleAgenticSearchLinkDelete}
+        deletingUrl={deletingSearchLinkUrl}
+        disabled={agenticActionPending}
+      />
+    ]);
   }
   if (agentic?.LastModified) {
     agenticRows.push(['Zuletzt aktualisiert', formatDateTime(agentic.LastModified)]);
@@ -2710,6 +2748,83 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }
 
+  async function handleAgenticSearchLinkDelete(url: string) {
+    const targetUrl = typeof url === 'string' ? url.trim() : '';
+    if (!targetUrl) {
+      return;
+    }
+    if (!agentic) {
+      console.warn('Search link delete requested without run data');
+      setAgenticError('Kein KI Durchlauf vorhanden.');
+      return;
+    }
+    const referenceId = agentic.Artikel_Nummer?.trim() || item?.Artikel_Nummer?.trim() || '';
+    if (!referenceId) {
+      logError('ItemDetail: Missing Artikel_Nummer for search link delete', undefined, { itemId });
+      setAgenticError('Artikelnummer fehlt für die Löschung.');
+      return;
+    }
+
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display search link delete user alert', error);
+      }
+      return;
+    }
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Suchergebnis entfernen',
+        message: 'Diesen Link aus den gespeicherten Suchergebnissen entfernen? Er wird bei künftigen Läufen nicht mehr verwendet.',
+        confirmLabel: 'Entfernen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (error) {
+      console.error('Failed to confirm search link deletion', error);
+      return;
+    }
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingSearchLinkUrl(targetUrl);
+    setAgenticError(null);
+    try {
+      const result = await persistAgenticSearchLinkDeletion({
+        artikelNummer: referenceId,
+        url: targetUrl,
+        actor,
+        context: 'item detail search-link delete'
+      });
+
+      if (result.ok) {
+        // Backend returns the refreshed run with the pruned LastSearchLinksJson — swap it in so the
+        // list re-renders without a full status refetch.
+        if (result.agentic) {
+          setAgentic(result.agentic);
+        }
+        setAgenticError(null);
+      } else {
+        const message = result.reason === 'not-found'
+          ? 'Suchergebnis wurde nicht gefunden.'
+          : 'Suchergebnis konnte nicht entfernt werden.';
+        setAgenticError(message);
+      }
+    } catch (err) {
+      logError('Suchergebnis-Löschung fehlgeschlagen', err, { referenceId, url: targetUrl });
+      setAgenticError('Suchergebnis konnte nicht entfernt werden.');
+    } finally {
+      setDeletingSearchLinkUrl(null);
+    }
+  }
+
   const agenticStartHandler = !agenticHasRun ? handleAgenticStart : handleAgenticRestart;
   const agenticStatus = agenticStatusDisplay(agentic);
   const agenticIsInProgress = isAgenticRunInProgress(agentic);
@@ -3022,6 +3137,9 @@ export default function ItemDetail({ itemId }: Props) {
             canDelete={agenticCanDelete}
             onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
             actionPending={agenticActionPending}
+            snapshotArtikelNummer={item?.Artikel_Nummer ?? null}
+            snapshotCurrentFields={snapshotCurrentFields}
+            onSnapshotRestored={() => { void load({ showSpinner: false }); }}
           />
         );
         break;

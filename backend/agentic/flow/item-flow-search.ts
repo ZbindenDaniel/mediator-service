@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import type { SearchResult } from '../tools/tavily-client';
 import { RateLimitError } from '../tools/tavily-client';
-import type { SearchSource } from '../utils/source-formatter';
+import { formatSourcesForRetry, type SearchSource } from '../utils/source-formatter';
 import { stringifyLangChainContent } from '../utils/langchain';
 import { parseJsonWithSanitizer } from '../utils/json';
 import { searchLimits } from '../config';
@@ -904,9 +904,15 @@ export async function collectSearchContexts({
 
   if (!shouldSearch) {
     // When skipSearch is active but stored sources exist, inject them so the extraction model
-    // has prior evidence to work from — sanitization runs via the buildAggregatedSearchText closure.
+    // has prior evidence to work from instead of being told only that search was skipped.
+    // Use the shared source formatter (numbered Title/URL/Description blocks) rather than a bare
+    // description join: the persisted LastSearchLinksJson shape ({url,title?,description?}) frequently
+    // carries no description, and a description-only join collapsed to an empty string there — which
+    // surfaced as "Current search context: None." even though real results had been collected. The
+    // formatter always emits the title + URL (and "Description: (none)" when absent), so every
+    // collected result is represented and the block is never empty when sources exist.
     if (Array.isArray(storedSources) && storedSources.length > 0) {
-      const storedText = storedSources.map((s) => (typeof s.description === 'string' && s.description ? s.description : typeof s.content === 'string' ? s.content : '')).filter(Boolean).join('\n\n');
+      const storedText = formatSourcesForRetry(storedSources, logger).join('\n\n');
       searchContexts.push({ query: searchTerm ?? 'stored-search-data', text: storedText, sources: storedSources });
       recordSources(storedSources);
     }
@@ -987,6 +993,14 @@ export async function collectSearchContexts({
     }
   }
 
+  // Per-plan resilience: a single plan's transient failure no longer aborts the whole run. We collect
+  // whatever the surviving plans return and only fail the run if EVERY plan failed (zero usable
+  // context). Partial results are still recorded/persisted by the caller, so a later failure leaves
+  // evidence for a search-free retry. A rate limit is the exception — it is a provider-wide signal, so
+  // we surface it immediately to back off the queue rather than hammering the remaining plans.
+  let searchFailureCount = 0;
+  let lastSearchErr: unknown = null;
+
   for (const [index, plan] of limitedPlans.entries()) {
     retrievalMetrics.uniqueQueries.add(normalizeQuery(plan.query));
     const metadata = { ...plan.metadata, requestIndex: index };
@@ -1042,11 +1056,27 @@ export async function collectSearchContexts({
       }
     } catch (searchErr) {
       logger?.error?.({ err: searchErr, msg: 'search failed', searchQuery: plan.query, itemId, requestIndex: index });
+      // A rate limit is provider-wide: abort now so the caller backs off instead of hammering.
       if (searchErr instanceof RateLimitError) {
         throw new FlowError('RATE_LIMITED', 'Search provider rate limited requests', searchErr.statusCode ?? 503);
       }
-      throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: searchErr });
+      // Otherwise tolerate this plan and try the rest; only fail the run if nothing survives.
+      searchFailureCount += 1;
+      lastSearchErr = searchErr;
     }
+  }
+
+  // Fail only when no plan produced any context — a partial set is enough to proceed to extraction.
+  if (searchContexts.length === 0 && searchFailureCount > 0) {
+    throw new FlowError('SEARCH_FAILED', 'Failed to retrieve search results', 502, { cause: lastSearchErr });
+  }
+  if (searchFailureCount > 0) {
+    logger?.warn?.({
+      msg: 'search completed with partial failures',
+      itemId,
+      failedPlans: searchFailureCount,
+      succeededPlans: searchContexts.length
+    });
   }
 
 
