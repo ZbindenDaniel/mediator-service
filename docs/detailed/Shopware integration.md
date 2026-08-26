@@ -55,8 +55,10 @@ This document captures the current architecture, required configuration, and ope
   product becomes a **variant parent**: `db.buildVariantGroups` builds one group per instance with options =
   InstanceSpecs axes + `Zustand` (quality) + `itemUUID`; `adminClient.syncVariants` resolves each group's option
   values to property options (P2a machinery), PATCHes the parent's `configuratorSettings` with the axis
-  options (each entry carries a **deterministic id** `sha1(parentId:optionId)` so a re-sync upserts the same
-  configurator row instead of re-inserting it and violating `uniq.product_configurator_setting`), and upserts one
+  options (it first searches `product-configurator-setting` and **reuses each option's existing setting id** so
+  the PATCH updates in place — a new id for an option that already has a row would INSERT and violate
+  `uniq.product_configurator_setting`; only genuinely-new options get a deterministic `sha1(parentId:optionId)` id,
+  and stale axes are deleted 404-tolerantly), and upserts one
   **child product** per instance (`productNumber = parent.<sha1(sig)>`, `parentId` + `options` + the instance's
   stock, inheriting price/tax/visibility from the parent). Existing children get stock/active updated; an instance
   that no longer exists is retired (`active:false, stock:0`). Each instance's `ShopwareVariantId` is persisted.

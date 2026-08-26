@@ -523,17 +523,36 @@ export class ShopwareAdminClient {
       desired.push({ productNumber: `${parentNumber}.${suffix}`, optionIds, stock: v.stock, instanceIds: v.instanceIds });
     }
 
-    // Declare which options participate as variant axes (PATCH the full set; adding axes is the common case).
-    // Deterministic id per (parent, option) so a re-sync upserts the same configurator row by primary key
-    // instead of re-inserting it and violating uniq.product_configurator_setting (product+version+option).
+    // Declare which options participate as variant axes. uniq.product_configurator_setting is on
+    // (product, version, option), so a PATCH entry must reuse the EXISTING row's id for an option that
+    // already has one — sending a fresh id makes Shopware INSERT and hit 1062. Reusing existing ids also
+    // heals rows created before ids were deterministic and absorbs the added itemUUID axis. New options
+    // get a deterministic id (idempotent within a run); stale axes are removed (404-tolerant).
     if (allOptionIds.size) {
+      const current = await this.request<{ data?: Array<{ id: string; optionId?: string }> }>('POST', '/api/search/product-configurator-setting', {
+        filter: [{ type: 'equals', field: 'productId', value: parentId }],
+        includes: { product_configurator_setting: ['id', 'optionId'] },
+        limit: 500
+      });
+      const settingIdByOption = new Map<string, string>();
+      for (const s of current?.data ?? []) {
+        if (s.optionId) settingIdByOption.set(s.optionId, s.id);
+      }
       await this.request('PATCH', `/api/product/${parentId}`, {
         id: parentId,
         configuratorSettings: [...allOptionIds].map((optionId) => ({
-          id: createHash('sha1').update(`${parentId}:${optionId}`).digest('hex').slice(0, 32),
+          id: settingIdByOption.get(optionId) ?? createHash('sha1').update(`${parentId}:${optionId}`).digest('hex').slice(0, 32),
           optionId
         }))
       });
+      for (const [optionId, settingId] of settingIdByOption) {
+        if (allOptionIds.has(optionId)) continue;
+        try {
+          await this.request('DELETE', `/api/product-configurator-setting/${settingId}`);
+        } catch (err) {
+          if ((err as { status?: number }).status !== 404) throw err;
+        }
+      }
     }
 
     const assignments: Array<{ instanceIds: string[]; variantId: string }> = [];
