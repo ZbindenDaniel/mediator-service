@@ -77,6 +77,26 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0zd. ✅ **Event-log CSV round-trip corrupted `Meta` into `[object Object]` → re-import dropped the event (erp-sync #936).**
+  `events.Meta` is a `jsonb` column, so `pg` returns it as a parsed JS object; `export-data.ts`'s `toCsvValue`
+  serialized cells with `String(value)`, turning the object into the literal `"[object Object]"` in `events.csv`.
+  On re-import that string was bound into the `jsonb` column → `22P02 invalid input syntax for type json`, and
+  because `insertEventLogEntry` swallows the error the entire event row was silently dropped. Fixed at the source
+  (`toCsvValue` now `JSON.stringify`s object/array cells; `Date` excluded so timestamps are unchanged) plus importer
+  hardening (`sanitizeEventMetaValue` drops a non-JSON `Meta` to `NULL` with a warning so a row from an
+  already-broken export still imports). Test: `test/csv-ingest-events-meta.test.ts`.
+  **Note:** related to 0z7 (a CI JSON-lint over `contracts/`) — a broader "validate JSON at the CSV/jsonb boundary"
+  guard would have caught this class earlier; still worth the cheap CI sweep.
+
+0zc. ✅ **Intake can match a booted device onto a pre-existing instance instead of forcing a duplicate (intake #935).**
+  Pre-intake-API / hand-catalogued items have no serial/MAC, so `/start`'s identifier lookup missed and the
+  operator was forced to create a duplicate at `select_ref`. Now each candidate carries `matchableInstances`
+  (serial-less, non-component, in-stock instances of the ref) and the `type:'ref'` answer accepts `useItemUUID`
+  to bind the scanned identity + scan onto the chosen instance (guarded, idempotent; logs `InstanceMatched`).
+  Fully additive — a station that ignores the new fields behaves as before.
+  **Follow-up (image-side):** `phase1.sh` should render the "new device or one of these existing ones?" prompt
+  from `matchableInstances` and send `useItemUUID` for "existing". Backend fields are ignored harmlessly until then.
+
 0za. ✅ **Admin "Backup" was not a restorable snapshot + emitted env-dependent HTML (erp-sync #931).**
   The Backup button routed to `/api/export/items?mode=backup`, which emitted only items+boxes (no agentic
   runs, no events) and resolved Langtext via `LANGTEXT_EXPORT_FORMAT` — so setting that env to `html` (for

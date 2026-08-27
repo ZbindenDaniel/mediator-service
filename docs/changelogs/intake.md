@@ -4,6 +4,40 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 949. ✅ Intake can match a booted device onto a pre-existing instance (not just create a new one)
+**Why:** Items catalogued **before** the intake API — or by hand — typically have no serial and no
+MAC on file. `/api/intake/start` matches a booted device to an existing item **only by serial/MAC**,
+so for those pre-intake items the lookup always missed and the flow fell to `select_ref`, whose only
+outcome was "create a new instance". The operator was forced to produce a **duplicate** of a device
+already in stock, and it never went through the intake pipeline on its real record. The operator's
+ask: check whether instances already exist and let the operator decide **new vs. existing**.
+**What:** The decision is surfaced at `select_ref` and honoured at the `ref` answer, both additive:
+1. **Surface (`intake-start`).** Each `IntakeRefCandidate` now carries `matchableInstances[]` —
+   existing instances of that reference with **`SerialNumber IS NULL AND MacAddress IS NULL`**,
+   excluding in-device components (`IN_DEVICE_COMPONENT_SQL`) and zero-stock (`Auf_Lager <= 0`)
+   items, ordered newest-first and capped at 10/ref. Each entry gives `itemUUID`, `boxId`/`boxLabel`,
+   `location`, `quality`, `datumErfasst` so the TUI can show the operator the shelf unit to recognise.
+   The extra lookup is best-effort (a failure logs + returns no matches; it never blocks select_ref).
+2. **Honour (`intake-answer`).** The `type:'ref'` body accepts an optional **`useItemUUID`**. When
+   set, `attachIntakeToExistingInstance` binds the scanned serial/MAC (and the persisted scan +
+   in-device components) onto that existing instance instead of `ensureItem` minting a new one, then
+   the flow continues to `quality` on it. Guards keep the match safe: the instance must belong to the
+   chosen `artikelNummer` and must not already carry a **different** serial/MAC (→ `409`);
+   re-submitting the same identity is idempotent (no-op update). Logs an `InstanceMatched` event.
+**Why (approach):** Chose to enrich the existing `select_ref` candidates + add one optional answer
+field over introducing a new `select_instance` state — it keeps the state machine and the image
+contract backward compatible (a script that ignores `matchableInstances` and never sends
+`useItemUUID` behaves exactly as today), and puts the new/existing decision in the one place the
+operator already chooses a reference. "Matchable" is defined as *no identity on file* because an
+instance that had a serial/MAC would already have matched at `/start` (or is a genuinely different
+unit) — so we never silently overwrite an identity. The attach path deliberately does **not** reset
+quality: a matched pre-intake item re-runs the normal intake quality step on its real record.
+**Deferred:** No fuzzy instance matching beyond "serial-less instances of the same ref" (e.g.
+matching across references, or by InstanceSpecs) — the operator makes the call from the shown list.
+No backfill / de-duplication of instances already duplicated by past intakes. The new-or-existing
+prompt itself is an image-side (`phase1.sh`) TUI addition — the backend fields are ignored harmlessly
+until the station renders them.
+
 ## 916. ✅ Intake: operator-typed Artikelbeschreibung was ignored + make every question skippable
 **Why:** Two operator-reported issues.
 **(1) The typed Artikelbeschreibung never stuck — the scanned model always won.** Field-name

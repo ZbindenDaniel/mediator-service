@@ -21,6 +21,29 @@ POST /api/intake/{key}/complete                  # trigger agentic enrichment
 `{key}` is `SN:{serial}` (or `MAC:{mac}` when no serial). Auth: `X-Intake-Token` on all
 `/api/intake/*` routes. The `/api/contracts/*` routes are open (no token).
 
+## `select_ref` — new instance or an existing one?
+
+`/start` matches a booted device to an existing item **by serial/MAC**. Items catalogued before
+the intake API (or by hand) usually have neither on file, so that lookup misses and the flow lands
+on `select_ref` — historically the only choice there was "create a new instance", which produced a
+duplicate of the device already in stock.
+
+To avoid that, each `select_ref` candidate now carries **`matchableInstances`**: existing instances
+of that reference with **no serial and no MAC** (excluding in-device components and zero-stock
+items) — the exact devices that *could* be the one on the bench. The TUI should:
+
+1. Operator picks a reference candidate.
+2. If it has `matchableInstances`, ask **"new device or one of these existing ones?"** — show each
+   by `boxLabel`/`location` + `quality` so the operator can recognise the shelf unit.
+3. **New** → send `{ type:'ref', artikelNummer }` as before (mints a new instance).
+   **Existing** → send `{ type:'ref', artikelNummer, useItemUUID:'<the instance>' }` — the scanned
+   serial/MAC + scan are bound to that instance and the flow continues to `quality` on it.
+
+The whole feature is **additive**: a script that ignores `matchableInstances` and never sends
+`useItemUUID` behaves exactly as before. Guards: `useItemUUID` must belong to `artikelNummer` and
+must not already carry a *different* serial/MAC (else `409`); re-sending the same identity is
+idempotent.
+
 ## The questionnaire is auto-trimmed — you render what comes back
 
 At intake the server answers everything it already knows and returns **only the questions a human

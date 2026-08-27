@@ -126,7 +126,11 @@ function parseExportMode(raw: string | null): { mode: ExportMode; source: 'defau
 
 function toCsvValue(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const stringValue = String(value);
+  // pg parses jsonb columns (e.g. events.Meta) into JS objects/arrays; String() would emit
+  // "[object Object]", which then fails re-import into the jsonb column. Serialize as JSON so
+  // the value round-trips. Date is excluded so timestamp formatting stays unchanged.
+  const stringValue =
+    typeof value === 'object' && !(value instanceof Date) ? JSON.stringify(value) : String(value);
   return /[",\n]/.test(stringValue) ? `"${stringValue.replace(/"/g, '""')}"` : stringValue;
 }
 
