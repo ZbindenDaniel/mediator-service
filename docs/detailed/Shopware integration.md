@@ -37,12 +37,18 @@ This document captures the current architecture, required configuration, and ope
   active, stock) on both **update** and **create** — not stock alone. Create also sets a sales-channel
   **visibility** (`visibility:30`) so a published+active product actually appears in the storefront, and
   persists the new `ShopwareProductId` back. Absolute-stock ⇒ a missed/duplicated job self-heals.
-- **Properties (P2a):** after stock, `syncProductProperties` turns each structured Langtext entry
-  (group name → value(s)) into Shopware **filterable properties** — `ensurePropertyGroup`
-  (`filterable:true`) + `ensurePropertyOption` (both cached), then reconciles the product's option
-  associations to exactly the desired set (PATCH full list + 404-tolerant DELETE of stale links). Array
-  values become multiple options. Property failures share the retry classification; stock is written
-  first so it never depends on properties succeeding.
+- **Properties (P2a):** after stock, `syncProductProperties` turns **each** structured Langtext entry
+  (group name → value(s)) into a Shopware property — `ensurePropertyGroup` + `ensurePropertyOption`
+  (both cached), then reconciles the product's option associations to exactly the desired set (PATCH full
+  list + 404-tolerant DELETE of stale links). Array values become multiple options. **Filterable curation
+  (P2b):** all keys are pushed, but a property group is created **`filterable`** only when its key is a
+  recognized spec-contract field (`registry.getFilterableSpecKeys()` = union of `contracts/specs/*.json`
+  `fields[].key`, passed through the snapshot as `filterablePropertyKeys`); freeform Langtext keys are
+  pushed as **non-filterable** properties so they don't flood the storefront filter sidebar. The flag is
+  global per group (Shopware has no per-product filterable), so the whitelist is the union across
+  contracts; `ensurePropertyGroup` also **heals** an existing group whose flag no longer matches (PATCH),
+  so changing a contract re-filters on the next sync. Property failures share the retry classification;
+  stock is written first so it never depends on properties succeeding.
 - **Categories.** After properties, `syncProductCategories` (on the parent) links the product to **existing**
   Shopware categories. The snapshot's `categories` are display names resolved from the ref's category codes
   (`db.resolveShopwareCategoryNames`): for the primary **A** and secondary **B** pairs, each `Unterkategorien`

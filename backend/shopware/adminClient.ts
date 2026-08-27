@@ -31,8 +31,12 @@ export interface ShopwareProductSnapshot {
   // that don't compute it).
   shopEligible?: boolean;
   shopwareProductId?: string | null;
-  // Parsed Langtext/Spezifikationen → filterable Shopware properties (group name → option value(s)).
+  // Parsed Langtext/Spezifikationen → Shopware properties (group name → option value(s)). All are pushed;
+  // only keys in `filterablePropertyKeys` are made storefront-filterable.
   properties?: Record<string, string | string[]> | null;
+  // Property keys that should be filterable (spec-contract fields). Omitted/undefined ⇒ all filterable
+  // (back-compat). An empty array ⇒ none filterable.
+  filterablePropertyKeys?: string[];
   // Product images (cover first), uploaded as binary and associated to the product.
   images?: ShopwareImageInput[];
   // Variant groups (instances grouped by distinct InstanceSpecs). When ≥2, the product becomes a
@@ -300,17 +304,20 @@ export class ShopwareAdminClient {
     return fields;
   }
 
-  // Ensure a filterable property group exists for `name`; returns its id (cached).
-  private async ensurePropertyGroup(name: string): Promise<string> {
+  // Ensure a property group exists for `name` with the requested `filterable` flag; returns its id
+  // (cached). An existing group whose flag differs is PATCHed to `filterable` so a changed spec-contract
+  // whitelist heals over-/under-filtered groups on the next sync.
+  private async ensurePropertyGroup(name: string, filterable: boolean): Promise<string> {
     const key = name.trim();
     const cached = this.groupCache.get(key);
     if (cached) return cached;
-    const found = await this.request<{ data?: Array<{ id: string }> }>('POST', '/api/search/property-group', {
+    const found = await this.request<{ data?: Array<{ id: string; filterable?: boolean }> }>('POST', '/api/search/property-group', {
       filter: [{ type: 'equals', field: 'name', value: key }],
-      includes: { property_group: ['id'] },
+      includes: { property_group: ['id', 'filterable'] },
       limit: 1
     });
-    let id = found?.data?.[0]?.id ?? null;
+    const existing = found?.data?.[0];
+    let id = existing?.id ?? null;
     if (!id) {
       id = uuid32();
       await this.request('POST', '/api/property-group', {
@@ -318,8 +325,10 @@ export class ShopwareAdminClient {
         name: key,
         displayType: 'text',
         sortingType: 'alphanumeric',
-        filterable: true
+        filterable
       });
+    } else if (existing && existing.filterable !== filterable) {
+      await this.request('PATCH', `/api/property-group/${id}`, { id, filterable });
     }
     this.groupCache.set(key, id);
     return id;
@@ -348,9 +357,20 @@ export class ShopwareAdminClient {
     return id;
   }
 
-  // Set the product's property associations to exactly the options implied by `payload`
-  // (group name → value(s)). Missing groups/options are created as filterable properties.
-  async syncProductProperties(productId: string, payload: Record<string, string | string[]>): Promise<void> {
+  // A property key is filterable when it's a recognized spec-contract field. `filterableKeys` undefined
+  // ⇒ everything filterable (back-compat / no contract info); a set (even empty) restricts it.
+  private isFilterableKey(name: string, filterableKeys?: Set<string>): boolean {
+    return filterableKeys ? filterableKeys.has(name.trim()) : true;
+  }
+
+  // Set the product's property associations to exactly the options implied by `payload` (group name →
+  // value(s)). All keys are pushed as properties; only those in `filterableKeys` are made filterable.
+  async syncProductProperties(
+    productId: string,
+    payload: Record<string, string | string[]>,
+    filterableKeys?: string[] | Set<string>
+  ): Promise<void> {
+    const filterSet = filterableKeys ? new Set(filterableKeys) : undefined;
     const desired = new Set<string>();
     for (const [group, raw] of Object.entries(payload)) {
       const groupName = group.trim();
@@ -360,7 +380,7 @@ export class ShopwareAdminClient {
       for (const value of values) {
         const v = String(value ?? '').trim();
         if (!v) continue;
-        groupId = groupId ?? (await this.ensurePropertyGroup(groupName));
+        groupId = groupId ?? (await this.ensurePropertyGroup(groupName, this.isFilterableKey(groupName, filterSet)));
         desired.add(await this.ensurePropertyOption(groupId, v));
       }
     }
@@ -526,7 +546,7 @@ export class ShopwareAdminClient {
     }
 
     if (result.productId && snapshot.properties && Object.keys(snapshot.properties).length > 0) {
-      await this.syncProductProperties(result.productId, snapshot.properties);
+      await this.syncProductProperties(result.productId, snapshot.properties, snapshot.filterablePropertyKeys);
     }
     if (result.productId && snapshot.categories && snapshot.categories.length > 0) {
       await this.syncProductCategories(result.productId, snapshot.categories);
@@ -539,7 +559,8 @@ export class ShopwareAdminClient {
         result.productId,
         snapshot.productNumber,
         snapshot.variants,
-        snapshot.active ?? false
+        snapshot.active ?? false,
+        snapshot.filterablePropertyKeys ? new Set(snapshot.filterablePropertyKeys) : undefined
       );
     }
     return result;
@@ -553,7 +574,8 @@ export class ShopwareAdminClient {
     parentId: string,
     parentNumber: string,
     variants: ShopwareVariantInput[],
-    active: boolean
+    active: boolean,
+    filterableKeys?: Set<string>
   ): Promise<Array<{ instanceIds: string[]; variantId: string }>> {
     const allOptionIds = new Set<string>();
     const desired: Array<{ productNumber: string; optionIds: string[]; stock: number; instanceIds: string[] }> = [];
@@ -563,7 +585,9 @@ export class ShopwareAdminClient {
         const g = group.trim();
         const val = String(value ?? '').trim();
         if (!g || !val) continue;
-        const groupId = await this.ensurePropertyGroup(g);
+        // Variant-axis groups follow the same rule: only spec-contract fields are filterable (itemUUID
+        // and Zustand are variant axes, not storefront filters).
+        const groupId = await this.ensurePropertyGroup(g, this.isFilterableKey(g, filterableKeys));
         const optId = await this.ensurePropertyOption(groupId, val);
         optionIds.push(optId);
         allOptionIds.add(optId);

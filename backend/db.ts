@@ -3,6 +3,7 @@ import { query, queryOne, execute, insert, withTransaction, namedQuery, namedQue
 import { SHOPWARE_SYNC_ENABLED } from './config';
 import { describeQuality } from '../models/quality';
 import { buildItemCategoryLookups } from '../models/item-category-lookups';
+import { getFilterableSpecKeys } from './contracts/registry';
 import { resolveShopwareImageInputs } from './lib/shopware-media';
 import type { ShopwareImageInput } from './shopware/adminClient';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
@@ -2700,6 +2701,10 @@ export interface ShopwareSyncSnapshot {
   active: boolean;
   // Parsed Langtext spec map (group → value(s)) for property sync; null when Langtext is freeform/empty.
   properties: Record<string, string | string[]> | null;
+  // Which property keys should be storefront-filterable (the union of spec-contract field keys). All
+  // properties are still pushed; only these are made filterable so freeform Langtext keys don't flood
+  // the filter sidebar. Global (same for every product) since Shopware's filterable flag is per-group.
+  filterablePropertyKeys: string[];
   // Product images (cover first) resolved from Grafikname/ImageNames to uploadable descriptors.
   images: ShopwareImageInput[];
   // Variant groups: the ref's instances grouped by distinct InstanceSpecs combination. Empty when the
@@ -2893,6 +2898,7 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
     shopEligible,
     active: normalizePublishedValue(row.published) === 'yes',
     properties,
+    filterablePropertyKeys: [...getFilterableSpecKeys()],
     images: resolveShopwareImageInputs(row.productNumber, row.grafikname, row.imageNames),
     variants,
     categories: resolveShopwareCategoryNames(row.hauptA, row.unterA, row.hauptB, row.unterB)

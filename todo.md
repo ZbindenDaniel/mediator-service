@@ -10,7 +10,8 @@
   created products (today invisible until published via the shop flow); **max-retry ceiling** for transient
   failures; dedup the product normaliser shared by store `client.ts` / admin `adminClient.ts` / agentic
   `tools/shopware.ts`.
-  **P2a done (#938):** Langtext/Spezifikationen → **filterable Shopware properties** (native storefront filters).
+  **P2a done (#938):** Langtext/Spezifikationen → Shopware properties (native storefront filters).
+  **P2b done (#948):** push **all** Langtext as properties, but a group is `filterable` only when its key is a spec-contract field (`registry.getFilterableSpecKeys()` = union of `contracts/specs/*.json` keys) — stops the filter sidebar flooding. `ensurePropertyGroup` heals existing over-/under-filtered groups. Note (#942's earlier "contracts dropped") applied to *badges*; contracts are now used to curate filterability. Not expressible: per-category filterability of a shared field (Shopware's flag is global per group).
   **Policy+data fixes (#940):** shop-eligibility gate (`Shopartikel=1 AND approved` — ineligible items deactivated/skipped, never published), `Veröffentlicht_Status`→`active`, full product data (name/description/price/active) on create AND update, sales-channel visibility on create.
   **Open follow-ups:** (a) items **without agentic approval never sync** — decide if manual shop items need a path / make approval configurable like `ERP_SYNC_REQUIRE_APPROVAL`; (b) **backfill** pre-existing skeleton products (they self-correct only on next enqueue; visibility is create-only) — a bulk re-sync of shop refs; (c) name/description field mapping is a heuristic.
   **Variants done (#941):** ref → parent product, distinct InstanceSpecs combos → variant children (configurator + child products, per-variant summed stock, `ShopwareVariantId` persisted). Single-product fallback when <2 combos or any spec-less instance.
