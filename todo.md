@@ -385,8 +385,11 @@
    Category/config gaps found:
    - **G‑C1** Taxonomy lives in 4 hand‑synced copies (`models/item-categories.ts`,
      `frontend/src/data/itemCategories.ts` re‑export, `docs/data_struct.md` LLM
-     reference, `INTAKE_CATEGORIES`) — no generator enforces consistency. Add a
-     build‑time generator to de‑risk any category change.
+     reference, `INTAKE_CATEGORIES`) — no generator enforces consistency.
+     **Phased plan ready:** [`docs/PLANNING_TAXONOMY_EXTERNALIZATION.md`](docs/PLANNING_TAXONOMY_EXTERNALIZATION.md)
+     — single-source `taxonomy.json` → build-time codegen (the shared `models/` TS
+     compiles into the browser too, so no runtime file-load), preserving the
+     module API so consumers are untouched. Next actionable workstream.
    - **G‑C2 / G‑K2** Taxonomy and contract files are a flat global namespace — no
      scoping, so two use cases cannot coexist on one instance without new design.
    - **G‑F1 / G‑F2** No use‑case/domain/tenant dimension exists in config at all;
