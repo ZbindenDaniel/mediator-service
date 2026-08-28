@@ -191,22 +191,25 @@ export class ShopwareAdminClient {
   }
 
   private async resolveTaxId(): Promise<{ id: string; rate: number }> {
-    if (this.cachedTaxId) {
-      return { id: this.cachedTaxId, rate: this.cachedTaxRate ?? 0 };
+    // Only short-circuit once we also know the rate. A pinned SHOPWARE_DEFAULT_TAX_ID sets cachedTaxId
+    // but not the rate, so we must still fetch to learn it — otherwise net would be computed as == gross.
+    if (this.cachedTaxId && this.cachedTaxRate != null) {
+      return { id: this.cachedTaxId, rate: this.cachedTaxRate };
     }
     const data = await this.request<{ data?: Array<{ id: string; taxRate?: number; attributes?: { taxRate?: number } }> }>(
       'POST',
       '/api/search/tax',
       { limit: 50 }
     );
-    const taxes = data?.data ?? [];
+    const taxes = (data?.data ?? []).map((t) => ({ id: t.id, rate: Number(t.taxRate ?? t.attributes?.taxRate ?? 0) }));
     if (!taxes.length) {
       throw new Error('Shopware has no tax rates configured; set SHOPWARE_DEFAULT_TAX_ID');
     }
-    // Pick the highest rate as the "standard" rate (heuristic when no explicit default is set).
-    const best = taxes
-      .map((t) => ({ id: t.id, rate: Number(t.taxRate ?? t.attributes?.taxRate ?? 0) }))
-      .sort((a, b) => b.rate - a.rate)[0];
+    // Use the pinned tax's own rate when SHOPWARE_DEFAULT_TAX_ID is set and found; otherwise pick the
+    // highest rate as the "standard" rate (heuristic when no explicit default is configured).
+    const best =
+      (this.cachedTaxId && taxes.find((t) => t.id === this.cachedTaxId)) ||
+      [...taxes].sort((a, b) => b.rate - a.rate)[0];
     this.cachedTaxId = best.id;
     this.cachedTaxRate = best.rate;
     return best;
@@ -519,8 +522,10 @@ export class ShopwareAdminClient {
 
     if (snapshot.shopEligible === false) {
       if (existingId) {
-        // Was in the shop, now must not be — unpublish rather than delete.
+        // Was in the shop, now must not be — unpublish rather than delete. Cascade to variant children
+        // so a deactivated product never leaves a sellable variant live.
         await this.request('PATCH', `/api/product/${existingId}`, { id: existingId, active: false });
+        await this.deactivateVariantChildren(existingId);
         return { action: 'deactivated', productId: existingId };
       }
       return { action: 'skipped', productId: null };
@@ -562,6 +567,10 @@ export class ShopwareAdminClient {
         snapshot.active ?? false,
         snapshot.filterablePropertyKeys ? new Set(snapshot.filterablePropertyKeys) : undefined
       );
+    } else if (result.productId) {
+      // No longer a variant parent (dropped below 2 instances): retire any children a previous
+      // variant sync left behind, so they don't linger as sellable variants under a plain product.
+      await this.deactivateVariantChildren(result.productId);
     }
     return result;
   }
@@ -664,6 +673,20 @@ export class ShopwareAdminClient {
     }
 
     return assignments;
+  }
+
+  // Deactivate + zero every variant child of a parent. Used when the parent is unpublished (a
+  // deactivated product must not leave sellable variants live) or when a ref drops back below 2
+  // instances (the single-product path no longer calls syncVariants, so leftover children must be retired).
+  private async deactivateVariantChildren(parentId: string): Promise<void> {
+    const children = await this.request<{ data?: Array<{ id: string }> }>('POST', '/api/search/product', {
+      filter: [{ type: 'equals', field: 'parentId', value: parentId }],
+      includes: { product: ['id'] },
+      limit: 500
+    });
+    for (const child of children?.data ?? []) {
+      await this.request('PATCH', `/api/product/${child.id}`, { id: child.id, active: false, stock: 0 });
+    }
   }
 }
 
