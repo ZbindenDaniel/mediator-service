@@ -226,24 +226,21 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
-| `SHOPWARE_ENABLED` | `false` | Enables Shopware search integration. |
+| `SHOPWARE_ENABLED` | `false` | Enables the Shopware read/search integration. |
 | `SHOPWARE_BASE_URL` | (unset) | Shopware base URL. |
-| `SHOPWARE_SALES_CHANNEL_ID` | (unset) | Sales channel ID for Shopware search. |
-| `SHOPWARE_SALES_CHANNEL` | (unset) | Legacy alias for `SHOPWARE_SALES_CHANNEL_ID`. |
-| `SHOPWARE_CLIENT_ID` | (unset) | OAuth client ID. |
-| `SHOPWARE_CLIENT_SECRET` | (unset) | OAuth client secret. |
-| `SHOPWARE_ACCESS_TOKEN` | (unset) | Pre-generated API token for Shopware search. |
-| `SHOPWARE_API_TOKEN` | (unset) | Alias for `SHOPWARE_ACCESS_TOKEN` used by agentic config. |
+| `SHOPWARE_SALES_CHANNEL_ACCESS_KEY` | (unset) | Sales-channel API access key (`sw-access-key`, not the UUID). |
+| `SHOPWARE_SALES_CHANNEL_ID` / `SHOPWARE_SALES_CHANNEL` | (unset) | Deprecated aliases for `SHOPWARE_SALES_CHANNEL_ACCESS_KEY`. |
+| `SHOPWARE_CLIENT_ID` | (unset) | OAuth client ID (client-credentials auth). |
+| `SHOPWARE_CLIENT_SECRET` | (unset) | OAuth client secret (client-credentials auth). |
+| `SHOPWARE_ACCESS_TOKEN` | (unset) | Static admin API access token (API-key auth) — alternative to client credentials. |
+| `SHOPWARE_API_TOKEN` | (unset) | Deprecated alias for `SHOPWARE_ACCESS_TOKEN`. |
 | `SHOPWARE_REQUEST_TIMEOUT_MS` | `10000` | Request timeout for Shopware API calls. |
 
 ## Shopware sync queue
 
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
-| `SHOPWARE_SYNC_ENABLED` | `false` | Enables Shopware sync queue worker. |
-| `SHOPWARE_QUEUE_ENABLED` | (unset) | Legacy alias for `SHOPWARE_SYNC_ENABLED`. |
-| `SHOPWARE_API_BASE_URL` | (unset) | Base URL for Shopware sync API. |
-| `SHOPWARE_QUEUE_POLL_INTERVAL_MS` | `5000` | Poll interval for the sync queue worker. |
+| `SHOPWARE_SYNC_ENABLED` | `false` | Gates sync-queue enqueue (write path). Dispatcher not yet implemented. |
 
 ## Frontend runtime flags
 

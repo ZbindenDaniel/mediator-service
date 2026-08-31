@@ -301,6 +301,11 @@ export default function BulkItemActionBar({
   const effectiveResolveActor = resolveActor ?? ensureUser;
   const selectedCount = selectedIds.length;
   const hasSelection = selectedCount > 0;
+  // Admin-only actions (e.g. Shop-Sync) are shown only to operators logged into the admin page — i.e.
+  // those who hold the admin token. Read once; the endpoint re-validates it anyway.
+  const [adminToken] = useState<string>(() => {
+    try { return sessionStorage.getItem('adminSecret') ?? ''; } catch { return ''; }
+  });
 
   const selectionLabel = useMemo(() => {
     if (!hasSelection) {
@@ -861,6 +866,72 @@ export default function BulkItemActionBar({
     }
   }
 
+  async function handleBulkSyncToShop(): Promise<void> {
+    if (!hasSelection) {
+      setFeedback({ type: 'error', message: 'Keine Artikel für die Aktion ausgewählt.' });
+      return;
+    }
+
+    setFeedback(null);
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Shop Sync',
+        message: (
+          <div className="bulk-item-action-bar__confirm-content">
+            <p>Sollen die ausgewählten Artikel mit Shopware synchronisiert werden?</p>
+            <p className="muted">Nur freigegebene Shop-Artikel werden veröffentlicht; nicht-freigegebene werden deaktiviert.</p>
+            <p>{selectionLabel}</p>
+          </div>
+        ),
+        confirmLabel: 'Sync starten',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (dialogError) {
+      console.error('Bulk shop sync confirmation dialog failed', dialogError);
+      setFeedback({ type: 'error', message: 'Bestätigung fehlgeschlagen. Bitte erneut versuchen.' });
+      return;
+    }
+
+    if (!confirmed) {
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const response = await fetch('/api/admin/shopware/sync', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {})
+        },
+        body: JSON.stringify({ itemIds: selectedIds })
+      });
+
+      if (!response.ok) {
+        const message = await readErrorMessage(response);
+        console.error('Bulk shop sync failed', { status: response.status, message });
+        setFeedback({ type: 'error', message: response.status === 401 ? 'Nicht autorisiert (Admin-Login erforderlich).' : message });
+        return;
+      }
+
+      const payload = await response.json() as { ok: boolean; reason?: string; enqueued?: number; total?: number };
+      if (!payload.ok && payload.reason === 'sync_disabled') {
+        setFeedback({ type: 'error', message: 'Shop-Sync ist deaktiviert (SHOPWARE_SYNC_ENABLED=false).' });
+        return;
+      }
+
+      await handleAfterSuccess();
+      setFeedback({ type: 'info', message: `Shop-Sync für ${payload.enqueued ?? 0} Artikel ausgelöst.` });
+    } catch (error) {
+      console.error('Bulk shop sync request failed', error);
+      setFeedback({ type: 'error', message: (error as Error).message || 'Unbekannter Fehler beim Shop-Sync.' });
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   async function handleBulkDelete(): Promise<void> {
     if (!hasSelection) {
       setFeedback({ type: 'error', message: 'Keine Artikel für die Aktion ausgewählt.' });
@@ -1149,6 +1220,21 @@ export default function BulkItemActionBar({
           <GoSync aria-hidden="true" />
           <span>Kivi Sync 🥝</span>
         </button>
+
+        {adminToken ? (
+          <button
+            className="bulk-item-action-bar__button"
+            disabled={isProcessing || !hasSelection}
+            onClick={() => {
+              void handleBulkSyncToShop();
+            }}
+            type="button"
+            title="Ausgewählte Artikel mit Shopware synchronisieren (nur Admin)"
+          >
+            <GoSync aria-hidden="true" />
+            <span>Shop Sync 🛒</span>
+          </button>
+        ) : null}
 
         <button
           className="bulk-item-action-bar__button"

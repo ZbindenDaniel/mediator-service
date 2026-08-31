@@ -4,7 +4,7 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
-## 935. ✅ Intake can match a booted device onto a pre-existing instance (not just create a new one)
+## 949. ✅ Intake can match a booted device onto a pre-existing instance (not just create a new one)
 **Why:** Items catalogued **before** the intake API — or by hand — typically have no serial and no
 MAC on file. `/api/intake/start` matches a booted device to an existing item **only by serial/MAC**,
 so for those pre-intake items the lookup always missed and the flow fell to `select_ref`, whose only

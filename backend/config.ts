@@ -246,16 +246,10 @@ export const BASE_UI_URL = resolveBaseUrl(process.env.BASE_UI_URL, '/ui');
 
 
 const SHOPWARE_ENABLE_VALUES = new Set(['1', 'true', 'yes', 'on']);
-const rawShopwareEnabled = (process.env.SHOPWARE_SYNC_ENABLED || process.env.SHOPWARE_QUEUE_ENABLED || '').trim().toLowerCase();
-export const SHOPWARE_SYNC_ENABLED = SHOPWARE_ENABLE_VALUES.has(rawShopwareEnabled);
-export const SHOPWARE_API_BASE_URL = (process.env.SHOPWARE_API_BASE_URL || '').trim();
-const parsedShopwarePoll = Number.parseInt(process.env.SHOPWARE_QUEUE_POLL_INTERVAL_MS || '', 10);
-export const SHOPWARE_QUEUE_POLL_INTERVAL_MS =
-  Number.isFinite(parsedShopwarePoll) && parsedShopwarePoll > 0 ? parsedShopwarePoll : 5000;
-
-if (SHOPWARE_SYNC_ENABLED && !SHOPWARE_API_BASE_URL) {
-  console.warn('[config] Shopware sync enabled but SHOPWARE_API_BASE_URL is not configured.');
-}
+// Gate for the outbound write path (sync queue enqueue + the future dispatcher). Separate from
+// SHOPWARE_ENABLED, which gates the read/search path — writing back is a bigger commitment than reading.
+const rawShopwareSyncEnabled = (process.env.SHOPWARE_SYNC_ENABLED || '').trim().toLowerCase();
+export const SHOPWARE_SYNC_ENABLED = SHOPWARE_ENABLE_VALUES.has(rawShopwareSyncEnabled);
 
 function parseBooleanFlag(raw: string | undefined, label: string): boolean | undefined {
   if (typeof raw !== 'string') {
@@ -521,23 +515,44 @@ export interface ShopwareCredentialsConfig {
 export interface ShopwareConfig {
   enabled: boolean;
   baseUrl: string | null;
-  salesChannelId: string | null;
+  // The sales-channel API access key sent as the `sw-access-key` header on store-api calls
+  // (NOT the sales-channel UUID). Canonical env: SHOPWARE_SALES_CHANNEL_ACCESS_KEY.
+  salesChannelAccessKey: string | null;
   requestTimeoutMs: number;
   credentials: ShopwareCredentialsConfig;
+  // Optional Admin-API write defaults for create-if-missing (else resolved from Shopware at runtime).
+  defaultTaxId?: string | null;
+  defaultCurrencyId?: string | null;
 }
 
 export const SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS = 10000;
 
+// Read the first non-empty value across a canonical name and any legacy aliases.
+function resolveShopwareEnv(...names: string[]): string {
+  for (const name of names) {
+    const value = (process.env[name] || '').trim();
+    if (value) return value;
+  }
+  return '';
+}
+
 const shopwareEnabled = parseBooleanFlag(process.env.SHOPWARE_ENABLED, 'SHOPWARE_ENABLED') ?? false;
 const resolvedShopwareBaseUrl = stripTrailingSlash((process.env.SHOPWARE_BASE_URL || '').trim());
 const shopwareBaseUrl = resolvedShopwareBaseUrl ? resolvedShopwareBaseUrl : null;
-const resolvedShopwareSalesChannelId = (process.env.SHOPWARE_SALES_CHANNEL_ID || '').trim();
-const shopwareSalesChannelId = resolvedShopwareSalesChannelId ? resolvedShopwareSalesChannelId : null;
+// Canonical SHOPWARE_SALES_CHANNEL_ACCESS_KEY; legacy SHOPWARE_SALES_CHANNEL_ID / SHOPWARE_SALES_CHANNEL
+// accepted as deprecated aliases.
+const resolvedShopwareSalesChannelAccessKey = resolveShopwareEnv(
+  'SHOPWARE_SALES_CHANNEL_ACCESS_KEY',
+  'SHOPWARE_SALES_CHANNEL_ID',
+  'SHOPWARE_SALES_CHANNEL'
+);
+const shopwareSalesChannelAccessKey = resolvedShopwareSalesChannelAccessKey || null;
 
 const shopwareCredentials: ShopwareCredentialsConfig = {};
 const resolvedShopwareClientId = (process.env.SHOPWARE_CLIENT_ID || '').trim();
 const resolvedShopwareClientSecret = (process.env.SHOPWARE_CLIENT_SECRET || '').trim();
-const resolvedShopwareAccessToken = (process.env.SHOPWARE_ACCESS_TOKEN || '').trim();
+// Canonical SHOPWARE_ACCESS_TOKEN; legacy SHOPWARE_API_TOKEN accepted as a deprecated alias.
+const resolvedShopwareAccessToken = resolveShopwareEnv('SHOPWARE_ACCESS_TOKEN', 'SHOPWARE_API_TOKEN');
 
 if (resolvedShopwareClientId) {
   shopwareCredentials.clientId = resolvedShopwareClientId;
@@ -560,9 +575,11 @@ const shopwareRequestTimeoutMs = parsePositiveInt(
 const computedShopwareConfig: ShopwareConfig = {
   enabled: shopwareEnabled,
   baseUrl: shopwareBaseUrl,
-  salesChannelId: shopwareSalesChannelId,
+  salesChannelAccessKey: shopwareSalesChannelAccessKey,
   requestTimeoutMs: shopwareRequestTimeoutMs,
-  credentials: shopwareCredentials
+  credentials: shopwareCredentials,
+  defaultTaxId: resolveShopwareEnv('SHOPWARE_DEFAULT_TAX_ID') || null,
+  defaultCurrencyId: resolveShopwareEnv('SHOPWARE_DEFAULT_CURRENCY_ID') || null
 };
 
 export const SHOPWARE_CONFIG: ShopwareConfig = Object.freeze(computedShopwareConfig);
@@ -570,7 +587,7 @@ export const SHOPWARE_CONFIG: ShopwareConfig = Object.freeze(computedShopwareCon
 function gatherShopwareConfigIssues(config: ShopwareConfig): string[] {
   const issues: string[] = [];
   const hasBaseUrl = Boolean(config.baseUrl);
-  const hasSalesChannelId = Boolean(config.salesChannelId);
+  const hasSalesChannelAccessKey = Boolean(config.salesChannelAccessKey);
   const hasClientId = Boolean(config.credentials.clientId);
   const hasClientSecret = Boolean(config.credentials.clientSecret);
   const hasAccessToken = Boolean(config.credentials.accessToken);
@@ -583,8 +600,8 @@ function gatherShopwareConfigIssues(config: ShopwareConfig): string[] {
       issues.push('SHOPWARE_BASE_URL must start with http:// or https://.');
     }
 
-    if (!hasSalesChannelId) {
-      issues.push('SHOPWARE_SALES_CHANNEL_ID is required when SHOPWARE_ENABLED=true.');
+    if (!hasSalesChannelAccessKey) {
+      issues.push('SHOPWARE_SALES_CHANNEL_ACCESS_KEY is required when SHOPWARE_ENABLED=true.');
     }
 
     if (hasClientId !== hasClientSecret) {
@@ -596,7 +613,7 @@ function gatherShopwareConfigIssues(config: ShopwareConfig): string[] {
     }
   } else {
     const providedValues =
-      hasBaseUrl || hasSalesChannelId || hasClientId || hasClientSecret || hasAccessToken;
+      hasBaseUrl || hasSalesChannelAccessKey || hasClientId || hasClientSecret || hasAccessToken;
     if (providedValues) {
       issues.push('Shopware variables are configured but SHOPWARE_ENABLED is not true; integration remains disabled.');
     }
