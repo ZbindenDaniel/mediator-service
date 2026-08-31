@@ -152,10 +152,13 @@ The strategic aim is **one codebase, per‑deployment data** — move use‑case
 out of code so a new deployment is a config/data change, not a fork.
 
 1. **Externalize the taxonomy (closes G‑C1 + enables per‑deployment swap).**
-   Make `models/item-categories.ts` load from a data file (or generate the TS,
-   `docs/data_struct.md`, and `INTAKE_CATEGORIES` from one source) so a
-   deployment supplies its own taxonomy without editing/rebuilding code. This is
-   the single highest‑leverage change for the separate‑deployment model.
+   Make the taxonomy a **runtime, DB‑backed data object** — loaded at startup,
+   served to the frontend, and editable — so one shipped image runs any
+   deployment's taxonomy and labels/categories change without a rebuild.
+   (Build‑time codegen was rejected: we ship one image, so baking the taxonomy in
+   would force one image per taxonomy.) Full phased plan:
+   [`docs/PLANNING_TAXONOMY_EXTERNALIZATION.md`](PLANNING_TAXONOMY_EXTERNALIZATION.md).
+   This is the single highest‑leverage change for the separate‑deployment model.
 2. **Author the new use case's `contracts/*.json`** once its subcategories are
    defined — this layer already supports per‑deployment data via mounted files.
 3. **Turn the remaining §4 domain hardcodes into config** as needed:

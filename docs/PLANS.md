@@ -9,7 +9,7 @@ This file is the single entry point for all active feature planning documents.
 - [`docs/PLANNING_STUB_BOXES.md`](PLANNING_STUB_BOXES.md) — Stub box creation, listing, and transport integration
 - [`docs/PLANNING_INVENTORY.md`](PLANNING_INVENTORY.md) — Passive inventory cycle, session tracking, and scan workflows
 - [`docs/PLANNING_NEW_USE_CASE.md`](PLANNING_NEW_USE_CASE.md) — Readiness inventory for onboarding a new use case (config / categories / contracts) and gap list
-- [`docs/PLANNING_TAXONOMY_EXTERNALIZATION.md`](PLANNING_TAXONOMY_EXTERNALIZATION.md) — Phased plan to make the category taxonomy single-source (build-time codegen), closing the 4-copy drift gap (G-C1)
+- [`docs/PLANNING_TAXONOMY_EXTERNALIZATION.md`](PLANNING_TAXONOMY_EXTERNALIZATION.md) — Phased plan to make the category taxonomy a runtime, DB-backed, editable data object (one image, per-deployment data), closing the 4-copy drift gap (G-C1)
 
 ## Active task tracker
 
