@@ -1,0 +1,1290 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "code": 10,
+      "labelExternal": "Computer_und_Komplettsysteme",
+      "labelInternal": "Computer_und_Komplettsysteme",
+      "sortOrder": 0,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 101,
+          "labelExternal": "Komplettsysteme",
+          "labelInternal": "Komplettsysteme",
+          "parentCode": 10,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 102,
+          "labelExternal": "Standard-PC",
+          "labelInternal": "Standard_PC",
+          "parentCode": 10,
+          "sortOrder": 1,
+          "active": true,
+          "intakeEnabled": true,
+          "intakeLabel": "Desktop-PC"
+        },
+        {
+          "code": 103,
+          "labelExternal": "Server",
+          "labelInternal": "Server",
+          "parentCode": 10,
+          "sortOrder": 2,
+          "active": true,
+          "intakeEnabled": true,
+          "intakeLabel": "Server"
+        },
+        {
+          "code": 104,
+          "labelExternal": "Barebones, Mini-PC",
+          "labelInternal": "Barebones_Mini_PC",
+          "parentCode": 10,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 105,
+          "labelExternal": "MAC",
+          "labelInternal": "MAC",
+          "parentCode": 10,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 106,
+          "labelExternal": "Workstation etc.",
+          "labelInternal": "Workstation_etc",
+          "parentCode": 10,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 107,
+          "labelExternal": "Exoten",
+          "labelInternal": "Exoten",
+          "parentCode": 10,
+          "sortOrder": 6,
+          "active": true
+        },
+        {
+          "code": 108,
+          "labelExternal": "Thin-Client",
+          "labelInternal": "Thin_Client",
+          "parentCode": 10,
+          "sortOrder": 7,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 20,
+      "labelExternal": "Laptop_und_Zubehör",
+      "labelInternal": "Laptop_und_Zubehör",
+      "sortOrder": 1,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 201,
+          "labelExternal": "Laptop",
+          "labelInternal": "Laptop",
+          "parentCode": 20,
+          "sortOrder": 0,
+          "active": true,
+          "intakeEnabled": true,
+          "intakeLabel": "Laptop"
+        },
+        {
+          "code": 202,
+          "labelExternal": "Laptop-Ersatzteile",
+          "labelInternal": "Laptop_Ersatzteile",
+          "parentCode": 20,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 203,
+          "labelExternal": "Netbook",
+          "labelInternal": "Netbook",
+          "parentCode": 20,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 204,
+          "labelExternal": "Tablet PC",
+          "labelInternal": "Tablet_PC",
+          "parentCode": 20,
+          "sortOrder": 3,
+          "active": true,
+          "intakeEnabled": true,
+          "intakeLabel": "Tablet"
+        },
+        {
+          "code": 205,
+          "labelExternal": "Laptop-Steckkarte",
+          "labelInternal": "Laptop_Steckkarte",
+          "parentCode": 20,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 206,
+          "labelExternal": "Laptop-Akku",
+          "labelInternal": "Laptop_Akku",
+          "parentCode": 20,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 207,
+          "labelExternal": "Docking-Station",
+          "labelInternal": "Docking_Station",
+          "parentCode": 20,
+          "sortOrder": 6,
+          "active": true
+        },
+        {
+          "code": 208,
+          "labelExternal": "Laptop-Tasche",
+          "labelInternal": "Laptop_Tasche",
+          "parentCode": 20,
+          "sortOrder": 7,
+          "active": true
+        },
+        {
+          "code": 209,
+          "labelExternal": "Laptop-Zubehör",
+          "labelInternal": "Laptop_Zubehör",
+          "parentCode": 20,
+          "sortOrder": 8,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 30,
+      "labelExternal": "Drucker_Fax_Scanner",
+      "labelInternal": "Drucker_Fax_Scanner",
+      "sortOrder": 2,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 301,
+          "labelExternal": "Drucker",
+          "labelInternal": "Drucker",
+          "parentCode": 30,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 302,
+          "labelExternal": "Multifunktionsgerät",
+          "labelInternal": "Multifunktionsgerät",
+          "parentCode": 30,
+          "sortOrder": 1,
+          "active": true,
+          "intakeEnabled": true,
+          "intakeLabel": "All-in-One"
+        },
+        {
+          "code": 303,
+          "labelExternal": "Scanner",
+          "labelInternal": "Scanner",
+          "parentCode": 30,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 304,
+          "labelExternal": "Faxgerät",
+          "labelInternal": "Faxgerät",
+          "parentCode": 30,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 305,
+          "labelExternal": "Druckereinzelteile",
+          "labelInternal": "Druckereinzelteile",
+          "parentCode": 30,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 306,
+          "labelExternal": "Kopierer",
+          "labelInternal": "Kopierer",
+          "parentCode": 30,
+          "sortOrder": 5,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 40,
+      "labelExternal": "Monitor_Beamer_Kamera",
+      "labelInternal": "Monitor_Beamer_Kamera",
+      "sortOrder": 3,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 401,
+          "labelExternal": "Flachbildschirm",
+          "labelInternal": "Flachbildschirm",
+          "parentCode": 40,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 402,
+          "labelExternal": "TV",
+          "labelInternal": "TV",
+          "parentCode": 40,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 403,
+          "labelExternal": "Digitale Bilderrahmen",
+          "labelInternal": "Digitale_Bilderrahmen",
+          "parentCode": 40,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 404,
+          "labelExternal": "Röhrenbildschirm",
+          "labelInternal": "Röhrenbildschirm",
+          "parentCode": 40,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 405,
+          "labelExternal": "Beamer",
+          "labelInternal": "Beamer",
+          "parentCode": 40,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 406,
+          "labelExternal": "Digital-Kamera",
+          "labelInternal": "Digital_Kamera",
+          "parentCode": 40,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 407,
+          "labelExternal": "Webcam",
+          "labelInternal": "Webcam",
+          "parentCode": 40,
+          "sortOrder": 6,
+          "active": true
+        },
+        {
+          "code": 408,
+          "labelExternal": "Videokamera",
+          "labelInternal": "Videokamera",
+          "parentCode": 40,
+          "sortOrder": 7,
+          "active": true
+        },
+        {
+          "code": 409,
+          "labelExternal": "Ersatzteile für Monitore, TVs etc.",
+          "labelInternal": "Ersatzteile_für_Monitore_TVs_etc",
+          "parentCode": 40,
+          "sortOrder": 8,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 50,
+      "labelExternal": "Tastatur_Maus_Spielsteuerung_Virtual_Reality",
+      "labelInternal": "Tastatur_Maus_Spielsteuerung_Virtual_Reality",
+      "sortOrder": 4,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 501,
+          "labelExternal": "Tastatur",
+          "labelInternal": "Tastatur",
+          "parentCode": 50,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 502,
+          "labelExternal": "Maus",
+          "labelInternal": "Maus",
+          "parentCode": 50,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 503,
+          "labelExternal": "Desktop-Set (Tastatur und Maus)",
+          "labelInternal": "Desktop_Set_Tastatur_und_Maus",
+          "parentCode": 50,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 504,
+          "labelExternal": "Spielsteuerung",
+          "labelInternal": "Spielsteuerung",
+          "parentCode": 50,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 505,
+          "labelExternal": "Graphik Tablett, Digital Pen",
+          "labelInternal": "Graphik_Tablett_Digital_Pen",
+          "parentCode": 50,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 506,
+          "labelExternal": "3D-Brillen",
+          "labelInternal": "3D_Brillen",
+          "parentCode": 50,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 507,
+          "labelExternal": "Presenter",
+          "labelInternal": "Presenter",
+          "parentCode": 50,
+          "sortOrder": 6,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 60,
+      "labelExternal": "Mainboard_CPU_Ram",
+      "labelInternal": "Mainboard_CPU_Ram",
+      "sortOrder": 5,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 601,
+          "labelExternal": "Mainboard",
+          "labelInternal": "Mainboard",
+          "parentCode": 60,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 602,
+          "labelExternal": "Prozessor",
+          "labelInternal": "Prozessor",
+          "parentCode": 60,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 603,
+          "labelExternal": "Arbeitsspeicher",
+          "labelInternal": "Arbeitsspeicher",
+          "parentCode": 60,
+          "sortOrder": 2,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 70,
+      "labelExternal": "Steckkarten",
+      "labelInternal": "Steckkarten",
+      "sortOrder": 6,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 701,
+          "labelExternal": "Graphikkarte",
+          "labelInternal": "Graphikkarte",
+          "parentCode": 70,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 702,
+          "labelExternal": "Netzwerkkarte (Kabel)",
+          "labelInternal": "Netzwerkkarte_Kabel",
+          "parentCode": 70,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 703,
+          "labelExternal": "Soundkarte",
+          "labelInternal": "Soundkarte",
+          "parentCode": 70,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 704,
+          "labelExternal": "Schnittstellenkarte",
+          "labelInternal": "Schnittstellenkarte",
+          "parentCode": 70,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 705,
+          "labelExternal": "TV-Karte",
+          "labelInternal": "TV_Karte",
+          "parentCode": 70,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 706,
+          "labelExternal": "Analog-Modemkarte",
+          "labelInternal": "Analog_Modemkarte",
+          "parentCode": 70,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 707,
+          "labelExternal": "ISDN-Modemkarte",
+          "labelInternal": "ISDN_Modemkarte",
+          "parentCode": 70,
+          "sortOrder": 6,
+          "active": true
+        },
+        {
+          "code": 708,
+          "labelExternal": "Festplattenkontroller",
+          "labelInternal": "Festplattenkontroller",
+          "parentCode": 70,
+          "sortOrder": 7,
+          "active": true
+        },
+        {
+          "code": 709,
+          "labelExternal": "Multifunktionskarte",
+          "labelInternal": "Multifunktionskarte",
+          "parentCode": 70,
+          "sortOrder": 8,
+          "active": true
+        },
+        {
+          "code": 710,
+          "labelExternal": "Wireless-Karte",
+          "labelInternal": "Wireless_Karte",
+          "parentCode": 70,
+          "sortOrder": 9,
+          "active": true
+        },
+        {
+          "code": 711,
+          "labelExternal": "CPU-Karten",
+          "labelInternal": "CPU_Karten",
+          "parentCode": 70,
+          "sortOrder": 10,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 80,
+      "labelExternal": "Gehäuse_Netzteile_Umschalter_USB_Hubs_USV_Serverracks",
+      "labelInternal": "Gehäuse_Netzteile_Umschalter_USB_Hubs_USV_Serverracks",
+      "sortOrder": 7,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 801,
+          "labelExternal": "PC-Gehäuse",
+          "labelInternal": "PC_Gehäuse",
+          "parentCode": 80,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 802,
+          "labelExternal": "Festplattengehäuse",
+          "labelInternal": "Festplattengehäuse",
+          "parentCode": 80,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 803,
+          "labelExternal": "Laufwerksgehäuse",
+          "labelInternal": "Laufwerksgehäuse",
+          "parentCode": 80,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 804,
+          "labelExternal": "Netzteil extern",
+          "labelInternal": "Netzteil_extern",
+          "parentCode": 80,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 805,
+          "labelExternal": "Netzteil intern",
+          "labelInternal": "Netzteil_intern",
+          "parentCode": 80,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 806,
+          "labelExternal": "Gehäuseteile",
+          "labelInternal": "Gehäuseteile",
+          "parentCode": 80,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 807,
+          "labelExternal": "Umschalt-Switches",
+          "labelInternal": "Umschalt_Switches",
+          "parentCode": 80,
+          "sortOrder": 6,
+          "active": true
+        },
+        {
+          "code": 808,
+          "labelExternal": "Festplatten-Schubladen",
+          "labelInternal": "Festplatten_Schubladen",
+          "parentCode": 80,
+          "sortOrder": 7,
+          "active": true
+        },
+        {
+          "code": 809,
+          "labelExternal": "Serverracks",
+          "labelInternal": "Serverracks",
+          "parentCode": 80,
+          "sortOrder": 8,
+          "active": true
+        },
+        {
+          "code": 810,
+          "labelExternal": "USB-Hubs",
+          "labelInternal": "USB_Hubs",
+          "parentCode": 80,
+          "sortOrder": 9,
+          "active": true
+        },
+        {
+          "code": 811,
+          "labelExternal": "USV",
+          "labelInternal": "USV",
+          "parentCode": 80,
+          "sortOrder": 10,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 90,
+      "labelExternal": "Festplatten_Flashcards_Sticks",
+      "labelInternal": "Festplatten_Flashcards_Sticks",
+      "sortOrder": 8,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 901,
+          "labelExternal": "Festplatte",
+          "labelInternal": "Festplatte",
+          "parentCode": 90,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 902,
+          "labelExternal": "USB-Stick",
+          "labelInternal": "USB_Stick",
+          "parentCode": 90,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 903,
+          "labelExternal": "Flashspeicher",
+          "labelInternal": "Flashspeicher",
+          "parentCode": 90,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 904,
+          "labelExternal": "Kartenlesegerät",
+          "labelInternal": "Kartenlesegerät",
+          "parentCode": 90,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 905,
+          "labelExternal": "Externe Festplatte",
+          "labelInternal": "Externe_Festplatte",
+          "parentCode": 90,
+          "sortOrder": 4,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 100,
+      "labelExternal": "Laufwerke_fuer_Medien",
+      "labelInternal": "Laufwerke_fuer_Medien",
+      "sortOrder": 9,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 1001,
+          "labelExternal": "CD/DVD/BluRay",
+          "labelInternal": "CD_DVD_BluRay",
+          "parentCode": 100,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 1002,
+          "labelExternal": "ZIP-Laufwerk",
+          "labelInternal": "ZIP_Laufwerk",
+          "parentCode": 100,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 1003,
+          "labelExternal": "Diskettenlaufwerk",
+          "labelInternal": "Diskettenlaufwerk",
+          "parentCode": 100,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 1004,
+          "labelExternal": "JAZ-Laufwerk",
+          "labelInternal": "JAZ_Laufwerk",
+          "parentCode": 100,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 1005,
+          "labelExternal": "MO-Laufwerk",
+          "labelInternal": "MO_Laufwerk",
+          "parentCode": 100,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 1006,
+          "labelExternal": "Bandlaufwerk",
+          "labelInternal": "Bandlaufwerk",
+          "parentCode": 100,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 1007,
+          "labelExternal": "Sonstige Laufwerke",
+          "labelInternal": "Sonstige_Laufwerke",
+          "parentCode": 100,
+          "sortOrder": 6,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 110,
+      "labelExternal": "Medien",
+      "labelInternal": "Medien",
+      "sortOrder": 10,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 1101,
+          "labelExternal": "Disketten",
+          "labelInternal": "Disketten",
+          "parentCode": 110,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 1102,
+          "labelExternal": "CD / DVD / BluRay-Disk",
+          "labelInternal": "CD_DVD_BluRay_Disk",
+          "parentCode": 110,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 1103,
+          "labelExternal": "Zip-Medien",
+          "labelInternal": "Zip_Medien",
+          "parentCode": 110,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 1104,
+          "labelExternal": "JAZ-Medien",
+          "labelInternal": "JAZ_Medien",
+          "parentCode": 110,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 1105,
+          "labelExternal": "MO-Medien",
+          "labelInternal": "MO_Medien",
+          "parentCode": 110,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 1106,
+          "labelExternal": "Bandkasetten",
+          "labelInternal": "Bandkasetten",
+          "parentCode": 110,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 1107,
+          "labelExternal": "sonstige Medien",
+          "labelInternal": "sonstige_Medien",
+          "parentCode": 110,
+          "sortOrder": 6,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 120,
+      "labelExternal": "Externe_Netzwerkgeräte",
+      "labelInternal": "Externe_Netzwerkgeräte",
+      "sortOrder": 11,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 1201,
+          "labelExternal": "5G-, LTE-, UMTS-, GPRS-, GMS-Modems",
+          "labelInternal": "5G_LTE_UMTS_GPRS_GMS_Modems",
+          "parentCode": 120,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 1202,
+          "labelExternal": "Wireless Adapter",
+          "labelInternal": "Wireless_Adapter",
+          "parentCode": 120,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 1203,
+          "labelExternal": "Switch, Hub",
+          "labelInternal": "Switch_Hub",
+          "parentCode": 120,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 1204,
+          "labelExternal": "Router, DSL-Modem, Wireless-AP",
+          "labelInternal": "Router_DSL_Modem_Wireless_AP",
+          "parentCode": 120,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 1205,
+          "labelExternal": "Netzwerkspeicher (NAS)",
+          "labelInternal": "Netzwerkspeicher_NAS",
+          "parentCode": 120,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 1206,
+          "labelExternal": "Analog-Modem",
+          "labelInternal": "Analog_Modem",
+          "parentCode": 120,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 1207,
+          "labelExternal": "ISDN-Modem",
+          "labelInternal": "ISDN_Modem",
+          "parentCode": 120,
+          "sortOrder": 6,
+          "active": true
+        },
+        {
+          "code": 1208,
+          "labelExternal": "Powerline Adapter",
+          "labelInternal": "Powerline_Adapter",
+          "parentCode": 120,
+          "sortOrder": 7,
+          "active": true
+        },
+        {
+          "code": 1209,
+          "labelExternal": "Print-Server",
+          "labelInternal": "Print_Server",
+          "parentCode": 120,
+          "sortOrder": 8,
+          "active": true
+        },
+        {
+          "code": 1210,
+          "labelExternal": "Firewall",
+          "labelInternal": "Firewall",
+          "parentCode": 120,
+          "sortOrder": 9,
+          "active": true
+        },
+        {
+          "code": 1211,
+          "labelExternal": "Kabelmodem",
+          "labelInternal": "Kabelmodem",
+          "parentCode": 120,
+          "sortOrder": 10,
+          "active": true
+        },
+        {
+          "code": 1212,
+          "labelExternal": "Medienkonverter",
+          "labelInternal": "Medienkonverter",
+          "parentCode": 120,
+          "sortOrder": 11,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 130,
+      "labelExternal": "Soundgeraete_Multimedia",
+      "labelInternal": "Soundgeraete_Multimedia",
+      "sortOrder": 12,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 1301,
+          "labelExternal": "Internet-TV",
+          "labelInternal": "Internet_TV",
+          "parentCode": 130,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 1302,
+          "labelExternal": "Mikrophon",
+          "labelInternal": "Mikrophon",
+          "parentCode": 130,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 1303,
+          "labelExternal": "Video-Player",
+          "labelInternal": "Video_Player",
+          "parentCode": 130,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 1304,
+          "labelExternal": "Lautsprecher",
+          "labelInternal": "Lautsprecher",
+          "parentCode": 130,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 1305,
+          "labelExternal": "Kopfhörer",
+          "labelInternal": "Kopfhörer",
+          "parentCode": 130,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 1306,
+          "labelExternal": "Headset",
+          "labelInternal": "Headset",
+          "parentCode": 130,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 1307,
+          "labelExternal": "interne Lautsprecher",
+          "labelInternal": "interne_Lautsprecher",
+          "parentCode": 130,
+          "sortOrder": 6,
+          "active": true
+        },
+        {
+          "code": 1308,
+          "labelExternal": "Sonstiges",
+          "labelInternal": "Sonstiges",
+          "parentCode": 130,
+          "sortOrder": 7,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 140,
+      "labelExternal": "Kühlung",
+      "labelInternal": "Kühlung",
+      "sortOrder": 13,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 1401,
+          "labelExternal": "Ventilator",
+          "labelInternal": "Ventilator",
+          "parentCode": 140,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 1402,
+          "labelExternal": "Kühlkörper",
+          "labelInternal": "Kühlkörper",
+          "parentCode": 140,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 1403,
+          "labelExternal": "Kühlkörper mit Ventilator",
+          "labelInternal": "Kühlkörper_mit_Ventilator",
+          "parentCode": 140,
+          "sortOrder": 2,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 150,
+      "labelExternal": "Verbrauchsmaterial",
+      "labelInternal": "Verbrauchsmaterial",
+      "sortOrder": 14,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 1501,
+          "labelExternal": "Lasertoner",
+          "labelInternal": "Lasertoner",
+          "parentCode": 150,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 1502,
+          "labelExternal": "Diverses Verbauchsmaterial Laserdrucker",
+          "labelInternal": "Diverses_Verbauchsmaterial_Laserdrucker",
+          "parentCode": 150,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 1503,
+          "labelExternal": "Wärmeleitpaste",
+          "labelInternal": "Wärmeleitpaste",
+          "parentCode": 150,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 1504,
+          "labelExternal": "Tintenpatronen",
+          "labelInternal": "Tintenpatronen",
+          "parentCode": 150,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 1505,
+          "labelExternal": "Batterien",
+          "labelInternal": "Batterien",
+          "parentCode": 150,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 1506,
+          "labelExternal": "Farbbänder",
+          "labelInternal": "Farbbänder",
+          "parentCode": 150,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 1507,
+          "labelExternal": "Sonstiges",
+          "labelInternal": "Sonstiges",
+          "parentCode": 150,
+          "sortOrder": 6,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 160,
+      "labelExternal": "Kabel_Adapter_Montage",
+      "labelInternal": "Kabel_Adapter_Montage",
+      "sortOrder": 15,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 1601,
+          "labelExternal": "Kabel extern",
+          "labelInternal": "Kabel_extern",
+          "parentCode": 160,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 1602,
+          "labelExternal": "Kabel Intern",
+          "labelInternal": "Kabel_Intern",
+          "parentCode": 160,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 1603,
+          "labelExternal": "Adapter",
+          "labelInternal": "Adapter",
+          "parentCode": 160,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 1604,
+          "labelExternal": "Serverschienen",
+          "labelInternal": "Serverschienen",
+          "parentCode": 160,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 1605,
+          "labelExternal": "Frontblenden",
+          "labelInternal": "Frontblenden",
+          "parentCode": 160,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 1606,
+          "labelExternal": "Slot- und Mainboardblenden",
+          "labelInternal": "Slot_und_Mainboardblenden",
+          "parentCode": 160,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 1607,
+          "labelExternal": "Befestigungsmaterial",
+          "labelInternal": "Befestigungsmaterial",
+          "parentCode": 160,
+          "sortOrder": 6,
+          "active": true
+        },
+        {
+          "code": 1608,
+          "labelExternal": "Frontpanel (USB etc.)",
+          "labelInternal": "Frontpanel_USB_etc",
+          "parentCode": 160,
+          "sortOrder": 7,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 170,
+      "labelExternal": "Kleinteile",
+      "labelInternal": "Kleinteile",
+      "sortOrder": 16,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 1701,
+          "labelExternal": "Schrauben und Muttern",
+          "labelInternal": "Schrauben_und_Muttern",
+          "parentCode": 170,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 1702,
+          "labelExternal": "Diverses",
+          "labelInternal": "Diverses",
+          "parentCode": 170,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 1703,
+          "labelExternal": "Schutzhüllen etc.",
+          "labelInternal": "Schutzhüllen_etc",
+          "parentCode": 170,
+          "sortOrder": 2,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 180,
+      "labelExternal": "Spielkonsolen_Telefone_diverse_ext_Geraete",
+      "labelInternal": "Spielkonsolen_Telefone_diverse_ext_Geraete",
+      "sortOrder": 17,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 1801,
+          "labelExternal": "Fix-Telefone und -anlagen",
+          "labelInternal": "Fix_Telefone_und_anlagen",
+          "parentCode": 180,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 1802,
+          "labelExternal": "Handy, Smartphone",
+          "labelInternal": "Handy_Smartphone",
+          "parentCode": 180,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 1803,
+          "labelExternal": "Handheld, Pager",
+          "labelInternal": "Handheld_Pager",
+          "parentCode": 180,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 1804,
+          "labelExternal": "Sonstige ext. Geräte",
+          "labelInternal": "Sonstige_ext_Geräte",
+          "parentCode": 180,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 1805,
+          "labelExternal": "Spielekonsolen und Zubehör",
+          "labelInternal": "Spielekonsolen_und_Zubehör",
+          "parentCode": 180,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 1806,
+          "labelExternal": "Taschenrechner & Tischrechner",
+          "labelInternal": "Taschenrechner_Tischrechner",
+          "parentCode": 180,
+          "sortOrder": 5,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 190,
+      "labelExternal": "Elektronik_Komponenten_und_Laborbedarf",
+      "labelInternal": "Elektronik_Komponenten_und_Laborbedarf",
+      "sortOrder": 18,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 1901,
+          "labelExternal": "Disketten",
+          "labelInternal": "Disketten",
+          "parentCode": 190,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 1902,
+          "labelExternal": "CD / DVD / BluRay-Disk",
+          "labelInternal": "CD_DVD_BluRay_Disk",
+          "parentCode": 190,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 1903,
+          "labelExternal": "Zip-Medien",
+          "labelInternal": "Zip_Medien",
+          "parentCode": 190,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 1904,
+          "labelExternal": "JAZ-Medien",
+          "labelInternal": "JAZ_Medien",
+          "parentCode": 190,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 1905,
+          "labelExternal": "MO-Medien",
+          "labelInternal": "MO_Medien",
+          "parentCode": 190,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 1906,
+          "labelExternal": "Bandkasetten",
+          "labelInternal": "Bandkasetten",
+          "parentCode": 190,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 1907,
+          "labelExternal": "sonstige Medien",
+          "labelInternal": "sonstige_Medien",
+          "parentCode": 190,
+          "sortOrder": 6,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 200,
+      "labelExternal": "Non_IT",
+      "labelInternal": "Non_IT",
+      "sortOrder": 19,
+      "active": true,
+      "subcategories": []
+    }
+  ]
+}
