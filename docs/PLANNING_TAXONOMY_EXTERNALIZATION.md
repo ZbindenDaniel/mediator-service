@@ -161,13 +161,17 @@ doc, held in sync by the parity test.
 - **Acceptance:** everything reads through the runtime path; behavior identical;
   suite green. No DB yet.
 
-### Phase 2 — Frontend consumes the endpoint
-- Add `TaxonomyProvider` (boot fetch of `/api/taxonomy`, loading/error state);
-  migrate `ItemBasicInfoForm`, `ItemListPage`, `itemFormShared`, and the
-  `categoryLookup` wrapper off the static import; delete
-  `frontend/src/data/itemCategories.ts`.
-- **Acceptance:** the frontend no longer imports the taxonomy at build time; a
-  changed `/api/taxonomy` response changes the UI with no rebuild.
+### Phase 2 — Frontend consumes the endpoint  ✅ DONE
+- Added `TaxonomyProvider` (`frontend/src/context/TaxonomyContext.tsx`) — boot
+  fetch of `/api/taxonomy`, exposes `{ categories, lookups, loading, error }`,
+  wired into `App`'s provider stack. Migrated all consumers to `useTaxonomy()`:
+  `ItemDetail` + `itemFormShared` (lookups), `ItemBasicInfoForm` + `ItemListPage`
+  (categories); deleted `frontend/src/data/itemCategories.ts`. The context
+  defaults to an empty taxonomy so components rendered without a provider
+  (isolated tests, pre‑mount) degrade gracefully instead of throwing.
+- **Result:** the frontend no longer imports the taxonomy at build time; it comes
+  from `/api/taxonomy` at boot. All 58 frontend tests pass; bundle builds clean.
+  The transient FE dual‑source from Phase 1 is gone.
 
 ### Phase 3 — Persist to DB (seed‑on‑init)
 - Add `taxonomy_categories` / `taxonomy_subcategories` tables (additive migration).
