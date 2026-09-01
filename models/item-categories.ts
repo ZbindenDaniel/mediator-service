@@ -1,13 +1,41 @@
 // TODO(agent): Sync these definitions with upstream taxonomy service when available.
 // TODO(agent): Provide direct code-to-label accessors for exports that need canonical names.
+// New taxonomy-data-object fields are additive and optional so the existing
+// hardcoded array (and every consumer that reads `.label`) keeps working while
+// the runtime/DB-backed source is built out (see docs/PLANNING_TAXONOMY_EXTERNALIZATION.md).
 export interface ItemSubcategoryDefinition {
   code: number;
+  // Human display name. Retained as the required, canonical compat field; treated
+  // as `labelExternal` when the split fields are absent.
   label: string;
+  // Freely-renameable UI display name. Falls back to `label` when unset.
+  labelExternal?: string;
+  // Canonical machine identifier for CSV import name-matching / export columns.
+  // Falls back to canonicalizeCategoryLabel(label) when unset.
+  labelInternal?: string;
+  // Parent Hauptkategorie code (also resolvable via buildItemCategoryLookups).
+  parentCode?: number;
+  // Display order within the parent (defaults to source order / code order).
+  sortOrder?: number;
+  // Soft-deactivate: hidden from new-item pickers; existing items keep the code.
+  active?: boolean;
+  // Optional short hint handed to the categorizer agent to map descriptions → code.
+  categorizerDescription?: string;
+  // Whether this subcategory appears in the intake device list.
+  intakeEnabled?: boolean;
+  // Intake-specific display label (e.g. "All-in-One" for 302).
+  intakeLabel?: string;
+  // Alternate names accepted during import matching.
+  aliases?: string[];
 }
 
 export interface ItemCategoryDefinition {
   code: number;
   label: string;
+  labelExternal?: string;
+  labelInternal?: string;
+  sortOrder?: number;
+  active?: boolean;
   subcategories: ItemSubcategoryDefinition[];
 }
 
