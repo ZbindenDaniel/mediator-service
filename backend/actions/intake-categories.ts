@@ -2,25 +2,35 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { requireIntakeAuth } from '../utils/intake-auth';
 import type { IntakeCategoryEntry } from '../../models/intake';
+import { getItemCategories } from '../lib/taxonomy';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
 }
 
-// Selectable device categories for the intake TUI.
-// Hauptkategorien_A is the top-level group; Unterkategorien_A identifies the quality contract.
-// Only bootable devices belong here: the intake station is a netboot TUI, so a device must be
-// able to boot the image to reach this step. Monitors/external screens are intentionally excluded.
-// Hauptkategorien_A codes follow the canonical taxonomy in models/item-categories.ts (10/20/…),
-// not the legacy 1/2/… shorthand — keep them in sync.
-const INTAKE_CATEGORIES: IntakeCategoryEntry[] = [
-  { hauptkategorienA: 20, unterkategorienA: 201, label: 'Laptop' },
-  { hauptkategorienA: 10, unterkategorienA: 102, label: 'Desktop-PC' },
-  { hauptkategorienA: 10, unterkategorienA: 103, label: 'Server' },
-  { hauptkategorienA: 10, unterkategorienA: 302, label: 'All-in-One' },
-  { hauptkategorienA: 20, unterkategorienA: 204, label: 'Tablet' },
-];
+// Selectable device categories for the intake TUI, derived from the taxonomy's
+// `intakeEnabled` subcategories (ordered by `intakeSortOrder`). Hauptkategorien_A
+// is the parent group; Unterkategorien_A identifies the quality contract. Only
+// bootable devices are flagged intake-enabled in the taxonomy — monitors/external
+// screens are intentionally excluded. Was a hardcoded list; now a projection of
+// the runtime taxonomy so a deployment controls its intake set via data.
+function buildIntakeCategories(): IntakeCategoryEntry[] {
+  const entries: Array<IntakeCategoryEntry & { sortOrder: number }> = [];
+  for (const category of getItemCategories()) {
+    for (const sub of category.subcategories) {
+      if (!sub.intakeEnabled) continue;
+      entries.push({
+        hauptkategorienA: sub.parentCode ?? category.code,
+        unterkategorienA: sub.code,
+        label: sub.intakeLabel ?? sub.labelExternal ?? sub.label,
+        sortOrder: sub.intakeSortOrder ?? Number.MAX_SAFE_INTEGER
+      });
+    }
+  }
+  entries.sort((a, b) => a.sortOrder - b.sortOrder);
+  return entries.map(({ sortOrder: _sortOrder, ...entry }) => entry);
+}
 
 const action = defineHttpAction({
   key: 'intake-categories',
@@ -30,7 +40,7 @@ const action = defineHttpAction({
   matches: (p, method) => p === '/api/intake/categories' && method === 'GET',
   async handle(req: IncomingMessage, res: ServerResponse) {
     if (!requireIntakeAuth(req, res)) return;
-    sendJson(res, 200, { categories: INTAKE_CATEGORIES });
+    sendJson(res, 200, { categories: buildIntakeCategories() });
   }
 });
 

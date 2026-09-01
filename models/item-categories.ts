@@ -25,6 +25,8 @@ export interface ItemSubcategoryDefinition {
   intakeEnabled?: boolean;
   // Intake-specific display label (e.g. "All-in-One" for 302).
   intakeLabel?: string;
+  // Order within the intake device list (lower first); falls back to taxonomy order.
+  intakeSortOrder?: number;
   // Alternate names accepted during import matching.
   aliases?: string[];
 }
@@ -60,7 +62,8 @@ export const itemCategories: ItemCategoryDefinition[] = [
       { code: 105, label: 'MAC' },
       { code: 106, label: 'Workstation etc.' },
       { code: 107, label: 'Exoten' },
-      { code: 108, label: 'Thin-Client' }
+      { code: 108, label: 'Thin-Client' },
+      { code: 109, label: 'All-in-One' }
     ]
   },
   {

@@ -19,6 +19,7 @@ export interface TaxonomySeedSubcategory {
   categorizerDescription?: string;
   intakeEnabled?: boolean;
   intakeLabel?: string;
+  intakeSortOrder?: number;
   aliases?: string[];
 }
 
@@ -93,6 +94,7 @@ export function parseTaxonomySeed(raw: unknown): ItemCategoryDefinition[] {
         categorizerDescription: sub.categorizerDescription,
         intakeEnabled: sub.intakeEnabled,
         intakeLabel: sub.intakeLabel,
+        intakeSortOrder: sub.intakeSortOrder,
         aliases: sub.aliases
       };
     });

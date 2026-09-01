@@ -8,15 +8,18 @@ import { resolve } from 'path';
 import { itemCategories, canonicalizeCategoryLabel } from '../models/item-categories';
 
 // Mirror of the current INTAKE_CATEGORIES (backend/actions/intake-categories.ts),
-// which is a non-exported const — captured here so the seed carries the same
-// intake subset via the new intakeEnabled/intakeLabel fields.
-const INTAKE_BY_SUBCODE: Record<number, string> = {
-  201: 'Laptop',
-  102: 'Desktop-PC',
-  103: 'Server',
-  302: 'All-in-One',
-  204: 'Tablet'
-};
+// which is a non-exported const — captured here (in its original order) so the
+// seed carries the same intake subset via intakeEnabled/intakeLabel/intakeSortOrder.
+const INTAKE_ORDER: Array<{ code: number; label: string }> = [
+  { code: 201, label: 'Laptop' },
+  { code: 102, label: 'Desktop-PC' },
+  { code: 103, label: 'Server' },
+  { code: 109, label: 'All-in-One' },
+  { code: 204, label: 'Tablet' }
+];
+const INTAKE_BY_SUBCODE: Record<number, { label: string; order: number }> = Object.fromEntries(
+  INTAKE_ORDER.map((e, i) => [e.code, { label: e.label, order: i }])
+);
 
 const seed = {
   // Version lets the loader/migration reason about seed shape over time.
@@ -36,9 +39,11 @@ const seed = {
         sortOrder: si,
         active: true
       };
-      if (INTAKE_BY_SUBCODE[sub.code]) {
+      const intake = INTAKE_BY_SUBCODE[sub.code];
+      if (intake) {
         entry.intakeEnabled = true;
-        entry.intakeLabel = INTAKE_BY_SUBCODE[sub.code];
+        entry.intakeLabel = intake.label;
+        entry.intakeSortOrder = intake.order;
       }
       return entry;
     })

@@ -24,7 +24,8 @@
           "sortOrder": 1,
           "active": true,
           "intakeEnabled": true,
-          "intakeLabel": "Desktop-PC"
+          "intakeLabel": "Desktop-PC",
+          "intakeSortOrder": 1
         },
         {
           "code": 103,
@@ -34,7 +35,8 @@
           "sortOrder": 2,
           "active": true,
           "intakeEnabled": true,
-          "intakeLabel": "Server"
+          "intakeLabel": "Server",
+          "intakeSortOrder": 2
         },
         {
           "code": 104,
@@ -75,6 +77,17 @@
           "parentCode": 10,
           "sortOrder": 7,
           "active": true
+        },
+        {
+          "code": 109,
+          "labelExternal": "All-in-One",
+          "labelInternal": "All_in_One",
+          "parentCode": 10,
+          "sortOrder": 8,
+          "active": true,
+          "intakeEnabled": true,
+          "intakeLabel": "All-in-One",
+          "intakeSortOrder": 3
         }
       ]
     },
@@ -93,7 +106,8 @@
           "sortOrder": 0,
           "active": true,
           "intakeEnabled": true,
-          "intakeLabel": "Laptop"
+          "intakeLabel": "Laptop",
+          "intakeSortOrder": 0
         },
         {
           "code": 202,
@@ -119,7 +133,8 @@
           "sortOrder": 3,
           "active": true,
           "intakeEnabled": true,
-          "intakeLabel": "Tablet"
+          "intakeLabel": "Tablet",
+          "intakeSortOrder": 4
         },
         {
           "code": 205,
@@ -184,9 +199,7 @@
           "labelInternal": "Multifunktionsgerät",
           "parentCode": 30,
           "sortOrder": 1,
-          "active": true,
-          "intakeEnabled": true,
-          "intakeLabel": "All-in-One"
+          "active": true
         },
         {
           "code": 303,
