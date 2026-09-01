@@ -1829,22 +1829,82 @@ export default function ItemDetail({ itemId }: Props) {
       }
     };
 
-    const descriptionMatches = await askFlag(
+    // Step 1/2: ask Ja/Nein/Abbrechen; on "Nein" offer an inline correction so a small
+    // mismatch can be fixed and the run approved, instead of forcing a rejection.
+    const askEditableField = async (
+      stepKey: keyof import('../lib/agenticReviewMapping').AgenticReviewQuestionAnswers,
+      title: string,
+      previewMessage: React.ReactNode,
+      currentValue: string | null,
+      editMessage: string,
+      placeholder: string
+    ): Promise<{ matches: boolean; editedValue: string | null } | null> => {
+      const answer = await askFlag(stepKey, title, previewMessage);
+      if (answer === null) {
+        return null;
+      }
+      if (answer === true) {
+        return { matches: true, editedValue: null };
+      }
+      let edited: string | null = null;
+      try {
+        edited = await dialogService.prompt({
+          title,
+          message: editMessage,
+          confirmLabel: 'Übernehmen & korrigieren',
+          cancelLabel: 'Nicht korrigieren',
+          placeholder,
+          defaultValue: currentValue ?? ''
+        });
+      } catch (error) {
+        logError('ItemDetail: Failed to capture inline review edit', error, { itemId, stepKey });
+        return { matches: false, editedValue: null };
+      }
+      // Cancel ("Nicht korrigieren") preserves the original "does not match" reject signal.
+      if (edited === null) {
+        return { matches: false, editedValue: null };
+      }
+      const trimmed = edited.trim();
+      const original = (currentValue ?? '').trim();
+      // No real change captured → still an unresolved mismatch, not an approval.
+      if (!trimmed || trimmed === original) {
+        return { matches: false, editedValue: null };
+      }
+      return { matches: true, editedValue: trimmed };
+    };
+
+    const referenceEdits: Record<string, string> = {};
+
+    const descriptionResult = await askEditableField(
       'descriptionMatches',
       'Schritt 1  · Artikelbeschreibung',
-      descriptionPreviewMessage
+      descriptionPreviewMessage,
+      item?.Artikelbeschreibung ?? null,
+      'Artikelbeschreibung stimmt nicht? Direkt korrigieren oder „Nicht korrigieren“ zum Ablehnen.',
+      'Korrigierte Artikelbeschreibung'
     );
-    if (descriptionMatches === null) {
+    if (descriptionResult === null) {
       return null;
     }
+    const descriptionMatches = descriptionResult.matches;
+    if (descriptionResult.editedValue) {
+      referenceEdits.Artikelbeschreibung = descriptionResult.editedValue;
+    }
 
-    const shortTextMatches = await askFlag(
+    const shortTextResult = await askEditableField(
       'shortTextMatches',
       'Schritt 2 · Kurztext',
-      shortTextPreviewMessage
+      shortTextPreviewMessage,
+      item?.Kurzbeschreibung ?? null,
+      'Kurztext stimmt nicht? Direkt korrigieren oder „Nicht korrigieren“ zum Ablehnen.',
+      'Korrigierter Kurztext'
     );
-    if (shortTextMatches === null) {
+    if (shortTextResult === null) {
       return null;
+    }
+    const shortTextMatches = shortTextResult.matches;
+    if (shortTextResult.editedValue) {
+      referenceEdits.Kurzbeschreibung = shortTextResult.editedValue;
     }
 
     // Build contract-field list for Step 3: coalesce spec contract + Langtext + InstanceSpecs
@@ -2058,6 +2118,9 @@ export default function ItemDetail({ itemId }: Props) {
     if (Object.keys(specValues).length > 0) {
       mappedInput.specValues = specValues;
     }
+    if (Object.keys(referenceEdits).length > 0) {
+      mappedInput.referenceEdits = referenceEdits;
+    }
 
     const wrongInformationExplicitlyFlagged = typeof explicitWrongInformationFlag === 'boolean';
 
@@ -2131,6 +2194,11 @@ export default function ItemDetail({ itemId }: Props) {
           const data = await res.json();
           setAgentic(data.agentic ?? null);
           setAgenticError(null);
+          // Reflect inline corrections locally; the backend persists them on approval.
+          if (reviewInput.referenceEdits && Object.keys(reviewInput.referenceEdits).length > 0) {
+            const edits = reviewInput.referenceEdits;
+            setItem((previous) => (previous ? { ...previous, ...edits } : previous));
+          }
         } else {
           logError('Agentic review update failed', null, { referenceId, status: res.status });
           setAgenticError('Review konnte nicht gespeichert werden.');

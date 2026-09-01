@@ -20,6 +20,9 @@ export interface AgenticReviewInput {
   shop_article: boolean | null;
   reviewedBy: string | null;
   specValues?: Record<string, string>;
+  // Inline corrections to top-level reference text fields (Artikelbeschreibung, Kurzbeschreibung),
+  // so reviewers can fix small issues without rejecting the run. Persisted on approval only.
+  referenceEdits?: Record<string, string>;
 }
 
 export function buildAgenticReviewSubmissionPayload(
@@ -42,6 +45,9 @@ export function buildAgenticReviewSubmissionPayload(
   };
   if (reviewInput.specValues && Object.keys(reviewInput.specValues).length > 0) {
     payload.specValues = reviewInput.specValues;
+  }
+  if (reviewInput.referenceEdits && Object.keys(reviewInput.referenceEdits).length > 0) {
+    payload.referenceEdits = reviewInput.referenceEdits;
   }
   return payload;
 }

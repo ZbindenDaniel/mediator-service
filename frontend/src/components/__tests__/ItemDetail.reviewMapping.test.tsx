@@ -1,4 +1,8 @@
-import { mapReviewAnswersToInput } from '../../lib/agenticReviewMapping';
+import {
+  mapReviewAnswersToInput,
+  buildAgenticReviewSubmissionPayload,
+  type AgenticReviewInput
+} from '../../lib/agenticReviewMapping';
 import { mergeSpecFieldSelection } from '../agenticReviewSpecFields';
 
 describe('mapReviewAnswersToInput', () => {
@@ -138,5 +142,38 @@ describe('mapReviewAnswersToInput', () => {
       shop_article: null,
       reviewedBy: null
     });
+  });
+});
+
+describe('buildAgenticReviewSubmissionPayload', () => {
+  const baseInput: AgenticReviewInput = {
+    information_present: true,
+    bad_format: false,
+    wrong_information: false,
+    wrong_physical_dimensions: false,
+    missing_spec: [],
+    unneeded_spec: [],
+    notes: null,
+    review_price: null,
+    shop_article: null,
+    reviewedBy: null
+  };
+
+  it('includes inline reference edits when present', () => {
+    const payload = buildAgenticReviewSubmissionPayload('alice', {
+      ...baseInput,
+      referenceEdits: { Artikelbeschreibung: 'Festplatte 2TB', Kurzbeschreibung: 'Kurz und knapp.' }
+    });
+
+    expect(payload.referenceEdits).toEqual({
+      Artikelbeschreibung: 'Festplatte 2TB',
+      Kurzbeschreibung: 'Kurz und knapp.'
+    });
+    expect(payload.actor).toBe('alice');
+  });
+
+  it('omits referenceEdits when there are none', () => {
+    const payload = buildAgenticReviewSubmissionPayload('alice', baseInput);
+    expect('referenceEdits' in payload).toBe(false);
   });
 });

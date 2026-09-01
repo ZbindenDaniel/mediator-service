@@ -334,6 +334,90 @@ export async function applyManualReviewReferenceUpdates(
   }
 }
 
+// Top-level ItemRef text columns a reviewer may correct inline during review (see review-flow.md).
+// Kept as an explicit whitelist so a review payload can never write arbitrary reference columns.
+export const REVIEW_EDITABLE_REFERENCE_FIELDS = ['Artikelbeschreibung', 'Kurzbeschreibung'] as const;
+type ReviewEditableReferenceField = (typeof REVIEW_EDITABLE_REFERENCE_FIELDS)[number];
+
+export function normalizeReferenceEditsPayload(value: unknown): Record<ReviewEditableReferenceField, string> {
+  const edits: Partial<Record<ReviewEditableReferenceField, string>> = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return edits as Record<ReviewEditableReferenceField, string>;
+  }
+  const source = value as Record<string, unknown>;
+  for (const key of REVIEW_EDITABLE_REFERENCE_FIELDS) {
+    const raw = source[key];
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim();
+    // Empty edits are dropped: an inline correction never blanks a description, it only replaces it.
+    if (trimmed) {
+      edits[key] = trimmed;
+    }
+  }
+  return edits as Record<ReviewEditableReferenceField, string>;
+}
+
+export async function applyReferenceEditsAfterReview(
+  artikelNummer: string,
+  referenceEdits: Record<string, string>,
+  ctx: {
+    getItemReference: (id: string) => Promise<ItemRef | undefined>;
+    persistItemReference?: (ref: ItemRef) => Promise<void> | void;
+  },
+  logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
+): Promise<void> {
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  const changes: Partial<Record<ReviewEditableReferenceField, string>> = {};
+  for (const key of REVIEW_EDITABLE_REFERENCE_FIELDS) {
+    const value = referenceEdits?.[key];
+    if (typeof value === 'string' && value.trim()) {
+      changes[key] = value.trim();
+    }
+  }
+
+  if (!trimmedArtikelNummer || Object.keys(changes).length === 0) {
+    return;
+  }
+
+  let reference: ItemRef | undefined;
+  try {
+    reference = await ctx.getItemReference(trimmedArtikelNummer);
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to load reference for inline edits write-back', {
+      artikelNummer: trimmedArtikelNummer,
+      error
+    });
+    return;
+  }
+
+  if (!reference) {
+    logger.warn?.('[agentic-review] Artikelnummer reference not found for inline edits write-back', {
+      artikelNummer: trimmedArtikelNummer
+    });
+    return;
+  }
+
+  if (typeof ctx.persistItemReference !== 'function') {
+    logger.error?.('[agentic-review] Persistence helper unavailable; cannot apply inline edits', {
+      artikelNummer: trimmedArtikelNummer
+    });
+    return;
+  }
+
+  try {
+    await ctx.persistItemReference({ ...reference, ...changes });
+    logger.info?.('[agentic-review] Applied operator inline edits from review', {
+      artikelNummer: trimmedArtikelNummer,
+      fields: Object.keys(changes)
+    });
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to persist inline edits write-back', {
+      artikelNummer: trimmedArtikelNummer,
+      error
+    });
+  }
+}
+
 
 
 type NormalizedReviewMetadata = {
@@ -631,6 +715,7 @@ const action = defineHttpAction({
               .map(([k, v]) => [k, v == null ? '' : String(v)])
           )
         : {};
+      const referenceEdits = normalizeReferenceEditsPayload(data.referenceEdits);
       const reviewMetadata = normalizeReviewMetadataPayload(data);
       const notes = reviewMetadata.notes ?? '';
       const reviewedBy = reviewMetadata.reviewedBy ?? actor;
@@ -884,6 +969,14 @@ const action = defineHttpAction({
             await applySpecValuesAfterReview(artikelNummer, specValues, ctx, console);
           } catch (err) {
             console.error('Failed to apply spec values write-back after review for Artikelnummer', err);
+          }
+        }
+
+        if (Object.keys(referenceEdits).length > 0) {
+          try {
+            await applyReferenceEditsAfterReview(artikelNummer, referenceEdits, ctx, console);
+          } catch (err) {
+            console.error('Failed to apply inline reference edits after review for Artikelnummer', err);
           }
         }
       }

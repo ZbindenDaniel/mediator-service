@@ -40,7 +40,8 @@
 - Key fields (review-related):
   - Run lifecycle: `Status`, `LastModified`, `LastError`, `RetryCount`, `NextRetryAt`, `LastAttemptAt`.
   - Reviewer attribution/decision: `ReviewState`, `ReviewedBy`, `LastReviewDecision`, `LastReviewNotes`.
-  - Review artifact envelope: `information_present`, `missing_spec`, `unneeded_spec`, `bad_format`, `wrong_information`, `wrong_physical_dimensions`, `notes`, `review_price`, `shop_article`, `reviewedBy`.
+  - Review artifact envelope: `information_present`, `missing_spec`, `unneeded_spec`, `bad_format`, `wrong_information`, `wrong_physical_dimensions`, `notes`, `review_price`, `shop_article`, `reviewedBy`, `specValues`, `referenceEdits`.
+  - `referenceEdits`: optional inline corrections to top-level reference text fields (`Artikelbeschreibung`, `Kurzbeschreibung`) captured during review steps 1/2. Whitelisted server-side (`normalizeReferenceEditsPayload`) and written to `item_refs` on approval by `applyReferenceEditsAfterReview` — reviewers fix small issues without rejecting the run. Persisted on `approved` only (mirrors `specValues`).
 - Sync requirements across layers:
   - Review metadata naming must stay aligned between frontend payload builder and backend normalization.
   - `agentic_runs` fields above must stay aligned with shared `AgenticRun` typing.
