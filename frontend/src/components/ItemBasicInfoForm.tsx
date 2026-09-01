@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
 import { ItemEinheit, ITEM_EINHEIT_VALUES, isItemEinheit } from '../../../models';
 import { ItemFormData, ITEM_FORM_DEFAULT_EINHEIT, useItemFormState } from './forms/itemFormShared';
-import { itemCategories } from '../data/itemCategories';
+import { useTaxonomy } from '../context/TaxonomyContext';
 
 interface ItemBasicInfoFormProps {
   initialValues: Partial<ItemFormData>;
@@ -20,6 +20,7 @@ export function ItemBasicInfoForm({
   headerContent
 }: ItemBasicInfoFormProps) {
   const { form, update, mergeForm } = useItemFormState({ initialItem: initialValues });
+  const { categories } = useTaxonomy();
 
   const isMenge = (form.Einheit ?? ITEM_FORM_DEFAULT_EINHEIT) === ItemEinheit.Menge;
   const hasIdentifier = !!(form.SerialNumber?.trim() || form.MacAddress?.trim());
@@ -27,9 +28,9 @@ export function ItemBasicInfoForm({
   const subcategoryOptions = useMemo(() => {
     const hauptCode = typeof form.Hauptkategorien_A === 'number' ? form.Hauptkategorien_A : null;
     if (hauptCode === null) return [];
-    const cat = itemCategories.find((c) => c.code === hauptCode);
+    const cat = categories.find((c) => c.code === hauptCode);
     return cat ? cat.subcategories : [];
-  }, [form.Hauptkategorien_A]);
+  }, [categories, form.Hauptkategorien_A]);
 
   const updateOptionalNumber = (
     field: 'Länge_mm' | 'Breite_mm' | 'Höhe_mm' | 'Gewicht_kg',
@@ -108,7 +109,7 @@ export function ItemBasicInfoForm({
             }}
           >
             <option value="">— optional —</option>
-            {itemCategories.map((cat) => (
+            {categories.map((cat) => (
               <option key={cat.code} value={cat.code}>{cat.label.replace(/_/g, ' ')}</option>
             ))}
           </select>

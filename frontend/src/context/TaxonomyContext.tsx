@@ -21,7 +21,17 @@ interface TaxonomyContextValue {
   error: boolean;
 }
 
-const TaxonomyContext = createContext<TaxonomyContextValue | null>(null);
+// Default = empty taxonomy so consumers rendered without a provider (isolated
+// component tests, or before the app tree mounts) degrade gracefully to "no
+// categories yet" rather than throwing. The provider supplies real data in-app.
+const EMPTY_TAXONOMY: TaxonomyContextValue = {
+  categories: [],
+  lookups: buildItemCategoryLookups([]),
+  loading: false,
+  error: false
+};
+
+const TaxonomyContext = createContext<TaxonomyContextValue>(EMPTY_TAXONOMY);
 
 export function TaxonomyProvider({ children }: PropsWithChildren) {
   const [categories, setCategories] = useState<ItemCategoryDefinition[]>([]);
@@ -58,7 +68,5 @@ export function TaxonomyProvider({ children }: PropsWithChildren) {
 }
 
 export function useTaxonomy(): TaxonomyContextValue {
-  const ctx = useContext(TaxonomyContext);
-  if (!ctx) throw new Error('useTaxonomy must be used within a TaxonomyProvider');
-  return ctx;
+  return useContext(TaxonomyContext);
 }
