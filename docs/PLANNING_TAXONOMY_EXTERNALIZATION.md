@@ -67,13 +67,47 @@ The taxonomy is read through a small, known set of call sites:
 
 ```
 config/taxonomy.seed.json          ← shipped DEFAULT seed (current taxonomy verbatim)
-DB: taxonomy_categories            ← code PK, label, sortOrder
-    taxonomy_subcategories         ← code PK, parentCode FK, label, sortOrder,
-                                       intakeEnabled?, intakeLabel?
+DB: taxonomy_categories            ← the fields below
+    taxonomy_subcategories         ← the fields below (+ parentCode, categorizer, intake)
 backend startup: loadTaxonomy()    ← seed-if-empty from file → read DB → cache in memory
 GET  /api/taxonomy                 ← read model for the frontend (+ anyone)
 POST/PATCH/DELETE /api/admin/taxonomy/…  ← editing (admin-gated), invalidates cache
 ```
+
+### 3.1 Fields (the data object)
+
+**Why three identity fields, not one:** `code` is the immutable machine key
+(`items.SubCategory` stores it). But labels currently do double duty — the UI
+shows the label *and* `canonicalizeCategoryLabel()` turns it into an identifier
+used by **CSV import name‑matching and export columns**. So renaming a label today
+silently changes an interface. Split them.
+
+Common to categories and subcategories:
+
+| Field | Type | Editable? | Purpose |
+|---|---|---|---|
+| `code` | int (PK) | **never** | Immutable stable key; what items reference. |
+| `labelInternal` | text | rarely (it's an interface) | Canonical identifier for **machine interfaces** — CSV import name‑matching, export column values. Replaces today's `canonicalizeCategoryLabel(label)`. |
+| `labelExternal` | text | **freely** | Human display name in the UI. Rename without breaking anything; natural future i18n seam. |
+| `sortOrder` | int | yes | Display order (defaults to code order). |
+| `active` | bool | yes | **Soft‑deactivate** — hide from new‑item pickers without breaking existing items that still reference the code. This is how "remove a category" works safely. |
+
+Subcategory‑only:
+
+| Field | Type | Purpose |
+|---|---|---|
+| `parentCode` | int (FK) | Hauptkategorie link. |
+| `categorizerDescription` | text? | **Optional** hint handed to the categorizer agent — what the category is, notable inclusions/exclusions — to map an item description → this code. |
+| `intakeEnabled` | bool | Whether this subcategory appears in the intake device list. |
+| `intakeLabel` | text? | Intake‑specific display (e.g. "All‑in‑One" for 302). |
+| `aliases` | text[]? | Optional alternate names for import matching (partner exports use varied names). |
+
+**On `categorizerDescription` — mind the prompt budget.** The categorizer today
+sees only `code + label`, and its prompt already hit context‑window limits
+(changelogs #874/#932 trimmed the taxonomy reference). So descriptions must be
+**short and optional**, and the in‑memory reference renderer includes one **only
+when present** — accuracy gain traded against tokens, opt‑in per category. Good
+candidates: ambiguous or overlapping codes (e.g. Mainboard vs CPU vs Steckkarte).
 
 - **Storage choice — structured tables over a JSON blob.** Two small tables (code
   as PK) give referential clarity with `items.SubCategory`, clean per‑row edits,
