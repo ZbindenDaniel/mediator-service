@@ -111,11 +111,33 @@ function copyContracts() {
   }
 }
 
+function copyTaxonomySeed() {
+  // The taxonomy loader (backend/lib/taxonomy.ts) reads config/taxonomy.seed.json at
+  // runtime; dist resolves it under dist/config, so ship it there.
+  const src = path.join(__dirname, '..', 'config', 'taxonomy.seed.json');
+  const dest = path.join(__dirname, '..', 'dist', 'config', 'taxonomy.seed.json');
+
+  if (!fs.existsSync(src)) {
+    console.warn('[build] Taxonomy seed missing; skipping copy.', { src });
+    return;
+  }
+
+  try {
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(src, dest);
+    console.log('[build] Copied taxonomy seed.', { dest });
+  } catch (error) {
+    console.error('[build] Failed to copy taxonomy seed.', { src, dest, error });
+    throw error;
+  }
+}
+
 try {
   copyFrontendPublic();
   copyModelResources();
   copyAgenticPrompts();
   copyContracts();
+  copyTaxonomySeed();
 } catch (error) {
   console.error('[build] Build script encountered an unrecoverable error.', error);
   process.exit(1);
