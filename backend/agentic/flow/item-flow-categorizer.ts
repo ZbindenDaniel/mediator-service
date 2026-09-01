@@ -1,7 +1,6 @@
-import fs from 'fs/promises';
-import path from 'path';
 import { z } from 'zod';
 import { FlowError } from './errors';
+import { renderCategorizerReference } from '../../lib/taxonomy';
 import { stringifyLangChainContent } from '../utils/langchain';
 import { parseJsonWithSanitizer } from '../utils/json';
 import type { ChatModel, ExtractionLogger } from './item-flow-extraction';
@@ -9,7 +8,6 @@ import { logSchemaKeyTelemetry, type AgenticOutput } from './item-flow-schemas';
 import { appendTranscriptSection, type AgentTranscriptWriter, type TranscriptSectionPayload } from './transcript';
 
 // TODO(agent): Monitor categorizer drift once evaluation datasets are curated.
-const CATEGORY_REFERENCE_PATH = path.resolve(__dirname, '../prompts/docs/data_struct.md');
 
 // TODO(agent): Replace ad-hoc categorizer schema once upstream agent contract is stabilized.
 const CategorizerResponseSchema = z
@@ -122,20 +120,20 @@ async function loadCategoryReference(logger: ExtractionLogger | undefined, itemI
   }
 
   try {
-    const rawReference = await fs.readFile(CATEGORY_REFERENCE_PATH, 'utf8');
-    const reference = compactTaxonomyReference(rawReference);
+    // Rendered from the runtime taxonomy (was: read + compact docs/data_struct.md).
+    // Output format is identical to compactTaxonomyReference (parity-tested), so the
+    // categorizer prompt text is unchanged for the default seed.
+    const reference = renderCategorizerReference();
     cachedReference = reference;
     logger?.debug?.({
-      msg: 'category reference loaded',
+      msg: 'category reference rendered from taxonomy',
       itemId,
-      referencePath: CATEGORY_REFERENCE_PATH,
-      rawLength: rawReference.length,
       compactedLength: reference.length
     });
     return reference;
   } catch (err) {
-    logger?.error?.({ err, msg: 'failed to load category reference', itemId, referencePath: CATEGORY_REFERENCE_PATH });
-    throw new FlowError('CATEGORIZER_REFERENCE_UNAVAILABLE', 'Failed to load category taxonomy reference', 500, {
+    logger?.error?.({ err, msg: 'failed to render category reference', itemId });
+    throw new FlowError('CATEGORIZER_REFERENCE_UNAVAILABLE', 'Failed to render category taxonomy reference', 500, {
       cause: err
     });
   }

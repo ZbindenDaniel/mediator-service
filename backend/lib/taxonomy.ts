@@ -134,3 +134,33 @@ export function getTaxonomyLookups(): ItemCategoryLookups {
 export function resetTaxonomyCache(): void {
   cache = null;
 }
+
+// Verbatim numbering-convention line from docs/data_struct.md, kept here so the
+// categorizer reference can be rendered from the loaded taxonomy instead of
+// parsing the markdown file. Must stay identical to the md intro so the rendered
+// reference matches the previous compacted output (guarded by a parity test).
+const CATEGORIZER_REFERENCE_INTRO =
+  'Die folgenden Codes werden für Haupt- und Unterkategorien verwendet. Die Hauptkategorien sind in Zehnerschritten nummeriert, die Unterkategorien hängen sich mit laufenden Nummern an (z.B. 10 → 101, 102, ...).';
+
+/**
+ * Renders the compact taxonomy reference the categorizer prompt uses, from the
+ * loaded taxonomy — replacing the read+compaction of docs/data_struct.md. Output
+ * format matches compactTaxonomyReference(): intro line, blank line, then one
+ * `code Name: subcode Name; …` line per category (semicolon-joined because some
+ * names contain commas). An optional per-subcategory categorizerDescription is
+ * appended when present; absent in the default seed, so parity is preserved.
+ */
+export function renderCategorizerReference(categories: ItemCategoryDefinition[] = getItemCategories()): string {
+  const lines = categories.map((cat) => {
+    const subs = cat.subcategories.map((sub) => {
+      const label = sub.labelExternal ?? sub.label;
+      return sub.categorizerDescription
+        ? `${sub.code} ${label} (${sub.categorizerDescription})`
+        : `${sub.code} ${label}`;
+    });
+    const catLabel = cat.labelExternal ?? cat.label;
+    const subsText = subs.length > 0 ? `: ${subs.join('; ')}` : ' (keine Unterkategorien)';
+    return `${cat.code} ${catLabel}${subsText}`;
+  });
+  return [CATEGORIZER_REFERENCE_INTRO, '', ...lines].join('\n').trim();
+}
