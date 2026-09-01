@@ -36,7 +36,7 @@ import { describeQuality } from '../../../models/quality';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
-import { buildItemCategoryLookups } from '../lib/categoryLookup';
+import { useTaxonomy } from '../context/TaxonomyContext';
 import {
   buildAgenticItemRefPath,
   buildAgenticRestartRequestPayload,
@@ -334,7 +334,7 @@ export default function ItemDetail({ itemId }: Props) {
     setEntity('box', boxId);
   }, [setEntity]);
 
-  const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
+  const { lookups: categoryLookups } = useTaxonomy();
 
   const qualitySummary = useMemo(() => describeQuality(item?.Quality ?? null), [item?.Quality]);
 
