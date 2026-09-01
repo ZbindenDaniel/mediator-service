@@ -109,6 +109,7 @@ import {
   initDb
 } from './db';
 import { AgenticModelInvoker } from './agentic/invoker';
+import { loadTaxonomy } from './lib/taxonomy';
 import type { Item, LabelJob } from './db';
 import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
 import { syncPrinterQueuesToCups, startPrinterQueueSyncInterval } from './utils/sync-printer-queues';
@@ -1088,6 +1089,16 @@ function formatListenerUrl(protocol: 'http' | 'https', hostname: string, port: n
 }
 
 if (process.env.NODE_ENV !== 'test') {
+  // Warm (and validate) the taxonomy cache before serving; a malformed seed
+  // should abort startup rather than surface as broken category lookups later.
+  try {
+    const taxonomy = loadTaxonomy();
+    console.info(`[server] Taxonomy loaded (${taxonomy.length} categories).`);
+  } catch (err) {
+    console.error('[server] Failed to load category taxonomy — aborting startup.', err);
+    process.exit(1);
+  }
+
   initDb()
     .then(() => {
       console.info('[server] Database schema initialized.');
