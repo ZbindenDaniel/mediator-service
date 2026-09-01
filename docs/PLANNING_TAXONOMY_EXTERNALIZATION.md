@@ -132,7 +132,24 @@ candidates: ambiguous or overlapping codes (e.g. Mainboard vs CPU vs Steckkarte)
 
 ## 4. Phases
 
-### Phase 1 — Runtime source + in‑memory cache (backend), behavior unchanged
+### Phase 1 — Runtime source + in‑memory cache (backend), behavior unchanged  ✅ DONE
+
+**Shipped (8 increments):** extended taxonomy types with the full field model
+(additive); generated `config/taxonomy.seed.json` from the current taxonomy
+(round‑trip verified); `backend/lib/taxonomy.ts` loads + validates + caches it
+(`getItemCategories()` synchronous accessor); `GET /api/taxonomy` + startup
+warm/fail‑fast; routed the backend lookup consumers (`print-unified`,
+`defaultLocation`, `categoryLabelLookup`), the categorizer reference
+(`renderCategorizerReference`, byte‑for‑byte parity‑tested vs the old
+`data_struct.md` output), and the intake list (derived from `intakeEnabled` /
+`intakeSortOrder`) through the loader; build ships the seed to `dist/config`.
+Also fixed a bug the work surfaced — intake mapped "All‑in‑One" to code 302 (a
+printer) → added `109 All‑in‑One` under Computer. No new test failures (the 3
+pre‑existing failing suites are todo #52). `data_struct.md` is no longer the
+categorizer's LLM source (rendered from the taxonomy now) but is kept as human
+doc, held in sync by the parity test.
+
+
 - Extract the current taxonomy to `config/taxonomy.seed.json`.
 - Add `loadTaxonomy()` that (for now) reads the seed file into an in‑memory cache
   at startup; convert the eager module‑load computations in `item-categories.ts`

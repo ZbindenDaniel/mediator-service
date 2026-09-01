@@ -391,9 +391,14 @@
      `GET /api/taxonomy`, seeded into DB from a shipped default, editable via admin
      CRUD). Build-time codegen rejected: we ship one image, so it would force one
      image per taxonomy. Backend stays synchronous via a startup cache
-     (`getItemCategories()`); frontend moves to a boot-fetch provider. Next
-     actionable workstream. Phases 1–2 deliver the runtime decoupling; 3–4 add DB
-     persistence + editing.
+     (`getItemCategories()`); frontend moves to a boot-fetch provider.
+     **Phase 1 ✅ shipped** (#937): backend loader+cache+validation,
+     `GET /api/taxonomy`, categorizer/intake/lookup consumers rerouted, seed in
+     `config/taxonomy.seed.json` shipped to dist; also fixed All-in-One→302
+     (printer) bug via a new `109 All-in-One` under Computer. **Remaining:**
+     Phase 2 (frontend boot-fetch provider; drop static import — until then the FE
+     still imports the const, an accepted transient dual-source), Phase 3 (DB
+     persist + seed-on-init), Phase 4 (admin editing + integrity guards).
    - **G‑C2 / G‑K2** Taxonomy and contract files are a flat global namespace — no
      scoping, so two use cases cannot coexist on one instance without new design.
    - **G‑F1 / G‑F2** No use‑case/domain/tenant dimension exists in config at all;
