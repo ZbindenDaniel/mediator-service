@@ -3,6 +3,7 @@ import { resolve } from 'path';
 import type { ItemCategoryDefinition } from '../../models/item-categories';
 import { buildItemCategoryLookups } from '../../models/item-category-lookups';
 import type { ItemCategoryLookups } from '../../models/item-category-lookups';
+import { countTaxonomyCategories, readTaxonomyFromDb, seedTaxonomy } from '../db';
 
 // Backend-only runtime source for the category taxonomy. Lives here (not in
 // models/) because it reads a file at startup — models/ is also compiled into the
@@ -122,9 +123,49 @@ export function loadTaxonomy(force = false): ItemCategoryDefinition[] {
   return cache;
 }
 
-/** Synchronous accessor for backend consumers; lazy-loads on first use. */
+/** Synchronous accessor for backend consumers; lazy-loads the seed file on first use. */
 export function getItemCategories(): ItemCategoryDefinition[] {
   return cache ?? loadTaxonomy();
+}
+
+interface TaxonomyInitLogger {
+  info?: (msg: string) => void;
+  warn?: (msg: string) => void;
+  error?: (payload: unknown) => void;
+}
+
+/**
+ * Startup initialization (must run AFTER initDb): guarantees a non-empty cache from the seed
+ * file (sync fallback), seeds the DB from that file when the taxonomy tables are empty, then
+ * reads the DB into the cache as the authoritative source. Never throws — on any DB error the
+ * seed-file cache remains in place so category lookups keep working. getItemCategories() stays
+ * synchronous against the cache.
+ */
+export async function initTaxonomy(logger?: TaxonomyInitLogger): Promise<ItemCategoryDefinition[]> {
+  const fileCategories = loadTaxonomy(true); // also warms `cache` as the fallback
+  try {
+    if ((await countTaxonomyCategories()) === 0) {
+      await seedTaxonomy(fileCategories);
+      logger?.info?.(`[taxonomy] Seeded ${fileCategories.length} categories into the database from the seed file.`);
+    }
+    const dbCategories = await readTaxonomyFromDb();
+    if (dbCategories.length > 0) {
+      cache = dbCategories;
+      return dbCategories;
+    }
+    logger?.warn?.('[taxonomy] Database taxonomy empty after seeding; keeping the seed-file cache.');
+    return fileCategories;
+  } catch (err) {
+    logger?.error?.({ msg: '[taxonomy] Database taxonomy load failed; using the seed-file cache.', err });
+    return fileCategories; // cache already holds the file data
+  }
+}
+
+/** Re-reads the taxonomy from the DB into the cache (used after edits). Falls back to the seed file. */
+export async function reloadTaxonomyFromDb(): Promise<ItemCategoryDefinition[]> {
+  const dbCategories = await readTaxonomyFromDb();
+  cache = dbCategories.length > 0 ? dbCategories : loadTaxonomy(true);
+  return cache;
 }
 
 /** Lookups built over the loaded taxonomy. */

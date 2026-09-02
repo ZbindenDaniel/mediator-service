@@ -33,6 +33,7 @@ import {
   resolveEventLogLevel
 } from '../models';
 import { normalizeQuality } from '../models/quality';
+import type { ItemCategoryDefinition } from '../models/item-categories';
 import type { QualityAssessment, QualityAssessmentInsert } from '../models/quality';
 import type { QualityCheckResponse } from '../models/quality-contract';
 import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
@@ -453,6 +454,31 @@ CREATE TABLE IF NOT EXISTS printer_queues (
   enabled     BOOLEAN NOT NULL DEFAULT TRUE,
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Category taxonomy as runtime data (seeded from config/taxonomy.seed.json on first
+-- boot; editable thereafter). See docs/PLANNING_TAXONOMY_EXTERNALIZATION.md (Phase 3).
+CREATE TABLE IF NOT EXISTS taxonomy_categories (
+  code           INTEGER PRIMARY KEY,
+  label_internal TEXT NOT NULL,
+  label_external TEXT NOT NULL,
+  sort_order     INTEGER NOT NULL DEFAULT 0,
+  active         BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS taxonomy_subcategories (
+  code                    INTEGER PRIMARY KEY,
+  parent_code             INTEGER NOT NULL REFERENCES taxonomy_categories(code) ON DELETE CASCADE ON UPDATE CASCADE,
+  label_internal          TEXT NOT NULL,
+  label_external          TEXT NOT NULL,
+  sort_order              INTEGER NOT NULL DEFAULT 0,
+  active                  BOOLEAN NOT NULL DEFAULT TRUE,
+  categorizer_description TEXT,
+  intake_enabled          BOOLEAN NOT NULL DEFAULT FALSE,
+  intake_label            TEXT,
+  intake_sort_order       INTEGER,
+  aliases                 TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_taxonomy_subcategories_parent ON taxonomy_subcategories(parent_code);
 `);
 
   // Additive column migrations — safe no-ops after first run
@@ -1917,6 +1943,89 @@ export async function setSystemSetting(key: string, value: string): Promise<void
      ON CONFLICT ("key") DO UPDATE SET "value"=$2`,
     [key, value]
   );
+}
+
+// --- Taxonomy (runtime category data; see docs/PLANNING_TAXONOMY_EXTERNALIZATION.md) ---
+
+interface TaxonomyCategoryRow {
+  code: number; label_internal: string; label_external: string; sort_order: number; active: boolean;
+}
+interface TaxonomySubcategoryRow {
+  code: number; parent_code: number; label_internal: string; label_external: string;
+  sort_order: number; active: boolean; categorizer_description: string | null;
+  intake_enabled: boolean; intake_label: string | null; intake_sort_order: number | null; aliases: string | null;
+}
+
+export async function countTaxonomyCategories(): Promise<number> {
+  const row = await queryOne<{ n: number }>(`SELECT COUNT(*)::int AS n FROM taxonomy_categories`);
+  return row ? Number(row.n) : 0;
+}
+
+/** Reads the taxonomy from the DB, assembled into the nested ItemCategoryDefinition[] shape. */
+export async function readTaxonomyFromDb(): Promise<ItemCategoryDefinition[]> {
+  const cats = await query<TaxonomyCategoryRow>(
+    `SELECT * FROM taxonomy_categories ORDER BY sort_order, code`
+  );
+  const subs = await query<TaxonomySubcategoryRow>(
+    `SELECT * FROM taxonomy_subcategories ORDER BY sort_order, code`
+  );
+  const byParent = new Map<number, ItemCategoryDefinition['subcategories']>();
+  for (const s of subs) {
+    let aliases: string[] | undefined;
+    try { aliases = s.aliases ? JSON.parse(s.aliases) : undefined; } catch { aliases = undefined; }
+    const list = byParent.get(s.parent_code) ?? [];
+    list.push({
+      code: s.code,
+      label: s.label_external, // compat: consumers read .label
+      labelExternal: s.label_external,
+      labelInternal: s.label_internal,
+      parentCode: s.parent_code,
+      sortOrder: s.sort_order,
+      active: s.active,
+      categorizerDescription: s.categorizer_description ?? undefined,
+      intakeEnabled: s.intake_enabled,
+      intakeLabel: s.intake_label ?? undefined,
+      intakeSortOrder: s.intake_sort_order ?? undefined,
+      aliases
+    });
+    byParent.set(s.parent_code, list);
+  }
+  return cats.map((c) => ({
+    code: c.code,
+    label: c.label_external,
+    labelExternal: c.label_external,
+    labelInternal: c.label_internal,
+    sortOrder: c.sort_order,
+    active: c.active,
+    subcategories: byParent.get(c.code) ?? []
+  }));
+}
+
+/** Inserts the given taxonomy into the (assumed-empty) tables in one transaction. Idempotent via ON CONFLICT. */
+export async function seedTaxonomy(categories: ItemCategoryDefinition[]): Promise<void> {
+  await withTransaction(async (client) => {
+    for (const c of categories) {
+      await client.query(
+        `INSERT INTO taxonomy_categories (code, label_internal, label_external, sort_order, active)
+         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (code) DO NOTHING`,
+        [c.code, c.labelInternal ?? c.label, c.labelExternal ?? c.label, c.sortOrder ?? 0, c.active ?? true]
+      );
+      for (const s of c.subcategories) {
+        await client.query(
+          `INSERT INTO taxonomy_subcategories
+             (code, parent_code, label_internal, label_external, sort_order, active,
+              categorizer_description, intake_enabled, intake_label, intake_sort_order, aliases)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (code) DO NOTHING`,
+          [
+            s.code, c.code, s.labelInternal ?? s.label, s.labelExternal ?? s.label,
+            s.sortOrder ?? 0, s.active ?? true, s.categorizerDescription ?? null,
+            s.intakeEnabled ?? false, s.intakeLabel ?? null, s.intakeSortOrder ?? null,
+            s.aliases ? JSON.stringify(s.aliases) : null
+          ]
+        );
+      }
+    }
+  });
 }
 
 export async function listRecentBoxes(): Promise<any[]> {
