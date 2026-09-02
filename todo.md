@@ -441,9 +441,13 @@
      All-in-One→302 (printer) bug via a new `109 All-in-One`. **Phase 2 ✅** (#938):
      `TaxonomyProvider` fetches `/api/taxonomy` at boot; all FE consumers use
      `useTaxonomy()`; static `frontend/src/data/itemCategories.ts` deleted — FE no
-     longer imports the taxonomy at build time. **Remaining:** Phase 3 (DB persist +
-     seed-on-init), Phase 4 (admin editing UI + cache invalidation + integrity
-     guards) = the edit-without-redeploy payoff.
+     longer imports the taxonomy at build time. **Phase 3 ✅** (#957): DB tables
+     `taxonomy_categories`/`taxonomy_subcategories` + `initTaxonomy()` (seed-on-init
+     from the file, then DB is authoritative; sync seed-file fallback; never
+     throws); `reloadTaxonomyFromDb()` for edits. **Remaining:** Phase 4 (admin CRUD
+     API + `/admin` editing UI + cache invalidation + integrity guards: codes
+     immutable, no delete of in-use code) = the edit-without-redeploy payoff. Also
+     open: a dedicated quality contract for 109 (falls back to `general`).
    - **G‑C2 / G‑K2** Taxonomy and contract files are a flat global namespace — no
      scoping, so two use cases cannot coexist on one instance without new design.
    - **G‑F1 / G‑F2** No use‑case/domain/tenant dimension exists in config at all;

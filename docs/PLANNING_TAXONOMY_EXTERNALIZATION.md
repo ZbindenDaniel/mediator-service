@@ -173,7 +173,22 @@ doc, held in sync by the parity test.
   from `/api/taxonomy` at boot. All 58 frontend tests pass; bundle builds clean.
   The transient FE dual‑source from Phase 1 is gone.
 
-### Phase 3 — Persist to DB (seed‑on‑init)
+### Phase 3 — Persist to DB (seed‑on‑init)  ✅ DONE
+- Added `taxonomy_categories` / `taxonomy_subcategories` tables to `initDb`
+  (additive `CREATE TABLE IF NOT EXISTS`) + `db.ts` accessors
+  (`countTaxonomyCategories`, `readTaxonomyFromDb`, `seedTaxonomy`).
+- `initTaxonomy()` (runs after `initDb`): loads the seed file as a **synchronous
+  fallback** so the cache is never empty, seeds the DB on first boot when the
+  tables are empty, then reads the DB into the cache as the **authoritative**
+  source; never throws (DB error → seed-file cache stays). `getItemCategories()`
+  stays synchronous, so all consumers are unchanged. `reloadTaxonomyFromDb()`
+  added for post-edit refresh (Phase 4).
+- Tests mock `../db` for the seed-on-empty / DB-authoritative / error-fallback
+  logic (the SQL itself is exercised by the Postgres-gated suites). 855 tests
+  pass; only the 3 pre-existing failures remain.
+
+#### Original plan
+
 - Add `taxonomy_categories` / `taxonomy_subcategories` tables (additive migration).
 - `loadTaxonomy()` seeds them from the file when empty, then reads the DB into the
   cache. File becomes the default seed only.

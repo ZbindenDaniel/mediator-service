@@ -4,7 +4,7 @@ Covers: item creation, editing, quality assessment, specs, accessories, spare pa
 
 ---
 
-## 939. ✅ Spec contract for 109 (All-in-One)
+## 956. ✅ Spec contract for 109 (All-in-One)
 **Why:** The `109 All-in-One` subcategory added during taxonomy externalization (#937) had no
 dedicated spec contract, so it fell back to `general`. Added `contracts/specs/109.json` — modelled
 on `102` (Standard-PC) plus the integrated-display fields an All-in-One needs: required `Prozessor`
