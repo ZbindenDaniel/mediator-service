@@ -4,6 +4,15 @@ Covers: item creation, editing, quality assessment, specs, accessories, spare pa
 
 ---
 
+## 939. ✅ Spec contract for 109 (All-in-One)
+**Why:** The `109 All-in-One` subcategory added during taxonomy externalization (#937) had no
+dedicated spec contract, so it fell back to `general`. Added `contracts/specs/109.json` — modelled
+on `102` (Standard-PC) plus the integrated-display fields an All-in-One needs: required `Prozessor`
++ `Bildschirmgröße`, optional `Auflösung`/`Touchscreen`/`Speichertyp`/`Speicher`/`RAM-Kapazität`/
+`RAM-Typ`/`Grafikkarte`/`Anschlüsse`, and two guidance snippets (capture screen size; keep the OS out
+of the prose). Auto-discovered by filename and shipped to `dist/contracts` by the build; no code
+change. **Deferred:** a dedicated quality contract for 109 (still falls back to `general`).
+
 ## 911. ✅ Editable instance specs
 **Why:** `items.InstanceSpecs` (per-instance specs like RAM/Speicher/Speichertyp) could only be
 written by the intake API (`intake-answer` → `updateItemInstanceSpecs`) and quality review; a wrong

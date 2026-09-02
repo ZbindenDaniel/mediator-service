@@ -7,6 +7,7 @@ Each file is named by subcategory number:
 - `102.json` — desktop computers
 - `103.json` — servers
 - `105.json` — workstations
+- `109.json` — all-in-one PCs
 - `201.json` — laptops
 - `204.json` — tablets
 - `301.json` — monitors
