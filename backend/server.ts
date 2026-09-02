@@ -102,12 +102,18 @@ import {
   deleteItem,
   deleteBox,
   enqueueShopwareSyncJob,
+  getShopwareSyncSnapshotForPayload,
+  setShopwareProductId,
+  setItemShopwareVariantId,
   insertAgenticRunReviewHistoryEntry,
   listStubs,
   createStub,
   closeStub,
   initDb
 } from './db';
+import { createShopwareAdminClient } from './shopware/adminClient';
+import { createShopwareSyncClient } from './shopware/syncClient';
+import { processShopwareQueue } from './workers/processShopwareQueue';
 import { AgenticModelInvoker } from './agentic/invoker';
 import { loadTaxonomy } from './lib/taxonomy';
 import type { Item, LabelJob } from './db';
@@ -136,7 +142,7 @@ function clearCsvIngestionOptions(absPath: string): void {
 let shopwareConfig: ShopwareConfig = {
   enabled: false,
   baseUrl: null,
-  salesChannelId: null,
+  salesChannelAccessKey: null,
   requestTimeoutMs: SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
   credentials: {}
 };
@@ -592,8 +598,44 @@ if (agenticServiceEnabled) {
   })();
 }
 
+// Poll cadence for the Shopware sync worker. Hardcoded (the old SHOPWARE_QUEUE_POLL_INTERVAL_MS env
+// was retired as dead in #936); revisit if it needs to be tunable per deployment.
+const SHOPWARE_SYNC_POLL_INTERVAL_MS = 10_000;
+
 if (SHOPWARE_SYNC_ENABLED) {
-  console.info('[server] SHOPWARE_SYNC_ENABLED=true but the background worker is not active because dispatchJob is not implemented.');
+  if (!shopwareConfigReady) {
+    console.warn('[server] SHOPWARE_SYNC_ENABLED=true but Shopware config is incomplete; sync worker not started.', {
+      issues: shopwareConfigIssues
+    });
+  } else {
+    try {
+      const shopwareAdminClient = createShopwareAdminClient(shopwareConfig);
+      const shopwareSyncClient = createShopwareSyncClient({
+        adminClient: shopwareAdminClient,
+        loadSnapshot: getShopwareSyncSnapshotForPayload,
+        persistProductId: setShopwareProductId,
+        persistVariantId: setItemShopwareVariantId,
+        logger: console
+      });
+      let shopwareSyncRunning = false;
+      const runShopwareSync = async () => {
+        // Reentrancy guard: skip this tick if the previous batch is still in flight (slow Shopware).
+        if (shopwareSyncRunning) return;
+        shopwareSyncRunning = true;
+        try {
+          await processShopwareQueue({ client: shopwareSyncClient, logger: console });
+        } catch (err) {
+          console.error('[server] Shopware sync worker tick failed', err);
+        } finally {
+          shopwareSyncRunning = false;
+        }
+      };
+      setInterval(() => void runShopwareSync(), SHOPWARE_SYNC_POLL_INTERVAL_MS);
+      console.info('[server] Shopware sync worker started', { intervalMs: SHOPWARE_SYNC_POLL_INTERVAL_MS });
+    } catch (err) {
+      console.error('[server] Failed to start Shopware sync worker', err);
+    }
+  }
 }
 
 // ERP_NIGHTLY_SYNC_ENABLED is the env-level default; the runtime toggle lives in system_settings

@@ -1,6 +1,30 @@
 # Todo
 
 ## Confirmed Decisions
+- **Shopware integration (P0 + P1 done; see `docs/PLANNING_shopware_integration.md`).** Direction decided:
+  **direct-to-Shopware**, create-if-missing, absolute stock. Read/search path live; **stock sync live** (#937) —
+  Admin-API write client + dispatch client + worker started under `SHOPWARE_SYNC_ENABLED`. P0 (#935–936):
+  unified config, API-key **or** client-credentials auth, `SHOPWARE_SALES_CHANNEL_ACCESS_KEY` rename, dead vars
+  removed, enqueue-leak fixed, admin connection check + status/queue card.
+  **P1 follow-ups:** queue **retention/trim** (succeeded rows accumulate); **sales-channel visibility** on
+  created products (today invisible until published via the shop flow); **max-retry ceiling** for transient
+  failures; dedup the product normaliser shared by store `client.ts` / admin `adminClient.ts` / agentic
+  `tools/shopware.ts`.
+  **P2a done (#938):** Langtext/Spezifikationen → Shopware properties (native storefront filters).
+  **P2b done (#948):** push **all** Langtext as properties, but a group is `filterable` only when its key is a spec-contract field (`registry.getFilterableSpecKeys()` = union of `contracts/specs/*.json` keys) — stops the filter sidebar flooding. `ensurePropertyGroup` heals existing over-/under-filtered groups. Note (#942's earlier "contracts dropped") applied to *badges*; contracts are now used to curate filterability. Not expressible: per-category filterability of a shared field (Shopware's flag is global per group).
+  **Policy+data fixes (#940):** shop-eligibility gate (`Shopartikel=1 AND approved` — ineligible items deactivated/skipped, never published), `Veröffentlicht_Status`→`active`, full product data (name/description/price/active) on create AND update, sales-channel visibility on create.
+  **Open follow-ups:** (a) items **without agentic approval never sync** — decide if manual shop items need a path / make approval configurable like `ERP_SYNC_REQUIRE_APPROVAL`; (b) **backfill** pre-existing skeleton products (they self-correct only on next enqueue; visibility is create-only) — a bulk re-sync of shop refs; (c) name/description field mapping is a heuristic.
+  **Variants done (#941):** ref → parent product, distinct InstanceSpecs combos → variant children (configurator + child products, per-variant summed stock, `ShopwareVariantId` persisted). Single-product fallback when <2 combos or any spec-less instance.
+  **Variant follow-ups:** validate `configuratorSettings`/child-`options` write semantics on a live Shopware (as with P2a m2n); ragged specs (instance missing an axis) fall back to single-product; a lone combo's InstanceSpecs aren't surfaced as parent properties; no per-variant price.
+  **#944/#946 (variant re-sync 1062 fixed):** #944 gave `configuratorSettings` entries a deterministic id; #946 completed it — `syncVariants` now searches existing `product-configurator-setting` rows and **reuses their ids** (a fresh id for an option that already has a row INSERTs → 1062), deterministic id only for new options, stale axes deleted. The `mkdir Permission denied` on image upload is a dockware container fs-permission issue (env, not code); storefront axis grouping is a Shopware presentation setting.
+  **#942:** quality → variant axis (`Zustand`); admin **Shop-Sync** button + `POST /api/admin/shopware/sync` (enqueues all shop refs, also backfills). Contracts + CO₂ badges **dropped** (all properties come from items; no benefit).
+  **Open — reverse/stock-back sync:** orders in Shopware must book out mediator stock. Recommended: `checkout.order.placed` webhook → map ordered variant → decrement a matching instance's `Auf_Lager`; poll fallback. Design in the runbook ("Reverse sync"); not built. Open: which instance to book out when a variant groups several (FIFO?), Shopware-side corrections.
+  **#943 (P3 images done):** product images uploaded as binary (`lib/shopware-media.ts` + `adminClient.syncProductImages`), cover = Grafikname. Validate the `media` m2n + `coverId` write on a live shop; stale-image removal deferred.
+  **#945 (image previews + itemUUID axis):** (a) media is now created in the **Product Media** default folder (`mediaFolderId` resolved via `/api/search/media-folder`) so Shopware generates thumbnails — fixes blank previews. (b) `itemUUID` is now a **variant axis** → one variant = one instance (no merging); any ref with ≥2 instances is a variant parent. Follow-ups: prune stale itemUUID property options; consider a non-filterable itemUUID group; live-validate thumbnails + the itemUUID configurator switch. The image `mkdir Permission denied` is a dockware host fs-permission issue, not code.
+  **#947 (categories done):** product↔category links from the ref's `Hauptkategorien_A/Unterkategorien_A` (+ `_B`) codes → Shopware category names (`db.resolveShopwareCategoryNames` + `adminClient.syncProductCategories`). Per operator decision: **link-only to existing categories (never create)**, both A+B, additive (never removes a link). Follow-ups: stale-link reconciliation behind a flag; an explicit code→category-id mapping override for shops whose category names differ from the mediator labels (today unmatched names are skipped+logged — check the worker logs for `No Shopware category named "…"` to see misses).
+  **Documents (decision pending):** (a) Shopware product downloads (customer-facing manuals), (b) media + custom-field link list, or (c) don't upload — external links in a custom field (internal docs). Not built.
+  **Next (P4+):** accessory cross-selling → reverse stock-back sync.
+
 - **ERP export approval gate:** Only approved items may be exported/synced to the ERP — exporting unreviewed items is too dangerous. Enforced as a single choke point in `stageItemsExport` for `erp` mode (covers `/api/sync/erp`, `/api/export/items?mode=erp`, `/api/export/data?mode=erp`) plus an early filter in `sync-erp`. Configurable via `ERP_SYNC_REQUIRE_APPROVAL` (default `true`); backup-mode exports are unaffected.
 - **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.
 - **Item list conditional column:** A single date column slot appears only when sorting by `entryDate`, `lastSynced`, or `agenticLastRun`, showing the relevant date. Other sort keys show no date column.
@@ -52,6 +76,26 @@
 ---
 
 ## Priority 1 — Bugs & Active Work
+
+0zd. ✅ **Event-log CSV round-trip corrupted `Meta` into `[object Object]` → re-import dropped the event (erp-sync #936).**
+  `events.Meta` is a `jsonb` column, so `pg` returns it as a parsed JS object; `export-data.ts`'s `toCsvValue`
+  serialized cells with `String(value)`, turning the object into the literal `"[object Object]"` in `events.csv`.
+  On re-import that string was bound into the `jsonb` column → `22P02 invalid input syntax for type json`, and
+  because `insertEventLogEntry` swallows the error the entire event row was silently dropped. Fixed at the source
+  (`toCsvValue` now `JSON.stringify`s object/array cells; `Date` excluded so timestamps are unchanged) plus importer
+  hardening (`sanitizeEventMetaValue` drops a non-JSON `Meta` to `NULL` with a warning so a row from an
+  already-broken export still imports). Test: `test/csv-ingest-events-meta.test.ts`.
+  **Note:** related to 0z7 (a CI JSON-lint over `contracts/`) — a broader "validate JSON at the CSV/jsonb boundary"
+  guard would have caught this class earlier; still worth the cheap CI sweep.
+
+0zc. ✅ **Intake can match a booted device onto a pre-existing instance instead of forcing a duplicate (intake #935).**
+  Pre-intake-API / hand-catalogued items have no serial/MAC, so `/start`'s identifier lookup missed and the
+  operator was forced to create a duplicate at `select_ref`. Now each candidate carries `matchableInstances`
+  (serial-less, non-component, in-stock instances of the ref) and the `type:'ref'` answer accepts `useItemUUID`
+  to bind the scanned identity + scan onto the chosen instance (guarded, idempotent; logs `InstanceMatched`).
+  Fully additive — a station that ignores the new fields behaves as before.
+  **Follow-up (image-side):** `phase1.sh` should render the "new device or one of these existing ones?" prompt
+  from `matchableInstances` and send `useItemUUID` for "existing". Backend fields are ignored harmlessly until then.
 
 0za. ✅ **Admin "Backup" was not a restorable snapshot + emitted env-dependent HTML (erp-sync #931).**
   The Backup button routed to `/api/export/items?mode=backup`, which emitted only items+boxes (no agentic
