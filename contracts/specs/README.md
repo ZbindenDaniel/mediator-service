@@ -13,6 +13,8 @@ Each file is named by subcategory number:
 - `401.json` — network equipment
 - `601.json` — audio/video
 - `701.json` — smartphones
+- `901.json` — internal hard drives / SSDs (Festplatte)
+- `905.json` — external hard drives (Externe Festplatte)
 
 ## Schema
 Each file must match the `SpecContract` type in `models/spec-contract.ts`.

@@ -28,7 +28,6 @@
     - Anti-pattern: Never return placeholder-only `Spezifikationen` (e.g., `{"Feature": "N/A"}`) when sources contain concrete technical specs.
     - Anti-pattern: Returning only preset placeholders is invalid when evidence includes further technical data.
     - Numeric fields: extract only when present; otherwise keep defaults.
-    - Hard-drive dimensions: for internal/external hard drives and SSDs (device class 'Festplatte'), explicit measurements are often unavailable, but the form factor is standardized. When no explicit dimensions appear in the sources, fill Länge_mm/Breite_mm/Höhe_mm from the form factor: 2.5-inch drives → 100 / 70 / 7 (use Höhe 9.5 or 15 if the source states a thicker drive); 3.5-inch drives → 147 / 102 / 26. Only apply this fallback when the drive's form factor (2.5" or 3.5") is stated or clearly determinable; never invent dimensions for other product classes.
     - Hersteller: Copy from sources or keep provided value.
     - reviewNotes: Treat as guidance.
 - format mm values with half milmeter steps (i.e. '13.5', '132')

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "subCategory": 901,
+  "fields": [
+    { "key": "Speichertyp",  "required": true,  "description": "Drive technology (HDD, SSD, NVMe SSD, SAS HDD)" },
+    { "key": "Speicher",     "required": true,  "description": "Capacity (e.g. 1 TB, 512 GB)" },
+    { "key": "Formfaktor",   "required": false, "description": "Physical form factor (2.5\", 3.5\", M.2, U.2)" },
+    { "key": "Schnittstelle","required": false, "description": "Interface (SATA III, SAS, NVMe/PCIe, IDE)" },
+    { "key": "Drehzahl",     "required": false, "description": "Rotational speed for HDDs in RPM (e.g. 5400, 7200); leave empty for SSDs" }
+  ],
+  "guidance": [
+    "2.5\" drives are about 100×70×7 mm (Länge×Breite×Höhe; use 9.5 or 15 mm height for thicker drives); 3.5\" drives are about 147×102×26 mm. When the sources give no explicit dimensions, fill Länge_mm/Breite_mm/Höhe_mm from the stated or clearly determinable form factor. Never guess dimensions for an unknown form factor."
+  ]
+}
