@@ -1440,10 +1440,31 @@ div {
     gap: 6px;
     align-items: center;
 
-    input {
+    input,
+    textarea {
         flex: 1;
         min-width: 0;
     }
+
+    textarea {
+        resize: vertical;
+        font: inherit;
+    }
+}
+
+// Always-present per-step feedback box (AgenticStepReviewModal + contract-field modal).
+.review-dialog__step-note {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+}
+
+.review-dialog__step-note-input {
+    width: 100%;
+    box-sizing: border-box;
+    resize: vertical;
+    font: inherit;
+    margin-top: 4px;
 }
 
 .contract-field-row__remove {

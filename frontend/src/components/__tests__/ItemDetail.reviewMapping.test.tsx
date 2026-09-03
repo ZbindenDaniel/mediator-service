@@ -176,4 +176,13 @@ describe('buildAgenticReviewSubmissionPayload', () => {
     const payload = buildAgenticReviewSubmissionPayload('alice', baseInput);
     expect('referenceEdits' in payload).toBe(false);
   });
+
+  it('carries numeric dimension edits through as strings', () => {
+    const payload = buildAgenticReviewSubmissionPayload('alice', {
+      ...baseInput,
+      referenceEdits: { 'Länge_mm': '147', 'Breite_mm': '102', 'Höhe_mm': '26' }
+    });
+
+    expect(payload.referenceEdits).toEqual({ 'Länge_mm': '147', 'Breite_mm': '102', 'Höhe_mm': '26' });
+  });
 });

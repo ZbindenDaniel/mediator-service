@@ -25,6 +25,7 @@ export interface SpecContractFieldEntry {
 
 export interface AgenticContractFieldReviewResult {
   specValues: Record<string, string>;
+  note?: string;
 }
 
 interface ContractFieldReviewProps {
@@ -34,6 +35,7 @@ interface ContractFieldReviewProps {
   additionalFields?: Record<string, string | string[]>;
   confirmLabel?: string;
   cancelLabel?: string;
+  notePlaceholder?: string;
   onConfirm: (result: AgenticContractFieldReviewResult) => void;
   onCancel: () => void;
 }
@@ -46,6 +48,7 @@ export function AgenticContractFieldReviewModal({
   additionalFields = {},
   confirmLabel = 'Übernehmen',
   cancelLabel = 'Abbrechen',
+  notePlaceholder = 'Feedback zu diesem Schritt (optional)',
   onConfirm,
   onCancel
 }: ContractFieldReviewProps) {
@@ -63,6 +66,7 @@ export function AgenticContractFieldReviewModal({
   }, [contractFields, additionalFields]);
 
   const [fieldValues, setFieldValues] = useState<Record<string, string>>(initialValues);
+  const [note, setNote] = useState('');
 
   const updateField = (key: string, value: string) => {
     setFieldValues((prev) => ({ ...prev, [key]: value }));
@@ -70,7 +74,7 @@ export function AgenticContractFieldReviewModal({
 
   const handleConfirm = () => {
     try {
-      onConfirm({ specValues: fieldValues });
+      onConfirm({ specValues: fieldValues, note: note.trim() || undefined });
     } catch (error) {
       logError('AgenticContractFieldReviewModal: Failed to submit spec values', error, {});
     }
@@ -174,6 +178,20 @@ export function AgenticContractFieldReviewModal({
             </div>
           </details>
         ) : null}
+
+        <div className="review-dialog__step-note">
+          <label className="contract-field-row__label" htmlFor="agentic-contract-field-note">
+            <span className="contract-field-row__key">Feedback</span>
+          </label>
+          <textarea
+            id="agentic-contract-field-note"
+            className="review-dialog__step-note-input"
+            rows={2}
+            value={note}
+            placeholder={notePlaceholder}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </div>
 
         <div className="dialog-actions">
           <button type="button" className="btn secondary" onClick={onCancel}>{cancelLabel}</button>
@@ -353,6 +371,139 @@ export default function AgenticSpecFieldReviewModal({
         <div className="dialog-actions">
           <button type="button" className="btn secondary" onClick={onCancel}>{cancelLabel}</button>
           <button type="button" className="btn" onClick={handleConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Unified per-step review dialog: shows one or more editable fields (text/number) plus an always-present
+// feedback note, so a reviewer can correct the value AND leave a comment on every step. `outcome`
+// carries the Passt/Problem gate decision; when `problemLabel` is omitted the step is edit-only.
+export type AgenticStepFieldType = 'text' | 'textarea' | 'number';
+
+export interface AgenticStepReviewField {
+  key: string;
+  label: string;
+  value: string;
+  type?: AgenticStepFieldType;
+  placeholder?: string;
+  description?: string;
+}
+
+export interface AgenticStepReviewResult {
+  outcome: 'ok' | 'problem';
+  values: Record<string, string>;
+  note: string;
+}
+
+interface StepReviewProps {
+  title: string;
+  description?: string;
+  fields: AgenticStepReviewField[];
+  notePlaceholder?: string;
+  okLabel?: string;
+  problemLabel?: string;
+  cancelLabel?: string;
+  onResolve: (result: AgenticStepReviewResult | null) => void;
+}
+
+export function AgenticStepReviewModal({
+  title,
+  description,
+  fields,
+  notePlaceholder = 'Feedback zu diesem Schritt (optional)',
+  okLabel = 'Passt',
+  problemLabel = 'Problem',
+  cancelLabel = 'Abbrechen',
+  onResolve
+}: StepReviewProps) {
+  const initialValues = useMemo(() => {
+    const values: Record<string, string> = {};
+    for (const field of fields) values[field.key] = field.value ?? '';
+    return values;
+  }, [fields]);
+
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>(initialValues);
+  const [note, setNote] = useState('');
+
+  const updateField = (key: string, value: string) => {
+    setFieldValues((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const resolveWith = (outcome: 'ok' | 'problem') => {
+    try {
+      onResolve({ outcome, values: fieldValues, note: note.trim() });
+    } catch (error) {
+      logError('AgenticStepReviewModal: Failed to submit step review', error, { title });
+    }
+  };
+
+  return (
+    <div className="dialog-overlay" role="presentation" onClick={() => onResolve(null)}>
+      <div
+        className="dialog-content review-dialog review-dialog--step"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="agentic-step-review-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <h2 className="dialog-title" id="agentic-step-review-title">{title}</h2>
+        {description ? <p className="muted">{description}</p> : null}
+
+        <div className="review-dialog__contract-fields">
+          {fields.map((field) => (
+            <div key={field.key} className="contract-field-row">
+              <label className="contract-field-row__label" htmlFor={`step-field-${field.key}`}>
+                <span className="contract-field-row__key">{field.label}</span>
+                {field.description ? <span className="contract-field-row__desc">{field.description}</span> : null}
+              </label>
+              <div className="contract-field-row__input-row">
+                {field.type === 'textarea' ? (
+                  <textarea
+                    id={`step-field-${field.key}`}
+                    className="contract-field-row__input"
+                    rows={3}
+                    value={fieldValues[field.key] ?? ''}
+                    placeholder={field.placeholder}
+                    onChange={(e) => updateField(field.key, e.target.value)}
+                  />
+                ) : (
+                  <input
+                    id={`step-field-${field.key}`}
+                    type={field.type === 'number' ? 'number' : 'text'}
+                    inputMode={field.type === 'number' ? 'decimal' : undefined}
+                    className="contract-field-row__input"
+                    value={fieldValues[field.key] ?? ''}
+                    placeholder={field.placeholder}
+                    onChange={(e) => updateField(field.key, e.target.value)}
+                  />
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="review-dialog__step-note">
+          <label className="contract-field-row__label" htmlFor="agentic-step-review-note">
+            <span className="contract-field-row__key">Feedback</span>
+          </label>
+          <textarea
+            id="agentic-step-review-note"
+            className="review-dialog__step-note-input"
+            rows={2}
+            value={note}
+            placeholder={notePlaceholder}
+            onChange={(e) => setNote(e.target.value)}
+          />
+        </div>
+
+        <div className="dialog-actions">
+          <button type="button" className="btn secondary" onClick={() => onResolve(null)}>{cancelLabel}</button>
+          {problemLabel ? (
+            <button type="button" className="btn btn--danger" onClick={() => resolveWith('problem')}>{problemLabel}</button>
+          ) : null}
+          <button type="button" className="btn" onClick={() => resolveWith('ok')}>{okLabel}</button>
         </div>
       </div>
     </div>

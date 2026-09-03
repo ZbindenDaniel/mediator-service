@@ -5,9 +5,12 @@ import { AgenticSnapshotsPanel } from '../AgenticSnapshotsPanel';
 import type { AgenticSnapshotFields } from '../../../../models';
 import AgenticSpecFieldReviewModal, {
   AgenticContractFieldReviewModal,
+  AgenticStepReviewModal,
   type AgenticSpecFieldOption,
   type AgenticSpecFieldReviewResult,
   type AgenticContractFieldReviewResult,
+  type AgenticStepReviewField,
+  type AgenticStepReviewResult,
   type SpecContractFieldEntry
 } from '../AgenticSpecFieldReviewModal';
 
@@ -31,6 +34,15 @@ export interface ContractFieldModalState {
   additionalFields?: Record<string, string | string[]>;
 }
 
+export interface StepReviewModalState {
+  title: string;
+  description?: string;
+  fields: AgenticStepReviewField[];
+  notePlaceholder?: string;
+  okLabel?: string;
+  problemLabel?: string;
+}
+
 interface Props {
   agenticCardProps: AgenticStatusCardProps;
   specFieldModalState: SpecFieldModalState | null;
@@ -39,6 +51,8 @@ interface Props {
   contractFieldModalState?: ContractFieldModalState | null;
   onContractFieldModalClose?: () => void;
   onContractFieldModalConfirm?: (result: AgenticContractFieldReviewResult) => void;
+  stepReviewModalState?: StepReviewModalState | null;
+  onStepReviewResolve?: (result: AgenticStepReviewResult | null) => void;
   // Targeted rework ("KI Überarbeitung"): selectable fields + a submit handler. Kept local to this tab
   // so it doesn't perturb the review-modal state machine in ItemDetail.
   reworkFieldOptions?: AgenticSpecFieldOption[];
@@ -63,6 +77,8 @@ export default function ItemKiTab({
   contractFieldModalState,
   onContractFieldModalClose,
   onContractFieldModalConfirm,
+  stepReviewModalState,
+  onStepReviewResolve,
   reworkFieldOptions,
   onReworkSubmit,
   canClose,
@@ -169,6 +185,18 @@ export default function ItemKiTab({
           additionalFields={contractFieldModalState.additionalFields}
           onCancel={onContractFieldModalClose}
           onConfirm={onContractFieldModalConfirm}
+        />,
+        document.body
+      ) : null}
+      {stepReviewModalState && onStepReviewResolve ? ReactDOM.createPortal(
+        <AgenticStepReviewModal
+          title={stepReviewModalState.title}
+          description={stepReviewModalState.description}
+          fields={stepReviewModalState.fields}
+          notePlaceholder={stepReviewModalState.notePlaceholder}
+          okLabel={stepReviewModalState.okLabel}
+          problemLabel={stepReviewModalState.problemLabel}
+          onResolve={onStepReviewResolve}
         />,
         document.body
       ) : null}

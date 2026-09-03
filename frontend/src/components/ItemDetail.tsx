@@ -89,7 +89,7 @@ import ZubehoerBadge, { type ZubehoerMode } from './ZubehoerBadge';
 import { buildAgenticReviewMetricRows } from './AgenticReviewMetricsRows';
 import DetailTabBar from './DetailTabBar';
 import ItemReferenceTab from './item-tabs/ItemReferenceTab';
-import ItemKiTab, { type SpecFieldModalState, type ContractFieldModalState } from './item-tabs/ItemKiTab';
+import ItemKiTab, { type SpecFieldModalState, type ContractFieldModalState, type StepReviewModalState } from './item-tabs/ItemKiTab';
 import ItemInstanceTab from './item-tabs/ItemInstanceTab';
 import ItemImagesTab from './item-tabs/ItemImagesTab';
 import ItemAttachmentsTab from './item-tabs/ItemAttachmentsTab';
@@ -107,6 +107,8 @@ import AgenticSpecFieldReviewModal, {
   type AgenticSpecFieldOption,
   type AgenticSpecFieldReviewResult,
   type AgenticContractFieldReviewResult,
+  type AgenticStepReviewField,
+  type AgenticStepReviewResult,
   type SpecContractFieldEntry
 } from './AgenticSpecFieldReviewModal';
 import {
@@ -288,6 +290,15 @@ export default function ItemDetail({ itemId }: Props) {
     contractFields: SpecContractFieldEntry[];
     additionalFields?: Record<string, string | string[]>;
     resolve: (result: AgenticContractFieldReviewResult | null) => void;
+  } | null>(null);
+  const [stepReviewModalState, setStepReviewModalState] = useState<{
+    title: string;
+    description?: string;
+    fields: AgenticStepReviewField[];
+    notePlaceholder?: string;
+    okLabel?: string;
+    problemLabel?: string;
+    resolve: (result: AgenticStepReviewResult | null) => void;
   } | null>(null);
   const [agenticReviewAutomation, setAgenticReviewAutomation] = useState<ItemDetailReviewAutomationSignal | null>(null);
   const [agenticCardWarning, setAgenticCardWarning] = useState<string | null>(null);
@@ -1692,6 +1703,32 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }
 
+  async function promptStepReview(options: {
+    title: string;
+    description?: string;
+    fields: AgenticStepReviewField[];
+    notePlaceholder?: string;
+    okLabel?: string;
+    problemLabel?: string;
+  }): Promise<AgenticStepReviewResult | null> {
+    try {
+      return await new Promise<AgenticStepReviewResult | null>((resolve) => {
+        setStepReviewModalState({
+          title: options.title,
+          description: options.description,
+          fields: options.fields,
+          notePlaceholder: options.notePlaceholder,
+          okLabel: options.okLabel,
+          problemLabel: options.problemLabel,
+          resolve
+        });
+      });
+    } catch (error) {
+      logError('ItemDetail: Failed to collect step review', error, { itemId, title: options.title });
+      return null;
+    }
+  }
+
   async function promptSpecFieldReviewSelection(options: {
     title: string;
     description: string;
@@ -1746,166 +1783,51 @@ export default function ItemDetail({ itemId }: Props) {
         : entry.key
     }));
 
-    const descriptionPreviewMessage = (
-      <div className="review-dialog__sections">
-        {buildReviewDialogSection(
-          itemId,
-          'Schritt 1 · Artikelbeschreibung',
-          [{ label: 'Artikelbeschreibung', value: item?.Artikelbeschreibung ?? null }],
-          'Artikelbeschreibung passend?'
-        )}
-      </div>
-    );
-
-    const shortTextPreviewMessage = (
-      <div className="review-dialog__sections">
-        {buildReviewDialogSection(
-          itemId,
-          'Schritt 2 · Kurztext',
-          [{ label: 'Kurztext', value: item?.Kurzbeschreibung ?? null }],
-          'Kurztext passend?'
-        )}
-      </div>
-    );
-
-    const dimensionsPreviewMessage = (
-      <div className="review-dialog__sections">
-        {buildReviewDialogSection(
-          itemId,
-          'Schritt 4 · Dimensionen',
-          [
-            { label: 'Länge_mm', value: item?.Länge_mm ?? null },
-            { label: 'Breite_mm', value: item?.Breite_mm ?? null },
-            { label: 'Höhe_mm', value: item?.Höhe_mm ?? null },
-            { label: 'Gewicht_kg', value: item?.Gewicht_kg ?? null }
-          ],
-          'Dimensionen vorhanden/plausibel?'
-        )}
-      </div>
-    );
-
-    // returns true (Ja), false (Nein/does not match), or null (Abbrechen/abort review)
-    const askFlag = async (
-      stepKey: keyof import('../lib/agenticReviewMapping').AgenticReviewQuestionAnswers,
-      title: string,
-      message: React.ReactNode
-    ): Promise<boolean | null> => {
-      try {
-        const result = await dialogService.confirmThreeWay({
-          title,
-          message,
-          confirmLabel: 'Ja',
-          rejectLabel: 'Nein',
-          cancelLabel: 'Abbrechen',
-          contentClassName: 'review-dialog'
-        });
-        if (result === null) {
-          logger.warn?.('ItemDetail: Agentic review checklist step aborted via cancel', {
-            itemId,
-            stepKey,
-            completed: false
-          });
-          return null;
-        }
-        logger.info?.('ItemDetail: Agentic review checklist step completed', {
-          itemId,
-          stepKey,
-          completed: true,
-          answer: result
-        });
-        return result;
-      } catch (error) {
-        logError('ItemDetail: Failed to capture structured review flag', error, {
-          itemId,
-          title,
-          stepKey
-        });
-        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
-          itemId,
-          stepKey,
-          completed: false
-        });
-        return null;
-      }
-    };
-
-    // Step 1/2: ask Ja/Nein/Abbrechen; on "Nein" offer an inline correction so a small
-    // mismatch can be fixed and the run approved, instead of forcing a rejection.
-    const askEditableField = async (
-      stepKey: keyof import('../lib/agenticReviewMapping').AgenticReviewQuestionAnswers,
-      title: string,
-      previewMessage: React.ReactNode,
-      currentValue: string | null,
-      editMessage: string,
-      placeholder: string
-    ): Promise<{ matches: boolean; editedValue: string | null } | null> => {
-      const answer = await askFlag(stepKey, title, previewMessage);
-      if (answer === null) {
-        return null;
-      }
-      if (answer === true) {
-        return { matches: true, editedValue: null };
-      }
-      let edited: string | null = null;
-      try {
-        edited = await dialogService.prompt({
-          title,
-          message: editMessage,
-          confirmLabel: 'Übernehmen & korrigieren',
-          cancelLabel: 'Nicht korrigieren',
-          placeholder,
-          defaultValue: currentValue ?? ''
-        });
-      } catch (error) {
-        logError('ItemDetail: Failed to capture inline review edit', error, { itemId, stepKey });
-        return { matches: false, editedValue: null };
-      }
-      // Cancel ("Nicht korrigieren") preserves the original "does not match" reject signal.
-      if (edited === null) {
-        return { matches: false, editedValue: null };
-      }
-      const trimmed = edited.trim();
-      const original = (currentValue ?? '').trim();
-      // No real change captured → still an unresolved mismatch, not an approval.
-      if (!trimmed || trimmed === original) {
-        return { matches: false, editedValue: null };
-      }
-      return { matches: true, editedValue: trimmed };
-    };
-
+    // Every step is edit-in-place with an always-present feedback box. "Passt" = value is fine,
+    // "Problem" = flag it (drives the reject signals); edited values persist on approval either way
+    // the run ends approved. Per-step feedback is tagged and concatenated into the run notes.
     const referenceEdits: Record<string, string> = {};
+    const stepNotes: string[] = [];
+    const addStepNote = (label: string, note: string) => {
+      const trimmed = note.trim();
+      if (trimmed) stepNotes.push(`${label}: ${trimmed}`);
+    };
+    // Records a text edit only when it is a real, non-empty change (never blanks the field).
+    const captureTextEdit = (key: 'Artikelbeschreibung' | 'Kurzbeschreibung', raw: string, original: string | null) => {
+      const trimmed = raw.trim();
+      if (trimmed && trimmed !== (original ?? '').trim()) referenceEdits[key] = trimmed;
+    };
+    // Records a numeric (dimension/weight) edit only when it parses and differs from the current value.
+    const captureNumericEdit = (key: string, raw: string, original: number | null | undefined) => {
+      const normalized = raw.replace(',', '.').trim();
+      if (!normalized) return;
+      const parsed = Number(normalized);
+      if (Number.isFinite(parsed) && parsed >= 0 && parsed !== original) referenceEdits[key] = String(parsed);
+    };
 
-    const descriptionResult = await askEditableField(
-      'descriptionMatches',
-      'Schritt 1  · Artikelbeschreibung',
-      descriptionPreviewMessage,
-      item?.Artikelbeschreibung ?? null,
-      'Artikelbeschreibung stimmt nicht? Direkt korrigieren oder „Nicht korrigieren“ zum Ablehnen.',
-      'Korrigierte Artikelbeschreibung'
-    );
-    if (descriptionResult === null) {
+    const descriptionStep = await promptStepReview({
+      title: 'Schritt 1 · Artikelbeschreibung',
+      description: 'Artikelbeschreibung prüfen und bei Bedarf direkt korrigieren.',
+      fields: [{ key: 'Artikelbeschreibung', label: 'Artikelbeschreibung', value: item?.Artikelbeschreibung ?? '', type: 'textarea' }]
+    });
+    if (descriptionStep === null) {
       return null;
     }
-    const descriptionMatches = descriptionResult.matches;
-    if (descriptionResult.editedValue) {
-      referenceEdits.Artikelbeschreibung = descriptionResult.editedValue;
-    }
+    const descriptionMatches = descriptionStep.outcome === 'ok';
+    captureTextEdit('Artikelbeschreibung', descriptionStep.values.Artikelbeschreibung ?? '', item?.Artikelbeschreibung ?? null);
+    addStepNote('Artikelbeschreibung', descriptionStep.note);
 
-    const shortTextResult = await askEditableField(
-      'shortTextMatches',
-      'Schritt 2 · Kurztext',
-      shortTextPreviewMessage,
-      item?.Kurzbeschreibung ?? null,
-      'Kurztext stimmt nicht? Direkt korrigieren oder „Nicht korrigieren“ zum Ablehnen.',
-      'Korrigierter Kurztext'
-    );
-    if (shortTextResult === null) {
+    const shortTextStep = await promptStepReview({
+      title: 'Schritt 2 · Kurztext',
+      description: 'Kurzbeschreibung prüfen und bei Bedarf direkt korrigieren.',
+      fields: [{ key: 'Kurzbeschreibung', label: 'Kurztext', value: item?.Kurzbeschreibung ?? '', type: 'textarea' }]
+    });
+    if (shortTextStep === null) {
       return null;
     }
-    const shortTextMatches = shortTextResult.matches;
-    if (shortTextResult.editedValue) {
-      referenceEdits.Kurzbeschreibung = shortTextResult.editedValue;
-    }
+    const shortTextMatches = shortTextStep.outcome === 'ok';
+    captureTextEdit('Kurzbeschreibung', shortTextStep.values.Kurzbeschreibung ?? '', item?.Kurzbeschreibung ?? null);
+    addStepNote('Kurztext', shortTextStep.note);
 
     // Build contract-field list for Step 3: coalesce spec contract + Langtext + InstanceSpecs
     const INTAKE_TO_SPEC: Record<string, string> = { ram_gb: 'RAM', storage_gb: 'Speicher', drive_type: 'Speichertyp' };
@@ -1964,6 +1886,7 @@ export default function ItemDetail({ itemId }: Props) {
         return null;
       }
       specValues = contractReviewResult.specValues;
+      addStepNote('Spezifikationen', contractReviewResult.note ?? '');
       logger.info?.('ItemDetail: Agentic review checklist step completed', {
         itemId,
         stepKey: 'contractFieldReview',
@@ -1997,53 +1920,53 @@ export default function ItemDetail({ itemId }: Props) {
     const hasUnnecessarySpecs = false;
     const hasMissingSpecs = false;
 
-    const dimensionsPlausible = await askFlag(
-      'dimensionsPlausible',
-      'Schritt 4 · Dimensionen',
-      dimensionsPreviewMessage
-    );
-    if (dimensionsPlausible === null) {
+    // Step 4 · Dimensionen — now fully editable (L/W/H/weight), not just a plausibility gate.
+    const dimensionStep = await promptStepReview({
+      title: 'Schritt 4 · Dimensionen',
+      description: 'Abmessungen und Gewicht prüfen und bei Bedarf direkt korrigieren.',
+      fields: [
+        { key: 'Länge_mm', label: 'Länge (mm)', value: item?.Länge_mm != null ? String(item.Länge_mm) : '', type: 'number' },
+        { key: 'Breite_mm', label: 'Breite (mm)', value: item?.Breite_mm != null ? String(item.Breite_mm) : '', type: 'number' },
+        { key: 'Höhe_mm', label: 'Höhe (mm)', value: item?.Höhe_mm != null ? String(item.Höhe_mm) : '', type: 'number' },
+        { key: 'Gewicht_kg', label: 'Gewicht (kg)', value: item?.Gewicht_kg != null ? String(item.Gewicht_kg) : '', type: 'number' }
+      ]
+    });
+    if (dimensionStep === null) {
       return null;
     }
+    const dimensionsPlausible = dimensionStep.outcome === 'ok';
+    captureNumericEdit('Länge_mm', dimensionStep.values.Länge_mm ?? '', item?.Länge_mm ?? null);
+    captureNumericEdit('Breite_mm', dimensionStep.values.Breite_mm ?? '', item?.Breite_mm ?? null);
+    captureNumericEdit('Höhe_mm', dimensionStep.values.Höhe_mm ?? '', item?.Höhe_mm ?? null);
+    captureNumericEdit('Gewicht_kg', dimensionStep.values.Gewicht_kg ?? '', item?.Gewicht_kg ?? null);
+    addStepNote('Dimensionen', dimensionStep.note);
 
-    let reviewPrice: number | null = null;
-    try {
-      const defaultPrice = typeof item?.Verkaufspreis === 'number' && Number.isFinite(item.Verkaufspreis)
-        ? String(item.Verkaufspreis)
-        : '';
-      const priceInput = await dialogService.prompt({
-        title: 'Schritt 5 · Preis',
-        message: 'Verkaufspreis prüfen und bei Bedarf anpassen.',
-        confirmLabel: 'Ok',
-        cancelLabel: 'Abbrechen',
-        placeholder: 'z. B. 199.99',
-        defaultValue: defaultPrice
-      });
-      if (priceInput === null) {
-        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
-          itemId,
-          stepKey: 'review_price',
-          completed: false
-        });
-        return null;
-      }
-      const normalizedInput = priceInput.replace(',', '.').trim();
-      if (normalizedInput.length > 0) {
-        const parsedPrice = Number(normalizedInput);
-        if (Number.isFinite(parsedPrice) && parsedPrice >= 0) {
-          reviewPrice = parsedPrice;
-        }
-      }
-      logger.info?.('ItemDetail: Agentic review checklist step completed', {
-        itemId,
-        stepKey: 'review_price',
-        completed: true,
-        reviewPrice
-      });
-    } catch (error) {
-      logError('ItemDetail: Failed to capture review price', error, { itemId });
+    // Step 5 · Preis — single numeric field, edit-only (no Problem gate).
+    const priceStep = await promptStepReview({
+      title: 'Schritt 5 · Preis',
+      description: 'Verkaufspreis prüfen und bei Bedarf anpassen.',
+      fields: [{
+        key: 'Verkaufspreis',
+        label: 'Verkaufspreis',
+        value: typeof item?.Verkaufspreis === 'number' && Number.isFinite(item.Verkaufspreis) ? String(item.Verkaufspreis) : '',
+        type: 'number',
+        placeholder: 'z. B. 199.99'
+      }],
+      okLabel: 'Weiter',
+      problemLabel: ''
+    });
+    if (priceStep === null) {
       return null;
     }
+    let reviewPrice: number | null = null;
+    const priceRaw = (priceStep.values.Verkaufspreis ?? '').replace(',', '.').trim();
+    if (priceRaw.length > 0) {
+      const parsedPrice = Number(priceRaw);
+      if (Number.isFinite(parsedPrice) && parsedPrice >= 0) {
+        reviewPrice = parsedPrice;
+      }
+    }
+    addStepNote('Preis', priceStep.note);
 
     const explicitWrongInformationFlag: boolean | null = null;
     const hasExplicitWrongInformation = explicitWrongInformationFlag === true;
@@ -2069,33 +1992,22 @@ export default function ItemDetail({ itemId }: Props) {
 
     let shopArticle: boolean | null = null;
     if (reviewPositiveSoFar) {
-      try {
-        shopArticle = await dialogService.confirm({
-          title: 'Schritt 6 · Shop',
-          message: 'Artikel in den Shop stellen?',
-          confirmLabel: 'Ja',
-          cancelLabel: 'Abbrechen'
-        });
-        logger.info?.('ItemDetail: Agentic review checklist step completed', {
-          itemId,
-          stepKey: 'shop_article',
-          completed: true,
-          shopArticle
-        });
-      } catch (error) {
-        logError('ItemDetail: Failed to capture shop article decision', error, { itemId });
+      const shopStep = await promptStepReview({
+        title: 'Schritt 6 · Shop',
+        description: 'Artikel in den Shop stellen?',
+        fields: [],
+        okLabel: 'In den Shop',
+        problemLabel: 'Nicht in den Shop'
+      });
+      if (shopStep === null) {
         return null;
       }
+      shopArticle = shopStep.outcome === 'ok';
+      addStepNote('Shop', shopStep.note);
     }
 
-    let notes = '';
-    if (!reviewPositiveSoFar) {
-      const noteValue = await promptAgenticReviewNote();
-      if (noteValue === null) {
-        return null;
-      }
-      notes = noteValue;
-    }
+    // Per-step feedback, tagged and concatenated, becomes the run's notes for operators.
+    const notes = stepNotes.join('\n');
 
     const mappedInput = mapReviewAnswersToInput(
       {
@@ -3173,6 +3085,23 @@ export default function ItemDetail({ itemId }: Props) {
       finally { setContractFieldReviewModalState(null); }
     };
 
+    const stepReviewModalData: StepReviewModalState | null = stepReviewModalState
+      ? {
+          title: stepReviewModalState.title,
+          description: stepReviewModalState.description,
+          fields: stepReviewModalState.fields,
+          notePlaceholder: stepReviewModalState.notePlaceholder,
+          okLabel: stepReviewModalState.okLabel,
+          problemLabel: stepReviewModalState.problemLabel
+        }
+      : null;
+
+    const handleStepReviewResolve = (result: AgenticStepReviewResult | null) => {
+      try { stepReviewModalState?.resolve(result); }
+      catch (error) { logError('ItemDetail: Failed to resolve step review modal', error, { itemId }); }
+      finally { setStepReviewModalState(null); }
+    };
+
     let tabContent: React.ReactNode;
     switch (activeTab ?? 'instance') {
       case 'reference':
@@ -3198,6 +3127,8 @@ export default function ItemDetail({ itemId }: Props) {
             contractFieldModalState={contractFieldModalData}
             onContractFieldModalClose={handleContractFieldModalClose}
             onContractFieldModalConfirm={handleContractFieldModalConfirm}
+            stepReviewModalState={stepReviewModalData}
+            onStepReviewResolve={handleStepReviewResolve}
             reworkFieldOptions={reworkFieldOptions}
             onReworkSubmit={handleReworkSubmit}
             canClose={agenticCanClose}
