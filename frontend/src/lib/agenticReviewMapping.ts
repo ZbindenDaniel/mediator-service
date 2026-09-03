@@ -20,9 +20,12 @@ export interface AgenticReviewInput {
   shop_article: boolean | null;
   reviewedBy: string | null;
   specValues?: Record<string, string>;
-  // Inline corrections to top-level reference text fields (Artikelbeschreibung, Kurzbeschreibung),
-  // so reviewers can fix small issues without rejecting the run. Persisted on approval only.
+  // Inline corrections to reference fields (text + numeric dimensions), so reviewers can fix small
+  // issues without rejecting the run. Persisted on approval only.
   referenceEdits?: Record<string, string>;
+  // Explicit final decision from the review wizard's summary step. When set, the backend uses it
+  // directly instead of deriving approve/reject from the checklist flags.
+  decision?: 'approved' | 'rejected';
 }
 
 export function buildAgenticReviewSubmissionPayload(
@@ -48,6 +51,9 @@ export function buildAgenticReviewSubmissionPayload(
   }
   if (reviewInput.referenceEdits && Object.keys(reviewInput.referenceEdits).length > 0) {
     payload.referenceEdits = reviewInput.referenceEdits;
+  }
+  if (reviewInput.decision === 'approved' || reviewInput.decision === 'rejected') {
+    payload.decision = reviewInput.decision;
   }
   return payload;
 }

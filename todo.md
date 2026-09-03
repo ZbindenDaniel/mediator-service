@@ -423,6 +423,7 @@
 
 ### Still Open
 
+- For the **agentic review wizard flags**: the reviewer no longer sets `bad_format` / `wrong_physical_dimensions` / `information_present` per step (the wizard makes one explicit approve/reject decision at the end). Should these flags be **derived from the wizard inputs** — e.g. an edit to Artikelbeschreibung/Kurztext ⇒ `bad_format`, an edit to a dimension ⇒ `wrong_physical_dimensions`, a blanked required spec ⇒ `information_present` — so review metrics stay meaningful? Currently sent at non-blocking defaults. (Operator wants to think about it.)
 - For **spare parts `drive_type`**, should this question move to the disassembly contract storage slot (needs `qualityQuestion[]` array support on parts) or stay in quality/201.json as a follow-up spec question? Currently stays in quality/201.json (TBD).
 - For **spare parts bidirectional suggestions**, when a device's quality check says "PS missing", should the system surface matching PS units in inventory for the operator? Deferred to phase 2 — needs structured spec matching.
 - For **shelf totals**, should weight/item count include nested boxes only, loose items only, or both?

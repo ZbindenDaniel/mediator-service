@@ -13,6 +13,7 @@ import AgenticSpecFieldReviewModal, {
   type AgenticStepReviewResult,
   type SpecContractFieldEntry
 } from '../AgenticSpecFieldReviewModal';
+import { AgenticReviewWizard, type AgenticReviewWizardData, type AgenticReviewWizardResult } from '../AgenticReviewWizard';
 
 export interface SpecFieldModalState {
   title: string;
@@ -53,6 +54,8 @@ interface Props {
   onContractFieldModalConfirm?: (result: AgenticContractFieldReviewResult) => void;
   stepReviewModalState?: StepReviewModalState | null;
   onStepReviewResolve?: (result: AgenticStepReviewResult | null) => void;
+  reviewWizardState?: AgenticReviewWizardData | null;
+  onReviewWizardResolve?: (result: AgenticReviewWizardResult | null) => void;
   // Targeted rework ("KI Überarbeitung"): selectable fields + a submit handler. Kept local to this tab
   // so it doesn't perturb the review-modal state machine in ItemDetail.
   reworkFieldOptions?: AgenticSpecFieldOption[];
@@ -79,6 +82,8 @@ export default function ItemKiTab({
   onContractFieldModalConfirm,
   stepReviewModalState,
   onStepReviewResolve,
+  reviewWizardState,
+  onReviewWizardResolve,
   reworkFieldOptions,
   onReworkSubmit,
   canClose,
@@ -198,6 +203,10 @@ export default function ItemKiTab({
           problemLabel={stepReviewModalState.problemLabel}
           onResolve={onStepReviewResolve}
         />,
+        document.body
+      ) : null}
+      {reviewWizardState && onReviewWizardResolve ? ReactDOM.createPortal(
+        <AgenticReviewWizard data={reviewWizardState} onResolve={onReviewWizardResolve} />,
         document.body
       ) : null}
     </>

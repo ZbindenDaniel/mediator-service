@@ -1467,6 +1467,55 @@ div {
     margin-top: 4px;
 }
 
+// Review wizard summary + shop step.
+.review-wizard__summary {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+
+.review-wizard__summary-row {
+    display: flex;
+    gap: 10px;
+    align-items: baseline;
+    padding: 3px 0;
+    border-bottom: 1px solid var(--line);
+}
+
+.review-wizard__summary-label {
+    flex: 0 0 40%;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.review-wizard__summary-value {
+    flex: 1;
+    min-width: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.review-wizard__summary-notes {
+    margin-bottom: 10px;
+
+    ul {
+        margin: 4px 0 0;
+        padding-left: 18px;
+    }
+}
+
+.review-wizard__shop-choice {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 8px 0;
+
+    label {
+        cursor: pointer;
+    }
+}
+
 .contract-field-row__remove {
     flex-shrink: 0;
     padding: 4px 8px;

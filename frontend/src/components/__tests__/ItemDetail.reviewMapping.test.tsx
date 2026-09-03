@@ -185,4 +185,13 @@ describe('buildAgenticReviewSubmissionPayload', () => {
 
     expect(payload.referenceEdits).toEqual({ 'Länge_mm': '147', 'Breite_mm': '102', 'Höhe_mm': '26' });
   });
+
+  it('includes an explicit decision when the wizard makes one', () => {
+    expect(buildAgenticReviewSubmissionPayload('alice', { ...baseInput, decision: 'approved' }).decision).toBe('approved');
+    expect(buildAgenticReviewSubmissionPayload('alice', { ...baseInput, decision: 'rejected' }).decision).toBe('rejected');
+  });
+
+  it('omits decision when none is set', () => {
+    expect('decision' in buildAgenticReviewSubmissionPayload('alice', baseInput)).toBe(false);
+  });
 });
