@@ -444,10 +444,13 @@
      longer imports the taxonomy at build time. **Phase 3 ✅** (#957): DB tables
      `taxonomy_categories`/`taxonomy_subcategories` + `initTaxonomy()` (seed-on-init
      from the file, then DB is authoritative; sync seed-file fallback; never
-     throws); `reloadTaxonomyFromDb()` for edits. **Remaining:** Phase 4 (admin CRUD
-     API + `/admin` editing UI + cache invalidation + integrity guards: codes
-     immutable, no delete of in-use code) = the edit-without-redeploy payoff. Also
-     open: a dedicated quality contract for 109 (falls back to `general`).
+     throws); `reloadTaxonomyFromDb()` for edits. **Phase 4 ✅** (#958): `/admin/taxonomy`
+     editor + `/api/admin/taxonomy` CRUD (live via `reloadTaxonomyFromDb`; codes
+     immutable) + file-based **contract overlay** (`CONTRACTS_OVERLAY_DIR`,
+     `admin-contracts` PUT/DELETE, download→edit→re-upload UI). **Taxonomy
+     externalization workstream complete** (G‑C1 closed). Follow-ups: in-use count
+     display, in-browser contract editor, reparenting, a dedicated 109 quality
+     contract.
    - **G‑C2 / G‑K2** Taxonomy and contract files are a flat global namespace — no
      scoping, so two use cases cannot coexist on one instance without new design.
    - **G‑F1 / G‑F2** No use‑case/domain/tenant dimension exists in config at all;

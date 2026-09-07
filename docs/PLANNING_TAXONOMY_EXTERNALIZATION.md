@@ -195,7 +195,22 @@ doc, held in sync by the parity test.
 - **Acceptance:** a fresh DB self‑seeds; editing a row in the DB and restarting
   changes the taxonomy; existing `items.SubCategory` codes still resolve.
 
-### Phase 4 — Editing (the "data object" payoff)
+### Phase 4 — Editing (the "data object" payoff)  ✅ DONE
+
+**Shipped (4a/4b/4c):** (4a) file‑based contract overlay — `backend/contracts/paths.ts`
+resolves reads overlay‑first (`CONTRACTS_OVERLAY_DIR`) then shipped, wired into both
+loaders with cache invalidation; `admin-contracts` action does coverage +
+validated `PUT` upload (503 when overlay off) + `DELETE` revert. (4b) `admin-taxonomy`
+CRUD (`db.ts` insert/update/exists + `countItemsForSubcategory`; codes immutable,
+reparenting/hard‑delete deferred; every write `reloadTaxonomyFromDb()`). (4c) the
+`/admin/taxonomy` master‑detail page (nav from `/admin`): edit `labelExternal`/`active`/
+add on the surface, advanced fields behind an expander; per‑subcategory contract
+coverage badges + Download/Upload (the full download→edit→re‑upload loop). Backend
+868 tests + FE 58 pass; only the 3 pre‑existing failures remain. **Deferred:** in‑use
+count display, in‑browser structured contract editor, reparenting, a dedicated 109
+quality contract.
+
+#### Original plan
 
 Two capabilities on one admin surface: **taxonomy editing** (DB) and **contract
 round‑trip** (files). Contracts deliberately stay file‑based — they are structured
