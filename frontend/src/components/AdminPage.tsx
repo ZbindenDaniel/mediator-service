@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import ImportCard from './ImportCard';
 import ShelfCreateForm from './ShelfCreateForm';
 import ExportCard from './admin/ExportCard';
@@ -70,6 +71,9 @@ export default function AdminPage() {
   return (
     <div className="admin-page">
       <h1 className="admin-page__title">Administration</h1>
+      <nav className="admin-page__nav" style={{ marginBottom: 12 }}>
+        <Link to="/admin/taxonomy">Taxonomie verwalten →</Link>
+      </nav>
       <div className="admin-page__grid">
         <ImportCard />
         <ExportCard />
