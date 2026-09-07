@@ -196,13 +196,52 @@ doc, held in sync by the parity test.
   changes the taxonomy; existing `items.SubCategory` codes still resolve.
 
 ### Phase 4 — Editing (the "data object" payoff)
-- Admin CRUD API (`/api/admin/taxonomy/…`, admin‑gated) to edit labels and add
-  categories/subcategories; cache invalidation on write (no restart).
-- Integrity guards: codes immutable; block delete/deactivate of a code that has
-  items (offer soft‑deactivate instead).
-- Minimal admin UI (a section on the existing `/admin` page).
+
+Two capabilities on one admin surface: **taxonomy editing** (DB) and **contract
+round‑trip** (files). Contracts deliberately stay file‑based — they are structured
+schemas with logic, so a DB would just hold opaque blobs and lose the
+version‑controlled defaults + editor ergonomics. Runtime‑editability for contracts
+comes from a **writable overlay**, mirroring the taxonomy's default→override shape
+(shipped default + runtime override), just files→overlay instead of file→DB.
+
+**UI (decisions settled):** a dedicated `/admin/taxonomy` page reached from an
+admin‑page nav link (not a card on `/admin`). **Master‑detail** — category list +
+the selected category's subcategories. **Go small first:** edit `labelExternal` /
+`active` / add rows; advanced fields (`labelInternal`, `sortOrder`, `aliases`,
+`intake*`, `categorizerDescription`) behind a per‑row "Advanced" expander.
+**Deferred:** reparenting subcategories; in‑browser structured contract editor;
+the in‑use count signal (add later).
+
+**Taxonomy CRUD (DB):**
+- `/api/admin/taxonomy/*` (admin‑gated) — add/update category + subcategory,
+  toggle `active`. Writes to the DB then calls `reloadTaxonomyFromDb()` so the
+  change appears everywhere (UI dropdowns, categorizer reference, intake) with no
+  restart.
+- Integrity guards: `code` immutable; no hard‑delete of an in‑use code —
+  soft‑deactivate via `active`.
+
+**Contracts (file overlay + round‑trip):**
+- **Read precedence:** contract loaders check `CONTRACTS_OVERLAY_DIR` first, fall
+  back to the shipped `contracts/`. Loaders already `readFileSync` live, so an
+  upload takes effect immediately (no cache to bust).
+- **Persistence:** the overlay is a mounted volume, opt‑in via
+  `CONTRACTS_OVERLAY_DIR` (same model as `ALT_DOC_DIRS`); unset → read‑only,
+  upload disabled. In dev it can point at the repo `contracts/`.
+- **Round‑trip:** Download = existing `GET /api/contracts/{quality|specs|assembly}/<code>`;
+  new `PUT /api/admin/contracts/{type}/<code>` validates against the TS shape
+  **before** writing to the overlay (a bad contract is rejected, never breaks the
+  pipeline); optional `DELETE` reverts to the shipped default.
+- **UI:** per‑subcategory **contract coverage** (quality/spec/assembly present, or
+  "falls back to `general`") with Download / Upload per type; a new category can
+  download a starter template, edit, and upload.
+
 - **Acceptance:** an operator edits a label / adds a category and it appears
-  everywhere (UI dropdowns, categorizer reference, intake) without a redeploy.
+  everywhere without a redeploy; and can download → edit → upload a contract for a
+  new subcategory, which the pipeline picks up immediately.
+
+**Phase 4 increments:** (4a) contract overlay read + validated upload + coverage
+list (backend, tested); (4b) taxonomy CRUD API + reload + guards (backend,
+tested); (4c) `/admin/taxonomy` master‑detail page + contract round‑trip UI + nav.
 
 ### Phase 5 — Deferred: per‑tenant taxonomy
 - Only if a requirement appears. Deployment‑wide is the decision (parent §10.1 —
