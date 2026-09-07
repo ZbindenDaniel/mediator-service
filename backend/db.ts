@@ -2001,6 +2001,91 @@ export async function readTaxonomyFromDb(): Promise<ItemCategoryDefinition[]> {
   }));
 }
 
+export async function taxonomyCategoryExists(code: number): Promise<boolean> {
+  return !!(await queryOne(`SELECT 1 FROM taxonomy_categories WHERE code=$1`, [code]));
+}
+export async function taxonomySubcategoryExists(code: number): Promise<boolean> {
+  return !!(await queryOne(`SELECT 1 FROM taxonomy_subcategories WHERE code=$1`, [code]));
+}
+
+/** Count of item instances referencing a subcategory code — used to guard hard deletes. */
+export async function countItemsForSubcategory(code: number): Promise<number> {
+  const row = await queryOne<{ n: number }>(
+    `SELECT COUNT(*)::int AS n FROM items WHERE "Unterkategorien_A" = $1`, [code]
+  );
+  return row ? Number(row.n) : 0;
+}
+
+export interface TaxonomyCategoryInput {
+  code: number; labelInternal: string; labelExternal: string; sortOrder?: number; active?: boolean;
+}
+export interface TaxonomySubcategoryInput extends TaxonomyCategoryInput {
+  parentCode: number;
+  categorizerDescription?: string | null;
+  intakeEnabled?: boolean;
+  intakeLabel?: string | null;
+  intakeSortOrder?: number | null;
+  aliases?: string[] | null;
+}
+
+export async function insertTaxonomyCategory(c: TaxonomyCategoryInput): Promise<void> {
+  await execute(
+    `INSERT INTO taxonomy_categories (code, label_internal, label_external, sort_order, active)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [c.code, c.labelInternal, c.labelExternal, c.sortOrder ?? 0, c.active ?? true]
+  );
+}
+
+export async function insertTaxonomySubcategory(s: TaxonomySubcategoryInput): Promise<void> {
+  await execute(
+    `INSERT INTO taxonomy_subcategories
+       (code, parent_code, label_internal, label_external, sort_order, active,
+        categorizer_description, intake_enabled, intake_label, intake_sort_order, aliases)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [
+      s.code, s.parentCode, s.labelInternal, s.labelExternal, s.sortOrder ?? 0, s.active ?? true,
+      s.categorizerDescription ?? null, s.intakeEnabled ?? false, s.intakeLabel ?? null,
+      s.intakeSortOrder ?? null, s.aliases ? JSON.stringify(s.aliases) : null
+    ]
+  );
+}
+
+// Partial updates — `code` is immutable and never updated (nor `parent_code`: reparenting is deferred).
+export async function updateTaxonomyCategory(
+  code: number,
+  patch: Partial<Pick<TaxonomyCategoryInput, 'labelInternal' | 'labelExternal' | 'sortOrder' | 'active'>>
+): Promise<number> {
+  const sets: string[] = []; const params: unknown[] = []; let i = 1;
+  const add = (col: string, val: unknown) => { sets.push(`${col}=$${i++}`); params.push(val); };
+  if (patch.labelInternal !== undefined) add('label_internal', patch.labelInternal);
+  if (patch.labelExternal !== undefined) add('label_external', patch.labelExternal);
+  if (patch.sortOrder !== undefined) add('sort_order', patch.sortOrder);
+  if (patch.active !== undefined) add('active', patch.active);
+  if (sets.length === 0) return 0;
+  params.push(code);
+  return execute(`UPDATE taxonomy_categories SET ${sets.join(', ')} WHERE code=$${i}`, params);
+}
+
+export async function updateTaxonomySubcategory(
+  code: number,
+  patch: Partial<Omit<TaxonomySubcategoryInput, 'code' | 'parentCode'>>
+): Promise<number> {
+  const sets: string[] = []; const params: unknown[] = []; let i = 1;
+  const add = (col: string, val: unknown) => { sets.push(`${col}=$${i++}`); params.push(val); };
+  if (patch.labelInternal !== undefined) add('label_internal', patch.labelInternal);
+  if (patch.labelExternal !== undefined) add('label_external', patch.labelExternal);
+  if (patch.sortOrder !== undefined) add('sort_order', patch.sortOrder);
+  if (patch.active !== undefined) add('active', patch.active);
+  if (patch.categorizerDescription !== undefined) add('categorizer_description', patch.categorizerDescription);
+  if (patch.intakeEnabled !== undefined) add('intake_enabled', patch.intakeEnabled);
+  if (patch.intakeLabel !== undefined) add('intake_label', patch.intakeLabel);
+  if (patch.intakeSortOrder !== undefined) add('intake_sort_order', patch.intakeSortOrder);
+  if (patch.aliases !== undefined) add('aliases', patch.aliases ? JSON.stringify(patch.aliases) : null);
+  if (sets.length === 0) return 0;
+  params.push(code);
+  return execute(`UPDATE taxonomy_subcategories SET ${sets.join(', ')} WHERE code=$${i}`, params);
+}
+
 /** Inserts the given taxonomy into the (assumed-empty) tables in one transaction. Idempotent via ON CONFLICT. */
 export async function seedTaxonomy(categories: ItemCategoryDefinition[]): Promise<void> {
   await withTransaction(async (client) => {
