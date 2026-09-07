@@ -36,12 +36,32 @@ function authHeaders(): Record<string, string> {
 
 const labelOf = (x: { labelExternal?: string; label?: string }) => x.labelExternal ?? x.label ?? '';
 
+type ContractType = 'quality' | 'specs' | 'assembly';
+interface Coverage { overlayEnabled: boolean; quality: Set<string>; specs: Set<string>; assembly: Set<string>; }
+
 export default function TaxonomyAdminPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [selectedCode, setSelectedCode] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [coverage, setCoverage] = useState<Coverage>({ overlayEnabled: false, quality: new Set(), specs: new Set(), assembly: new Set() });
+
+  const loadCoverage = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/contracts', { headers: authHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      const c = data.coverage ?? {};
+      setCoverage({
+        overlayEnabled: !!data.overlayEnabled,
+        quality: new Set<string>(c.quality ?? []),
+        specs: new Set<string>(c.specs ?? []),
+        assembly: new Set<string>(c.assembly ?? [])
+      });
+    } catch { /* non-fatal — coverage badges just won't show */ }
+  }, []);
+  useEffect(() => { void loadCoverage(); }, [loadCoverage]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,6 +152,8 @@ export default function TaxonomyAdminPage() {
                   key={s.code}
                   sub={s}
                   onSave={(patch) => send('PUT', `/api/admin/taxonomy/subcategories/${s.code}`, patch)}
+                  coverage={coverage}
+                  onContractsChanged={loadCoverage}
                 />
               ))}
               <AddSubcategoryForm
@@ -160,7 +182,12 @@ function CategoryEditor({ category, onSave }: { category: Category; onSave: (pat
   );
 }
 
-function SubcategoryEditor({ sub, onSave }: { sub: Subcategory; onSave: (patch: Record<string, unknown>) => Promise<boolean> }) {
+function SubcategoryEditor({ sub, onSave, coverage, onContractsChanged }: {
+  sub: Subcategory;
+  onSave: (patch: Record<string, unknown>) => Promise<boolean>;
+  coverage: Coverage;
+  onContractsChanged: () => void;
+}) {
   const [labelExternal, setLabelExternal] = useState(labelOf(sub));
   const [active, setActive] = useState(sub.active !== false);
   const [labelInternal, setLabelInternal] = useState(sub.labelInternal ?? '');
@@ -205,6 +232,71 @@ function SubcategoryEditor({ sub, onSave }: { sub: Subcategory; onSave: (patch: 
           <label>Aliasse (kommagetrennt) <input value={aliases} onChange={(e) => setAliases(e.target.value)} /></label>
         </div>
       </details>
+      <ContractControls code={sub.code} coverage={coverage} onChanged={onContractsChanged} />
+    </div>
+  );
+}
+
+const CONTRACT_TYPES: { type: ContractType; label: string }[] = [
+  { type: 'quality', label: 'Qualität' },
+  { type: 'specs', label: 'Spezifikation' },
+  { type: 'assembly', label: 'Zerlegung' }
+];
+
+function ContractControls({ code, coverage, onChanged }: { code: number; coverage: Coverage; onChanged: () => void }) {
+  const [busy, setBusy] = useState<ContractType | null>(null);
+  const [msg, setMsg] = useState('');
+
+  const download = async (type: ContractType) => {
+    try {
+      const res = await fetch(`/api/contracts/${type}/${code}`);
+      if (!res.ok) { setMsg(`${type}: kein Contract (${res.status})`); return; }
+      const text = await res.text();
+      const url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = `${type}-${code}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch { setMsg(`${type}: Download fehlgeschlagen`); }
+  };
+
+  const upload = async (type: ContractType, file: File) => {
+    setBusy(type); setMsg('');
+    try {
+      const text = await file.text();
+      try { JSON.parse(text); } catch { setMsg(`${type}: Datei ist kein gültiges JSON`); return; }
+      const res = await fetch(`/api/admin/contracts/${type}/${code}`, { method: 'PUT', headers: authHeaders(), body: text });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { setMsg(`${type}: ${data.error || res.status}`); return; }
+      setMsg(`${type}: hochgeladen`);
+      onChanged();
+    } catch { setMsg(`${type}: Upload fehlgeschlagen`); }
+    finally { setBusy(null); }
+  };
+
+  return (
+    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginTop: 4, fontSize: '0.85em' }}>
+      <span className="muted">Contracts:</span>
+      {CONTRACT_TYPES.map(({ type, label }) => {
+        const present = coverage[type].has(String(code));
+        return (
+          <span key={type} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+            <span title={present ? 'vorhanden' : 'fällt auf general/keinen zurück'}>{present ? '✓' : '—'} {label}</span>
+            <button type="button" onClick={() => download(type)} disabled={!present} title="Herunterladen">⬇</button>
+            {coverage.overlayEnabled ? (
+              <label title="Hochladen" style={{ cursor: 'pointer' }}>
+                {busy === type ? '…' : '⬆'}
+                <input
+                  type="file" accept="application/json,.json" style={{ display: 'none' }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(type, f); e.currentTarget.value = ''; }}
+                />
+              </label>
+            ) : null}
+          </span>
+        );
+      })}
+      {!coverage.overlayEnabled && <span className="muted" title="CONTRACTS_OVERLAY_DIR nicht gesetzt">(Upload deaktiviert)</span>}
+      {msg && <span className="muted">{msg}</span>}
     </div>
   );
 }
