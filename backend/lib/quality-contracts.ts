@@ -1,16 +1,15 @@
 import { readFileSync } from 'fs';
-import { join, resolve } from 'path';
+import { join } from 'path';
 import type { QualityContract, QualityQuestion, QualityCheckResponse } from '../../models/quality-contract';
 import type { AssemblyContract } from '../../models/assembly-contract';
 import { QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX, QUALITY_LABELS } from '../../models/quality';
 import type { QualityTag } from '../../models/quality';
-
-// __dirname is reliable across dev and dist; process.cwd() varies by launch directory
-const CONTRACTS_DIR = resolve(__dirname, '../../contracts/quality');
+import { resolveContractReadPath } from '../contracts/paths';
 
 function loadContractFile(filename: string): QualityContract | null {
   try {
-    const raw = readFileSync(join(CONTRACTS_DIR, filename), 'utf-8');
+    // Overlay-first (CONTRACTS_OVERLAY_DIR), else the shipped contracts/quality default.
+    const raw = readFileSync(resolveContractReadPath(join('quality', filename)), 'utf-8');
     return JSON.parse(raw) as QualityContract;
   } catch {
     return null;
