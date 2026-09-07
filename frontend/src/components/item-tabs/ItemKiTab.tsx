@@ -4,56 +4,13 @@ import { AgenticStatusCard, type AgenticStatusCardProps } from '../AgenticStatus
 import { AgenticSnapshotsPanel } from '../AgenticSnapshotsPanel';
 import type { AgenticSnapshotFields } from '../../../../models';
 import AgenticSpecFieldReviewModal, {
-  AgenticContractFieldReviewModal,
-  AgenticStepReviewModal,
   type AgenticSpecFieldOption,
-  type AgenticSpecFieldReviewResult,
-  type AgenticContractFieldReviewResult,
-  type AgenticStepReviewField,
-  type AgenticStepReviewResult,
-  type SpecContractFieldEntry
+  type AgenticSpecFieldReviewResult
 } from '../AgenticSpecFieldReviewModal';
 import { AgenticReviewWizard, type AgenticReviewWizardData, type AgenticReviewWizardResult } from '../AgenticReviewWizard';
 
-export interface SpecFieldModalState {
-  title: string;
-  description: string;
-  fieldOptions: AgenticSpecFieldOption[];
-  includeAdditionalInput: boolean;
-  additionalInputPlaceholder?: string;
-  secondaryTitle?: string;
-  secondaryDescription?: string;
-  secondaryFieldOptions?: AgenticSpecFieldOption[];
-  includeSecondaryAdditionalInput?: boolean;
-  secondaryAdditionalInputPlaceholder?: string;
-}
-
-export interface ContractFieldModalState {
-  title: string;
-  description?: string;
-  contractFields: SpecContractFieldEntry[];
-  additionalFields?: Record<string, string | string[]>;
-}
-
-export interface StepReviewModalState {
-  title: string;
-  description?: string;
-  fields: AgenticStepReviewField[];
-  notePlaceholder?: string;
-  okLabel?: string;
-  problemLabel?: string;
-}
-
 interface Props {
   agenticCardProps: AgenticStatusCardProps;
-  specFieldModalState: SpecFieldModalState | null;
-  onSpecFieldModalClose: () => void;
-  onSpecFieldModalConfirm: (result: AgenticSpecFieldReviewResult) => void;
-  contractFieldModalState?: ContractFieldModalState | null;
-  onContractFieldModalClose?: () => void;
-  onContractFieldModalConfirm?: (result: AgenticContractFieldReviewResult) => void;
-  stepReviewModalState?: StepReviewModalState | null;
-  onStepReviewResolve?: (result: AgenticStepReviewResult | null) => void;
   reviewWizardState?: AgenticReviewWizardData | null;
   onReviewWizardResolve?: (result: AgenticReviewWizardResult | null) => void;
   // Targeted rework ("KI Überarbeitung"): selectable fields + a submit handler. Kept local to this tab
@@ -74,14 +31,6 @@ interface Props {
 
 export default function ItemKiTab({
   agenticCardProps,
-  specFieldModalState,
-  onSpecFieldModalClose,
-  onSpecFieldModalConfirm,
-  contractFieldModalState,
-  onContractFieldModalClose,
-  onContractFieldModalConfirm,
-  stepReviewModalState,
-  onStepReviewResolve,
   reviewWizardState,
   onReviewWizardResolve,
   reworkFieldOptions,
@@ -153,23 +102,6 @@ export default function ItemKiTab({
           onRestored={onSnapshotRestored}
         />
       ) : null}
-      {specFieldModalState ? ReactDOM.createPortal(
-        <AgenticSpecFieldReviewModal
-          title={specFieldModalState.title}
-          description={specFieldModalState.description}
-          fieldOptions={specFieldModalState.fieldOptions}
-          includeAdditionalInput={specFieldModalState.includeAdditionalInput}
-          additionalInputPlaceholder={specFieldModalState.additionalInputPlaceholder}
-          secondaryTitle={specFieldModalState.secondaryTitle}
-          secondaryDescription={specFieldModalState.secondaryDescription}
-          secondaryFieldOptions={specFieldModalState.secondaryFieldOptions}
-          includeSecondaryAdditionalInput={specFieldModalState.includeSecondaryAdditionalInput}
-          secondaryAdditionalInputPlaceholder={specFieldModalState.secondaryAdditionalInputPlaceholder}
-          onCancel={onSpecFieldModalClose}
-          onConfirm={onSpecFieldModalConfirm}
-        />,
-        document.body
-      ) : null}
       {reworkOpen && onReworkSubmit ? ReactDOM.createPortal(
         <AgenticSpecFieldReviewModal
           title="KI Überarbeitung"
@@ -179,29 +111,6 @@ export default function ItemKiTab({
           additionalInputPlaceholder="Anweisung für die Überarbeitung"
           onCancel={() => setReworkOpen(false)}
           onConfirm={(result) => { setReworkOpen(false); void onReworkSubmit(result); }}
-        />,
-        document.body
-      ) : null}
-      {contractFieldModalState && onContractFieldModalClose && onContractFieldModalConfirm ? ReactDOM.createPortal(
-        <AgenticContractFieldReviewModal
-          title={contractFieldModalState.title}
-          description={contractFieldModalState.description}
-          contractFields={contractFieldModalState.contractFields}
-          additionalFields={contractFieldModalState.additionalFields}
-          onCancel={onContractFieldModalClose}
-          onConfirm={onContractFieldModalConfirm}
-        />,
-        document.body
-      ) : null}
-      {stepReviewModalState && onStepReviewResolve ? ReactDOM.createPortal(
-        <AgenticStepReviewModal
-          title={stepReviewModalState.title}
-          description={stepReviewModalState.description}
-          fields={stepReviewModalState.fields}
-          notePlaceholder={stepReviewModalState.notePlaceholder}
-          okLabel={stepReviewModalState.okLabel}
-          problemLabel={stepReviewModalState.problemLabel}
-          onResolve={onStepReviewResolve}
         />,
         document.body
       ) : null}
