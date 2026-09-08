@@ -131,9 +131,13 @@ together" needs real logins + audit regardless of tenancy.
 
 ## 5. Open decisions (need your input before/within the phases)
 
-1. **Auth mechanism (confirm):** is Authentik **forward-auth** (reverse proxy in
-   front of the app) the target, as the compose stack implies? The whole of Phase 1
-   assumes it. If the real setup differs, Phase 1 changes.
+1. **Auth mechanism — RESOLVED: forward-auth + Authentik as broker.** The proxy
+   authenticates and injects `X-authentik-*` headers; the app reads them (smallest
+   change for the frameworkless backend). Authentik is both the IdP (its own users,
+   to start) *and* an abstraction layer: LDAP, Nextcloud-shared-users, and SSO are
+   later **Authentik sources**, with **zero app change** (the app's contract stays
+   `headers → ctx`). **Security-critical:** the proxy MUST strip any client-supplied
+   `X-authentik-*` headers so only the outpost can set them (else identity spoofing).
 2. **T1 — `tenants` table:** keep a small local registry (id, label) synced from
    Authentik for display/FK, or store only the tenant id string and treat Authentik
    as the sole source? (Lean: a thin local registry.)
