@@ -116,6 +116,8 @@ import { createShopwareSyncClient } from './shopware/syncClient';
 import { processShopwareQueue } from './workers/processShopwareQueue';
 import { AgenticModelInvoker } from './agentic/invoker';
 import { loadTaxonomy, initTaxonomy } from './lib/taxonomy';
+import { resolveIdentity } from './lib/identity';
+import type { RequestIdentity } from './lib/identity';
 import type { Item, LabelJob } from './db';
 import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
 import { syncPrinterQueuesToCups, startPrinterQueueSyncInterval } from './utils/sync-printer-queues';
@@ -523,6 +525,8 @@ type ActionContext = {
     issues: string[];
     ready: boolean;
   };
+  // Forward-auth identity resolved per request (docs/PLANNING_TENANCY.md Phase 1).
+  identity: RequestIdentity;
 };
 
 const agenticServiceEnabled = true;
@@ -1105,6 +1109,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
             issues: [...shopwareConfigIssues],
             ready: shopwareConfigReady
           },
+          identity: resolveIdentity(req),
           generateItemUUID: generateItemId
         });
       } catch (err) {
