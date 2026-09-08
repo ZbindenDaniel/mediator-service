@@ -400,7 +400,12 @@
    component lifecycle is the centerpiece to strengthen. Two greenfield
    workstreams gate it:
    - **G‑T1 Multi-tenancy (largest lift).** No `tenant`/`mandant`/`org_id`
-     concept exists anywhere. **Proposed (plan §12.3) — two-tier visibility** on
+     concept exists anywhere. **Phased plan ready:**
+     [`docs/PLANNING_TENANCY.md`](docs/PLANNING_TENANCY.md) — identity-first:
+     (1) Authentik forward-auth → `ctx.{user,tenant,role}`; (2) additive `TenantId`
+     schema; (3) class-aware scoping in `db.ts`; (4) tenant/user admin +
+     self-registration. Blocked on confirming the auth mechanism. **Proposed
+     (plan §12.3) — two-tier visibility** on
      the reference↔instance seam: `item_refs` = shared catalogue (no `TenantId`,
      read by all, writes guarded by `ContributedByTenant`); `items`/`boxes`/
      shelves/instance-quality/logistics-events = **`TenantId`, hard-isolated**
