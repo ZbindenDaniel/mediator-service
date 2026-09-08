@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "subCategory": 905,
+  "fields": [
+    { "key": "Speichertyp",  "required": true,  "description": "Drive technology inside the enclosure (HDD, SSD)" },
+    { "key": "Speicher",     "required": true,  "description": "Capacity (e.g. 2 TB, 1 TB)" },
+    { "key": "Formfaktor",   "required": false, "description": "Enclosure/mechanism form factor (2.5\", 3.5\")" },
+    { "key": "Schnittstelle","required": false, "description": "Connection (USB 3.0, USB-C, Thunderbolt, eSATA)" },
+    { "key": "Stromversorgung","required": false, "description": "Power source (bus-powered or external power adapter)" }
+  ],
+  "guidance": [
+    "External drives use a 2.5\" (usually bus-powered) or 3.5\" (with power adapter) mechanism, but the total dimensions depend on the enclosure. Only fill Länge_mm/Breite_mm/Höhe_mm when the sources state the enclosure's dimensions; do not derive them from the bare-drive form factor."
+  ]
+}
