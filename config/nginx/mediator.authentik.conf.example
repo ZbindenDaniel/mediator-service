@@ -1,0 +1,63 @@
+# =============================================================================
+# Authentik forward-auth for nginx (Phase 1b — docs/PLANNING_TENANCY.md)
+#
+# TEMPLATE — NOT YET ACTIVE. This replaces the HTTP Basic Auth in mediator.conf
+# once verified ON THE HOST (needs the Authentik Proxy Provider + embedded outpost
+# + groups configured — see docs/setup.md "Phase 1b"). Do not swap it in blind.
+#
+# It authenticates browser traffic against the Authentik embedded outpost and injects
+# the resolved identity as X-authentik-username / X-authentik-groups, which the backend
+# reads (backend/lib/identity.ts).
+#
+# SECURITY-CRITICAL: the app TRUSTS these headers. Every protected location below sets
+# them ONLY from the outpost's auth_request response (`auth_request_set` → `proxy_set_header`),
+# which OVERWRITES any client-supplied X-authentik-* header — so a user cannot spoof identity
+# by sending the header themselves. Never `proxy_pass` client X-authentik-* through unset.
+# =============================================================================
+
+# Authentik embedded outpost (served by the authentik-server container).
+resolver 127.0.0.11 valid=30s;
+set $authentik_host http://authentik-server:9000;
+
+# --- Outpost endpoints (auth check + login flow) ---
+location /outpost.goauthentik.io {
+  proxy_pass              $authentik_host/outpost.goauthentik.io;
+  proxy_set_header        Host $host;
+  proxy_set_header        X-Original-URL $scheme://$http_host$request_uri;
+  add_header              Set-Cookie $auth_cookie;
+  auth_request_set        $auth_cookie $upstream_http_set_cookie;
+  proxy_pass_request_body off;
+  proxy_set_header        Content-Length "";
+}
+
+# Redirect unauthenticated browser requests to the Authentik login flow.
+location @goauthentik_signin {
+  internal;
+  add_header Set-Cookie $auth_cookie;
+  return 302 /outpost.goauthentik.io/start?rd=$request_uri;
+}
+
+# --- Protected app + API (browser/SPA) ---
+# Apply this block's directives to `location /` and `location /api/` (replacing auth_basic).
+# /api/admin/ keeps its Bearer break-glass (ADMIN_SECRET) — do NOT forward-auth it, so the
+# admin token still works; role-based admin gating comes in Phase 4.
+location / {
+  auth_request        /outpost.goauthentik.io/auth/nginx;
+  error_page 401      = @goauthentik_signin;
+
+  # Pull the resolved identity out of the outpost response…
+  auth_request_set    $ak_username $upstream_http_x_authentik_username;
+  auth_request_set    $ak_groups   $upstream_http_x_authentik_groups;
+  # …and set them upstream. This OVERWRITES any client-supplied copy (spoof protection):
+  proxy_set_header    X-authentik-username $ak_username;
+  proxy_set_header    X-authentik-groups   $ak_groups;
+
+  proxy_pass          http://mediator:8080;
+  proxy_http_version  1.1;
+  proxy_set_header    Host $host;
+  proxy_set_header    X-Real-IP $remote_addr;
+  proxy_set_header    X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header    X-Forwarded-Proto https;
+  proxy_set_header    Upgrade $http_upgrade;
+  proxy_set_header    Connection $connection_upgrade;
+}

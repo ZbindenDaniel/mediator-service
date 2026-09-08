@@ -402,9 +402,12 @@
    - **G‑T1 Multi-tenancy (largest lift).** No `tenant`/`mandant`/`org_id`
      concept exists anywhere. **Phased plan ready:**
      [`docs/PLANNING_TENANCY.md`](docs/PLANNING_TENANCY.md) — identity-first:
-     (1) Authentik forward-auth → `ctx.{user,tenant,role}`; (2) additive `TenantId`
-     schema; (3) class-aware scoping in `db.ts`; (4) tenant/user admin +
-     self-registration. Blocked on confirming the auth mechanism. **Proposed
+     (1) Authentik forward-auth → `ctx.{user,tenant,role}` **✅ code done** (#960:
+     `identity.ts` resolver + `ctx` injection + `resolveActor` on lifecycle
+     handlers; proxy config templated, needs on-host verification before dropping
+     Basic Auth); (2) additive `TenantId` schema; (3) class-aware scoping in
+     `db.ts`; (4) tenant/user admin + self-registration. Auth mechanism decided
+     (forward-auth + Authentik broker). **Proposed
      (plan §12.3) — two-tier visibility** on
      the reference↔instance seam: `item_refs` = shared catalogue (no `TenantId`,
      read by all, writes guarded by `ContributedByTenant`); `items`/`boxes`/

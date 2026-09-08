@@ -56,7 +56,22 @@ together" needs real logins + audit regardless of tenancy.
 
 ## 3. Phases
 
-### Phase 1 — Identity into the backend (prerequisite; independently valuable)
+### Phase 1 — Identity into the backend (prerequisite; independently valuable)  ✅ CODE DONE (proxy needs host verification)
+
+**Shipped:** (1a) `backend/lib/identity.ts` resolves `X-authentik-*` headers → `{ authenticated,
+username, groups, tenant, role }` via a config-driven `group→{tenant,role}` map
+(`TENANT_GROUP_MAP`/`_FILE`); injected into the per-request `ctx` at the dispatch chokepoint;
+behaviour-neutral (nothing gates on it yet), `ADMIN_SECRET` stays break-glass. (1c) `resolveActor(ctx,
+requestActor)` prefers the authenticated username for the event-log `Actor`, applied to the item/box
+lifecycle write handlers (falls back to the typed actor until forward-auth is live). (1b) proxy
+config is **templated, not active**: `config/nginx/mediator.authentik.conf.example` + a Traefik
+snippet + Authentik provider/outpost/group runbook in `docs/setup.md` "Phase 1b", with the
+spoof-protection (headers set only from the outpost) called out — **needs on-host verification before
+Basic Auth is dropped.** Tests: identity resolver + actor helper. **Follow-up:** adopt `resolveActor`
+in the remaining actor-bearing handlers (agentic/bulk/export/print/catalog/qr-scan).
+
+#### Original plan
+
 - **Proxy forward-auth:** nginx `auth_request` against the Authentik outpost in
   `config/nginx/mediator.conf` (dev); Traefik `forwardAuth` middleware in
   `docker-compose.prod.yaml` (prod) — and add the Authentik services to the prod

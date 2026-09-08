@@ -94,6 +94,47 @@ tracked by the `# TODO(ingress-auth)` markers.
 > it will **not** start these new Authentik services on the host — bring them up once with a manual
 > `docker compose up -d` (or extend the workflow) on the deployment host.
 
+### Phase 1b — forward-auth wiring (tenancy identity)
+
+Turns the stood-up Authentik into enforced identity the backend reads
+(`X-authentik-username` / `X-authentik-groups` → `{ user, tenant, role }`, see
+`backend/lib/identity.ts`). **Verify on the host before swapping — the templates below are not
+active.**
+
+**In Authentik:**
+1. Create a **Proxy Provider** in *forward-auth (single application)* mode; attach it to an
+   Application for the mediator.
+2. Add it to the **embedded outpost** (the `authentik-server` container serves the outpost at
+   `/outpost.goauthentik.io/…`).
+3. Create groups: `mediator-admin` (platform admins), one group per tenant (e.g. `tenant-revamp`),
+   and optionally a per-tenant admin group (e.g. `tenant-revamp-admin`). Assign users.
+4. Mirror those groups in the app's `TENANT_GROUP_MAP` / `TENANT_GROUP_MAP_FILE` (see `.env.example`).
+
+**Dev (nginx):** swap the Basic Auth in `config/nginx/mediator.conf` for the forward-auth block in
+`config/nginx/mediator.authentik.conf.example` (outpost location + `auth_request` on `/` and `/api/`;
+keep `/api/admin/` on the `ADMIN_SECRET` Bearer break-glass). The example sets
+`X-authentik-username`/`-groups` upstream **only** from the outpost response, which overwrites any
+client-supplied copy — **the spoof-protection; do not remove it.** Drop nginx Basic Auth only after
+this verifies.
+
+**Prod (Traefik):** add the Authentik services to `docker-compose.prod.yaml` (they exist only in the
+dev compose today) and add a `forwardAuth` middleware pointing at the outpost, e.g.:
+
+```yaml
+# labels on the mediator service (Traefik):
+- "traefik.http.middlewares.ak.forwardauth.address=http://authentik-server:9000/outpost.goauthentik.io/auth/traefik"
+- "traefik.http.middlewares.ak.forwardauth.trustForwardHeader=true"
+- "traefik.http.middlewares.ak.forwardauth.authResponseHeaders=X-authentik-username,X-authentik-groups"
+- "traefik.http.routers.mediator.middlewares=ak@docker"
+```
+`authResponseHeaders` is the allow-list Traefik copies from the outpost — because only these are
+copied from the auth response, client-supplied copies are dropped (same spoof-protection as nginx).
+
+**Verify:** (1) an unauthenticated browser request redirects to the Authentik login; (2) after login,
+`backend/lib/identity.ts` sees the right `tenant`/`role` (temporarily log `ctx.identity`, or check
+the event-log `Actor`); (3) **send `X-authentik-username: attacker` from a client directly — it must
+be ignored** (overwritten by the proxy). Only then remove Basic Auth.
+
 ## Postgres rollout notes
 
 - These notes reflect the current Compose-driven workflow; managed database guidance has not been documented yet.
