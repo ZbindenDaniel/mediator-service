@@ -68,6 +68,50 @@ describe('AgenticReviewWizard', () => {
     expect(result.shopArticle).toBeNull();
   });
 
+  it('reject folds a before→after correction diff into the notes for the next run', () => {
+    const onResolve = jest.fn();
+    const data: AgenticReviewWizardData = {
+      ...BASE_DATA,
+      artikelbeschreibung: 'Lativ X200',
+      specFields: [{ key: 'RAM', value: '8GB' }, { key: 'Marketing', value: 'super', removable: true }]
+    };
+    render(<AgenticReviewWizard data={data} onResolve={onResolve} />);
+
+    fireEvent.change(document.getElementById('wizard-artikelbeschreibung')!, { target: { value: 'Lenovo ThinkPad X200' } });
+    fireEvent.change(document.getElementById('wizard-note-beschreibung')!, { target: { value: 'Marke war falsch' } });
+    clickButton('Weiter'); // 2
+    clickButton('Weiter'); // 3 (Spezifikationen)
+    fireEvent.change(document.getElementById('wizard-spec-Marketing')!, { target: { value: '' } }); // remove spec
+    clickButton('Weiter'); // 4
+    fireEvent.change(document.getElementById('wizard-hoehe')!, { target: { value: '26' } });
+    clickButton('Weiter'); // 5
+    clickButton('Weiter'); // summary
+    clickButton('Ablehnen');
+
+    const result = onResolve.mock.calls[0][0] as AgenticReviewWizardResult;
+    expect(result.decision).toBe('rejected');
+    expect(result.notes).toContain('Vorherige Reviewer-Korrekturen');
+    expect(result.notes).toContain('Artikelbeschreibung: "Lativ X200" → "Lenovo ThinkPad X200"');
+    expect(result.notes).toContain('Höhe_mm: (leer) → "26"');
+    expect(result.notes).toContain('Spec „Marketing“ entfernt');
+    expect(result.notes).toContain('Marke war falsch');
+  });
+
+  it('approve does not emit a correction diff (edits are persisted instead)', () => {
+    const onResolve = jest.fn();
+    render(<AgenticReviewWizard data={BASE_DATA} onResolve={onResolve} />);
+
+    fireEvent.change(document.getElementById('wizard-artikelbeschreibung')!, { target: { value: 'Korrigiert' } });
+    advanceToSummary();
+    clickButton('Freigeben');
+    clickButton('Freigeben & abschliessen');
+
+    const result = onResolve.mock.calls[0][0] as AgenticReviewWizardResult;
+    expect(result.decision).toBe('approved');
+    expect(result.notes).not.toContain('Vorherige Reviewer-Korrekturen');
+    expect(result.referenceEdits.Artikelbeschreibung).toBe('Korrigiert');
+  });
+
   it('Zurück preserves entered values across navigation', () => {
     const onResolve = jest.fn();
     render(<AgenticReviewWizard data={BASE_DATA} onResolve={onResolve} />);

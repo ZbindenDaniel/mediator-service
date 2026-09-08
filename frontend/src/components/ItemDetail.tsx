@@ -1592,10 +1592,12 @@ export default function ItemDetail({ itemId }: Props) {
       return null;
     }
 
-    // The wizard makes the explicit approve/reject decision at its summary step, so the structured
-    // checklist flags are set to their non-blocking defaults for now (reviewers use per-step notes).
-    // TODO(agentic-review-flags): derive bad_format/wrong_physical_dimensions/information_present
-    // from the wizard inputs (edits made + notes) once the flag semantics are decided.
+    // The wizard makes the explicit approve/reject decision, so the structured checklist flags are
+    // sent at their non-blocking defaults. Deliberately NOT derived: instead of lossy flags, the wizard
+    // folds a concrete before→after correction diff into the notes on reject, which flow into the next
+    // run's extraction/supervisor prompts (see AgenticReviewWizard.buildResult). On approve, the edits
+    // are persisted, so the corrected values are the next run's baseline. (Flag-based review metrics
+    // are left for later — see todo.md.)
     const mappedInput = mapReviewAnswersToInput(
       {
         descriptionMatches: true,

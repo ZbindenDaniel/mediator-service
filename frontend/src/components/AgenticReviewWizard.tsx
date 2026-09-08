@@ -122,14 +122,69 @@ export function AgenticReviewWizard({ data, onResolve }: Props) {
     const summaryNote = (notes.zusammenfassung ?? '').trim();
     if (summaryNote) noteFragments.push(`Entscheid: ${summaryNote}`);
 
+    // On reject the edits are NOT persisted, so a restarted run would otherwise learn nothing from
+    // what the reviewer corrected. Fold the concrete before→after diff into the notes, which already
+    // flow into the next run's extraction/supervisor prompts as reviewer guidance. On approve the
+    // edits are saved to item_refs, so the corrected values are the next run's baseline — no diff needed.
+    const sections: string[] = [];
+    if (decision === 'rejected') {
+      const changeLines = buildChangeSummary();
+      if (changeLines.length > 0) {
+        sections.push(
+          'Vorherige Reviewer-Korrekturen (an diesen orientieren, soweit die Quellen es zulassen):\n' +
+            changeLines.map((line) => `- ${line}`).join('\n')
+        );
+      }
+      if (noteFragments.length > 0) sections.push(`Notizen:\n${noteFragments.join('\n')}`);
+    } else if (noteFragments.length > 0) {
+      sections.push(noteFragments.join('\n'));
+    }
+
     return {
       decision,
       referenceEdits,
       specValues: { ...specValues },
       reviewPrice,
       shopArticle: decision === 'approved' ? shopArticle : null,
-      notes: noteFragments.join('\n')
+      notes: sections.join('\n\n')
     };
+  };
+
+  // Human-readable "was → now" diff of everything the reviewer touched, used as reject-time guidance.
+  const buildChangeSummary = (): string[] => {
+    const quote = (value: string): string => {
+      const compact = value.replace(/\s+/g, ' ').trim();
+      if (!compact) return '(leer)';
+      return `"${compact.length > 120 ? `${compact.slice(0, 119)}…` : compact}"`;
+    };
+    const numChanged = (a: string, b: string) => a.replace(',', '.').trim() !== b.replace(',', '.').trim();
+    const lines: string[] = [];
+    if (artikelbeschreibung.trim() !== data.artikelbeschreibung.trim()) {
+      lines.push(`Artikelbeschreibung: ${quote(data.artikelbeschreibung)} → ${quote(artikelbeschreibung)}`);
+    }
+    if (kurzbeschreibung.trim() !== data.kurzbeschreibung.trim()) {
+      lines.push(`Kurztext: ${quote(data.kurzbeschreibung)} → ${quote(kurzbeschreibung)}`);
+    }
+    const dims: Array<[string, string, string]> = [
+      ['Länge_mm', laenge, data.laenge],
+      ['Breite_mm', breite, data.breite],
+      ['Höhe_mm', hoehe, data.hoehe],
+      ['Gewicht_kg', gewicht, data.gewicht]
+    ];
+    for (const [label, cur, orig] of dims) {
+      if (numChanged(cur, orig)) lines.push(`${label}: ${quote(orig)} → ${quote(cur)}`);
+    }
+    if (numChanged(price, data.price)) {
+      lines.push(`Verkaufspreis: ${quote(data.price)} → ${quote(price)}`);
+    }
+    for (const field of data.specFields) {
+      const orig = (field.value ?? '').trim();
+      const cur = (specValues[field.key] ?? '').trim();
+      if (cur === orig) continue;
+      if (!cur && orig) lines.push(`Spec „${field.key}“ entfernt`);
+      else lines.push(`Spec „${field.key}“: ${quote(field.value ?? '')} → ${quote(cur)}`);
+    }
+    return lines;
   };
 
   const resolveWith = (decision: 'approved' | 'rejected') => {
