@@ -554,6 +554,28 @@ BEGIN
 END
 $do$;
 CREATE INDEX IF NOT EXISTS idx_events_meta_gin ON events USING GIN("Meta");
+
+-- Multi-tenancy (Phase 2 — docs/PLANNING_TENANCY.md). Additive + behaviour-neutral:
+-- a tenant registry + nullable TenantId on the PRIVATE LOGISTICS tables (items/boxes/
+-- shelves/stubs/instance-quality/instance-relations/events). The SHARED CATALOGUE
+-- (item_refs/item_ref_relations/agentic_runs) stays global; item_refs gets only an
+-- optional ContributedByTenant for attribution. Nothing filters on these yet.
+CREATE TABLE IF NOT EXISTS tenants (
+  "Id"        TEXT PRIMARY KEY,
+  "Label"     TEXT,
+  "Active"    BOOLEAN NOT NULL DEFAULT TRUE,
+  "CreatedAt" TEXT
+);
+ALTER TABLE items              ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE boxes              ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE box_stubs          ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE item_relations     ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE quality_assessments ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE events             ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE item_refs          ADD COLUMN IF NOT EXISTS "ContributedByTenant" TEXT;
+CREATE INDEX IF NOT EXISTS idx_items_tenant  ON items("TenantId");
+CREATE INDEX IF NOT EXISTS idx_boxes_tenant  ON boxes("TenantId");
+CREATE INDEX IF NOT EXISTS idx_events_tenant ON events("TenantId");
 `);
 
   console.info('[db] Postgres schema ready');
@@ -2111,6 +2133,33 @@ export async function seedTaxonomy(categories: ItemCategoryDefinition[]): Promis
       }
     }
   });
+}
+
+// --- Tenants registry (Phase 2 — docs/PLANNING_TENANCY.md) ---
+// A thin local registry (display label + active flag). Authentik stays the auth source of truth;
+// this is populated from it / by admins later. No scoping keys off it yet.
+export interface TenantRow {
+  Id: string;
+  Label: string | null;
+  Active: boolean;
+  CreatedAt: string | null;
+}
+
+export async function listTenants(): Promise<TenantRow[]> {
+  return query<TenantRow>(`SELECT * FROM tenants ORDER BY "Id"`);
+}
+
+export async function getTenant(id: string): Promise<TenantRow | null> {
+  return queryOne<TenantRow>(`SELECT * FROM tenants WHERE "Id" = $1`, [id]);
+}
+
+export async function upsertTenant(t: { id: string; label?: string | null; active?: boolean }): Promise<void> {
+  // On conflict update only Label/Active — CreatedAt is preserved (not in the SET list).
+  await execute(
+    `INSERT INTO tenants ("Id","Label","Active","CreatedAt") VALUES ($1,$2,$3,$4)
+     ON CONFLICT ("Id") DO UPDATE SET "Label" = EXCLUDED."Label", "Active" = EXCLUDED."Active"`,
+    [t.id, t.label ?? null, t.active ?? true, new Date().toISOString()]
+  );
 }
 
 export async function listRecentBoxes(): Promise<any[]> {

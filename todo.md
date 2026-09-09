@@ -406,7 +406,10 @@
      (1) Authentik forward-auth → `ctx.{user,tenant,role}` **✅ code done** (#960:
      `identity.ts` resolver + `ctx` injection + `resolveActor` on lifecycle
      handlers; proxy config templated, needs on-host verification before dropping
-     Basic Auth); (2) additive `TenantId` schema; (3) class-aware scoping in
+     Basic Auth); (2) **✅ 2a schema done** (#964: `tenants` table + nullable
+     `TenantId` on logistics tables + `ContributedByTenant` on `item_refs` +
+     `listTenants`/`getTenant`/`upsertTenant`; neutral) — **2b pending** (stamp on
+     create, held for host-verified auth); (3) class-aware scoping in
      `db.ts`; (4) tenant/user admin + self-registration. Auth mechanism decided
      (forward-auth + Authentik broker). **Proposed
      (plan §12.3) — two-tier visibility** on

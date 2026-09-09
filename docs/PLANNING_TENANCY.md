@@ -89,7 +89,20 @@ in the remaining actor-bearing handlers (agentic/bulk/export/print/catalog/qr-sc
 - **Acceptance:** every request carries `{ user, tenant, role }`; the event log shows
   real users. **No data scoping yet** — behaviour unchanged.
 
-### Phase 2 — Additive tenant schema (behaviour-neutral)
+### Phase 2 — Additive tenant schema (behaviour-neutral)  ◐ 2a DONE (schema); 2b pending (stamp-on-create)
+
+**Shipped (2a):** additive `initDb` migration — a `tenants` registry table (`Id`, `Label`,
+`Active`, `CreatedAt`) + nullable `TenantId` on the private-logistics tables (`items`, `boxes`,
+`box_stubs`, `item_relations`, `quality_assessments`, `events`) + `ContributedByTenant` on
+`item_refs` (attribution; catalogue reads stay global), with tenant indexes. `db.ts` accessors
+`listTenants` / `getTenant` / `upsertTenant`. Fully behaviour-neutral: columns nullable, nothing
+stamped or filtered yet. Typecheck + 901 tests green (SQL exercised by the Postgres-gated suites).
+**Pending (2b):** stamp `TenantId` on create from `ctx.tenant`, and seed the `tenants` registry
+from the configured group map — deferred until forward-auth is verified on host (so `ctx.tenant` is
+meaningful) to avoid churn.
+
+#### Original plan
+
 - Add **nullable `TenantId`** to the logistics tables (`items`, `boxes`, `box_stubs`,
   `item_relations`, `quality_assessments`, and logistics `events`) — additive
   `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, same pattern as recent migrations.
