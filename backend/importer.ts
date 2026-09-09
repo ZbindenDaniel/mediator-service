@@ -1756,6 +1756,25 @@ function normalizeEventField(value: unknown): string {
   }
 }
 
+function sanitizeEventMetaValue(meta: string, rowNumber: number): string | null {
+  if (!meta) {
+    return null;
+  }
+  try {
+    JSON.parse(meta);
+    return meta;
+  } catch {
+    // events.Meta is a jsonb column; a non-JSON cell (e.g. a legacy "[object Object]" export
+    // artifact) aborts the insert and drops the whole event. Persist the event with Meta=NULL
+    // instead so the row survives, matching the guarded legacy-Meta sanitization in initDb.
+    console.warn('[importer] Dropping non-JSON events.csv Meta; importing row with null Meta', {
+      rowNumber,
+      metaPreview: meta.slice(0, 60),
+    });
+    return null;
+  }
+}
+
 function normalizeEventCreatedAt(value: string, rowNumber: number): string | null {
   if (!value) {
     return null;
@@ -1842,7 +1861,7 @@ export async function ingestEventsCsv(data: Buffer | string): Promise<{ count: n
           EntityId: entityId,
           Event: event,
           Level: normalizedLevel,
-          Meta: meta || null
+          Meta: sanitizeEventMetaValue(meta, rowNumber)
         });
 
         if (inserted) {

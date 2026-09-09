@@ -334,6 +334,117 @@ export async function applyManualReviewReferenceUpdates(
   }
 }
 
+// Top-level ItemRef columns a reviewer may correct inline during review (see review-flow.md).
+// Explicit, typed whitelist so a review payload can never write arbitrary reference columns:
+// text columns are trimmed strings; numeric columns (dimensions/weight) are coerced to finite numbers.
+const REVIEW_EDITABLE_TEXT_FIELDS = ['Artikelbeschreibung', 'Kurzbeschreibung'] as const;
+const REVIEW_EDITABLE_NUMERIC_FIELDS = ['Länge_mm', 'Breite_mm', 'Höhe_mm', 'Gewicht_kg'] as const;
+export const REVIEW_EDITABLE_REFERENCE_FIELDS = [
+  ...REVIEW_EDITABLE_TEXT_FIELDS,
+  ...REVIEW_EDITABLE_NUMERIC_FIELDS
+] as const;
+type ReviewEditableReferenceField = (typeof REVIEW_EDITABLE_REFERENCE_FIELDS)[number];
+const NUMERIC_REVIEW_FIELDS = new Set<string>(REVIEW_EDITABLE_NUMERIC_FIELDS);
+
+// Parse a reviewer-entered number (accepts comma decimals). Returns a finite, non-negative number or null.
+function parseReviewNumber(raw: string): number | null {
+  const normalized = raw.replace(',', '.').trim();
+  if (!normalized) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+// Normalizes the wire payload (all string values) to the whitelisted, valid edits — dropping empty
+// text and unparseable numbers — so the review handler's "any edits?" gate reflects real changes.
+export function normalizeReferenceEditsPayload(value: unknown): Record<string, string> {
+  const edits: Record<string, string> = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return edits;
+  }
+  const source = value as Record<string, unknown>;
+  for (const key of REVIEW_EDITABLE_REFERENCE_FIELDS) {
+    const raw = source[key];
+    if (typeof raw !== 'string') continue;
+    if (NUMERIC_REVIEW_FIELDS.has(key)) {
+      const parsed = parseReviewNumber(raw);
+      // Empty numeric edits are dropped: an inline fix sets a value, it never blanks a dimension.
+      if (parsed !== null) edits[key] = String(parsed);
+    } else {
+      const trimmed = raw.trim();
+      // Empty text edits are dropped: an inline correction replaces a description, never blanks it.
+      if (trimmed) edits[key] = trimmed;
+    }
+  }
+  return edits;
+}
+
+export async function applyReferenceEditsAfterReview(
+  artikelNummer: string,
+  referenceEdits: Record<string, string>,
+  ctx: {
+    getItemReference: (id: string) => Promise<ItemRef | undefined>;
+    persistItemReference?: (ref: ItemRef) => Promise<void> | void;
+  },
+  logger: Pick<Console, 'debug' | 'error' | 'info' | 'warn'> = console
+): Promise<void> {
+  const trimmedArtikelNummer = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  const changes: Record<string, string | number> = {};
+  for (const key of REVIEW_EDITABLE_REFERENCE_FIELDS) {
+    const value = referenceEdits?.[key];
+    if (typeof value !== 'string') continue;
+    if (NUMERIC_REVIEW_FIELDS.has(key)) {
+      const parsed = parseReviewNumber(value);
+      if (parsed !== null) changes[key] = parsed;
+    } else if (value.trim()) {
+      changes[key] = value.trim();
+    }
+  }
+
+  if (!trimmedArtikelNummer || Object.keys(changes).length === 0) {
+    return;
+  }
+
+  let reference: ItemRef | undefined;
+  try {
+    reference = await ctx.getItemReference(trimmedArtikelNummer);
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to load reference for inline edits write-back', {
+      artikelNummer: trimmedArtikelNummer,
+      error
+    });
+    return;
+  }
+
+  if (!reference) {
+    logger.warn?.('[agentic-review] Artikelnummer reference not found for inline edits write-back', {
+      artikelNummer: trimmedArtikelNummer
+    });
+    return;
+  }
+
+  if (typeof ctx.persistItemReference !== 'function') {
+    logger.error?.('[agentic-review] Persistence helper unavailable; cannot apply inline edits', {
+      artikelNummer: trimmedArtikelNummer
+    });
+    return;
+  }
+
+  try {
+    // Cast needed because `changes` is a string|number index map while ItemRef's columns are strongly
+    // typed; each key is whitelisted and value-checked above, so the merged object is a valid ItemRef.
+    await ctx.persistItemReference({ ...reference, ...changes } as ItemRef);
+    logger.info?.('[agentic-review] Applied operator inline edits from review', {
+      artikelNummer: trimmedArtikelNummer,
+      fields: Object.keys(changes)
+    });
+  } catch (error) {
+    logger.error?.('[agentic-review] Failed to persist inline edits write-back', {
+      artikelNummer: trimmedArtikelNummer,
+      error
+    });
+  }
+}
+
 
 
 type NormalizedReviewMetadata = {
@@ -631,6 +742,7 @@ const action = defineHttpAction({
               .map(([k, v]) => [k, v == null ? '' : String(v)])
           )
         : {};
+      const referenceEdits = normalizeReferenceEditsPayload(data.referenceEdits);
       const reviewMetadata = normalizeReviewMetadataPayload(data);
       const notes = reviewMetadata.notes ?? '';
       const reviewedBy = reviewMetadata.reviewedBy ?? actor;
@@ -884,6 +996,14 @@ const action = defineHttpAction({
             await applySpecValuesAfterReview(artikelNummer, specValues, ctx, console);
           } catch (err) {
             console.error('Failed to apply spec values write-back after review for Artikelnummer', err);
+          }
+        }
+
+        if (Object.keys(referenceEdits).length > 0) {
+          try {
+            await applyReferenceEditsAfterReview(artikelNummer, referenceEdits, ctx, console);
+          } catch (err) {
+            console.error('Failed to apply inline reference edits after review for Artikelnummer', err);
           }
         }
       }

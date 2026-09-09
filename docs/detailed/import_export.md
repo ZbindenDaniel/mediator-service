@@ -69,6 +69,12 @@
   - Required query: `actor`.
   - Optional query: `mode` (`backup|erp|manual_import|automatic_import`), plus date filters (`createdAfter`, `updatedAfter`).
   - Returns staged export artifact for download (manual headers vs automatic ERP headers based on mode/header regime).
+  - Scope: items + boxes only. Used by the admin export card for the ERP/partner modes (not the Backup button).
+- `/api/export/data` (`GET`, `backend/actions/export-data.ts`)
+  - Optional query: `format` (`zip` default | `json`), `mode` (`backup` default | `erp`), `entities` (comma list of `items,boxes,agentic,events`; default all), date filters, `limit`.
+  - Multi-entity export: `format=zip` writes `items.csv` + `boxes.csv` (via `stageItemsExport`) plus `agentic_runs.csv` + `events.csv`; `format=json` returns the raw rows per entity (Langtext untouched).
+  - **Backup contract:** the admin "Backup" button calls `format=zip&mode=backup&entities=items,boxes,agentic,events`. In `backup` mode Langtext is always JSON (never HTML — see env note below), grouping/ERP-approval filtering are off, and the agentic/events rows are **uncapped** (the `limit` applies only to non-backup callers) so the archive is a complete, restorable snapshot ingestible by `/api/import`.
+  - `agentic_runs.csv` carries `LastSearchLinksJson` (round-tripped by `ingestAgenticRunsCsv`); no `actor` param required (this endpoint does not log per-item `Exported` events).
 - `/api/sync/erp` (`POST`, `backend/actions/sync-erp.ts`)
   - Request JSON requires non-empty string array `itemIds` (instance ItemUUID selectors for export scope).
   - `ERP_SYNC_ITEM_IDS` is derived from resolved `Artikel_Nummer` media-folder keys (deduplicated, formatted), not raw ItemUUID values; it is newline-delimited and must not be comma-split because valid GVFS/WebDAV paths can contain commas.

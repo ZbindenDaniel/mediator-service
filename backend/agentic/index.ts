@@ -12,6 +12,8 @@ import {
   type AgenticRunCancelResult,
   type AgenticRunDeleteInput,
   type AgenticRunDeleteResult,
+  type AgenticRunSearchLinkRemoveInput,
+  type AgenticRunSearchLinkRemoveResult,
   type AgenticRunRestartInput,
   type AgenticRunReviewMetadata,
   type AgenticRunStartInput,
@@ -353,6 +355,56 @@ function applyQueueUpdate(
     logger.error?.('[agentic-service] Failed to persist queue metadata update', {
       artikelNummer: update.Artikel_Nummer,
       error: toErrorMessage(err)
+    });
+  }
+}
+
+// A run can die in the queue — before it ever reaches the invoker — via three paths that previously
+// left only a terse warn: a stale/zombie `running` reclaim, an over-cap cancellation, and an empty
+// `SearchQuery`. This records each one legibly in BOTH places an operator looks: a structured
+// from→to/reason log line, and an `AgenticRunFailed` item event so the transition shows up in the item's
+// history (the queue paths emitted no event at all, hence "waiting runs fall to failed untraceably").
+// `category` distinguishes an infrastructure cancellation (capacity/zombie reclaim — not the run's
+// fault) from a genuine invalid-state failure, without yet changing the terminal status itself.
+async function recordQueueTerminalTransition(
+  deps: AgenticServiceDependencies,
+  logger: AgenticServiceLogger,
+  params: {
+    artikelNummer: string;
+    fromStatus: string | null;
+    reason: string;
+    category: 'infra-cancelled' | 'invalid-state';
+    retryCount?: number | null;
+  }
+): Promise<void> {
+  const { artikelNummer, fromStatus, reason, category, retryCount } = params;
+  logger.warn?.('[agentic-service] Queue terminal transition', {
+    artikelNummer,
+    from: fromStatus ?? null,
+    to: AGENTIC_RUN_STATUS_FAILED,
+    reason,
+    category,
+    retryCount: retryCount ?? null
+  });
+  try {
+    await deps.logEvent({
+      Actor: 'agentic-service',
+      EntityType: 'Item',
+      EntityId: artikelNummer,
+      Event: 'AgenticRunFailed',
+      Meta: JSON.stringify({
+        from: fromStatus ?? null,
+        to: AGENTIC_RUN_STATUS_FAILED,
+        reason,
+        category,
+        failedAt: new Date().toISOString()
+      })
+    });
+  } catch (eventErr) {
+    logger.error?.('[agentic-service] Failed to record queue terminal transition event', {
+      artikelNummer,
+      reason,
+      error: toErrorMessage(eventErr)
     });
   }
 }
@@ -1117,6 +1169,13 @@ export async function dispatchQueuedAgenticRuns(
         LastError: 'stale-run-auto-cancelled',
         LastAttemptAt: staleRun.LastAttemptAt ?? nowIso
       });
+      await recordQueueTerminalTransition(deps, logger, {
+        artikelNummer: staleRun.Artikel_Nummer,
+        fromStatus: AGENTIC_RUN_STATUS_RUNNING,
+        reason: 'stale-run-auto-cancelled',
+        category: 'infra-cancelled',
+        retryCount
+      });
     }));
   } catch (err) {
     logger.error?.('[agentic-service] Failed to recover stale running runs', {
@@ -1124,19 +1183,25 @@ export async function dispatchQueuedAgenticRuns(
     });
   }
 
-  // Enforce the concurrency cap: if somehow more than MAX runs are RUNNING (race, restart, manual DB edits),
-  // cancel the oldest ones so the cap is respected before the next dispatch.
+  // Enforce the concurrency cap: if somehow more than MAX runs are RUNNING (an over-claim race, a restart,
+  // or manual DB edits), push the excess back to 'queued' so they WAIT for a free slot instead of being
+  // cancelled. Over-cap is not the run's fault — it was triggered legitimately and should run once there is
+  // space — so failing it (the previous behavior) surfaced as "queued run moved to running then cancelled
+  // immediately". We keep the runs with the OLDEST LastAttemptAt running (those are the ones actually
+  // making progress in a background invocation) and requeue the freshest excess (a racing over-claim
+  // stamps LastAttemptAt = now). A requeued run whose background invocation is still mid-flight is safe:
+  // that task's promotion guard re-reads Status and bails when it is no longer 'running'.
   try {
-    const overCapRuns = await query<{ Artikel_Nummer: string; LastAttemptAt: string | null }>(
-      `SELECT "Artikel_Nummer", "LastAttemptAt"
+    const overCapRuns = await query<{ Artikel_Nummer: string; RetryCount: number | null; LastAttemptAt: string | null }>(
+      `SELECT "Artikel_Nummer", "RetryCount", "LastAttemptAt"
          FROM agentic_runs
         WHERE "Status" = 'running'
-        ORDER BY "LastAttemptAt" DESC
+        ORDER BY "LastAttemptAt" ASC
         OFFSET $1`,
       [MAX_CONCURRENT_RUNNING_RUNS]
     );
     if (overCapRuns.length > 0) {
-      logger.warn?.('[agentic-service] Over-cap running runs detected; cancelling oldest', {
+      logger.warn?.('[agentic-service] Over-cap running runs detected; requeuing freshest excess to wait', {
         count: overCapRuns.length,
         cap: MAX_CONCURRENT_RUNNING_RUNS
       });
@@ -1144,17 +1209,23 @@ export async function dispatchQueuedAgenticRuns(
       const updateQueueState = deps.updateQueuedAgenticRunQueueState ?? updateQueuedAgenticRunQueueState;
       await Promise.allSettled(overCapRuns.map(async (run) => {
         try {
+          // Promotion to the waiting queue is not an attempt, so RetryCount is preserved (not reset) and
+          // NextRetryAt stays clear so the queued→running claim can pick it up as soon as a slot frees.
           await updateQueueState({
             Artikel_Nummer: run.Artikel_Nummer,
-            Status: AGENTIC_RUN_STATUS_FAILED,
+            Status: AGENTIC_RUN_STATUS_QUEUED,
             LastModified: nowIso,
-            RetryCount: 0,
+            RetryCount: run.RetryCount ?? 0,
             NextRetryAt: null,
-            LastError: 'over-cap-cancelled',
+            LastError: null,
             LastAttemptAt: run.LastAttemptAt ?? nowIso
           });
+          logger.info?.('[agentic-service] Requeued over-cap running run to waiting queue', {
+            artikelNummer: run.Artikel_Nummer,
+            cap: MAX_CONCURRENT_RUNNING_RUNS
+          });
         } catch (err) {
-          logger.error?.('[agentic-service] Failed to cancel over-cap run', {
+          logger.error?.('[agentic-service] Failed to requeue over-cap run', {
             artikelNummer: run.Artikel_Nummer,
             error: toErrorMessage(err)
           });
@@ -1191,7 +1262,11 @@ export async function dispatchQueuedAgenticRuns(
     });
   } else {
     try {
-      queuedRuns = await claimQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots));
+      // Pass the running cap so the claim self-limits to the free slots atomically: availableSlots here
+      // is read non-atomically before the claim, so overlapping ticks / instances could otherwise each
+      // claim up to availableSlots and together over-fill the running slots (the excess was then cancelled
+      // by the over-cap sweep instead of waiting). The in-statement cap makes that impossible.
+      queuedRuns = await claimQueuedAgenticRuns(Math.min(effectiveLimit, availableSlots), MAX_CONCURRENT_RUNNING_RUNS);
     } catch (err) {
       // Log and continue to the feeder rather than aborting the whole cycle.
       logger.error?.('[agentic-service] Failed to load queued agentic runs for dispatch', {
@@ -1224,11 +1299,6 @@ export async function dispatchQueuedAgenticRuns(
       const lastAttemptAt = run.LastAttemptAt ?? nowIso;
       const lastError = 'missing-search-query';
 
-      logger.warn?.('[agentic-service] Skipping queued agentic run with empty search query', {
-        artikelNummer,
-        runId: run.Id
-      });
-
       applyQueueUpdate(deps, logger, {
         Artikel_Nummer: artikelNummer,
         Status: AGENTIC_RUN_STATUS_FAILED,
@@ -1237,6 +1307,13 @@ export async function dispatchQueuedAgenticRuns(
         NextRetryAt: null,
         LastError: lastError,
         LastAttemptAt: lastAttemptAt
+      });
+      await recordQueueTerminalTransition(deps, logger, {
+        artikelNummer,
+        fromStatus: AGENTIC_RUN_STATUS_QUEUED,
+        reason: lastError,
+        category: 'invalid-state',
+        retryCount
       });
       continue;
     }
@@ -1816,6 +1893,155 @@ export async function deleteAgenticRun(
 
   const refreshed = await fetchAgenticRun(artikelNummer, deps, logger);
   return { deleted: true, agentic: refreshed };
+}
+
+type StoredSearchSource = { url: string; title?: string; description?: string };
+
+// Parse the stored LastSearchLinksJson blob into the canonical {url,title?,description?} shape.
+// Mirrors the defensive parsing in the frontend (parseAgenticSearchSources) and the result-handler
+// (normalizeSearchLinks): a malformed blob degrades to an empty list rather than throwing, so a bad
+// blob can't wedge the curation endpoint.
+function parseStoredSearchSources(json: string | null | undefined): StoredSearchSource[] {
+  if (!json || typeof json !== 'string') {
+    return [];
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  const out: StoredSearchSource[] = [];
+  for (const entry of parsed) {
+    if (!entry || typeof entry !== 'object') continue;
+    const candidate = entry as Record<string, unknown>;
+    const url = typeof candidate.url === 'string' ? candidate.url.trim() : '';
+    if (!url) continue;
+    const source: StoredSearchSource = { url };
+    if (typeof candidate.title === 'string' && candidate.title.trim()) {
+      source.title = candidate.title.trim();
+    }
+    if (typeof candidate.description === 'string' && candidate.description.trim()) {
+      source.description = candidate.description.trim();
+    }
+    out.push(source);
+  }
+  return out;
+}
+
+/**
+ * Remove a single stored search-result link from a run's LastSearchLinksJson so a bad result stops
+ * poisoning the reuse/grounding path (skipSearch reads this blob back verbatim). Operator-facing
+ * curation from the KI tab (todo #21). Unlike deleteAgenticRun this does NOT reset the run — it prunes
+ * one source and leaves the run's status/review state untouched.
+ */
+export async function removeAgenticSearchLink(
+  input: AgenticRunSearchLinkRemoveInput,
+  deps: AgenticServiceDependencies
+): Promise<AgenticRunSearchLinkRemoveResult> {
+  validateDependencies(deps);
+  const logger = resolveLogger(deps);
+  const request = normalizeRequestContext(input.request ?? null);
+  persistRequestPayloadSnapshot(request, logger);
+
+  const itemId = (input.itemId || '').trim();
+  if (!itemId) {
+    logger.warn?.('[agentic-service] removeAgenticSearchLink missing itemId');
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-item-id', logger);
+    return { removed: false, agentic: null, reason: 'missing-item-id' };
+  }
+  const resolved = resolveAgenticArtikelNummer(itemId, logger);
+  if (!resolved.artikelNummer) {
+    const reason = resolved.reason ?? 'missing-artikel-nummer';
+    logger.warn?.('[agentic-service] removeAgenticSearchLink failed to resolve Artikel_Nummer', { itemId, reason });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, reason, logger);
+    return { removed: false, agentic: null, reason };
+  }
+  const artikelNummer = resolved.artikelNummer;
+
+  const actor = (input.actor || '').trim();
+  if (!actor) {
+    logger.warn?.('[agentic-service] removeAgenticSearchLink missing actor', { artikelNummer });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-actor', logger);
+    return { removed: false, agentic: null, reason: 'missing-actor' };
+  }
+
+  const url = (input.url || '').trim();
+  if (!url) {
+    logger.warn?.('[agentic-service] removeAgenticSearchLink missing url', { artikelNummer });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'missing-url', logger);
+    return { removed: false, agentic: null, reason: 'missing-url' };
+  }
+
+  const existing = await fetchAgenticRun(artikelNummer, deps, logger);
+  if (!existing) {
+    logger.warn?.('[agentic-service] removeAgenticSearchLink attempted without existing run', { artikelNummer });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'not-found', logger);
+    return { removed: false, agentic: null, reason: 'not-found' };
+  }
+
+  const sources = parseStoredSearchSources(existing.LastSearchLinksJson);
+  const remaining = sources.filter((source) => source.url !== url);
+  if (remaining.length === sources.length) {
+    logger.info?.('[agentic-service] removeAgenticSearchLink found no matching link', { artikelNummer, url });
+    finalizeRequestLog(request, REQUEST_STATUS_DECLINED, 'link-not-found', logger);
+    return { removed: false, agentic: existing, reason: 'link-not-found', remaining: sources.length };
+  }
+
+  // An emptied list persists as null so downstream reuse/grounding treats it as "no evidence" (same as
+  // a never-searched run) rather than an empty-array edge case.
+  const nextJson = remaining.length > 0 ? JSON.stringify(remaining) : null;
+  const nowIso = resolveNow(deps).toISOString();
+
+  recordRequestLogStart(request, existing.SearchQuery ?? null, logger);
+
+  try {
+    // updateAgenticRunStatus rewrites Status/LastModified/ReviewState unconditionally, so echo the
+    // run's current values back to avoid clobbering them; only LastSearchLinksJson actually changes
+    // (its IsSet flag is the only one set true).
+    await deps.updateAgenticRunStatus(
+      normalizeAgenticStatusUpdate({
+        Artikel_Nummer: artikelNummer,
+        Status: existing.Status,
+        LastModified: nowIso,
+        ReviewState: existing.ReviewState ?? 'not_required',
+        LastSearchLinksJson: nextJson,
+        LastSearchLinksJsonIsSet: true
+      })
+    );
+
+    try {
+      await deps.logEvent({
+        Actor: actor,
+        EntityType: 'Item',
+        EntityId: artikelNummer,
+        Event: 'AgenticSearchLinkRemoved',
+        Meta: JSON.stringify({ url, remaining: remaining.length, removedAt: nowIso })
+      });
+    } catch (err) {
+      // Event logging is non-fatal here: the link is already pruned, so a logging failure must not
+      // surface as a request error.
+      logger.error?.('[agentic-service] Failed to record search-link removal event', {
+        artikelNummer,
+        error: toErrorMessage(err)
+      });
+    }
+    finalizeRequestLog(request, REQUEST_STATUS_SUCCESS, null, logger);
+  } catch (err) {
+    logger.error?.('[agentic-service] Failed to remove agentic search link', {
+      artikelNummer,
+      url,
+      error: toErrorMessage(err)
+    });
+    finalizeRequestLog(request, REQUEST_STATUS_FAILED, toErrorMessage(err), logger);
+    throw err;
+  }
+
+  const refreshed = await fetchAgenticRun(artikelNummer, deps, logger);
+  return { removed: true, agentic: refreshed, remaining: remaining.length };
 }
 
 export async function restartAgenticRun(

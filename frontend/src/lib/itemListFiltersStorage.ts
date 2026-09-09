@@ -16,6 +16,7 @@ export type ItemListSortKey =
   | 'box'
   | 'entryDate'
   | 'lastSynced'
+  | 'agenticLastRun'
   | 'uuid'
   | 'stock'
   | 'subcategory'
@@ -55,6 +56,7 @@ const SORT_KEYS: ItemListSortKey[] = [
   'box',
   'entryDate',
   'lastSynced',
+  'agenticLastRun',
   'uuid',
   'stock',
   'subcategory',

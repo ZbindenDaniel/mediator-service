@@ -22,6 +22,20 @@ The intake station identifies itself by serial or MAC. On each boot it calls `/a
 
 Step 3 (`phase2`) is always returned on subsequent boots — Phase 2 can upload and call `/complete` again to re-trigger agentic with richer data.
 
+### New instance vs. matching an existing one (`select_ref`)
+
+The `/start` match is **by serial/MAC only**. Items catalogued before the intake API (or by hand)
+often have neither, so they miss and land on `select_ref`. To avoid duplicating a device already in
+stock, each candidate carries **`matchableInstances[]`** — existing instances of that reference with
+no serial/MAC on file (excluding in-device components and zero-stock items). The operator then chooses:
+
+- **New** → `POST …/answer { type:'ref', artikelNummer }` — mints a new instance (default behaviour).
+- **Existing** → `POST …/answer { type:'ref', artikelNummer, useItemUUID }` — binds the scanned
+  serial/MAC + scan onto that instance (guarded: must belong to the ref, must not already carry a
+  different identity → `409`; idempotent), then continues to `quality`. Logs an `InstanceMatched` event.
+
+Additive: a station that ignores `matchableInstances`/`useItemUUID` behaves exactly as before.
+
 ## intakeKey
 
 Format: `SN:{serial}` or `MAC:{mac}` (MAC fallback when serial is unavailable).

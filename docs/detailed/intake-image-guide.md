@@ -21,6 +21,29 @@ POST /api/intake/{key}/complete                  # trigger agentic enrichment
 `{key}` is `SN:{serial}` (or `MAC:{mac}` when no serial). Auth: `X-Intake-Token` on all
 `/api/intake/*` routes. The `/api/contracts/*` routes are open (no token).
 
+## `select_ref` — new instance or an existing one?
+
+`/start` matches a booted device to an existing item **by serial/MAC**. Items catalogued before
+the intake API (or by hand) usually have neither on file, so that lookup misses and the flow lands
+on `select_ref` — historically the only choice there was "create a new instance", which produced a
+duplicate of the device already in stock.
+
+To avoid that, each `select_ref` candidate now carries **`matchableInstances`**: existing instances
+of that reference with **no serial and no MAC** (excluding in-device components and zero-stock
+items) — the exact devices that *could* be the one on the bench. The TUI should:
+
+1. Operator picks a reference candidate.
+2. If it has `matchableInstances`, ask **"new device or one of these existing ones?"** — show each
+   by `boxLabel`/`location` + `quality` so the operator can recognise the shelf unit.
+3. **New** → send `{ type:'ref', artikelNummer }` as before (mints a new instance).
+   **Existing** → send `{ type:'ref', artikelNummer, useItemUUID:'<the instance>' }` — the scanned
+   serial/MAC + scan are bound to that instance and the flow continues to `quality` on it.
+
+The whole feature is **additive**: a script that ignores `matchableInstances` and never sends
+`useItemUUID` behaves exactly as before. Guards: `useItemUUID` must belong to `artikelNummer` and
+must not already carry a *different* serial/MAC (else `409`); re-sending the same identity is
+idempotent.
+
 ## The questionnaire is auto-trimmed — you render what comes back
 
 At intake the server answers everything it already knows and returns **only the questions a human
@@ -40,6 +63,20 @@ the ref step) is what the server resolves from. Adding/removing an auto-resolved
 a contract-JSON edit. (A `showIf` pointing at an auto-answered question is resolved server-side —
 the dependent is asked or dropped based on the auto value — so you never need the script to know
 about auto-answers.)
+
+### `detectedSpecs` — show the operator what the scan filled in (optional to render)
+Alongside `qualityQuestions`, the `quality`-step responses (`/start` step 2 and the `ref` answer)
+now carry **`detectedSpecs: [{ label, value }]`** — the scan-answered specs the server resolved
+instead of asking (RAM, Speicher, Speichertyp, Akku). Render them as a short read-only banner so
+the operator sees the machine's known specs even though there was no question, e.g.:
+
+```
+Aus Scan übernommen:  RAM 8 GB · Speicher 256 GB · Speichertyp NVMe SSD · Akku Gut (>80%)
+```
+
+It is informational only — there is nothing to answer. If a spec you expected is **missing** from
+`detectedSpecs` (and instead appears as a question), the scan didn't carry it — see the disk-size
+warning under "The generic `components[]` object".
 
 ## 2. Specs — how to fill them
 
@@ -93,6 +130,14 @@ Answer them in the same `qualityAnswers` map by question `id`. Presence answers 
 (`ram_gb`, `storage_gb`, `drive_type`, `battery_condition`) via `defaultValue` — confirm or
 override.
 
+### Every question is skippable — "don't know" is valid
+**No intake question is mandatory.** To skip one, either **omit its `id`** from `qualityAnswers`
+or send an **empty string** (`""`). The server treats both as *unanswered*: a skipped question
+never contributes to the quality score and never produces a spec (so a skipped `ram_gb` will not
+write `RAM: " GB"`). A skipped answer also never overrides a value the scan already resolved.
+The station TUI should let the operator press **Enter on an empty prompt to skip** any question
+(select, boolean, or text) — see the `phase1.sh` skip patch in the intake changelog (#916).
+
 ### Accessories as *specs* vs. accessories as *linked items*
 - Most accessories are captured as **specs/presence answers** (above) — no separate item is
   created. This is the default and avoids identity-less clutter.
@@ -121,6 +166,24 @@ future:
   convention: `has_<slotKey>` → `"true"` and `<slotKey>_model` → its `model`. So a detected GPU
   tagged `slotKey:"gpu"` pre-answers a `has_gpu` question (operator confirms) — only if the
   subcategory's assembly contract defines that slot.
+
+### ⚠️ Disk `sizeGb` MUST come from `lsblk`, not `smartctl`
+`sizeGb` drives the `storageSize` signal that auto-answers (and drops) the `storage_gb` question.
+The server treats `sizeGb <= 0` as **unknown** and therefore **asks the operator** for storage.
+
+Source the size from the block device, not from SMART:
+
+- ✅ **`lsblk -bdno SIZE /dev/<name>`** (bytes) → `/ 1073741824 | floor`. `lsblk` reports capacity
+  for every block device — SATA, NVMe, eMMC, USB — regardless of transport.
+- ❌ **`smartctl` `.user_capacity.bytes`** is an **ATA/SATA** field. It is **empty for NVMe**
+  (SMART reports NVMe capacity under `nvme_total_capacity` / namespace fields) and empty whenever
+  `smartctl` open-fails (some USB bridges), so it yields `sizeGb: 0` on exactly the modern NVMe
+  laptops we intake — which is why storage kept being asked. Keep `smartctl` for **identity only**
+  (`serial` / `wwn` / `model` / protocol→`type`); take **size** from `lsblk`.
+
+**Self-check:** the server logs one `[intake] question resolution` line per questionnaire build. If
+`unresolvedAutoFill` contains `{ id: "storage_gb", autoFill: "storageSize" }`, the scan sent no
+usable size — fix the image, not the contract.
 
 ## 4. Putting it together — a complete quality answer
 

@@ -100,7 +100,7 @@ async function handleSuccess(
   const completionIso = completionTime.toISOString();
 
   try {
-    markShopwareSyncJobSucceeded(job.Id, completionIso);
+    await markShopwareSyncJobSucceeded(job.Id, completionIso);
     logger?.info?.('[shopware-worker] Shopware sync job succeeded', {
       jobId: job.Id,
       correlationId: job.CorrelationId,
@@ -140,7 +140,7 @@ async function handleRetry(
   const nextAttemptAt = new Date(now.getTime() + delayMs).toISOString();
 
   try {
-    rescheduleShopwareSyncJob({
+    await rescheduleShopwareSyncJob({
       id: job.Id,
       retryCount: newRetryCount,
       error: message,
@@ -179,7 +179,7 @@ async function handlePermanentFailure(
   const updatedIso = now.toISOString();
 
   try {
-    markShopwareSyncJobFailed({ id: job.Id, error: message, updatedAt: updatedIso });
+    await markShopwareSyncJobFailed({ id: job.Id, error: message, updatedAt: updatedIso });
     logger?.error?.('[shopware-worker] Shopware sync job failed permanently', {
       jobId: job.Id,
       correlationId,

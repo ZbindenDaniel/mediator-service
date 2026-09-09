@@ -117,6 +117,8 @@ export type ItemReferenceEdit = ItemRef;
 export type Item = ItemInstance & Partial<ItemRef> & {
   AgenticStatus?: AgenticRunStatus | null;
   AgenticReviewState?: string | null;
+  // Timestamp of the most recent agentic run attempt (agentic_runs.LastAttemptAt); null when never run.
+  AgenticLastRunAt?: string | null;
   /** Derived from relation tables: 'connected' = instance relation exists, 'available' = ref-level compatibility only */
   ZubehoerMode?: 'connected' | 'available' | null;
   /** UUID of the parent item if this item is stored as an accessory of another item */

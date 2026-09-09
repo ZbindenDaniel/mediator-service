@@ -69,13 +69,13 @@ describe('forwardAgenticTrigger — start/restart flow', () => {
     expect(agenticModule.restartAgenticRun).not.toHaveBeenCalled();
   });
 
-  it('restarts a non-active existing run and returns 202', async () => {
-    const staleRun = { Artikel_Nummer: 'A-003', Status: 'approved' };
+  it('restarts a notStarted existing run and returns 202', async () => {
+    const seededRun = { Artikel_Nummer: 'A-003', Status: 'notStarted' };
     const requeued = { Artikel_Nummer: 'A-003', Status: 'queued' };
     agenticModule.startAgenticRun.mockResolvedValue({
       queued: false,
       reason: 'already-exists',
-      agentic: staleRun
+      agentic: seededRun
     });
     agenticModule.restartAgenticRun.mockResolvedValue({ queued: true, agentic: requeued });
 
@@ -92,11 +92,35 @@ describe('forwardAgenticTrigger — start/restart flow', () => {
     );
   });
 
-  it('returns 409 when restart is declined', async () => {
+  it.each(['approved', 'auto_approved', 'review', 'rejected', 'failed', 'cancelled'])(
+    'does not restart a settled %s run; returns 200 with the existing run untouched',
+    async (status) => {
+      const settledRun = { Artikel_Nummer: 'A-003b', Status: status };
+      agenticModule.startAgenticRun.mockResolvedValue({
+        queued: false,
+        reason: 'already-exists',
+        agentic: settledRun
+      });
+
+      const result = await forwardAgenticTrigger(
+        { artikelNummer: 'A-003b', artikelbeschreibung: 'Drucker Canon' },
+        { context: 'test', service: makeServiceDeps() }
+      );
+
+      expect(result.ok).toBe(true);
+      expect(result.status).toBe(200);
+      expect((result.body as { agentic: unknown }).agentic).toEqual(settledRun);
+      // The whole point of the fix: a repeat trigger (e.g. creating another instance of an
+      // existing reference) must never restart an approved/in-review/settled run.
+      expect(agenticModule.restartAgenticRun).not.toHaveBeenCalled();
+    }
+  );
+
+  it('returns 409 when restart of a notStarted run is declined', async () => {
     agenticModule.startAgenticRun.mockResolvedValue({
       queued: false,
       reason: 'already-exists',
-      agentic: { Artikel_Nummer: 'A-004', Status: 'approved' }
+      agentic: { Artikel_Nummer: 'A-004', Status: 'notStarted' }
     });
     agenticModule.restartAgenticRun.mockResolvedValue({ queued: false, reason: 'concurrent-lock' });
 

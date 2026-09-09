@@ -9,15 +9,25 @@ const envSchema = z.object({
   MODEL_API_KEY: z.string().min(1).optional(),
   MODEL_NAME: z.string().min(1).optional(),
   VISION_MODEL_NAME: z.string().min(1).optional(),
+  // Ollama context window (num_ctx, tokens). Ollama defaults to 2048, far below the extraction prompt
+  // (~6–7k tokens), so the prompt is silently left-truncated and the model returns an empty completion —
+  // the root cause of the "json match missing" / EXTRACTION_FAILED loop. Size to cover prompt + output;
+  // raising it costs VRAM, so it stays configurable. Applies to Ollama only.
+  MODEL_NUM_CTX: z.coerce.number().int().positive().optional(),
+  // Force the Ollama response into valid JSON (Ollama `format: "json"`). Strong guard against empty /
+  // prose completions, but it suppresses a reasoning model's <think> phase — default OFF because the
+  // extraction path handles <think> blocks. Enable only for non-reasoning models.
+  MODEL_FORMAT_JSON: z.string().optional(),
+  // Raise undici's fetch header/body timeouts for the (local) model endpoint: a slow first token from a
+  // cold Ollama model is a legitimate long wait, not a transport failure. 0 disables the timeout.
+  MODEL_HTTP_HEADERS_TIMEOUT_MS: z.coerce.number().int().nonnegative().optional(),
+  MODEL_HTTP_BODY_TIMEOUT_MS: z.coerce.number().int().nonnegative().optional(),
   TAVILY_API_KEY: z.string().min(1).optional(),
   SEARCH_RATE_LIMIT_DELAY_MS: z.coerce.number().int().nonnegative().optional(),
   SEARCH_MAX_PLANS: z.coerce.number().int().min(1).optional(),
   SEARCH_MAX_AGENT_QUERIES_PER_REQUEST: z.coerce.number().int().min(1).optional(),
-  SHOPWARE_BASE_URL: z.string().url().optional(),
-  SHOPWARE_CLIENT_ID: z.string().min(1).optional(),
-  SHOPWARE_CLIENT_SECRET: z.string().min(1).optional(),
-  SHOPWARE_API_TOKEN: z.string().min(1).optional(),
-  SHOPWARE_SALES_CHANNEL: z.string().min(1).optional(),
+  // Shopware config now lives in the root backend config (backend/config.ts SHOPWARE_CONFIG),
+  // shared by the search action, the admin surface, and the agentic tool.
   AGENT_ACTOR_ID: z.string().min(1).optional()
 });
 
@@ -146,15 +156,14 @@ const envInput: EnvSchemaInput = {
   ),
   // Vision model name for OCR — standalone only, falls back to MODEL_NAME in code
   VISION_MODEL_NAME: resolveEnvValue('VISION_MODEL_NAME'),
+  MODEL_NUM_CTX: resolveNumber('MODEL_NUM_CTX'),
+  MODEL_FORMAT_JSON: resolveEnvValue('MODEL_FORMAT_JSON'),
+  MODEL_HTTP_HEADERS_TIMEOUT_MS: resolveNumber('MODEL_HTTP_HEADERS_TIMEOUT_MS'),
+  MODEL_HTTP_BODY_TIMEOUT_MS: resolveNumber('MODEL_HTTP_BODY_TIMEOUT_MS'),
   TAVILY_API_KEY: resolveEnvValue('TAVILY_API_KEY'),
   SEARCH_RATE_LIMIT_DELAY_MS: resolveNumber('SEARCH_RATE_LIMIT_DELAY_MS'),
   SEARCH_MAX_PLANS: resolveNumber('SEARCH_MAX_PLANS'),
   SEARCH_MAX_AGENT_QUERIES_PER_REQUEST: resolveNumber('SEARCH_MAX_AGENT_QUERIES_PER_REQUEST'),
-  SHOPWARE_BASE_URL: resolveEnvValue('SHOPWARE_BASE_URL'),
-  SHOPWARE_CLIENT_ID: resolveEnvValue('SHOPWARE_CLIENT_ID'),
-  SHOPWARE_CLIENT_SECRET: resolveEnvValue('SHOPWARE_CLIENT_SECRET'),
-  SHOPWARE_API_TOKEN: resolveEnvValue('SHOPWARE_API_TOKEN', 'SHOPWARE_ACCESS_TOKEN'),
-  SHOPWARE_SALES_CHANNEL: resolveEnvValue('SHOPWARE_SALES_CHANNEL', 'SHOPWARE_SALES_CHANNEL_ID'),
   AGENT_ACTOR_ID: resolveEnvValue('AGENT_ACTOR_ID')
 };
 
@@ -188,6 +197,10 @@ export interface AgenticModelConfig {
    * Falls back to textModel when unset — requires the configured model to support vision input.
    */
   visionModel?: string;
+  /** Ollama context window (num_ctx, tokens). Undefined ⇒ let Ollama use the model default. */
+  numCtx?: number;
+  /** Force Ollama responses to valid JSON (`format: "json"`). Off unless MODEL_FORMAT_JSON is truthy. */
+  formatJson: boolean;
 }
 
 export interface AgenticSearchConfig {
@@ -195,32 +208,36 @@ export interface AgenticSearchConfig {
   rateLimitDelayMs?: number;
 }
 
+export interface AgenticModelHttpConfig {
+  /** undici header timeout (ms) for model fetches — the wall a slow first token hits. 0 disables it. */
+  headersTimeoutMs: number;
+  /** undici body timeout (ms) for model fetches — inter-chunk timeout while streaming. 0 disables it. */
+  bodyTimeoutMs: number;
+}
+
 export interface AgenticSearchLimitsConfig {
   maxPlans: number;
   maxAgentQueriesPerRequest: number;
-}
-
-export interface ShopwareCredentialsConfig {
-  clientId?: string;
-  clientSecret?: string;
-  apiToken?: string;
-}
-
-export interface ShopwareIntegrationConfig extends ShopwareCredentialsConfig {
-  baseUrl: string;
-  salesChannel: string;
 }
 
 // TODO(agent): Validate configured search limits against production runbooks once env overrides are available.
 const resolvedSearchMaxPlans = parsedEnv.SEARCH_MAX_PLANS ?? 3;
 const resolvedSearchMaxAgentQueriesPerRequest = parsedEnv.SEARCH_MAX_AGENT_QUERIES_PER_REQUEST ?? 3;
 
+// Default 8192: comfortably covers the largest prompt (extraction ~6–7k tokens) plus the JSON answer,
+// while staying modest enough for a single mid-range GPU. Override via MODEL_NUM_CTX per hardware.
+const DEFAULT_MODEL_NUM_CTX = 8192;
+
 export const modelConfig: AgenticModelConfig = {
   provider: parsedEnv.MODEL_PROVIDER,
   baseUrl: parsedEnv.MODEL_BASE_URL,
   apiKey: parsedEnv.MODEL_API_KEY,
   textModel: parsedEnv.MODEL_NAME,
-  visionModel: parsedEnv.VISION_MODEL_NAME
+  visionModel: parsedEnv.VISION_MODEL_NAME,
+  numCtx: parsedEnv.MODEL_NUM_CTX ?? DEFAULT_MODEL_NUM_CTX,
+  formatJson: ['1', 'true', 'yes', 'on'].includes(
+    (parsedEnv.MODEL_FORMAT_JSON ?? '').trim().toLowerCase()
+  )
 };
 
 export const searchConfig: AgenticSearchConfig = {
@@ -228,59 +245,18 @@ export const searchConfig: AgenticSearchConfig = {
   rateLimitDelayMs: parsedEnv.SEARCH_RATE_LIMIT_DELAY_MS
 };
 
+// Default 10 min matches OLLAMA_KEEP_ALIVE, so a cold model has the full keep-alive window to return its
+// first token before undici treats the wait as a transport failure. Raising the ceiling is harmless for
+// fast APIs (they respond well within it); it only delays the failure of a genuinely hung request.
+export const modelHttpConfig: AgenticModelHttpConfig = {
+  headersTimeoutMs: parsedEnv.MODEL_HTTP_HEADERS_TIMEOUT_MS ?? 600_000,
+  bodyTimeoutMs: parsedEnv.MODEL_HTTP_BODY_TIMEOUT_MS ?? 600_000
+};
+
 export const searchLimits: AgenticSearchLimitsConfig = {
   maxPlans: resolvedSearchMaxPlans,
   maxAgentQueriesPerRequest: resolvedSearchMaxAgentQueriesPerRequest
 };
-
-const shopwareConfigSchema = z
-  .object({
-    baseUrl: z.string().url(),
-    clientId: z.string().min(1).optional(),
-    clientSecret: z.string().min(1).optional(),
-    apiToken: z.string().min(1).optional(),
-    salesChannel: z.string().min(1)
-  })
-  .refine(
-    (data) => Boolean(data.apiToken) || (Boolean(data.clientId) && Boolean(data.clientSecret)),
-    {
-      message: 'Provide either SHOPWARE_API_TOKEN or both SHOPWARE_CLIENT_ID and SHOPWARE_CLIENT_SECRET',
-      path: ['apiToken']
-    }
-  );
-
-const rawShopwareConfig = {
-  baseUrl: parsedEnv.SHOPWARE_BASE_URL,
-  clientId: parsedEnv.SHOPWARE_CLIENT_ID,
-  clientSecret: parsedEnv.SHOPWARE_CLIENT_SECRET,
-  apiToken: parsedEnv.SHOPWARE_API_TOKEN,
-  salesChannel: parsedEnv.SHOPWARE_SALES_CHANNEL
-};
-
-const hasShopwareBase = Boolean(rawShopwareConfig.baseUrl && rawShopwareConfig.salesChannel);
-const hasShopwareApiToken = Boolean(rawShopwareConfig.apiToken);
-const hasShopwareClientCredentials = Boolean(
-  rawShopwareConfig.clientId && rawShopwareConfig.clientSecret
-);
-
-let resolvedShopwareConfig: ShopwareIntegrationConfig | null = null;
-
-if (hasShopwareBase && (hasShopwareApiToken || hasShopwareClientCredentials)) {
-  resolvedShopwareConfig = shopwareConfigSchema.parse(rawShopwareConfig);
-} else if (
-  rawShopwareConfig.baseUrl ||
-  rawShopwareConfig.salesChannel ||
-  rawShopwareConfig.clientId ||
-  rawShopwareConfig.clientSecret ||
-  rawShopwareConfig.apiToken
-) {
-  console.info?.({
-    msg: 'Skipping Shopware configuration due to incomplete settings',
-    providedKeys: sanitizeEnvForLogging(rawShopwareConfig as Record<string, unknown>)
-  });
-}
-
-export const shopwareConfig: ShopwareIntegrationConfig | null = resolvedShopwareConfig;
 
 export const agentActorId: string = parsedEnv.AGENT_ACTOR_ID?.trim() || 'item-flow-service';
 

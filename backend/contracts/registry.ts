@@ -64,3 +64,24 @@ export function listSpecContractSubcategories(): number[] {
     return [];
   }
 }
+
+let filterableSpecKeysCache: Set<string> | null = null;
+
+// The union of every spec-contract field key across all subcategories. Used to decide which Shopware
+// property groups are storefront-filterable: only recognized spec fields filter, so freeform Langtext
+// keys are still pushed as (non-filterable) properties instead of flooding the filter sidebar.
+// A Shopware property_group's `filterable` flag is global (not per product), so the whitelist must be
+// the union across contracts — a per-product decision would flip a shared group's flag on every sync.
+export function getFilterableSpecKeys(): Set<string> {
+  if (filterableSpecKeysCache) return filterableSpecKeysCache;
+  const keys = new Set<string>();
+  for (const sub of listSpecContractSubcategories()) {
+    const contract = getSpecContract(sub);
+    for (const field of contract?.fields ?? []) {
+      const key = field.key?.trim();
+      if (key) keys.add(key);
+    }
+  }
+  filterableSpecKeysCache = keys;
+  return keys;
+}

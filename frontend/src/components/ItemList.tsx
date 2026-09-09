@@ -161,9 +161,9 @@ export default function ItemList({
             <th className="col-shop optional-column">Shop</th>
             <th className="col-zubehoer optional-column">Zub.</th>
             <th className="col-subcategory optional-column">Unterkategorie A</th>
-            {(sortKey === 'entryDate' || sortKey === 'lastSynced') && (
+            {(sortKey === 'entryDate' || sortKey === 'lastSynced' || sortKey === 'agenticLastRun') && (
               <th className="col-date optional-column">
-                {sortKey === 'lastSynced' ? 'Synchronisiert' : 'Erfasst am'}
+                {sortKey === 'lastSynced' ? 'Synchronisiert' : sortKey === 'agenticLastRun' ? 'KI-Datum' : 'Erfasst am'}
               </th>
             )}
           </tr>
@@ -400,6 +400,9 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                 )}
                 {sortKey === 'lastSynced' && (
                   <td className="col-date optional-column">{formatDate(representative?.LastSyncedAt)}</td>
+                )}
+                {sortKey === 'agenticLastRun' && (
+                  <td className="col-date optional-column">{formatDate(representative?.AgenticLastRunAt)}</td>
                 )}
               </tr>
             );

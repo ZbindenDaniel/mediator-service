@@ -7,11 +7,12 @@
 1. Copy `.env.example` to `.env` for local development.
 2. Populate the Shopware **search** variables before enabling read-only lookups. Leaving any required value blank keeps the integration disabled automatically:
    - `SHOPWARE_BASE_URL` must include the protocol (e.g. `https://shopware.example.com`).
-   - Provide either `SHOPWARE_CLIENT_ID` and `SHOPWARE_CLIENT_SECRET`, or set a pre-generated `SHOPWARE_ACCESS_TOKEN` / `SHOPWARE_API_TOKEN`.
-   - Set `SHOPWARE_SALES_CHANNEL_ID` (or `SHOPWARE_SALES_CHANNEL`) to the channel that should receive mediator updates.
+   - Provide either `SHOPWARE_CLIENT_ID` and `SHOPWARE_CLIENT_SECRET`, or set a `SHOPWARE_ACCESS_TOKEN` (API key). Both auth modes are supported.
+   - Set `SHOPWARE_SALES_CHANNEL_ACCESS_KEY` to the sales-channel API access key (the `sw-access-key`, not the UUID). Legacy `SHOPWARE_SALES_CHANNEL_ID` / `SHOPWARE_SALES_CHANNEL` are still accepted.
    - Adjust `SHOPWARE_REQUEST_TIMEOUT_MS` if the default 10s window is too short for your environment.
+   - Use the Admin **Shopware-Verbindung** card ("Verbindung testen") to confirm the credentials reach the instance.
 3. Flip `SHOPWARE_ENABLED=true` only after all required values are in place. Leaving it as `false` keeps Shopware search disabled even if credentials are present.
-4. Leave the queue-related flags (`SHOPWARE_SYNC_ENABLED`, `SHOPWARE_API_BASE_URL`, `SHOPWARE_QUEUE_POLL_INTERVAL_MS`) at their defaults. The background worker is intentionally disabled until the HTTP dispatch client is implemented.
+4. Leave `SHOPWARE_SYNC_ENABLED` at its default `false`. It gates sync-queue enqueue; the dispatcher that would send jobs to Shopware is not yet implemented, so enabling it only accumulates jobs. (The dead `SHOPWARE_API_BASE_URL` / `SHOPWARE_QUEUE_POLL_INTERVAL_MS` flags were removed.)
 5. Set `IMPORTER_FORCE_ZERO_STOCK=true` to automatically override all CSV row quantities to zero during ingestion. When this flag is omitted or left `false`, operators can trigger a single zero-stock upload by calling `/api/import?zeroStock=true`.
 6. Media storage defaults to local for development (`MEDIA_STORAGE_MODE=local`) with a fixed local path `dist/media`; container deployments should set `MEDIA_STORAGE_MODE=webdav` with `MEDIA_ROOT_DIR` as an absolute mounted filesystem root so fixed paths resolve to `<root>/shopbilder` and `<root>/shopbilder-import` (URLs are rejected).
 7. `/api/sync/erp` image mirroring uses `<MEDIA_ROOT_DIR>/shopbilder-import` by default (derived `ERP_MEDIA_MIRROR_DIR`). Confirm backend logs include `[sync-erp] script_finished` with `mediaCopyStatus: 'success'` plus script output line `[erp-sync] media_copy_result status=success ... source_count=<n> destination_count=<n>`.

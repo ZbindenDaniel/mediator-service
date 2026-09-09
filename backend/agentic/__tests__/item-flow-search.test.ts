@@ -51,6 +51,36 @@ describe('collectSearchContexts', () => {
     expect(result.aggregatedSources).toHaveLength(0);
   });
 
+  it('reuses stored sources as a labelled context when search is skipped, even without descriptions', async () => {
+    const searchInvoker: SearchInvoker = jest.fn(async (): Promise<SearchResult> => ({
+      text: 'unused',
+      sources: []
+    }));
+
+    const result = await collectSearchContexts({
+      searchTerm: 'Widget',
+      searchInvoker,
+      itemId: 'item-skip-stored',
+      shouldSearch: false,
+      // Persisted LastSearchLinksJson frequently carries only url + title, no description.
+      storedSources: [
+        { title: 'WD Blue spec sheet', url: 'https://wd.com/blue' },
+        { title: 'Datasheet', url: 'https://example.com/ds', description: 'Kapazität 2 TB' }
+      ]
+    });
+
+    expect(searchInvoker).not.toHaveBeenCalled();
+    expect(result.searchContexts).toHaveLength(1);
+    const text = result.searchContexts[0]?.text ?? '';
+    // The collected results must actually be appended — not collapsed to an empty block just
+    // because the first source had no description.
+    expect(text.length).toBeGreaterThan(0);
+    expect(text).toContain('WD Blue spec sheet');
+    expect(text).toContain('https://wd.com/blue');
+    expect(text).toContain('Kapazität 2 TB');
+    expect(result.searchContexts[0]?.sources).toHaveLength(2);
+  });
+
   it('buildAggregatedSearchText returns combined source texts', async () => {
     const searchInvoker: SearchInvoker = jest.fn(async (): Promise<SearchResult> => ({
       text: 'widget specification text',

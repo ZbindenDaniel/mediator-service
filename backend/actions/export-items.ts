@@ -848,19 +848,27 @@ function resolveLangtextExportFormat(
   exportMode: ExportMode,
   logger: Pick<Console, 'error' | 'info' | 'warn'> = console
 ): LangtextExportFormat {
+  // A backup must round-trip losslessly through the CSV importer, so its Langtext is ALWAYS
+  // serialized as JSON and its cells never contain HTML/markdown (HTML also enables the
+  // <p>-wrapped Kurzbeschreibung path, which corrupts the field on re-import). The
+  // LANGTEXT_EXPORT_FORMAT override is deliberately confined to the ERP boundary — letting it
+  // reach backups is what previously produced un-restorable HTML backups.
+  if (exportMode !== 'erp') {
+    return 'json';
+  }
   try {
     const envFormat = process.env.LANGTEXT_EXPORT_FORMAT?.toLowerCase();
     if (envFormat === 'json' || envFormat === 'markdown' || envFormat === 'html') {
       return envFormat;
     }
-    // ERP downstream importer expects HTML; backup exports use JSON
-    return exportMode === 'erp' ? 'html' : 'json';
+    // ERP downstream importer expects HTML.
+    return 'html';
   } catch (error) {
-    logger.error?.('[export-items] Failed to resolve Langtext export format from mode; defaulting to JSON.', {
+    logger.error?.('[export-items] Failed to resolve Langtext export format for ERP; defaulting to HTML.', {
       exportMode,
       error
     });
-    return 'json';
+    return 'html';
   }
 }
 

@@ -1,4 +1,6 @@
-import { shopwareConfig } from '../config';
+// Unified Shopware config lives in the root backend config (single source shared with the search
+// action + admin surface); the agentic tool no longer keeps its own copy.
+import { SHOPWARE_CONFIG, isShopwareConfigReady, type ShopwareConfig } from '../../config';
 import type { TavilySearchLogger } from './tavily-client';
 
 const PRODUCT_LIMIT_MAX = 25;
@@ -6,7 +8,7 @@ let cachedToken: string | null = null;
 let cachedTokenExpiry = 0;
 let cachedTokenSignature: string | null = null;
 
-let shopwareConfigOverride: typeof shopwareConfig | null | undefined;
+let shopwareConfigOverride: ShopwareConfig | null | undefined;
 
 export interface ShopwareToolLogger extends TavilySearchLogger {}
 
@@ -21,18 +23,21 @@ export interface ShopwareSearchResult {
   products: ShopwareProductEntry[];
 }
 
-function getActiveShopwareConfig() {
-  if (shopwareConfigOverride !== undefined) {
-    return shopwareConfigOverride;
+function getActiveShopwareConfig(): ShopwareConfig | null {
+  const config = shopwareConfigOverride !== undefined ? shopwareConfigOverride : SHOPWARE_CONFIG;
+  // Only expose the config to the tool when it's actually usable (enabled + no config issues),
+  // so the agentic search path and the read/search action agree on when Shopware is "on".
+  if (!config || !isShopwareConfigReady(config)) {
+    return null;
   }
-  return shopwareConfig;
+  return config;
 }
 
 export function isShopwareConfigured(): boolean {
-  return Boolean(getActiveShopwareConfig());
+  return getActiveShopwareConfig() !== null;
 }
 
-export function __setShopwareConfigOverride(config: typeof shopwareConfig | null): void {
+export function __setShopwareConfigOverride(config: ShopwareConfig | null): void {
   shopwareConfigOverride = config;
   cachedToken = null;
   cachedTokenExpiry = 0;
@@ -143,15 +148,16 @@ async function getShopwareToken(logger?: ShopwareToolLogger): Promise<string> {
   if (!activeConfig) {
     throw new Error('Shopware configuration is missing');
   }
-  if (activeConfig.apiToken) {
-    return activeConfig.apiToken;
+  const { clientId, clientSecret, accessToken } = activeConfig.credentials;
+  if (accessToken) {
+    return accessToken;
   }
   const now = Date.now();
   const signature = JSON.stringify({
     baseUrl: activeConfig.baseUrl,
-    clientId: activeConfig.clientId,
-    clientSecret: activeConfig.clientSecret,
-    salesChannel: activeConfig.salesChannel
+    clientId,
+    clientSecret,
+    salesChannelAccessKey: activeConfig.salesChannelAccessKey
   });
   if (cachedTokenSignature !== signature) {
     cachedToken = null;
@@ -162,11 +168,11 @@ async function getShopwareToken(logger?: ShopwareToolLogger): Promise<string> {
     return cachedToken;
   }
 
-  const tokenUrl = new URL('/api/oauth/token', activeConfig.baseUrl);
+  const tokenUrl = new URL('/api/oauth/token', activeConfig.baseUrl ?? '');
   const body = new URLSearchParams({
     grant_type: 'client_credentials',
-    client_id: activeConfig.clientId ?? '',
-    client_secret: activeConfig.clientSecret ?? ''
+    client_id: clientId ?? '',
+    client_secret: clientSecret ?? ''
   });
 
   try {
@@ -211,13 +217,13 @@ export async function searchShopwareRaw(query: string, limit = 5, logger?: Shopw
 
   try {
     const token = await getShopwareToken(logger);
-    const searchUrl = new URL('/store-api/search', activeConfig.baseUrl);
+    const searchUrl = new URL('/store-api/search', activeConfig.baseUrl ?? '');
     const response = await fetch(searchUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
-        'sw-access-key': activeConfig.salesChannel
+        'sw-access-key': activeConfig.salesChannelAccessKey ?? ''
       },
       body: JSON.stringify({ search: query, limit: boundedLimit })
     });
@@ -239,7 +245,7 @@ export async function searchShopwareRaw(query: string, limit = 5, logger?: Shopw
       return { text: `No Shopware products found for "${query}".`, products: [] };
     }
 
-    const products = items.slice(0, boundedLimit).map((product) => mapProduct(product, activeConfig.baseUrl));
+    const products = items.slice(0, boundedLimit).map((product) => mapProduct(product, activeConfig.baseUrl ?? ''));
     const lines = products.map((product, index) => {
       const parts = [
         `${index + 1}. ${product.name || '(no name)'}`,

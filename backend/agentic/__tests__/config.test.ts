@@ -1,4 +1,4 @@
-import type { AgenticModelConfig, ShopwareIntegrationConfig } from '../config';
+import type { AgenticModelConfig } from '../config';
 
 describe('agentic config environment resolution', () => {
   const baselineEnv = { ...process.env };
@@ -135,40 +135,7 @@ describe('agentic config environment resolution', () => {
     expect(() => loadConfig()).toThrowError(/Unsupported value/);
   });
 
-  describe('shopware configuration', () => {
-    it('accepts SHOPWARE_ACCESS_TOKEN and trims surrounding whitespace', () => {
-      process.env.SHOPWARE_BASE_URL = ' https://shopware.example.com ';
-      process.env.SHOPWARE_SALES_CHANNEL = ' main-channel ';
-      process.env.SHOPWARE_ACCESS_TOKEN = '  token-value  ';
-
-      const { shopwareConfig } = loadConfig();
-
-      expect(shopwareConfig).not.toBeNull();
-      expect((shopwareConfig as ShopwareIntegrationConfig).baseUrl).toBe(
-        'https://shopware.example.com'
-      );
-      expect((shopwareConfig as ShopwareIntegrationConfig).salesChannel).toBe('main-channel');
-      expect((shopwareConfig as ShopwareIntegrationConfig).apiToken).toBe('token-value');
-    });
-
-    it('skips configuration when required values resolve to empty strings', () => {
-      process.env.SHOPWARE_BASE_URL = 'https://shopware.example.com';
-      process.env.SHOPWARE_SALES_CHANNEL_ID = '   ';
-      process.env.SHOPWARE_CLIENT_ID = 'client-id';
-      process.env.SHOPWARE_CLIENT_SECRET = '   ';
-
-      const consoleInfoSpy = jest.spyOn(console, 'info').mockImplementation();
-
-      try {
-        const { shopwareConfig } = loadConfig();
-
-        expect(shopwareConfig).toBeNull();
-        expect(consoleInfoSpy).toHaveBeenCalledWith(
-          expect.objectContaining({ msg: 'Skipping Shopware configuration due to incomplete settings' })
-        );
-      } finally {
-        consoleInfoSpy.mockRestore();
-      }
-    });
-  });
+  // Shopware configuration moved to the root backend config (backend/config.ts SHOPWARE_CONFIG);
+  // it is no longer resolved by the agentic config module. See test/shopware-connection-check.test.ts
+  // and the config-issue helpers in backend/config.ts for its coverage.
 });

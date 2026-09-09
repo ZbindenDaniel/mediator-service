@@ -8,6 +8,7 @@ import PrinterSettingsCard from './admin/PrinterSettingsCard';
 import AgenticOverviewCard from './admin/AgenticOverviewCard';
 import SystemStatusCard from './admin/SystemStatusCard';
 import NightlyErpSyncCard from './admin/NightlyErpSyncCard';
+import ShopwareStatusCard from './admin/ShopwareStatusCard';
 import AgenticDispatchCard from './admin/AgenticDispatchCard';
 import AdminGate from './admin/AdminGate';
 
@@ -80,6 +81,7 @@ export default function AdminPage() {
         <AgenticDispatchCard authToken={token} onAuthFailure={handleAuthFailure} />
         <SystemStatusCard authToken={token} onAuthFailure={handleAuthFailure} />
         <NightlyErpSyncCard authToken={token} onAuthFailure={handleAuthFailure} />
+        <ShopwareStatusCard authToken={token} onAuthFailure={handleAuthFailure} />
       </div>
     </div>
   );

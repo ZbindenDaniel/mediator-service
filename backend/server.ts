@@ -102,12 +102,18 @@ import {
   deleteItem,
   deleteBox,
   enqueueShopwareSyncJob,
+  getShopwareSyncSnapshotForPayload,
+  setShopwareProductId,
+  setItemShopwareVariantId,
   insertAgenticRunReviewHistoryEntry,
   listStubs,
   createStub,
   closeStub,
   initDb
 } from './db';
+import { createShopwareAdminClient } from './shopware/adminClient';
+import { createShopwareSyncClient } from './shopware/syncClient';
+import { processShopwareQueue } from './workers/processShopwareQueue';
 import { AgenticModelInvoker } from './agentic/invoker';
 import type { Item, LabelJob } from './db';
 import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
@@ -135,7 +141,7 @@ function clearCsvIngestionOptions(absPath: string): void {
 let shopwareConfig: ShopwareConfig = {
   enabled: false,
   baseUrl: null,
-  salesChannelId: null,
+  salesChannelAccessKey: null,
   requestTimeoutMs: SHOPWARE_DEFAULT_REQUEST_TIMEOUT_MS,
   credentials: {}
 };
@@ -555,7 +561,20 @@ if (agenticServiceEnabled) {
   const agenticQueueDispatchIntervalMs = 5000;
   const agenticQueueDispatchLimit = 5;
   const agenticQueueDependencies = createAgenticServiceDependencies();
+  // Reentrancy guard: the concurrency cap (MAX_CONCURRENT_RUNNING_RUNS) is enforced by computing
+  // availableSlots = MAX - runningCount and claiming at most that many. That read-then-claim is NOT
+  // atomic across dispatch invocations, so if a tick's DB work outlasts the interval, the next
+  // setInterval firing overlaps it: both read the same low runningCount and both claim, promoting more
+  // than the cap into 'running' — the over-cap sweep then cancels the excess instead of letting it wait.
+  // Serializing ticks makes each claim see the previous tick's committed promotions, so the queue never
+  // over-fills.
+  let dispatchInFlight = false;
   const dispatchQueuedRuns = () => {
+    if (dispatchInFlight) {
+      // Previous tick still running; skip this firing rather than double-claim into the running slots.
+      return;
+    }
+    dispatchInFlight = true;
     // dispatchQueuedAgenticRuns is async; fire-and-forget with local error handling
     void dispatchQueuedAgenticRuns(agenticQueueDependencies, { limit: agenticQueueDispatchLimit }).then((summary) => {
       // if (summary.scheduled || summary.skipped || summary.failed) {
@@ -563,6 +582,8 @@ if (agenticServiceEnabled) {
       // }
     }).catch((err: unknown) => {
       console.error('[agentic-service] Failed to dispatch queued agentic runs', err);
+    }).finally(() => {
+      dispatchInFlight = false;
     });
   };
   setInterval(dispatchQueuedRuns, agenticQueueDispatchIntervalMs);
@@ -576,8 +597,44 @@ if (agenticServiceEnabled) {
   })();
 }
 
+// Poll cadence for the Shopware sync worker. Hardcoded (the old SHOPWARE_QUEUE_POLL_INTERVAL_MS env
+// was retired as dead in #936); revisit if it needs to be tunable per deployment.
+const SHOPWARE_SYNC_POLL_INTERVAL_MS = 10_000;
+
 if (SHOPWARE_SYNC_ENABLED) {
-  console.info('[server] SHOPWARE_SYNC_ENABLED=true but the background worker is not active because dispatchJob is not implemented.');
+  if (!shopwareConfigReady) {
+    console.warn('[server] SHOPWARE_SYNC_ENABLED=true but Shopware config is incomplete; sync worker not started.', {
+      issues: shopwareConfigIssues
+    });
+  } else {
+    try {
+      const shopwareAdminClient = createShopwareAdminClient(shopwareConfig);
+      const shopwareSyncClient = createShopwareSyncClient({
+        adminClient: shopwareAdminClient,
+        loadSnapshot: getShopwareSyncSnapshotForPayload,
+        persistProductId: setShopwareProductId,
+        persistVariantId: setItemShopwareVariantId,
+        logger: console
+      });
+      let shopwareSyncRunning = false;
+      const runShopwareSync = async () => {
+        // Reentrancy guard: skip this tick if the previous batch is still in flight (slow Shopware).
+        if (shopwareSyncRunning) return;
+        shopwareSyncRunning = true;
+        try {
+          await processShopwareQueue({ client: shopwareSyncClient, logger: console });
+        } catch (err) {
+          console.error('[server] Shopware sync worker tick failed', err);
+        } finally {
+          shopwareSyncRunning = false;
+        }
+      };
+      setInterval(() => void runShopwareSync(), SHOPWARE_SYNC_POLL_INTERVAL_MS);
+      console.info('[server] Shopware sync worker started', { intervalMs: SHOPWARE_SYNC_POLL_INTERVAL_MS });
+    } catch (err) {
+      console.error('[server] Failed to start Shopware sync worker', err);
+    }
+  }
 }
 
 // ERP_NIGHTLY_SYNC_ENABLED is the env-level default; the runtime toggle lives in system_settings

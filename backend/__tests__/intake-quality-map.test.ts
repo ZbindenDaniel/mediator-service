@@ -77,4 +77,29 @@ describe('resolveIntakeQuestions — ask vs. auto-answer', () => {
     const { ask } = resolveIntakeQuestions([q], scan);
     expect(ask[0].defaultValue).toBe('true'); // asked, but pre-answered for confirmation
   });
+
+  it('reports scan-answered autoFill questions as `detected`, rendered via specValue', () => {
+    const questions: QualityQuestion[] = [
+      { id: 'ram_gb', type: 'select', question: 'RAM?', values: ['4', '8', '16'], autoFill: 'ram', specField: 'RAM', specValue: '%v GB' },
+      { id: 'drive_type', type: 'select', question: 'Typ?', values: ['SSD', 'NVMe SSD'], autoFill: 'storageType', specField: 'Speichertyp', specValue: '%v' },
+    ];
+    const scan = makeScan({ ramMb: 8192, disks: [{ name: 'nvme0n1', sizeGb: 256, type: 'nvme' }] });
+    const { ask, detected } = resolveIntakeQuestions(questions, scan);
+    expect(ask).toHaveLength(0);
+    expect(detected).toEqual([
+      { id: 'ram_gb', label: 'RAM', value: '8 GB' },
+      { id: 'drive_type', label: 'Speichertyp', value: 'NVMe SSD' },
+    ]);
+  });
+
+  it('flags an autoFill question the scan could not answer in `unresolvedAutoFill` (NVMe size=0 mis-scan)', () => {
+    // smartctl-sourced size is 0 for NVMe → storageSize signal returns null → still asked. This is
+    // the exact production symptom: the field is scan-answerable but the scan did not carry it.
+    const q: QualityQuestion = { id: 'storage_gb', type: 'select', question: 'Speicher?', values: ['128', '256', '512'], autoFill: 'storageSize', specField: 'Speicher', specValue: '%v GB' };
+    const scan = makeScan({ disks: [{ name: 'nvme0n1', sizeGb: 0, type: 'nvme' }] });
+    const { ask, detected, unresolvedAutoFill } = resolveIntakeQuestions([q], scan);
+    expect(ask.map((x) => x.id)).toEqual(['storage_gb']);
+    expect(detected).toEqual([]);
+    expect(unresolvedAutoFill).toEqual([{ id: 'storage_gb', autoFill: 'storageSize' }]);
+  });
 });

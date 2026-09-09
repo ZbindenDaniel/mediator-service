@@ -1,14 +1,17 @@
 import React from 'react';
 import type { SimilarItem } from './useSimilarItems';
+import { highlightMatches } from './highlightMatches';
 
 interface SimilarItemsPanelProps {
   items: SimilarItem[];
   loading: boolean;
   error: string | null;
   onSelect: (item: SimilarItem) => void;
+  // The user's input, used to highlight matching words in each result.
+  highlightTerm?: string;
 }
 
-export function SimilarItemsPanel({ items, loading, error, onSelect }: SimilarItemsPanelProps) {
+export function SimilarItemsPanel({ items, loading, error, onSelect, highlightTerm }: SimilarItemsPanelProps) {
   if (!loading && !error && items.length === 0) {
     return null;
   }
@@ -32,9 +35,17 @@ export function SimilarItemsPanel({ items, loading, error, onSelect }: SimilarIt
                 <li key={listKey} className="suggestion-item">
                   <div className="suggestion-item__details">
                     <div>
-                      <span className="suggestion-item__number">{item.Artikel_Nummer || '—'}</span>
+                      <span className="suggestion-item__number">
+                        {item.Artikel_Nummer
+                          ? highlightMatches(item.Artikel_Nummer, highlightTerm)
+                          : '—'}
+                      </span>
                     </div>
-                    <div>{item.Artikelbeschreibung || 'Keine Beschreibung'}</div>
+                    <div>
+                      {item.Artikelbeschreibung
+                        ? highlightMatches(item.Artikelbeschreibung, highlightTerm)
+                        : 'Keine Beschreibung'}
+                    </div>
                     <div className="suggestion-item__box">
                       Behälter: {item.exemplarBoxID || 'unbekannt'}
                       {item.exemplarLocation ? ` – ${item.exemplarLocation}` : ''}

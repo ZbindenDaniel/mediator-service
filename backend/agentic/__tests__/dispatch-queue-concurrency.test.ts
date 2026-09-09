@@ -88,7 +88,8 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
 
     await dispatchQueuedAgenticRuns(deps, { limit: 5 });
 
-    expect(fetchQueuedSpy).toHaveBeenCalledWith(1);
+    // Second arg is the running cap, passed so the claim self-limits to free slots atomically.
+    expect(fetchQueuedSpy).toHaveBeenCalledWith(1, 3);
   });
 
   it('limits queued fetch to all 3 available slots when nothing is running', async () => {
@@ -101,7 +102,7 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
 
     await dispatchQueuedAgenticRuns(deps, { limit: 5 });
 
-    expect(fetchQueuedSpy).toHaveBeenCalledWith(3);
+    expect(fetchQueuedSpy).toHaveBeenCalledWith(3, 3);
   });
 
   it('limits queued fetch to effective limit when limit is less than available slots', async () => {
@@ -114,7 +115,7 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
 
     await dispatchQueuedAgenticRuns(deps, { limit: 2 });
 
-    expect(fetchQueuedSpy).toHaveBeenCalledWith(2);
+    expect(fetchQueuedSpy).toHaveBeenCalledWith(2, 3);
   });
 
   it('auto-feeder promotes notStarted runs into the waiting queue up to the cap, without invoking the model', async () => {
@@ -153,6 +154,43 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
     await dispatchQueuedAgenticRuns(deps, { limit: 5 });
 
     expect(feedSpy).not.toHaveBeenCalled();
+  });
+
+  it('requeues over-cap running runs to wait instead of cancelling them', async () => {
+    // Regression: an over-claim (overlapping ticks / racing instances) once left >cap runs 'running';
+    // the safety net cancelled the excess to 'failed', so a just-promoted queued run appeared to be
+    // "moved to running then cancelled immediately". It must be pushed back to 'queued' to wait instead.
+    const deps = createDeps();
+    const updateSpy = jest.fn(async () => undefined);
+    deps.updateQueuedAgenticRunQueueState = updateSpy;
+
+    // The over-cap SELECT (via db-client.query) returns two excess running runs; every other query is [].
+    (dbClientMod.query as jest.Mock).mockImplementation(async (sql: string) => {
+      if (typeof sql === 'string' && sql.includes("\"Status\" = 'running'") && sql.includes('OFFSET')) {
+        return [
+          { Artikel_Nummer: 'R-EXCESS-1', RetryCount: 0, LastAttemptAt: '2024-01-01T00:00:00.000Z' },
+          { Artikel_Nummer: 'R-EXCESS-2', RetryCount: 2, LastAttemptAt: '2024-01-01T00:00:01.000Z' }
+        ];
+      }
+      return [];
+    });
+    (dbClientMod.queryOne as jest.Mock).mockResolvedValue({ runningcount: 3 });
+    jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
+    jest.spyOn(agenticDb, 'claimNotStartedAgenticRuns').mockResolvedValue([]);
+
+    await dispatchQueuedAgenticRuns(deps, { limit: 5 });
+
+    // Both excess runs are requeued (not failed/cancelled), preserving RetryCount and clearing LastError.
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ Artikel_Nummer: 'R-EXCESS-1', Status: AGENTIC_RUN_STATUS_QUEUED, LastError: null, RetryCount: 0 })
+    );
+    expect(updateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ Artikel_Nummer: 'R-EXCESS-2', Status: AGENTIC_RUN_STATUS_QUEUED, LastError: null, RetryCount: 2 })
+    );
+    // No terminal-failure event was emitted for the requeued runs.
+    expect(deps.logEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({ Event: 'AgenticRunFailed' })
+    );
   });
 });
 

@@ -17,7 +17,7 @@ import { syncInDeviceComponents } from '../lib/in-device-components';
 import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse, assemblyToQualityContract } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveIntakeQuestions, deriveInstanceSpecsFromScan, normalizeScanComponents } from '../lib/intake-quality-map';
-import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion } from '../../models/intake';
+import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion, IntakeDetectedSpecView } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -34,7 +34,7 @@ function parseIntakeKey(key: string): { serial: string | null; mac: string | nul
 
 async function findOrCreateRef(
   artikelNummer: string | undefined,
-  newRef: { Hersteller: string; Kurzbeschreibung?: string; Hauptkategorien_A: number; Unterkategorien_A: number } | undefined,
+  newRef: { Hersteller: string; Artikelbeschreibung?: string; Kurzbeschreibung?: string; Hauptkategorien_A: number; Unterkategorien_A: number } | undefined,
   scannedModel?: string | null
 ): Promise<{ artikelNummer: string; unterkategorienA: number | null; hersteller: string | null; kurzbeschreibung: string | null } | null> {
   if (artikelNummer) {
@@ -59,13 +59,19 @@ async function findOrCreateRef(
   const maxArtikel = await getMaxArtikelNummer();
   const nextArtikelNummer = String((maxArtikel ? parseInt(maxArtikel, 10) : 0) + 1);
 
-  // Kurzbeschreibung is the model name; default it to the scanned model so the operator
-  // doesn't have to re-type what the station already scanned. Don't prepend the Hersteller
-  // (it's a separate first-class field) — prepending it is what produced "HP HP HP …".
-  const kurzbeschreibung = (newRef.Kurzbeschreibung ?? '').trim() || (scannedModel ?? '').trim();
-  const artikelbeschreibung = kurzbeschreibung || (newRef.Hersteller ?? '').trim();
+  // The operator types the description into the station's Artikelbeschreibung field — that value
+  // is AUTHORITATIVE and must win over the (often garbage) scanned model. Previously only
+  // `Kurzbeschreibung` was read, so the operator's typed `Artikelbeschreibung` was silently dropped
+  // and the scanned model always came through. Precedence: operator text → supplied Kurzbeschreibung
+  // → scanned model → Hersteller (last resort so the required field is never empty).
+  const operatorDesc = (newRef.Artikelbeschreibung ?? '').trim();
+  const suppliedKurz = (newRef.Kurzbeschreibung ?? '').trim();
+  const artikelbeschreibung =
+    operatorDesc || suppliedKurz || (scannedModel ?? '').trim() || (newRef.Hersteller ?? '').trim();
+  // Kurzbeschreibung stays the short model name (scan) when the operator didn't supply one.
+  const kurzbeschreibung = suppliedKurz || (scannedModel ?? '').trim() || operatorDesc;
   if (!artikelbeschreibung.trim()) {
-    throw new Error('Hersteller and Kurzbeschreibung cannot both be empty');
+    throw new Error('newRef needs a description (Artikelbeschreibung/Kurzbeschreibung), scan model, or Hersteller');
   }
   await persistItemReference({
     Artikel_Nummer: nextArtikelNummer,
@@ -130,18 +136,71 @@ async function ensureItem(
   return itemUUID;
 }
 
-function buildQualityQuestions(unterkategorienA: number | null, scan: IntakeScanPayload): IntakeQuestion[] {
+// The operator chose "existing": bind the scanned serial/MAC to a pre-existing (pre-intake)
+// instance instead of minting a duplicate. Guards keep the match safe — the instance must belong to
+// the selected reference and must not already carry a *different* identity (that would be another
+// physical unit). Re-submitting the same identity is idempotent.
+async function attachIntakeToExistingInstance(
+  itemUUID: string,
+  artikelNummer: string,
+  serial: string | null,
+  mac: string | null
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const row = await queryOne<{ Artikel_Nummer: string | null; SerialNumber: string | null; MacAddress: string | null }>(
+    `SELECT "Artikel_Nummer", "SerialNumber", "MacAddress" FROM items WHERE "ItemUUID" = $1 LIMIT 1`,
+    [itemUUID]
+  );
+  if (!row) return { ok: false, status: 404, error: 'instance not found' };
+  if ((row.Artikel_Nummer ?? '') !== artikelNummer) {
+    return { ok: false, status: 409, error: 'instance does not belong to the selected reference' };
+  }
+  const sameIdentity = (row.SerialNumber ?? null) === (serial ?? null) && (row.MacAddress ?? null) === (mac ?? null);
+  if ((row.SerialNumber || row.MacAddress) && !sameIdentity) {
+    return { ok: false, status: 409, error: 'instance already has a different serial/MAC — cannot re-match' };
+  }
+  if (!sameIdentity) {
+    await execute(
+      `UPDATE items SET "SerialNumber" = $1, "MacAddress" = $2, "UpdatedAt" = $3 WHERE "ItemUUID" = $4`,
+      [serial, mac, new Date().toISOString(), itemUUID]
+    );
+    await logEvent({
+      Actor: 'intake-station',
+      EntityType: 'Item',
+      EntityId: itemUUID,
+      Event: 'InstanceMatched',
+      Meta: JSON.stringify({ source: 'intake', artikelNummer, serial: serial ?? null, mac: mac ?? null }),
+    });
+  }
+  return { ok: true };
+}
+
+function buildQualityQuestions(
+  unterkategorienA: number | null,
+  scan: IntakeScanPayload
+): { ask: IntakeQuestion[]; detectedSpecs: IntakeDetectedSpecView[] } {
   try {
     const general = loadGeneralContract();
     const subCat = unterkategorienA ? loadSubCategoryContract(unterkategorienA) : null;
     const assembly = unterkategorienA ? getAssemblyContract(unterkategorienA) : null;
     const assemblyQ = assembly ? assemblyToQualityContract(assembly) : null;
-    return resolveIntakeQuestions(
+    const resolution = resolveIntakeQuestions(
       [...general.questions, ...(subCat?.questions ?? []), ...(assemblyQ?.questions ?? [])],
       scan
-    ).ask;
+    );
+    // Structured line: what the scan answered vs. what a scan-answerable field failed to answer
+    // (non-empty unresolvedAutoFill = mis-scan, e.g. NVMe size=0, not an operator judgement).
+    console.log('[intake] question resolution', {
+      subCategory: unterkategorienA,
+      asked: resolution.ask.map(q => q.id),
+      detected: resolution.detected.map(d => `${d.label}=${d.value}`),
+      unresolvedAutoFill: resolution.unresolvedAutoFill,
+    });
+    return {
+      ask: resolution.ask,
+      detectedSpecs: resolution.detected.map(d => ({ label: d.label, value: d.value })),
+    };
   } catch {
-    return [];
+    return { ask: [], detectedSpecs: [] };
   }
 }
 
@@ -192,7 +251,18 @@ const action = defineHttpAction({
         return sendJson(res, 422, { error: 'artikelNummer or newRef required' });
       }
 
-      const itemUUID = await ensureItem(ref.artikelNummer, serial, mac);
+      // Operator chose "existing" — reuse a pre-intake instance instead of creating a duplicate.
+      // Only valid against an existing reference (a brand-new ref has no prior instances to reuse).
+      let itemUUID: string;
+      if (refBody.useItemUUID) {
+        const attached = await attachIntakeToExistingInstance(refBody.useItemUUID, ref.artikelNummer, serial, mac);
+        if (!attached.ok) {
+          return sendJson(res, attached.status, { error: attached.error });
+        }
+        itemUUID = refBody.useItemUUID;
+      } else {
+        itemUUID = await ensureItem(ref.artikelNummer, serial, mac);
+      }
 
       // Persist the raw scan so the later quality step can auto-resolve scan-answerable questions
       // without the script re-sending it. Non-fatal.
@@ -211,12 +281,13 @@ const action = defineHttpAction({
         console.warn('[intake-answer] Failed to sync in-device components', { itemUUID, err });
       }
 
-      const questions = buildQualityQuestions(ref.unterkategorienA, scan);
+      const { ask, detectedSpecs } = buildQualityQuestions(ref.unterkategorienA, scan);
 
       const response: IntakeAnswerResponse = {
         nextStep: 'quality',
         itemUUID,
-        qualityQuestions: questions,
+        qualityQuestions: ask,
+        detectedSpecs,
       };
       return sendJson(res, 200, response);
     }
@@ -273,9 +344,13 @@ const action = defineHttpAction({
 
       // Auto-resolve the questions we didn't ask (skipAtIntake / autoFill), then let the
       // submitted answers win over them, so quality + specs are complete without the operator
-      // re-entering scan-known data.
+      // re-entering scan-known data. Drop empty ("don't know") submitted answers first, so a
+      // skipped question neither clobbers a scan-derived auto-answer nor scores as a real value.
       const { autoAnswers } = resolveIntakeQuestions(mergedContractQuestions(itemRow.Unterkategorien_A), resolvedScan);
-      const mergedAnswers = { ...autoAnswers, ...qualityAnswers };
+      const submittedAnswers = Object.fromEntries(
+        Object.entries(qualityAnswers).filter(([, v]) => typeof v === 'string' && v.trim() !== '')
+      );
+      const mergedAnswers = { ...autoAnswers, ...submittedAnswers };
       const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, mergedAnswers, assemblyQualityContract);
 
       const assessment = {

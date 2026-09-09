@@ -160,7 +160,7 @@ describe('forwardAgenticTrigger review metadata', () => {
     );
   });
 
-  it('restarts existing runs for bulk trigger context when start declines as already-exists', async () => {
+  it('restarts an existing notStarted run for bulk trigger context', async () => {
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
@@ -174,8 +174,14 @@ describe('forwardAgenticTrigger review metadata', () => {
     mockedStartAgenticRun.mockResolvedValueOnce({
       queued: false,
       created: false,
-      agentic: null,
+      agentic: { Artikel_Nummer: 'item-bulk-existing', Status: 'notStarted' } as any,
       reason: 'already-exists'
+    });
+    mockedRestartAgenticRun.mockResolvedValueOnce({
+      queued: true,
+      created: true,
+      agentic: { Artikel_Nummer: 'item-bulk-existing', Status: 'queued' } as any,
+      reason: null as any
     });
 
     const payload: AgenticRunTriggerPayload = {
@@ -231,7 +237,9 @@ describe('forwardAgenticTrigger review metadata', () => {
     );
   });
 
-  it('restarts existing terminal runs outside bulk context when status is failed', async () => {
+  it('does not restart an existing settled run (failed); returns it untouched', async () => {
+    // A repeat automatic trigger must not resurrect a settled run. Failures are terminal here;
+    // an explicit operator restart goes through the dedicated /agentic/restart endpoint instead.
     const logger = {
       info: jest.fn(),
       warn: jest.fn(),
@@ -247,10 +255,6 @@ describe('forwardAgenticTrigger review metadata', () => {
       SearchQuery: 'existing failed query',
       Status: 'failed'
     };
-    const restartedRun = {
-      ...existingRun,
-      Status: 'queued'
-    };
 
     mockedStartAgenticRun.mockResolvedValueOnce({
       queued: false,
@@ -258,16 +262,10 @@ describe('forwardAgenticTrigger review metadata', () => {
       agentic: existingRun as any,
       reason: 'already-exists'
     });
-    mockedRestartAgenticRun.mockResolvedValueOnce({
-      queued: true,
-      created: true,
-      agentic: restartedRun as any,
-      reason: null as any
-    });
 
     const result = await forwardAgenticTrigger(
       {
-        artikelbeschreibung: 'Restart terminal run',
+        artikelbeschreibung: 'Repeat trigger on failed run',
         artikelNummer: '19290'
       },
       {
@@ -278,16 +276,9 @@ describe('forwardAgenticTrigger review metadata', () => {
     );
 
     expect(result.ok).toBe(true);
-    expect(result.status).toBe(202);
-    expect(result.body).toEqual({ agentic: restartedRun });
-    expect(mockedRestartAgenticRun).toHaveBeenCalledWith(
-      expect.objectContaining({
-        itemId: '19290',
-        context: 'item detail start',
-        searchQuery: 'Restart terminal run'
-      }),
-      expect.any(Object)
-    );
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({ agentic: existingRun });
+    expect(mockedRestartAgenticRun).not.toHaveBeenCalled();
   });
 
   it('returns success with canonical run when a run already exists outside bulk context', async () => {
@@ -327,7 +318,7 @@ describe('forwardAgenticTrigger review metadata', () => {
     expect(result.status).toBe(200);
     expect(result.body).toEqual({ agentic: existingRun });
     expect(logger.info).toHaveBeenCalledWith(
-      '[agentic-trigger] Existing active agentic run detected; returning canonical run',
+      '[agentic-trigger] Existing agentic run detected; leaving it untouched',
       expect.objectContaining({ context: 'item detail start', artikelNummer: '19290' })
     );
   });

@@ -192,6 +192,13 @@ describe('deriveSpecsFromAnswers', () => {
     expect(Object.keys(specs)).toHaveLength(0);
   });
 
+  it('treats an empty ("don\'t know") answer as unanswered — no junk spec', () => {
+    const assemblyQc = assemblyToQualityContract(assemblyContract);
+    const specs = deriveSpecsFromAnswers([assemblyQc], { ram_gb: '' });
+    // Must NOT render "%v GB" as " GB" — the skipped question yields no spec at all.
+    expect(specs['RAM']).toBeUndefined();
+  });
+
   it('respects showIf: omits spec for hidden question', () => {
     // os_installed is hidden when has_os=false
     const answers = { has_os: 'false', os_installed: 'Ubuntu' };

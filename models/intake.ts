@@ -47,12 +47,29 @@ export interface IntakeScanPayload {
   batteryPercent?: number | null;
 }
 
+// An existing catalogued instance of a reference that has no serial/MAC on file — i.e. a device
+// catalogued before the intake API (or manually) that the scanned device might actually BE. Surfaced
+// at `select_ref` so the operator can match the boot onto it instead of creating a duplicate item.
+export interface IntakeInstanceCandidate {
+  itemUUID: string;
+  artikelNummer: string;
+  boxId: string | null;
+  boxLabel: string | null;
+  location: string | null;
+  quality: number | null;
+  datumErfasst: string | null;
+}
+
 export interface IntakeRefCandidate {
   artikelNummer: string;
   hersteller: string | null;
-  kurzbeschreibung: string | null;
+  artikelbeschreibung: string | null;
   hauptkategorienA: number | null;
   unterkategorienA: number | null;
+  // Existing instances of this reference with no serial/MAC — candidates the operator can match
+  // the scanned device onto ("existing") instead of minting a new one ("new"). Empty/absent means
+  // there is nothing to match, so the only choice is to create a new instance.
+  matchableInstances?: IntakeInstanceCandidate[];
 }
 
 export interface IntakeQuestion {
@@ -66,6 +83,14 @@ export interface IntakeQuestion {
   showIf?: { questionId: string; value: string };
 }
 
+// A scan-derived value the server filled in instead of asking — returned alongside the
+// questionnaire so the TUI can show the operator what the scan already answered (RAM, storage,
+// drive type, battery). Informational only; not a question.
+export interface IntakeDetectedSpecView {
+  label: string;
+  value: string;
+}
+
 export interface IntakeStartResponse {
   intakeKey: string;
   nextStep: IntakeNextStep;
@@ -76,12 +101,14 @@ export interface IntakeStartResponse {
   // quality
   itemUUID?: string;
   qualityQuestions?: IntakeQuestion[];
+  // Scan-answered specs to display (not ask) at the quality step.
+  detectedSpecs?: IntakeDetectedSpecView[];
   // phase2
   item?: {
     itemUUID: string;
     artikelNummer: string;
     hersteller: string | null;
-    kurzbeschreibung: string | null;
+    artikelbeschreibung: string | null;
     quality: number | null;
   };
 }
@@ -89,9 +116,16 @@ export interface IntakeStartResponse {
 export interface IntakeAnswerRefBody {
   type: 'ref';
   artikelNummer?: string;
+  // The operator chose "existing": reuse this pre-existing instance of `artikelNummer` (from the
+  // `matchableInstances` surfaced at select_ref) instead of creating a new one. The scanned
+  // serial/MAC and scan are attached to it. Requires `artikelNummer`; ignored when `newRef` is set.
+  useItemUUID?: string;
   newRef?: {
     Hersteller: string;
-    // Optional: defaults to the scanned model (scanPayload.model), which is the model name
+    // Operator-typed description — AUTHORITATIVE, wins over the scanned model. The station TUI
+    // sends the operator's input here (accept-suggestion or their own text).
+    Artikelbeschreibung?: string;
+    // Optional: short model name; defaults to the scanned model (scanPayload.model).
     Kurzbeschreibung?: string;
     Hauptkategorien_A: number;
     Unterkategorien_A: number;
@@ -117,6 +151,8 @@ export interface IntakeAnswerResponse {
   nextStep: IntakeNextStep;
   itemUUID?: string;
   qualityQuestions?: IntakeQuestion[];
+  // Scan-answered specs to display (not ask) at the quality step.
+  detectedSpecs?: IntakeDetectedSpecView[];
   summary?: {
     itemUUID: string;
     artikelNummer: string;

@@ -26,8 +26,79 @@ export interface ShopwareClientOptions {
   now?: () => number;
 }
 
+export interface ShopwareConnectionStep {
+  name: 'auth' | 'search';
+  ok: boolean;
+  status: number | null;
+  durationMs: number;
+  error?: string;
+}
+
+export interface ShopwareConnectionResult {
+  ok: boolean;
+  steps: ShopwareConnectionStep[];
+  productSampleCount: number | null;
+  checkedAt: string;
+}
+
 export interface ShopwareSearchClient {
   searchProducts(query: string, limit?: number): Promise<ShopwareSearchProduct[]>;
+  // Actively probe the two auth surfaces the read path depends on: the admin OAuth token
+  // endpoint (/api/oauth/token) and the sales-channel store-api search. Reports per-step so a
+  // failure is attributable to credentials vs. sales-channel key vs. reachability.
+  checkConnection(): Promise<ShopwareConnectionResult>;
+}
+
+// Shopware error responses are a JSON envelope { errors: [{ status, code, title, detail, trace… }] }
+// whose `trace` is a multi-KB PHP stack. Extract just the useful `code: detail` lines; fall back to a
+// bounded slice of the raw body so the admin check never dumps the whole trace.
+export function summarizeShopwareErrorBody(text: string): string {
+  const raw = (text || '').trim();
+  if (!raw) return '';
+  try {
+    const parsed = JSON.parse(raw);
+    const errors = Array.isArray((parsed as { errors?: unknown[] })?.errors)
+      ? (parsed as { errors: Array<Record<string, unknown>> }).errors
+      : [];
+    if (errors.length) {
+      const summary = errors
+        .map((e) => {
+          const code = typeof e.code === 'string' ? e.code : null;
+          const detail = typeof e.detail === 'string' ? e.detail : typeof e.title === 'string' ? e.title : null;
+          return [code, detail].filter(Boolean).join(': ');
+        })
+        .filter(Boolean)
+        .join('; ');
+      if (summary) return summary;
+    }
+  } catch {
+    // not JSON — fall through to the bounded raw slice
+  }
+  return raw.length > 300 ? `${raw.slice(0, 300)}…` : raw;
+}
+
+function httpStatusFromError(err: unknown): number | null {
+  const message = err instanceof Error ? err.message : '';
+  const match = message.match(/status (\d{3})/);
+  return match ? Number(match[1]) : null;
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error && err.message) {
+    // A failed fetch surfaces as a generic "fetch failed"; the actionable detail (ECONNREFUSED,
+    // ENOTFOUND, host:port) lives in the nested cause. Append it so the admin check is diagnosable.
+    const cause = (err as { cause?: unknown }).cause;
+    if (cause && typeof cause === 'object') {
+      const c = cause as { code?: string; address?: string; port?: number; hostname?: string; message?: string };
+      const target = c.address && c.port != null ? `${c.address}:${c.port}` : c.hostname;
+      const detail = [c.code, target].filter(Boolean).join(' ') || c.message;
+      if (detail) {
+        return `${err.message} (${detail})`;
+      }
+    }
+    return err.message;
+  }
+  return typeof err === 'string' ? err : 'Unknown error';
 }
 
 function normaliseNumber(value: unknown): number | null {
@@ -72,9 +143,11 @@ export class ShopwareClient implements ShopwareSearchClient {
   private tokenExpiry = 0;
   private tokenSignature: string | null = null;
   private readonly baseUrl: string;
-  private readonly clientId: string;
-  private readonly clientSecret: string;
-  private readonly salesChannelId: string;
+  // Auth is one of two modes: a static access token (API key), or client-credentials OAuth.
+  private readonly accessToken: string | null;
+  private readonly clientId: string | null;
+  private readonly clientSecret: string | null;
+  private readonly salesChannelAccessKey: string;
   private readonly requestTimeoutMs: number;
 
   constructor(private readonly config: ShopwareConfig, options: ShopwareClientOptions = {}) {
@@ -92,28 +165,32 @@ export class ShopwareClient implements ShopwareSearchClient {
     }
 
     const credentials = this.config.credentials ?? {};
-    const clientId = credentials.clientId;
-    const clientSecret = credentials.clientSecret;
-    if (!clientId || !clientSecret) {
-      this.logger.error?.('[shopware-client] Missing client credentials in Shopware configuration');
-      throw new Error('Shopware client credentials must be configured');
+    const accessToken = credentials.accessToken ?? null;
+    const clientId = credentials.clientId ?? null;
+    const clientSecret = credentials.clientSecret ?? null;
+    const hasClientCredentials = Boolean(clientId && clientSecret);
+    // Accept either a static access token OR a full client-credentials pair — not neither.
+    if (!accessToken && !hasClientCredentials) {
+      this.logger.error?.('[shopware-client] Missing credentials: provide an access token or client id + secret');
+      throw new Error('Shopware credentials must be configured (access token or client id + secret)');
     }
 
-    const salesChannelId = this.config.salesChannelId;
-    if (!salesChannelId) {
-      this.logger.error?.('[shopware-client] Missing sales channel identifier in Shopware configuration');
-      throw new Error('Shopware sales channel identifier must be configured');
+    const salesChannelAccessKey = this.config.salesChannelAccessKey;
+    if (!salesChannelAccessKey) {
+      this.logger.error?.('[shopware-client] Missing sales channel access key in Shopware configuration');
+      throw new Error('Shopware sales channel access key must be configured');
     }
 
     this.baseUrl = baseUrl;
+    this.accessToken = accessToken;
     this.clientId = clientId;
     this.clientSecret = clientSecret;
-    this.salesChannelId = salesChannelId;
+    this.salesChannelAccessKey = salesChannelAccessKey;
     this.requestTimeoutMs = Math.max(1, this.config.requestTimeoutMs);
   }
 
   private get tokenCacheKey(): string {
-    return [this.baseUrl, this.clientId, this.clientSecret].join('|');
+    return [this.baseUrl, this.clientId ?? '', this.clientSecret ?? ''].join('|');
   }
 
   private async fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
@@ -135,6 +212,11 @@ export class ShopwareClient implements ShopwareSearchClient {
   }
 
   private async getToken(): Promise<string> {
+    // Static access token (API key) takes precedence — no OAuth round-trip needed.
+    if (this.accessToken) {
+      return this.accessToken;
+    }
+
     const now = this.now();
     const signature = this.tokenCacheKey;
 
@@ -143,10 +225,11 @@ export class ShopwareClient implements ShopwareSearchClient {
     }
 
     const tokenUrl = new URL('/api/oauth/token', this.baseUrl);
+    // Reached only when no static access token is set, so client credentials are guaranteed present.
     const body = new URLSearchParams({
       grant_type: 'client_credentials',
-      client_id: this.clientId,
-      client_secret: this.clientSecret
+      client_id: this.clientId ?? '',
+      client_secret: this.clientSecret ?? ''
     });
 
     this.logger.info?.('[shopware-client] Requesting OAuth token');
@@ -167,7 +250,7 @@ export class ShopwareClient implements ShopwareSearchClient {
 
     if (!response.ok) {
       const text = await response.text().catch(() => '<unreadable>');
-      const err = new Error(`Shopware token request failed with status ${response.status}: ${text}`);
+      const err = new Error(`Shopware token request failed with status ${response.status}: ${summarizeShopwareErrorBody(text)}`);
       this.logger.error?.('[shopware-client] Token request rejected', err);
       throw err;
     }
@@ -334,7 +417,7 @@ export class ShopwareClient implements ShopwareSearchClient {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'sw-access-key': this.salesChannelId
+          'sw-access-key': this.salesChannelAccessKey
         },
         body: JSON.stringify({ search: trimmed, limit: boundedLimit })
       });
@@ -345,7 +428,7 @@ export class ShopwareClient implements ShopwareSearchClient {
 
     if (!response.ok) {
       const text = await response.text().catch(() => '<unreadable>');
-      const err = new Error(`Shopware search failed with status ${response.status}: ${text}`);
+      const err = new Error(`Shopware search failed with status ${response.status}: ${summarizeShopwareErrorBody(text)}`);
       this.logger.error?.('[shopware-client] Search request rejected', err);
       throw err;
     }
@@ -369,6 +452,43 @@ export class ShopwareClient implements ShopwareSearchClient {
     });
 
     return products;
+  }
+
+  async checkConnection(): Promise<ShopwareConnectionResult> {
+    const steps: ShopwareConnectionStep[] = [];
+
+    const authStart = this.now();
+    try {
+      await this.getToken();
+      steps.push({ name: 'auth', ok: true, status: null, durationMs: this.now() - authStart });
+    } catch (error) {
+      steps.push({
+        name: 'auth',
+        ok: false,
+        status: httpStatusFromError(error),
+        durationMs: this.now() - authStart,
+        error: errorMessage(error)
+      });
+      // No token ⇒ the store-api step cannot be attributed cleanly, so stop here.
+      return { ok: false, steps, productSampleCount: null, checkedAt: new Date().toISOString() };
+    }
+
+    const searchStart = this.now();
+    try {
+      // Innocuous probe query with limit 1 — we only care that the sales-channel key authenticates.
+      const products = await this.searchProducts('__connection_check__', 1);
+      steps.push({ name: 'search', ok: true, status: null, durationMs: this.now() - searchStart });
+      return { ok: true, steps, productSampleCount: products.length, checkedAt: new Date().toISOString() };
+    } catch (error) {
+      steps.push({
+        name: 'search',
+        ok: false,
+        status: httpStatusFromError(error),
+        durationMs: this.now() - searchStart,
+        error: errorMessage(error)
+      });
+      return { ok: false, steps, productSampleCount: null, checkedAt: new Date().toISOString() };
+    }
   }
 }
 

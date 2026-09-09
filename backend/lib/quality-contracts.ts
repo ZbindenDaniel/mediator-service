@@ -54,7 +54,9 @@ export function deriveQualityFromAnswers(
       if (!isQuestionVisible(question, answers)) continue;
       if (!question.qualityImpact) continue;
       const answer = answers[question.id];
-      if (answer === undefined) continue;
+      // An empty/whitespace answer means the operator skipped it ("don't know") — treat it as
+      // unanswered, not as a real value, so a skip never drives the quality score.
+      if (answer === undefined || answer.trim() === '') continue;
       const impact = question.qualityImpact[answer as keyof typeof question.qualityImpact];
       if (typeof impact === 'number') scores.push(impact);
     }
@@ -76,7 +78,9 @@ export function deriveSpecsFromAnswers(
       if (!isQuestionVisible(question, answers)) continue;
       if (!question.specField) continue;
       const answer = answers[question.id];
-      if (answer === undefined) continue;
+      // A skipped ("don't know") answer must not become a spec — otherwise specValue "%v GB"
+      // renders as " GB". An empty/whitespace answer is treated as unanswered.
+      if (answer === undefined || answer.trim() === '') continue;
       const rendered = question.specValue ? question.specValue.replace('%v', answer) : answer;
       specs[question.specField] = rendered;
     }

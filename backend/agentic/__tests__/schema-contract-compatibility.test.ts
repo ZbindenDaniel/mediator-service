@@ -41,9 +41,12 @@ describe('agent schema contract compatibility', () => {
     const categorizerPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/categorizer.md'), 'utf8');
     const supervisorPrompt = fs.readFileSync(path.resolve(__dirname, '../prompts/supervisor.md'), 'utf8');
 
-    // extract.md anchors via {{OUTPUT_CONTRACT}} token (see SHARED_PROMPT_FRAGMENTS.outputContract)
+    // extract.md and supervisor.md anchor via shared tokens ({{OUTPUT_CONTRACT}} +
+    // {{TARGET_SCHEMA_FORMAT}}), which inject the canonical schema at compose time; categorizer.md
+    // additionally names the schema-contract.md file explicitly.
     expect(extractPrompt).toContain('{{OUTPUT_CONTRACT}}');
     expect(categorizerPrompt).toContain('schema-contract.md');
-    expect(supervisorPrompt).toContain('schema-contract.md');
+    expect(supervisorPrompt).toContain('{{OUTPUT_CONTRACT}}');
+    expect(supervisorPrompt).toContain('{{TARGET_SCHEMA_FORMAT}}');
   });
 });

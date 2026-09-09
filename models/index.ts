@@ -9,6 +9,7 @@ export * from './event-log';
 export * from './entity';
 export * from './agentic-run';
 export * from './agentic-run-review-history';
+export * from './agentic-run-snapshot';
 export * from './agentic-request-log';
 export * from './agentic-statuses';
 export * from './agentic-orchestrator';

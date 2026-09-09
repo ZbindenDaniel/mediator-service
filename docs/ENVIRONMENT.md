@@ -208,6 +208,10 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 | `MODEL_BASE_URL` | (unset) | Legacy alias for `AGENTIC_MODEL_BASE_URL`. |
 | `MODEL_NAME` | (unset) | Legacy alias for `AGENTIC_MODEL_NAME`. |
 | `MODEL_API_KEY` | (unset) | Legacy alias for `AGENTIC_MODEL_API_KEY`. |
+| `MODEL_NUM_CTX` | `8192` | Ollama context window (`num_ctx`, tokens). Ollama's own default (2048) is far below the extraction prompt (~6-7k tokens), so the prompt is silently left-truncated and the model returns an empty completion (the `json match missing` / `EXTRACTION_FAILED` loop). Raise for larger prompts (costs VRAM), lower if the GPU can't hold it. Ollama provider only. |
+| `MODEL_FORMAT_JSON` | (off) | Force Ollama responses to valid JSON (`format: "json"`). Strong guard against empty/prose output, but suppresses a reasoning model's `<think>` phase — leave off for reasoning models. Truthy = `1`/`true`/`yes`/`on`. |
+| `MODEL_HTTP_HEADERS_TIMEOUT_MS` | `600000` | undici fetch header timeout (ms) for model calls. Raise if a cold/large local model is slow to first token and runs fail with `UND_ERR_HEADERS_TIMEOUT`; `0` disables. Applied as a global fetch dispatcher. |
+| `MODEL_HTTP_BODY_TIMEOUT_MS` | `600000` | undici fetch body timeout (ms) for model calls (inter-chunk while streaming); `0` disables. |
 | `TAVILY_API_KEY` | (unset) | Tavily API key for search enrichment. |
 | `SEARCH_RATE_LIMIT_DELAY_MS` | (unset) | Delay between search requests (ms). |
 | `SEARCH_MAX_PLANS` | `3` | Max agentic search plans per request. |
@@ -222,24 +226,21 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
-| `SHOPWARE_ENABLED` | `false` | Enables Shopware search integration. |
+| `SHOPWARE_ENABLED` | `false` | Enables the Shopware read/search integration. |
 | `SHOPWARE_BASE_URL` | (unset) | Shopware base URL. |
-| `SHOPWARE_SALES_CHANNEL_ID` | (unset) | Sales channel ID for Shopware search. |
-| `SHOPWARE_SALES_CHANNEL` | (unset) | Legacy alias for `SHOPWARE_SALES_CHANNEL_ID`. |
-| `SHOPWARE_CLIENT_ID` | (unset) | OAuth client ID. |
-| `SHOPWARE_CLIENT_SECRET` | (unset) | OAuth client secret. |
-| `SHOPWARE_ACCESS_TOKEN` | (unset) | Pre-generated API token for Shopware search. |
-| `SHOPWARE_API_TOKEN` | (unset) | Alias for `SHOPWARE_ACCESS_TOKEN` used by agentic config. |
+| `SHOPWARE_SALES_CHANNEL_ACCESS_KEY` | (unset) | Sales-channel API access key (`sw-access-key`, not the UUID). |
+| `SHOPWARE_SALES_CHANNEL_ID` / `SHOPWARE_SALES_CHANNEL` | (unset) | Deprecated aliases for `SHOPWARE_SALES_CHANNEL_ACCESS_KEY`. |
+| `SHOPWARE_CLIENT_ID` | (unset) | OAuth client ID (client-credentials auth). |
+| `SHOPWARE_CLIENT_SECRET` | (unset) | OAuth client secret (client-credentials auth). |
+| `SHOPWARE_ACCESS_TOKEN` | (unset) | Static admin API access token (API-key auth) — alternative to client credentials. |
+| `SHOPWARE_API_TOKEN` | (unset) | Deprecated alias for `SHOPWARE_ACCESS_TOKEN`. |
 | `SHOPWARE_REQUEST_TIMEOUT_MS` | `10000` | Request timeout for Shopware API calls. |
 
 ## Shopware sync queue
 
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
-| `SHOPWARE_SYNC_ENABLED` | `false` | Enables Shopware sync queue worker. |
-| `SHOPWARE_QUEUE_ENABLED` | (unset) | Legacy alias for `SHOPWARE_SYNC_ENABLED`. |
-| `SHOPWARE_API_BASE_URL` | (unset) | Base URL for Shopware sync API. |
-| `SHOPWARE_QUEUE_POLL_INTERVAL_MS` | `5000` | Poll interval for the sync queue worker. |
+| `SHOPWARE_SYNC_ENABLED` | `false` | Gates sync-queue enqueue (write path). Dispatcher not yet implemented. |
 
 ## Frontend runtime flags
 

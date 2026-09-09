@@ -3,11 +3,11 @@
   "subCategory": 105,
   "fields": [
     { "key": "Prozessor",       "required": true,  "description": "CPU (e.g. Apple M2, Intel Core i7)" },
-    { "key": "RAM",             "required": true,  "description": "Memory in GB (unified memory for Apple Silicon)" },
-    { "key": "Speicher",        "required": true,  "description": "SSD storage size (e.g. 512 GB)" },
     { "key": "Display",         "required": false, "description": "Screen size and resolution (MacBook/iMac only)" },
-    { "key": "Betriebssystem",  "required": false, "description": "macOS version installed" },
-    { "key": "Akku",            "required": false, "description": "Battery condition (MacBook only)" },
-    { "key": "Tastatur-Layout", "required": false, "description": "Keyboard layout (CH/DE/US)" }
+    { "key": "RAM-Slots",       "required": false, "description": "number of Ram Slots (e.g. 1, 2, 4)" },
+    { "key": "RAM-Kapazität",       "required": false, "description": "max. RAM (e.g. 16GB)" },
+    { "key": "RAM-Typ",            "required": false, "description": "Type of RAM (DDR3, DDR4, DDR5)" },
+    { "key": "Anschlüsse",     "required": false, "description": "Different interfaces like USB, HDMI, Ethernet, etc." }
+
   ]
 }

@@ -3,12 +3,8 @@
   "subCategory": 201,
   "fields": [
     { "key": "Prozessor",       "required": true,  "description": "CPU model and speed" },
-    { "key": "RAM",             "required": true,  "description": "Memory in GB" },
-    { "key": "Speicher",        "required": true,  "description": "Storage size and type (e.g. 256 GB SSD)" },
     { "key": "Display",         "required": false, "description": "Screen size and resolution" },
-    { "key": "Betriebssystem",  "required": false, "description": "Operating system installed" },
-    { "key": "Akku",            "required": false, "description": "Battery condition" },
-    { "key": "Tastatur-Layout", "required": false, "description": "Keyboard layout (CH/DE/US)" }
+    { "key": "Anschlüsse",     "required": false, "description": "Different interfaces like USB, HDMI, Ethernet, etc." }
   ],
   "guidance": [
     "Do not mention the operating system or the specific drive/disk model in the prose description (Kurzbeschreibung) or specs; those may vary inbetween the same model and can not be guaranteed"

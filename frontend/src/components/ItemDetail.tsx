@@ -18,6 +18,7 @@ import type {
   ItemInstanceSummary,
   ItemDetailReviewAutomationSignal
 } from '../../../models';
+import type { AgenticSnapshotFields } from '../../../models';
 import type { Co2ImpactLabel } from '../../../models/co2';
 import { CO2_IMPACT_LABEL_DE } from '../../../models/co2';
 import {
@@ -45,6 +46,7 @@ import {
   persistAgenticRunClose,
   persistAgenticRunCancellation,
   persistAgenticRunDeletion,
+  persistAgenticSearchLinkDeletion,
   triggerAgenticRun
 } from '../lib/agentic';
 import { parseLangtext } from '../lib/langtext';
@@ -87,7 +89,8 @@ import ZubehoerBadge, { type ZubehoerMode } from './ZubehoerBadge';
 import { buildAgenticReviewMetricRows } from './AgenticReviewMetricsRows';
 import DetailTabBar from './DetailTabBar';
 import ItemReferenceTab from './item-tabs/ItemReferenceTab';
-import ItemKiTab, { type SpecFieldModalState, type ContractFieldModalState } from './item-tabs/ItemKiTab';
+import ItemKiTab from './item-tabs/ItemKiTab';
+import { type AgenticReviewWizardData, type AgenticReviewWizardResult, type ReviewWizardSpecField } from './AgenticReviewWizard';
 import ItemInstanceTab from './item-tabs/ItemInstanceTab';
 import ItemImagesTab from './item-tabs/ItemImagesTab';
 import ItemAttachmentsTab from './item-tabs/ItemAttachmentsTab';
@@ -95,18 +98,7 @@ import ItemAccessoriesTab from './item-tabs/ItemAccessoriesTab';
 import ItemEventsTab from './item-tabs/ItemEventsTab';
 import ItemMarkierungTab from './item-tabs/ItemMarkierungTab';
 import { useUserMarks } from '../context/UserMarksContext';
-import {
-  buildNormalizedReviewSpecFields,
-  mergeSpecFieldSelection,
-  parseReviewSpecTokenList
-} from './agenticReviewSpecFields';
-import AgenticSpecFieldReviewModal, {
-  AgenticContractFieldReviewModal,
-  type AgenticSpecFieldOption,
-  type AgenticSpecFieldReviewResult,
-  type AgenticContractFieldReviewResult,
-  type SpecContractFieldEntry
-} from './AgenticSpecFieldReviewModal';
+import { type AgenticSpecFieldReviewResult } from './AgenticSpecFieldReviewModal';
 import {
   agenticStatusDisplay,
   isAgenticRunInProgress,
@@ -114,6 +106,7 @@ import {
   type AgenticStatusDisplay,
   type AgenticStatusCardProps
 } from './AgenticStatusCard';
+import { AgenticSearchSources, parseAgenticSearchSources } from './AgenticSearchSources';
 import {
   type NormalizedDetailValue,
   DETAIL_PLACEHOLDER_TEXT,
@@ -136,112 +129,6 @@ const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 
 
 
-const REVIEW_PREVIEW_PLACEHOLDER = '[nicht vorhanden]';
-const REVIEW_PREVIEW_MAX_TEXT_LENGTH = 400;
-
-
-function buildLangtextReviewPreviewFields(itemValue: unknown, itemId: string): ReviewDialogField[] {
-  try {
-    const parsed = parseLangtext(itemValue ?? '');
-    if (parsed.kind === 'json') {
-      const entries = parsed.entries.slice(0, 8);
-      if (entries.length === 0) {
-        return [{ label: 'Langtext', value: REVIEW_PREVIEW_PLACEHOLDER }];
-      }
-      return entries.map((entry) => ({
-        label: entry.key,
-        value: entry.value
-      }));
-    }
-    return [{ label: 'Langtext', value: parsed.text || REVIEW_PREVIEW_PLACEHOLDER }];
-  } catch (error) {
-    logger.warn?.('ItemDetail: Failed to parse review Langtext section; falling back to plain text.', {
-      itemId,
-      sectionName: 'Langtext',
-      error
-    });
-    return [{ label: 'Langtext', value: typeof itemValue === 'string' ? itemValue : String(itemValue ?? REVIEW_PREVIEW_PLACEHOLDER) }];
-  }
-}
-
-
-function formatReviewPreviewValue(value: unknown, maxLength = REVIEW_PREVIEW_MAX_TEXT_LENGTH): string {
-  if (value === null || value === undefined) {
-    return REVIEW_PREVIEW_PLACEHOLDER;
-  }
-
-  if (typeof value === 'number') {
-    return Number.isFinite(value) ? String(value) : REVIEW_PREVIEW_PLACEHOLDER;
-  }
-
-  if (typeof value === 'boolean') {
-    return value ? 'Ja' : 'Nein';
-  }
-
-  const textValue = typeof value === 'string' ? value : String(value);
-  const compact = textValue.replace(/\s+/g, ' ').trim();
-  if (!compact) {
-    return REVIEW_PREVIEW_PLACEHOLDER;
-  }
-  if (compact.length <= maxLength) {
-    return compact;
-  }
-  return `${compact.slice(0, Math.max(1, maxLength - 1))}…`;
-}
-
-interface ReviewDialogField {
-  label: string;
-  value: unknown;
-  highlight?: boolean;
-}
-
-function buildReviewDialogFields(
-  itemId: string,
-  sectionName: string,
-  fields: ReviewDialogField[]
-): ReviewDialogField[] {
-  try {
-    return fields.map((field) => ({
-      ...field,
-      value: formatReviewPreviewValue(field.value)
-    }));
-  } catch (error) {
-    logger.warn?.('ItemDetail: Failed to format review preview section; falling back to plain text.', {
-      itemId,
-      sectionName,
-      error
-    });
-    return fields.map((field) => ({
-      ...field,
-      value: typeof field.value === 'string' ? field.value : String(field.value ?? REVIEW_PREVIEW_PLACEHOLDER)
-    }));
-  }
-}
-
-function buildReviewDialogSection(
-  itemId: string,
-  sectionName: string,
-  fields: ReviewDialogField[],
-  question: string
-): React.ReactNode {
-  const safeFields = buildReviewDialogFields(itemId, sectionName, fields);
-  return (
-    <section className="review-dialog__section">
-      <h3 className="review-dialog__section-title">{question}</h3>
-      <div className="review-dialog__rows">
-        {safeFields.map((field) => (
-          <div
-            className={`review-dialog__row${field.highlight ? ' review-dialog__row--question' : ''}`}
-            key={`${sectionName}-${field.label}`}
-          >
-            <span className="review-dialog__row-label">{field.label}</span>
-            <span className="review-dialog__row-value">{field.value as React.ReactNode}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
 
 // TODO(agentic-search-term): Verify Suchbegriff hydration ordering once persisted edits are enabled.
 function resolveAgenticSearchTerm(item: Item | null): string {
@@ -266,31 +153,17 @@ export default function ItemDetail({ itemId }: Props) {
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticActionPending, setAgenticActionPending] = useState(false);
   const [agenticReviewIntent, setAgenticReviewIntent] = useState<'review' | null>(null);
-  const [specFieldReviewModalState, setSpecFieldReviewModalState] = useState<{
-    title: string;
-    description: string;
-    fieldOptions: AgenticSpecFieldOption[];
-    includeAdditionalInput: boolean;
-    additionalInputPlaceholder?: string;
-    secondaryTitle?: string;
-    secondaryDescription?: string;
-    secondaryFieldOptions?: AgenticSpecFieldOption[];
-    includeSecondaryAdditionalInput?: boolean;
-    secondaryAdditionalInputPlaceholder?: string;
-    resolve: (result: AgenticSpecFieldReviewResult | null) => void;
-  } | null>(null);
-  const [contractFieldReviewModalState, setContractFieldReviewModalState] = useState<{
-    title: string;
-    description?: string;
-    contractFields: SpecContractFieldEntry[];
-    additionalFields?: Record<string, string | string[]>;
-    resolve: (result: AgenticContractFieldReviewResult | null) => void;
+  const [reviewWizardModalState, setReviewWizardModalState] = useState<{
+    data: AgenticReviewWizardData;
+    resolve: (result: AgenticReviewWizardResult | null) => void;
   } | null>(null);
   const [agenticReviewAutomation, setAgenticReviewAutomation] = useState<ItemDetailReviewAutomationSignal | null>(null);
   const [agenticCardWarning, setAgenticCardWarning] = useState<string | null>(null);
   // TODO(agentic-search-term): Align editable agentic search term handling with backend suggestions once available.
   const [agenticSearchTerm, setAgenticSearchTerm] = useState<string>('');
   const [agenticSearchError, setAgenticSearchError] = useState<string | null>(null);
+  // URL of the stored search result currently being removed (curation) — disables just that row's control.
+  const [deletingSearchLinkUrl, setDeletingSearchLinkUrl] = useState<string | null>(null);
   const [mediaAssets, setMediaAssets] = useState<string[]>([]);
   const [isMediaSaving, setIsMediaSaving] = useState(false);
   const [instances, setInstances] = useState<ItemInstanceSummary[]>([]);
@@ -1003,10 +876,43 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }, [agenticSearchTerm]);
 
+  // The item's current AI-written fields, for the run-history diff (snapshot vs current). Langtext is
+  // parsed to the same object shape the snapshots store so the key-by-key diff lines up.
+  const snapshotCurrentFields: AgenticSnapshotFields = React.useMemo(() => ({
+    Artikelbeschreibung: item?.Artikelbeschreibung ?? null,
+    Kurzbeschreibung: item?.Kurzbeschreibung ?? null,
+    Langtext: item?.Langtext ? parseLangtext(item.Langtext) ?? {} : {},
+    Hersteller: item?.Hersteller ?? null,
+    Länge_mm: item?.Länge_mm ?? null,
+    Breite_mm: item?.Breite_mm ?? null,
+    Höhe_mm: item?.Höhe_mm ?? null,
+    Gewicht_kg: item?.Gewicht_kg ?? null,
+    Verkaufspreis: item?.Verkaufspreis ?? null,
+    Hauptkategorien_A: item?.Hauptkategorien_A ?? null,
+    Unterkategorien_A: item?.Unterkategorien_A ?? null,
+    Hauptkategorien_B: item?.Hauptkategorien_B ?? null,
+    Unterkategorien_B: item?.Unterkategorien_B ?? null
+  }), [item]);
+
   const agenticRows: [string, React.ReactNode][] = [];
   // TODO(agentic-transcript-ui): Keep the transcript link visible regardless of agentic run state once backend exposes it.
   if (agentic?.SearchQuery) {
     agenticRows.push(['Suchbegriff', agentic.SearchQuery]);
+  }
+  // Surface stored search evidence (LastSearchLinksJson) so operators can see whether an item already
+  // has search results, what was consulted, and that a rerun reuses them — previously persisted but
+  // never shown (todo #21).
+  const agenticSearchSources = parseAgenticSearchSources(agentic?.LastSearchLinksJson);
+  if (agenticSearchSources.length > 0) {
+    agenticRows.push([
+      `Suchergebnisse (${agenticSearchSources.length})`,
+      <AgenticSearchSources
+        sources={agenticSearchSources}
+        onDelete={handleAgenticSearchLinkDelete}
+        deletingUrl={deletingSearchLinkUrl}
+        disabled={agenticActionPending}
+      />
+    ]);
   }
   if (agentic?.LastModified) {
     agenticRows.push(['Zuletzt aktualisiert', formatDateTime(agentic.LastModified)]);
@@ -1581,32 +1487,6 @@ export default function ItemDetail({ itemId }: Props) {
     );
   }
 
-  // TODO(agentic-review-flow-order): Reconfirm whether optional note should remain a final prompt once reviewer feedback is collected.
-  // TODO(agentic-review-step-telemetry): Revisit per-question logging payload fields if analytics schema expands.
-  // TODO(agentic-review-note-modal): Keep this as a single-step modal unless operators request guided note validation.
-  async function promptAgenticReviewNote(): Promise<string | null> {
-    let promptResult: string | null;
-    try {
-      promptResult = await dialogService.prompt({
-        title: 'Review-Notiz',
-        message: 'Bitte optional eine Notiz für den finalen Review-Abschluss hinzufügen.',
-        confirmLabel: 'Review Abschliessen',
-        cancelLabel: 'Abbrechen',
-        placeholder: 'Notiz (optional)',
-        defaultValue: ''
-      });
-    } catch (error) {
-      logError('ItemDetail: Failed to prompt for agentic review note', error, { itemId });
-      return null;
-    }
-
-    if (promptResult === null) {
-      return null;
-    }
-
-    return promptResult.trim();
-  }
-
   async function promptAgenticCloseNote(): Promise<string | null> {
     try {
       const promptResult = await dialogService.prompt({
@@ -1632,63 +1512,16 @@ export default function ItemDetail({ itemId }: Props) {
 
 
 
-  async function promptContractFieldReview(options: {
-    title: string;
-    description?: string;
-    contractFields: SpecContractFieldEntry[];
-    additionalFields?: Record<string, string | string[]>;
-  }): Promise<AgenticContractFieldReviewResult | null> {
+  async function promptReviewWizard(data: AgenticReviewWizardData): Promise<AgenticReviewWizardResult | null> {
     try {
-      return await new Promise<AgenticContractFieldReviewResult | null>((resolve) => {
-        setContractFieldReviewModalState({
-          title: options.title,
-          description: options.description,
-          contractFields: options.contractFields,
-          additionalFields: options.additionalFields,
-          resolve
-        });
+      return await new Promise<AgenticReviewWizardResult | null>((resolve) => {
+        setReviewWizardModalState({ data, resolve });
       });
     } catch (error) {
-      logError('ItemDetail: Failed to collect contract field review', error, { itemId, title: options.title });
+      logError('ItemDetail: Failed to run review wizard', error, { itemId });
       return null;
     }
   }
-
-  async function promptSpecFieldReviewSelection(options: {
-    title: string;
-    description: string;
-    fieldOptions: AgenticSpecFieldOption[];
-    includeAdditionalInput?: boolean;
-    additionalInputPlaceholder?: string;
-    secondaryTitle?: string;
-    secondaryDescription?: string;
-    secondaryFieldOptions?: AgenticSpecFieldOption[];
-    includeSecondaryAdditionalInput?: boolean;
-    secondaryAdditionalInputPlaceholder?: string;
-  }): Promise<AgenticSpecFieldReviewResult | null> {
-    try {
-      return await new Promise<AgenticSpecFieldReviewResult | null>((resolve) => {
-        setSpecFieldReviewModalState({
-          title: options.title,
-          description: options.description,
-          fieldOptions: options.fieldOptions,
-          includeAdditionalInput: options.includeAdditionalInput ?? false,
-          additionalInputPlaceholder: options.additionalInputPlaceholder,
-          secondaryTitle: options.secondaryTitle,
-          secondaryDescription: options.secondaryDescription,
-          secondaryFieldOptions: options.secondaryFieldOptions,
-          includeSecondaryAdditionalInput: options.includeSecondaryAdditionalInput ?? false,
-          secondaryAdditionalInputPlaceholder: options.secondaryAdditionalInputPlaceholder,
-          resolve
-        });
-      });
-    } catch (error) {
-      logError('ItemDetail: Failed to collect spec field review selection', error, { itemId, title: options.title });
-      return null;
-    }
-  }
-
-
 
 
 
@@ -1700,116 +1533,7 @@ export default function ItemDetail({ itemId }: Props) {
       noteProvided: false
     });
 
-    const normalizedSpecFields = buildNormalizedReviewSpecFields(item?.Langtext ?? null, itemId, REVIEW_PREVIEW_PLACEHOLDER, formatReviewPreviewValue);
-    const normalizedSpecFieldOptions: AgenticSpecFieldOption[] = normalizedSpecFields.map((entry) => ({
-      value: entry.key,
-      label: entry.value && entry.value !== REVIEW_PREVIEW_PLACEHOLDER
-        ? `${entry.key}: ${entry.value}`
-        : entry.key
-    }));
-
-    const descriptionPreviewMessage = (
-      <div className="review-dialog__sections">
-        {buildReviewDialogSection(
-          itemId,
-          'Schritt 1 · Artikelbeschreibung',
-          [{ label: 'Artikelbeschreibung', value: item?.Artikelbeschreibung ?? null }],
-          'Artikelbeschreibung passend?'
-        )}
-      </div>
-    );
-
-    const shortTextPreviewMessage = (
-      <div className="review-dialog__sections">
-        {buildReviewDialogSection(
-          itemId,
-          'Schritt 2 · Kurztext',
-          [{ label: 'Kurztext', value: item?.Kurzbeschreibung ?? null }],
-          'Kurztext passend?'
-        )}
-      </div>
-    );
-
-    const dimensionsPreviewMessage = (
-      <div className="review-dialog__sections">
-        {buildReviewDialogSection(
-          itemId,
-          'Schritt 4 · Dimensionen',
-          [
-            { label: 'Länge_mm', value: item?.Länge_mm ?? null },
-            { label: 'Breite_mm', value: item?.Breite_mm ?? null },
-            { label: 'Höhe_mm', value: item?.Höhe_mm ?? null },
-            { label: 'Gewicht_kg', value: item?.Gewicht_kg ?? null }
-          ],
-          'Dimensionen vorhanden/plausibel?'
-        )}
-      </div>
-    );
-
-    // returns true (Ja), false (Nein/does not match), or null (Abbrechen/abort review)
-    const askFlag = async (
-      stepKey: keyof import('../lib/agenticReviewMapping').AgenticReviewQuestionAnswers,
-      title: string,
-      message: React.ReactNode
-    ): Promise<boolean | null> => {
-      try {
-        const result = await dialogService.confirmThreeWay({
-          title,
-          message,
-          confirmLabel: 'Ja',
-          rejectLabel: 'Nein',
-          cancelLabel: 'Abbrechen',
-          contentClassName: 'review-dialog'
-        });
-        if (result === null) {
-          logger.warn?.('ItemDetail: Agentic review checklist step aborted via cancel', {
-            itemId,
-            stepKey,
-            completed: false
-          });
-          return null;
-        }
-        logger.info?.('ItemDetail: Agentic review checklist step completed', {
-          itemId,
-          stepKey,
-          completed: true,
-          answer: result
-        });
-        return result;
-      } catch (error) {
-        logError('ItemDetail: Failed to capture structured review flag', error, {
-          itemId,
-          title,
-          stepKey
-        });
-        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
-          itemId,
-          stepKey,
-          completed: false
-        });
-        return null;
-      }
-    };
-
-    const descriptionMatches = await askFlag(
-      'descriptionMatches',
-      'Schritt 1  · Artikelbeschreibung',
-      descriptionPreviewMessage
-    );
-    if (descriptionMatches === null) {
-      return null;
-    }
-
-    const shortTextMatches = await askFlag(
-      'shortTextMatches',
-      'Schritt 2 · Kurztext',
-      shortTextPreviewMessage
-    );
-    if (shortTextMatches === null) {
-      return null;
-    }
-
-    // Build contract-field list for Step 3: coalesce spec contract + Langtext + InstanceSpecs
+    // Coalesce spec contract + Langtext + InstanceSpecs into one editable field list for the wizard.
     const INTAKE_TO_SPEC: Record<string, string> = { ram_gb: 'RAM', storage_gb: 'Speicher', drive_type: 'Speichertyp' };
     const INTAKE_FORMAT: Record<string, (v: string) => string> = {
       ram_gb: (v) => `${v} GB`,
@@ -1832,222 +1556,80 @@ export default function ItemDetail({ itemId }: Props) {
     const subcategoryCode = typeof item?.Unterkategorien_A === 'number' ? item.Unterkategorien_A : null;
     const specContract = subcategoryCode ? await fetchSpecContract(subcategoryCode) : null;
 
-    let contractFields: SpecContractFieldEntry[] = [];
-    let specValues: Record<string, string> = {};
-
+    const specFields: ReviewWizardSpecField[] = [];
     if (specContract) {
       const contractFieldKeys = new Set(specContract.fields.map((f) => f.key));
-      contractFields = specContract.fields.map((f): SpecContractFieldEntry => {
-        const currentValue = langtextMap[f.key] ?? null;
+      for (const f of specContract.fields) {
         const intakeKey = Object.entries(INTAKE_TO_SPEC).find(([, v]) => v === f.key)?.[0] ?? null;
         const rawIntakeValue = intakeKey ? instanceSpecsMap[intakeKey] : null;
         const intakeValue = rawIntakeValue && intakeKey ? INTAKE_FORMAT[intakeKey]?.(rawIntakeValue) ?? rawIntakeValue : null;
-        return { key: f.key, required: f.required, description: f.description, currentValue, intakeValue };
-      });
-
-      // Additional extracted specs not in contract
-      const additionalFields: Record<string, string | string[]> = {};
+        specFields.push({ key: f.key, value: langtextMap[f.key] ?? '', required: f.required, description: f.description, intakeValue });
+      }
       for (const [k, v] of Object.entries(langtextMap)) {
-        if (!contractFieldKeys.has(k)) additionalFields[k] = v;
+        if (!contractFieldKeys.has(k)) specFields.push({ key: k, value: v, removable: true });
       }
-
-      const contractReviewResult = await promptContractFieldReview({
-        title: 'Schritt 3 · Spezifikationen',
-        description: 'Alle Vertragsfelder prüfen, Konflikte auflösen, Werte korrigieren. Leeres Feld = Feld entfernen.',
-        contractFields,
-        additionalFields
-      });
-      if (contractReviewResult === null) {
-        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
-          itemId,
-          stepKey: 'contractFieldReview',
-          completed: false
-        });
-        return null;
-      }
-      specValues = contractReviewResult.specValues;
-      logger.info?.('ItemDetail: Agentic review checklist step completed', {
-        itemId,
-        stepKey: 'contractFieldReview',
-        completed: true,
-        specValueCount: Object.keys(specValues).length
-      });
     } else {
-      // Fallback to old free-text approach when no spec contract is available
-      const specSelection = await promptSpecFieldReviewSelection({
-        title: 'Schritt 3 · Spezifikationen',
-        description: 'Unnötige Felder markieren und fehlende Felder unten als Freitext eintragen.',
-        fieldOptions: normalizedSpecFieldOptions,
-        includeAdditionalInput: true,
-        additionalInputPlaceholder: 'Fehlende Felder: z. B. Spannung, Material, Schutzklasse'
-      });
-      if (specSelection === null) {
-        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
-          itemId,
-          stepKey: 'specSelectionSingleInput',
-          completed: false
-        });
-        return null;
+      // No contract: every extracted spec becomes an editable row (blank = remove).
+      for (const [k, v] of Object.entries(langtextMap)) {
+        specFields.push({ key: k, value: v, removable: true });
       }
-      logger.info?.('ItemDetail: Agentic review checklist step completed', {
-        itemId,
-        stepKey: 'specSelectionSingleInput',
-        completed: true
-      });
     }
 
-    const hasUnnecessarySpecs = false;
-    const hasMissingSpecs = false;
-
-    const dimensionsPlausible = await askFlag(
-      'dimensionsPlausible',
-      'Schritt 4 · Dimensionen',
-      dimensionsPreviewMessage
-    );
-    if (dimensionsPlausible === null) {
-      return null;
-    }
-
-    let reviewPrice: number | null = null;
-    try {
-      const defaultPrice = typeof item?.Verkaufspreis === 'number' && Number.isFinite(item.Verkaufspreis)
-        ? String(item.Verkaufspreis)
-        : '';
-      const priceInput = await dialogService.prompt({
-        title: 'Schritt 5 · Preis',
-        message: 'Verkaufspreis prüfen und bei Bedarf anpassen.',
-        confirmLabel: 'Ok',
-        cancelLabel: 'Abbrechen',
-        placeholder: 'z. B. 199.99',
-        defaultValue: defaultPrice
-      });
-      if (priceInput === null) {
-        logger.warn?.('ItemDetail: Agentic review checklist step aborted', {
-          itemId,
-          stepKey: 'review_price',
-          completed: false
-        });
-        return null;
-      }
-      const normalizedInput = priceInput.replace(',', '.').trim();
-      if (normalizedInput.length > 0) {
-        const parsedPrice = Number(normalizedInput);
-        if (Number.isFinite(parsedPrice) && parsedPrice >= 0) {
-          reviewPrice = parsedPrice;
-        }
-      }
-      logger.info?.('ItemDetail: Agentic review checklist step completed', {
-        itemId,
-        stepKey: 'review_price',
-        completed: true,
-        reviewPrice
-      });
-    } catch (error) {
-      logError('ItemDetail: Failed to capture review price', error, { itemId });
-      return null;
-    }
-
-    const explicitWrongInformationFlag: boolean | null = null;
-    const hasExplicitWrongInformation = explicitWrongInformationFlag === true;
-    const reviewPositiveContributors = {
-      descriptionMatches,
-      shortTextMatches,
-      dimensionsPlausible,
-      hasMissingSpecs,
-      hasExplicitWrongInformation,
-      hasUnnecessarySpecs
+    const wizardData: AgenticReviewWizardData = {
+      artikelbeschreibung: item?.Artikelbeschreibung ?? '',
+      kurzbeschreibung: item?.Kurzbeschreibung ?? '',
+      laenge: item?.Länge_mm != null ? String(item.Länge_mm) : '',
+      breite: item?.Breite_mm != null ? String(item.Breite_mm) : '',
+      hoehe: item?.Höhe_mm != null ? String(item.Höhe_mm) : '',
+      gewicht: item?.Gewicht_kg != null ? String(item.Gewicht_kg) : '',
+      price: typeof item?.Verkaufspreis === 'number' && Number.isFinite(item.Verkaufspreis) ? String(item.Verkaufspreis) : '',
+      specFields
     };
-    const reviewPositiveSoFar = reviewPositiveContributors.descriptionMatches
-      && reviewPositiveContributors.shortTextMatches
-      && reviewPositiveContributors.dimensionsPlausible
-      && !reviewPositiveContributors.hasMissingSpecs
-      && !reviewPositiveContributors.hasExplicitWrongInformation;
 
-    logger.info?.('ItemDetail: Computed reviewPositiveSoFar gating', {
-      itemId,
-      reviewPositiveSoFar,
-      ...reviewPositiveContributors
-    });
-
-    let shopArticle: boolean | null = null;
-    if (reviewPositiveSoFar) {
-      try {
-        shopArticle = await dialogService.confirm({
-          title: 'Schritt 6 · Shop',
-          message: 'Artikel in den Shop stellen?',
-          confirmLabel: 'Ja',
-          cancelLabel: 'Abbrechen'
-        });
-        logger.info?.('ItemDetail: Agentic review checklist step completed', {
-          itemId,
-          stepKey: 'shop_article',
-          completed: true,
-          shopArticle
-        });
-      } catch (error) {
-        logError('ItemDetail: Failed to capture shop article decision', error, { itemId });
-        return null;
-      }
+    const wizardResult = await promptReviewWizard(wizardData);
+    if (wizardResult === null) {
+      logger.info?.('ItemDetail: Agentic review wizard cancelled', { itemId });
+      return null;
     }
 
-    let notes = '';
-    if (!reviewPositiveSoFar) {
-      const noteValue = await promptAgenticReviewNote();
-      if (noteValue === null) {
-        return null;
-      }
-      notes = noteValue;
-    }
-
+    // The wizard makes the explicit approve/reject decision, so the structured checklist flags are
+    // sent at their non-blocking defaults. Deliberately NOT derived: instead of lossy flags, the wizard
+    // folds a concrete before→after correction diff into the notes on reject, which flow into the next
+    // run's extraction/supervisor prompts (see AgenticReviewWizard.buildResult). On approve, the edits
+    // are persisted, so the corrected values are the next run's baseline. (Flag-based review metrics
+    // are left for later — see todo.md.)
     const mappedInput = mapReviewAnswersToInput(
       {
-        descriptionMatches,
-        shortTextMatches,
-        hasUnnecessarySpecs,
-        hasMissingSpecs,
-        dimensionsPlausible
+        descriptionMatches: true,
+        shortTextMatches: true,
+        hasUnnecessarySpecs: false,
+        hasMissingSpecs: false,
+        dimensionsPlausible: true
       },
       {
         missingSpecRaw: null,
         unneededSpecRaw: null,
-        notes,
-        reviewPrice,
-        shopArticle,
-        wrongInformation: explicitWrongInformationFlag,
+        notes: wizardResult.notes,
+        reviewPrice: wizardResult.reviewPrice,
+        shopArticle: wizardResult.shopArticle,
+        wrongInformation: null,
         reviewedBy: null
       }
     );
-    if (Object.keys(specValues).length > 0) {
-      mappedInput.specValues = specValues;
+    mappedInput.decision = wizardResult.decision;
+    if (Object.keys(wizardResult.specValues).length > 0) {
+      mappedInput.specValues = wizardResult.specValues;
+    }
+    if (Object.keys(wizardResult.referenceEdits).length > 0) {
+      mappedInput.referenceEdits = wizardResult.referenceEdits;
     }
 
-    const wrongInformationExplicitlyFlagged = typeof explicitWrongInformationFlag === 'boolean';
-
-    logger.info?.('ItemDetail: Agentic review submission stage', {
-      checklistStarted: true,
-      checklistSubmitted: true,
-      noteProvided: Boolean(mappedInput.notes),
-      wrongInformationExplicitlyFlagged,
-      wrongInformationValue: mappedInput.wrong_information,
-      wrongInformationMappingSource: wrongInformationExplicitlyFlagged ? 'explicit' : 'default_false'
-    });
-
-    logger.info?.('ItemDetail: Mapped review checklist answers to structured payload', {
+    logger.info?.('ItemDetail: Agentic review wizard submitted', {
       itemId,
-      signalPresenceCount: [
-        mappedInput.information_present,
-        mappedInput.bad_format,
-        mappedInput.wrong_information,
-        mappedInput.wrong_physical_dimensions
-      ].filter((value) => value !== null).length,
-      signalTrueCount: [
-        mappedInput.bad_format,
-        mappedInput.wrong_information,
-        mappedInput.wrong_physical_dimensions
-      ].filter(Boolean).length,
-      missingSpecCount: mappedInput.missing_spec.length,
-      unneededSpecCount: mappedInput.unneeded_spec.length,
+      decision: wizardResult.decision,
       hasNote: Boolean(mappedInput.notes),
+      referenceEditCount: Object.keys(wizardResult.referenceEdits).length,
+      specValueCount: Object.keys(wizardResult.specValues).length,
       reviewPrice: mappedInput.review_price,
       shopArticle: mappedInput.shop_article
     });
@@ -2093,6 +1675,11 @@ export default function ItemDetail({ itemId }: Props) {
           const data = await res.json();
           setAgentic(data.agentic ?? null);
           setAgenticError(null);
+          // Reflect inline corrections locally; the backend persists them on approval.
+          if (reviewInput.referenceEdits && Object.keys(reviewInput.referenceEdits).length > 0) {
+            const edits = reviewInput.referenceEdits;
+            setItem((previous) => (previous ? { ...previous, ...edits } : previous));
+          }
         } else {
           logError('Agentic review update failed', null, { referenceId, status: res.status });
           setAgenticError('Review konnte nicht gespeichert werden.');
@@ -2710,6 +2297,83 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }
 
+  async function handleAgenticSearchLinkDelete(url: string) {
+    const targetUrl = typeof url === 'string' ? url.trim() : '';
+    if (!targetUrl) {
+      return;
+    }
+    if (!agentic) {
+      console.warn('Search link delete requested without run data');
+      setAgenticError('Kein KI Durchlauf vorhanden.');
+      return;
+    }
+    const referenceId = agentic.Artikel_Nummer?.trim() || item?.Artikel_Nummer?.trim() || '';
+    if (!referenceId) {
+      logError('ItemDetail: Missing Artikel_Nummer for search link delete', undefined, { itemId });
+      setAgenticError('Artikelnummer fehlt für die Löschung.');
+      return;
+    }
+
+    const actor = await ensureUser();
+    if (!actor) {
+      try {
+        await dialogService.alert({
+          title: 'Aktion nicht möglich',
+          message: 'Bitte zuerst oben den Benutzer setzen.'
+        });
+      } catch (error) {
+        console.error('Failed to display search link delete user alert', error);
+      }
+      return;
+    }
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'Suchergebnis entfernen',
+        message: 'Diesen Link aus den gespeicherten Suchergebnissen entfernen? Er wird bei künftigen Läufen nicht mehr verwendet.',
+        confirmLabel: 'Entfernen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (error) {
+      console.error('Failed to confirm search link deletion', error);
+      return;
+    }
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingSearchLinkUrl(targetUrl);
+    setAgenticError(null);
+    try {
+      const result = await persistAgenticSearchLinkDeletion({
+        artikelNummer: referenceId,
+        url: targetUrl,
+        actor,
+        context: 'item detail search-link delete'
+      });
+
+      if (result.ok) {
+        // Backend returns the refreshed run with the pruned LastSearchLinksJson — swap it in so the
+        // list re-renders without a full status refetch.
+        if (result.agentic) {
+          setAgentic(result.agentic);
+        }
+        setAgenticError(null);
+      } else {
+        const message = result.reason === 'not-found'
+          ? 'Suchergebnis wurde nicht gefunden.'
+          : 'Suchergebnis konnte nicht entfernt werden.';
+        setAgenticError(message);
+      }
+    } catch (err) {
+      logError('Suchergebnis-Löschung fehlgeschlagen', err, { referenceId, url: targetUrl });
+      setAgenticError('Suchergebnis konnte nicht entfernt werden.');
+    } finally {
+      setDeletingSearchLinkUrl(null);
+    }
+  }
+
   const agenticStartHandler = !agenticHasRun ? handleAgenticStart : handleAgenticRestart;
   const agenticStatus = agenticStatusDisplay(agentic);
   const agenticIsInProgress = isAgenticRunInProgress(agentic);
@@ -2942,52 +2606,10 @@ export default function ItemDetail({ itemId }: Props) {
       onDelete: agenticCanDelete ? handleAgenticDelete : undefined,
     };
 
-    const specModalData: SpecFieldModalState | null = specFieldReviewModalState
-      ? {
-          title: specFieldReviewModalState.title,
-          description: specFieldReviewModalState.description,
-          fieldOptions: specFieldReviewModalState.fieldOptions,
-          includeAdditionalInput: specFieldReviewModalState.includeAdditionalInput,
-          additionalInputPlaceholder: specFieldReviewModalState.additionalInputPlaceholder,
-          secondaryTitle: specFieldReviewModalState.secondaryTitle,
-          secondaryDescription: specFieldReviewModalState.secondaryDescription,
-          secondaryFieldOptions: specFieldReviewModalState.secondaryFieldOptions,
-          includeSecondaryAdditionalInput: specFieldReviewModalState.includeSecondaryAdditionalInput,
-          secondaryAdditionalInputPlaceholder: specFieldReviewModalState.secondaryAdditionalInputPlaceholder,
-        }
-      : null;
-
-    const handleSpecFieldModalClose = () => {
-      try { specFieldReviewModalState?.resolve(null); }
-      catch (error) { logError('ItemDetail: Failed to resolve cancelled spec modal', error, { itemId }); }
-      finally { setSpecFieldReviewModalState(null); }
-    };
-
-    const handleSpecFieldModalConfirm = (result: AgenticSpecFieldReviewResult) => {
-      try { specFieldReviewModalState?.resolve(result); }
-      catch (error) { logError('ItemDetail: Failed to resolve confirmed spec modal', error, { itemId }); }
-      finally { setSpecFieldReviewModalState(null); }
-    };
-
-    const contractFieldModalData = contractFieldReviewModalState
-      ? {
-          title: contractFieldReviewModalState.title,
-          description: contractFieldReviewModalState.description,
-          contractFields: contractFieldReviewModalState.contractFields,
-          additionalFields: contractFieldReviewModalState.additionalFields
-        }
-      : null;
-
-    const handleContractFieldModalClose = () => {
-      try { contractFieldReviewModalState?.resolve(null); }
-      catch (error) { logError('ItemDetail: Failed to resolve cancelled contract field modal', error, { itemId }); }
-      finally { setContractFieldReviewModalState(null); }
-    };
-
-    const handleContractFieldModalConfirm = (result: AgenticContractFieldReviewResult) => {
-      try { contractFieldReviewModalState?.resolve(result); }
-      catch (error) { logError('ItemDetail: Failed to resolve confirmed contract field modal', error, { itemId }); }
-      finally { setContractFieldReviewModalState(null); }
+    const handleReviewWizardResolve = (result: AgenticReviewWizardResult | null) => {
+      try { reviewWizardModalState?.resolve(result); }
+      catch (error) { logError('ItemDetail: Failed to resolve review wizard', error, { itemId }); }
+      finally { setReviewWizardModalState(null); }
     };
 
     let tabContent: React.ReactNode;
@@ -3009,12 +2631,8 @@ export default function ItemDetail({ itemId }: Props) {
         tabContent = (
           <ItemKiTab
             agenticCardProps={agenticCardProps}
-            specFieldModalState={specModalData}
-            onSpecFieldModalClose={handleSpecFieldModalClose}
-            onSpecFieldModalConfirm={handleSpecFieldModalConfirm}
-            contractFieldModalState={contractFieldModalData}
-            onContractFieldModalClose={handleContractFieldModalClose}
-            onContractFieldModalConfirm={handleContractFieldModalConfirm}
+            reviewWizardState={reviewWizardModalState?.data ?? null}
+            onReviewWizardResolve={handleReviewWizardResolve}
             reworkFieldOptions={reworkFieldOptions}
             onReworkSubmit={handleReworkSubmit}
             canClose={agenticCanClose}
@@ -3022,6 +2640,9 @@ export default function ItemDetail({ itemId }: Props) {
             canDelete={agenticCanDelete}
             onDelete={agenticCanDelete ? handleAgenticDelete : undefined}
             actionPending={agenticActionPending}
+            snapshotArtikelNummer={item?.Artikel_Nummer ?? null}
+            snapshotCurrentFields={snapshotCurrentFields}
+            onSnapshotRestored={() => { void load({ showSpinner: false }); }}
           />
         );
         break;

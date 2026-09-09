@@ -8,7 +8,7 @@
     "writable": true,
     "deletable": true
   },
-    {
+  {
     "name": "wipe-reports",
     "mountPath": "/mnt/mediator-docs/wipe-reports",
     "identifierType": "serialNumber",

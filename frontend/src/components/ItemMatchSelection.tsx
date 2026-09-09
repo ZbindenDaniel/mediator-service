@@ -96,7 +96,13 @@ export function ItemMatchSelection({ searchTerm, onSelect, onSkip, layout = 'pag
         <p>Wir haben nach bestehenden Artikeln mit der Beschreibung „{searchTerm || '—'}“ gesucht.</p>
       </div>
       <div className="item-form">
-        <SimilarItemsPanel items={items} loading={loading} error={error} onSelect={handleSelect} />
+        <SimilarItemsPanel
+          items={items}
+          loading={loading}
+          error={error}
+          onSelect={handleSelect}
+          highlightTerm={searchTerm}
+        />
         {!loading && !error && items.length === 0 && (
           <div className="row">
             <span>Keine ähnlichen Artikel gefunden.</span>

@@ -6,7 +6,7 @@
       "id": "vram_gb",
       "type": "select",
       "question": "Wie viel VRAM hat die Karte?",
-      "values": ["1", "2", "4", "6", "8", "12", "16", "24"],
+      "values": ["?", "1", "2", "4", "6", "8", "12", "16", "24"],
       "specField": "VRAM",
       "specValue": "%v GB"
     },

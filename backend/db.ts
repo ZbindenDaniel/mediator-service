@@ -1,5 +1,11 @@
 import { randomBytes } from 'crypto';
 import { query, queryOne, execute, insert, withTransaction, namedQuery, namedQueryOne, namedExecute, getPoolInstance, execBatch } from './db-client';
+import { SHOPWARE_SYNC_ENABLED } from './config';
+import { describeQuality } from '../models/quality';
+import { buildItemCategoryLookups } from '../models/item-category-lookups';
+import { getFilterableSpecKeys } from './contracts/registry';
+import { resolveShopwareImageInputs } from './lib/shopware-media';
+import type { ShopwareImageInput } from './shopware/adminClient';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import type {
   ShopwareSyncQueueEntry,
@@ -12,6 +18,9 @@ import {
   AgenticRequestLogUpsert,
   AgenticRequestNotification,
   AgenticRun,
+  AgenticRunSnapshot,
+  AgenticRunSnapshotReason,
+  AgenticSnapshotFields,
   Box,
   Item,
   ItemInstance,
@@ -399,6 +408,25 @@ CREATE TABLE IF NOT EXISTS agentic_run_review_history (
 
 CREATE INDEX IF NOT EXISTS idx_agentic_run_review_history_artikel_nummer_recorded_at
   ON agentic_run_review_history ("Artikel_Nummer", "RecordedAt", "Id");
+
+-- Versioned history of an item's AI-enriched state: one row captured just before a run/rework mutates
+-- the item (plus non-destructive restore rows). Powers the KI-tab diff + restore. Retention keeps the
+-- last 4 per item plus the most recent approved-state snapshot (see pruneAgenticRunSnapshots).
+CREATE TABLE IF NOT EXISTS agentic_run_snapshots (
+  "Id"                  SERIAL PRIMARY KEY,
+  "Artikel_Nummer"      TEXT NOT NULL REFERENCES item_refs("Artikel_Nummer") ON DELETE CASCADE ON UPDATE CASCADE,
+  "RunId"               INTEGER,
+  "CreatedAt"           TEXT NOT NULL,
+  "Reason"              TEXT NOT NULL,
+  "CapturedReviewState" TEXT,
+  "Actor"               TEXT,
+  "TriggerReason"       TEXT,
+  "SchemaVersion"       INTEGER NOT NULL DEFAULT 1,
+  "FieldsJson"          TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_agentic_run_snapshots_artikel_created
+  ON agentic_run_snapshots ("Artikel_Nummer", "CreatedAt", "Id");
 
 CREATE TABLE IF NOT EXISTS user_item_marks (
   "Username"  TEXT NOT NULL,
@@ -1188,7 +1216,8 @@ export async function listItems(): Promise<any[]> {
   const rows = await query(
     `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
       "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
-      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\"",
+      "ar.\"LastAttemptAt\" AS \"AgenticLastRunAt\""
     ])}${ITEM_JOIN_WITH_BOX}
      LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
      WHERE COALESCE(i."Auf_Lager", 0) > 0
@@ -1208,7 +1237,8 @@ export async function listItemsWithFilters(filters: {
   const rows = await query(
     `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK, [
       "COALESCE(ar.\"Status\", 'notStarted') AS \"AgenticStatus\"",
-      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\""
+      "COALESCE(ar.\"ReviewState\", 'not_required') AS \"AgenticReviewState\"",
+      "ar.\"LastAttemptAt\" AS \"AgenticLastRunAt\""
     ])}${ITEM_JOIN_WITH_BOX}
      LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
      WHERE COALESCE(i."Auf_Lager", 0) > 0
@@ -1247,7 +1277,8 @@ export async function listItemReferencesWithFilters(filters: {
       r."Veröffentlicht_Status",r."Shopartikel",r."Artikeltyp",r."Einheit",r."EntityType",r."EAN",r."ShopwareProductId",
       r."LastSyncedAt",
       COALESCE(ar."Status",'notStarted') AS "AgenticStatus",
-      COALESCE(ar."ReviewState",'not_required') AS "AgenticReviewState"
+      COALESCE(ar."ReviewState",'not_required') AS "AgenticReviewState",
+      ar."LastAttemptAt" AS "AgenticLastRunAt"
      FROM item_refs r
      LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
      LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
@@ -2100,6 +2131,130 @@ export async function listRecentAgenticRunReviewHistoryBySubcategory(subcategory
   }
 }
 
+// --- Agentic run snapshots (versioned enriched-state history) ---
+
+const AGENTIC_SNAPSHOT_KEEP_RECENT = 4;
+
+function parseSnapshotRow(row: {
+  Id: number;
+  Artikel_Nummer: string;
+  RunId: number | null;
+  CreatedAt: string;
+  Reason: string;
+  CapturedReviewState: string | null;
+  Actor: string | null;
+  TriggerReason: string | null;
+  SchemaVersion: number;
+  FieldsJson: string;
+}): AgenticRunSnapshot {
+  let fields: AgenticSnapshotFields = {};
+  try {
+    const parsed = JSON.parse(row.FieldsJson);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      fields = parsed as AgenticSnapshotFields;
+    }
+  } catch (err) {
+    console.warn('[db] Failed to parse agentic snapshot FieldsJson', { id: row.Id, error: err });
+  }
+  return {
+    Id: row.Id,
+    Artikel_Nummer: row.Artikel_Nummer,
+    RunId: row.RunId,
+    CreatedAt: row.CreatedAt,
+    Reason: (row.Reason as AgenticRunSnapshotReason) ?? 'pre-run',
+    CapturedReviewState: row.CapturedReviewState,
+    Actor: row.Actor,
+    TriggerReason: row.TriggerReason,
+    SchemaVersion: row.SchemaVersion,
+    Fields: fields
+  };
+}
+
+export async function insertAgenticRunSnapshot(params: {
+  Artikel_Nummer: string;
+  RunId?: number | null;
+  Reason: AgenticRunSnapshotReason;
+  CapturedReviewState?: string | null;
+  Actor?: string | null;
+  TriggerReason?: string | null;
+  SchemaVersion?: number;
+  Fields: AgenticSnapshotFields;
+  CreatedAt?: string;
+}): Promise<void> {
+  const artikelNummer = typeof params.Artikel_Nummer === 'string' ? params.Artikel_Nummer.trim() : '';
+  if (!artikelNummer) return;
+  const createdAt = params.CreatedAt ?? new Date().toISOString();
+  await execute(
+    `INSERT INTO agentic_run_snapshots
+       ("Artikel_Nummer","RunId","CreatedAt","Reason","CapturedReviewState","Actor","TriggerReason","SchemaVersion","FieldsJson")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      artikelNummer,
+      params.RunId ?? null,
+      createdAt,
+      params.Reason,
+      params.CapturedReviewState ?? null,
+      params.Actor ?? null,
+      params.TriggerReason ?? null,
+      params.SchemaVersion ?? 1,
+      JSON.stringify(params.Fields ?? {})
+    ]
+  );
+}
+
+// Retention: keep the 4 most recent snapshots PLUS the most recent approved-state snapshot even if it
+// falls outside that window — so an item can always be rolled back to its last known-good state.
+export async function pruneAgenticRunSnapshots(artikelNummer: string): Promise<void> {
+  const normalized = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalized) return;
+  try {
+    await execute(
+      `DELETE FROM agentic_run_snapshots
+       WHERE "Artikel_Nummer" = $1
+         AND "Id" NOT IN (
+           SELECT "Id" FROM agentic_run_snapshots
+           WHERE "Artikel_Nummer" = $1
+           ORDER BY "CreatedAt" DESC, "Id" DESC
+           LIMIT $2
+         )
+         AND "Id" NOT IN (
+           SELECT "Id" FROM agentic_run_snapshots
+           WHERE "Artikel_Nummer" = $1
+             AND LOWER(COALESCE("CapturedReviewState", '')) IN ('approved','auto_approved')
+           ORDER BY "CreatedAt" DESC, "Id" DESC
+           LIMIT 1
+         )`,
+      [normalized, AGENTIC_SNAPSHOT_KEEP_RECENT]
+    );
+  } catch (err) {
+    console.warn('[db] Failed to prune agentic run snapshots', { artikelNummer: normalized, error: err });
+  }
+}
+
+export async function listAgenticRunSnapshots(artikelNummer: string, limit = 20): Promise<AgenticRunSnapshot[]> {
+  const normalized = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalized) return [];
+  const normalizedLimit = Number.isInteger(limit) && limit > 0 ? Math.min(limit, 50) : 20;
+  const rows = await query<Parameters<typeof parseSnapshotRow>[0]>(
+    `SELECT "Id","Artikel_Nummer","RunId","CreatedAt","Reason","CapturedReviewState","Actor","TriggerReason","SchemaVersion","FieldsJson"
+     FROM agentic_run_snapshots WHERE "Artikel_Nummer"=$1
+     ORDER BY "CreatedAt" DESC, "Id" DESC LIMIT $2`,
+    [normalized, normalizedLimit]
+  );
+  return rows.map(parseSnapshotRow);
+}
+
+export async function getAgenticRunSnapshotById(id: number, artikelNummer: string): Promise<AgenticRunSnapshot | null> {
+  const normalized = typeof artikelNummer === 'string' ? artikelNummer.trim() : '';
+  if (!normalized || !Number.isInteger(id)) return null;
+  const row = await queryOne<Parameters<typeof parseSnapshotRow>[0]>(
+    `SELECT "Id","Artikel_Nummer","RunId","CreatedAt","Reason","CapturedReviewState","Actor","TriggerReason","SchemaVersion","FieldsJson"
+     FROM agentic_run_snapshots WHERE "Id"=$1 AND "Artikel_Nummer"=$2`,
+    [id, normalized]
+  );
+  return row ? parseSnapshotRow(row) : null;
+}
+
 export async function persistAgenticRunError(params: { artikelNummer: string; error: string | null; attemptAt?: string | null }): Promise<void> {
   const artikelNummer = typeof params.artikelNummer === 'string' ? params.artikelNummer.trim() : '';
   if (!artikelNummer) {
@@ -2152,8 +2307,14 @@ export type AgenticRunQueueUpdate = {
   LastAttemptAt: string;
 };
 
-export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
+export async function claimQueuedAgenticRuns(limit = 5, maxRunning?: number): Promise<AgenticRun[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 5;
+  // Optional hard cap on total 'running' runs, enforced inside this atomic statement. The caller's
+  // availableSlots read is not atomic with the claim, so passing the cap here makes the claim itself
+  // refuse to promote past it: LIMIT is clamped to (cap - current running count), computed in the same
+  // statement that does the promotion. This is the guarantee the removed per-invocation count-gate used
+  // to provide (see agentic index.ts), now at the claim layer. When omitted, only `limit` applies.
+  const cap = Number.isFinite(maxRunning) && (maxRunning ?? -1) >= 0 ? Math.floor(maxRunning as number) : null;
   const now = new Date().toISOString();
   try {
     // Atomic SELECT FOR UPDATE SKIP LOCKED + UPDATE in one statement so concurrent instances
@@ -2161,12 +2322,18 @@ export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
     // rather than block, and the rows are immediately moved to 'running' before any other
     // instance can see them as 'queued'.
     return query<AgenticRun>(
-      `WITH next_runs AS (
+      `WITH free_slots AS (
+         SELECT CASE
+                  WHEN $3::int IS NULL THEN $1::int
+                  ELSE LEAST($1::int, GREATEST(0, $3::int - (SELECT COUNT(*)::int FROM agentic_runs WHERE "Status" = 'running')))
+                END AS n
+       ),
+       next_runs AS (
          SELECT "Id"
          FROM agentic_runs
          WHERE "Status" = 'queued' AND ("NextRetryAt" IS NULL OR "NextRetryAt" <= $2)
          ORDER BY "LastModified" ASC, "Id" ASC
-         LIMIT $1
+         LIMIT (SELECT n FROM free_slots)
          FOR UPDATE SKIP LOCKED
        )
        UPDATE agentic_runs
@@ -2178,7 +2345,7 @@ export async function claimQueuedAgenticRuns(limit = 5): Promise<AgenticRun[]> {
        FROM next_runs
        WHERE agentic_runs."Id" = next_runs."Id"
        RETURNING agentic_runs.*`,
-      [effectiveLimit, now]
+      [effectiveLimit, now, cap]
     );
   } catch (err) {
     console.error('[db] Failed to claim queued agentic runs', err);
@@ -2435,7 +2602,343 @@ export async function listShopwareSyncQueue(): Promise<ShopwareSyncQueueEntry[]>
   return query<ShopwareSyncQueueEntry>(`SELECT * FROM shopware_sync_queue ORDER BY "Id"`);
 }
 
-export async function enqueueShopwareSyncJob(job: ShopwareSyncQueueInsert): Promise<ShopwareSyncQueueEntry> {
+// Manual "Shop-Sync": enqueue an item-upsert for every shop-article ref. The dispatch gate handles
+// eligibility (approved → synced, unapproved/de-flagged → deactivated), so this also backfills existing
+// products and cleans up pre-gate skeletons. No-op (returns 0) when SHOPWARE_SYNC_ENABLED is off.
+export async function enqueueShopwareSyncForShopRefs(): Promise<{ enqueued: number; total: number }> {
+  const refs = await query<{ Artikel_Nummer: string }>(
+    `SELECT "Artikel_Nummer" FROM item_refs WHERE "Shopartikel" = 1 AND "Artikel_Nummer" IS NOT NULL AND "Artikel_Nummer" <> ''`
+  );
+  let enqueued = 0;
+  for (const ref of refs) {
+    try {
+      const correlationId = generateShopwareCorrelationId('manual-shop-sync', ref.Artikel_Nummer);
+      const payload = createShopwareQueuePayload({ artikelNummer: ref.Artikel_Nummer, trigger: 'manual-shop-sync' }, 'manualShopSync');
+      const entry = await enqueueShopwareSyncJob({ CorrelationId: correlationId, JobType: 'item-upsert', Payload: payload });
+      if (entry) enqueued += 1;
+    } catch (err) {
+      console.error('[db] Failed to enqueue manual shop sync job', { artikelNummer: ref.Artikel_Nummer, error: err });
+    }
+  }
+  return { enqueued, total: refs.length };
+}
+
+// Enqueue a Shopware sync for the refs behind the selected item instances (list bulk-action). The
+// dispatch gate then decides per ref (approved → synced, ineligible → deactivated/skipped).
+export async function enqueueShopwareSyncForItems(itemIds: string[]): Promise<{ enqueued: number; total: number }> {
+  const ids = (itemIds || []).filter((id) => typeof id === 'string' && id.trim());
+  if (!ids.length) {
+    return { enqueued: 0, total: 0 };
+  }
+  const rows = await query<{ Artikel_Nummer: string | null }>(
+    `SELECT DISTINCT "Artikel_Nummer" FROM items WHERE "ItemUUID" = ANY($1::text[]) AND "Artikel_Nummer" IS NOT NULL AND "Artikel_Nummer" <> ''`,
+    [ids]
+  );
+  const refs = rows.map((r) => r.Artikel_Nummer).filter((n): n is string => Boolean(n));
+  let enqueued = 0;
+  for (const artikelNummer of refs) {
+    try {
+      const correlationId = generateShopwareCorrelationId('manual-shop-sync', artikelNummer);
+      const payload = createShopwareQueuePayload({ artikelNummer, trigger: 'manual-shop-sync' }, 'manualShopSync');
+      const entry = await enqueueShopwareSyncJob({ CorrelationId: correlationId, JobType: 'item-upsert', Payload: payload });
+      if (entry) enqueued += 1;
+    } catch (err) {
+      console.error('[db] Failed to enqueue manual shop sync job for item', { artikelNummer, error: err });
+    }
+  }
+  return { enqueued, total: refs.length };
+}
+
+export interface ShopwareSyncQueueCounts {
+  total: number;
+  queued: number;
+  processing: number;
+  succeeded: number;
+  failed: number;
+  oldestQueuedAt: string | null;
+}
+
+// Lightweight queue-depth summary for the admin surface. Because dispatch is not yet implemented,
+// this is how an operator confirms jobs are only accumulating (queued grows, processing/succeeded stay 0).
+export async function getShopwareSyncQueueCounts(): Promise<ShopwareSyncQueueCounts> {
+  const rows = await query<{ Status: string; count: string }>(
+    `SELECT "Status", COUNT(*)::int AS count FROM shopware_sync_queue GROUP BY "Status"`
+  );
+  const byStatus = new Map(rows.map((r) => [r.Status, Number(r.count)]));
+  const oldest = await queryOne<{ CreatedAt: string }>(
+    `SELECT "CreatedAt" FROM shopware_sync_queue WHERE "Status"='queued' ORDER BY "CreatedAt" ASC, "Id" ASC LIMIT 1`
+  );
+  const queued = byStatus.get('queued') ?? 0;
+  const processing = byStatus.get('processing') ?? 0;
+  const succeeded = byStatus.get('succeeded') ?? 0;
+  const failed = byStatus.get('failed') ?? 0;
+  return {
+    total: queued + processing + succeeded + failed,
+    queued,
+    processing,
+    succeeded,
+    failed,
+    oldestQueuedAt: oldest?.CreatedAt ?? null
+  };
+}
+
+export interface ShopwareSyncSnapshot {
+  productNumber: string;
+  name: string;
+  description: string | null;
+  grossPrice: number | null;
+  shopwareProductId: string | null;
+  stock: number;
+  // Physical dimensions → Shopware length/width/height (mm) + weight (kg). Null when unset.
+  lengthMm: number | null;
+  widthMm: number | null;
+  heightMm: number | null;
+  weightKg: number | null;
+  // Shop-eligibility: Shopartikel=1 AND agentically approved. When false the product must NOT be
+  // published — an unreviewed/non-shop item never lands live (deactivated if it already exists).
+  shopEligible: boolean;
+  // Maps to Shopware product.active (Veröffentlicht_Status === 'yes').
+  active: boolean;
+  // Parsed Langtext spec map (group → value(s)) for property sync; null when Langtext is freeform/empty.
+  properties: Record<string, string | string[]> | null;
+  // Which property keys should be storefront-filterable (the union of spec-contract field keys). All
+  // properties are still pushed; only these are made filterable so freeform Langtext keys don't flood
+  // the filter sidebar. Global (same for every product) since Shopware's filterable flag is per-group.
+  filterablePropertyKeys: string[];
+  // Product images (cover first) resolved from Grafikname/ImageNames to uploadable descriptors.
+  images: ShopwareImageInput[];
+  // Variant groups: the ref's instances grouped by distinct InstanceSpecs combination. Empty when the
+  // ref has <2 distinct spec combos (→ single-product path, using the summed `stock` above).
+  variants: ShopwareVariantGroup[];
+  // Category display names (main + sub, for the primary A and secondary B pairs) resolved from the ref's
+  // category codes. The Shopware client links the product to EXISTING categories of these names (never creates).
+  categories: string[];
+}
+
+// One Shopware variant = one physical instance of a ref (itemUUID axis makes the signature unique per
+// instance). Options are the spec axis→value pairs plus Zustand + itemUUID; stock is the instance's on-hand.
+export interface ShopwareVariantGroup {
+  // Stable signature (sorted key=value, incl. itemUUID) → deterministic child productNumber suffix on re-sync.
+  key: string;
+  options: Record<string, string>;
+  stock: number;
+  instanceIds: string[];
+}
+
+// Build one variant group per instance: options are the InstanceSpecs axes + Zustand + itemUUID. The
+// itemUUID axis makes every signature unique, so instances never merge. Returns groups sorted by key.
+export function buildVariantGroups(
+  instances: Array<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null; Quality?: number | null }>,
+  artikelNummer: string
+): ShopwareVariantGroup[] {
+  const byKey = new Map<string, ShopwareVariantGroup>();
+  for (const inst of instances) {
+    const parsed = parseLangtext(inst.InstanceSpecs, { context: 'db:buildVariantGroups', artikelNummer, itemUUID: inst.ItemUUID });
+    const options: Record<string, string> = {};
+    if (parsed && typeof parsed === 'object') {
+      for (const [rawK, rawV] of Object.entries(parsed)) {
+        const k = rawK.trim();
+        // A variant axis takes a single value; join a multi-value spec deterministically.
+        const v = (Array.isArray(rawV) ? rawV.join(' / ') : String(rawV ?? '')).trim();
+        if (k && v) options[k] = v;
+      }
+    }
+    // Quality is a variant axis too ("Zustand"), so instances differing only in condition split into
+    // separate variants. Skip unknown quality (label '?') so it doesn't become a junk option.
+    const qualityLabel = describeQuality(inst.Quality ?? null).label;
+    if (qualityLabel && qualityLabel !== '?') {
+      options.Zustand = qualityLabel;
+    }
+    // itemUUID is a variant axis so each physical instance is its own selectable variant (1:1) — the
+    // operator switches variants on this property in Shopware and groups the spec axes as descriptive.
+    // Because the UUID is unique per instance, instances no longer merge: a variant = exactly one item.
+    options.itemUUID = inst.ItemUUID;
+    const key = Object.keys(options).sort().map((k) => `${k}=${options[k]}`).join('|');
+    const existing = byKey.get(key);
+    const stock = Math.max(0, Number(inst.Auf_Lager) || 0);
+    if (existing) {
+      existing.stock += stock;
+      existing.instanceIds.push(inst.ItemUUID);
+    } else {
+      byKey.set(key, { key, options, stock, instanceIds: [inst.ItemUUID] });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
+}
+
+// Category code → label lookups, built once (module load) since the taxonomy is static.
+const CATEGORY_LOOKUPS = buildItemCategoryLookups();
+
+// Resolve a ref's category codes to Shopware category display names. Main labels are canonicalized with
+// underscores (e.g. "Laptop_und_Zubehör"); Shopware category names use spaces, so de-underscore them.
+// For each pair (primary A, secondary B): add the sub's own label + its parent main label; if only the
+// main code resolves, add just the main. De-duplicated. The Shopware client links to categories of these
+// names that already exist (never creates), so an unmatched label is simply skipped.
+export function resolveShopwareCategoryNames(
+  hauptA: number | null, unterA: number | null,
+  hauptB: number | null, unterB: number | null
+): string[] {
+  const names = new Set<string>();
+  const deUnderscore = (s: string) => s.replace(/_/g, ' ').trim();
+  const addPair = (haupt: number | null, unter: number | null) => {
+    if (unter != null) {
+      const sub = CATEGORY_LOOKUPS.unter.get(Number(unter));
+      if (sub) {
+        if (sub.parentLabel) names.add(deUnderscore(sub.parentLabel));
+        if (sub.label) names.add(deUnderscore(sub.label));
+        return;
+      }
+    }
+    if (haupt != null) {
+      const main = CATEGORY_LOOKUPS.haupt.get(Number(haupt));
+      if (main?.label) names.add(deUnderscore(main.label));
+    }
+  };
+  addPair(hauptA, unterA);
+  addPair(hauptB, unterB);
+  return [...names];
+}
+
+// Agentic approval: ReviewState is authoritative when set, else fall back to Status. Mirrors
+// resolveAgenticApproval in actions/export-items.ts (kept inline to avoid an actions→db import cycle).
+function isAgenticApproved(reviewState: string | null, status: string | null): boolean {
+  const approvedStates = new Set(['approved', 'auto_approved']);
+  const rs = (reviewState || '').trim();
+  if (rs) return approvedStates.has(rs);
+  return approvedStates.has((status || '').trim());
+}
+
+// Current state of one item reference, mapped to what a Shopware product upsert needs. Stock is the
+// summed on-hand quantity across all instances of the Artikel_Nummer (absolute-stock model). Returns
+// null when the reference no longer exists (e.g. deleted between enqueue and dispatch → nothing to sync).
+export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<ShopwareSyncSnapshot | null> {
+  const row = await queryOne<{
+    productNumber: string;
+    name: string;
+    description: string | null;
+    grossPrice: number | null;
+    shopwareProductId: string | null;
+    langtext: string | null;
+    grafikname: string | null;
+    imageNames: string | null;
+    shopartikel: number | null;
+    published: string | null;
+    lengthMm: number | null;
+    widthMm: number | null;
+    heightMm: number | null;
+    weightKg: number | null;
+    agenticStatus: string | null;
+    agenticReviewState: string | null;
+    hauptA: number | null;
+    unterA: number | null;
+    hauptB: number | null;
+    unterB: number | null;
+    stock: string | number;
+  }>(
+    // Approval comes from scalar subselects (LIMIT 1) so a ref with multiple agentic_runs never
+    // multiplies the item rows and corrupts the stock SUM.
+    // Name = Artikelbeschreibung (the ERP article title); description = Kurzbeschreibung (notes).
+    `SELECT r."Artikel_Nummer" AS "productNumber",
+            COALESCE(NULLIF(r."Artikelbeschreibung",''), NULLIF(r."Kurzbeschreibung",''), r."Artikel_Nummer") AS "name",
+            COALESCE(NULLIF(r."Kurzbeschreibung",''), NULLIF(r."Artikelbeschreibung",'')) AS "description",
+            r."Verkaufspreis" AS "grossPrice",
+            r."ShopwareProductId" AS "shopwareProductId",
+            r."Langtext" AS "langtext",
+            r."Grafikname" AS "grafikname",
+            r."ImageNames" AS "imageNames",
+            r."Shopartikel" AS "shopartikel",
+            r."Veröffentlicht_Status" AS "published",
+            r."Länge_mm" AS "lengthMm",
+            r."Breite_mm" AS "widthMm",
+            r."Höhe_mm" AS "heightMm",
+            r."Gewicht_kg" AS "weightKg",
+            (SELECT ar."Status" FROM agentic_runs ar WHERE ar."Artikel_Nummer" = r."Artikel_Nummer" ORDER BY ar."LastAttemptAt" DESC NULLS LAST LIMIT 1) AS "agenticStatus",
+            (SELECT ar."ReviewState" FROM agentic_runs ar WHERE ar."Artikel_Nummer" = r."Artikel_Nummer" ORDER BY ar."LastAttemptAt" DESC NULLS LAST LIMIT 1) AS "agenticReviewState",
+            ROUND(NULLIF(r."Hauptkategorien_A", '')::NUMERIC)::INTEGER AS "hauptA",
+            ROUND(NULLIF(r."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "unterA",
+            ROUND(NULLIF(r."Hauptkategorien_B", '')::NUMERIC)::INTEGER AS "hauptB",
+            ROUND(NULLIF(r."Unterkategorien_B", '')::NUMERIC)::INTEGER AS "unterB",
+            COALESCE(SUM(COALESCE(i."Auf_Lager",0)),0) AS "stock"
+       FROM item_refs r
+       LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
+      WHERE r."Artikel_Nummer" = $1
+      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext", r."Grafikname", r."ImageNames", r."Shopartikel", r."Veröffentlicht_Status", r."Länge_mm", r."Breite_mm", r."Höhe_mm", r."Gewicht_kg", r."Hauptkategorien_A", r."Unterkategorien_A", r."Hauptkategorien_B", r."Unterkategorien_B"`,
+    [artikelNummer]
+  );
+  if (!row) {
+    return null;
+  }
+  // Only the structured (object) Langtext form yields properties; freeform prose is not filterable.
+  const parsedLangtext = parseLangtext(row.langtext, { context: 'db:getShopwareSyncSnapshot', artikelNummer });
+  const properties = parsedLangtext && typeof parsedLangtext === 'object' ? parsedLangtext : null;
+  const description = row.description && row.description !== row.name ? row.description : null;
+  const shopEligible = Number(row.shopartikel) === 1 && isAgenticApproved(row.agenticReviewState, row.agenticStatus);
+
+  // Variant grouping: itemUUID is always an axis, so each instance is its own variant. Use the variant
+  // path when a ref has ≥2 instances; a single-instance ref stays a plain product (no needless parent).
+  const instances = await query<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null; Quality: number | null }>(
+    `SELECT "ItemUUID", "InstanceSpecs", "Auf_Lager", "Quality" FROM items WHERE "Artikel_Nummer" = $1`,
+    [artikelNummer]
+  );
+  const allGroups = buildVariantGroups(instances, artikelNummer);
+  const useVariants = allGroups.length >= 2 && allGroups.every((g) => Object.keys(g.options).length > 0);
+  const variants = useVariants ? allGroups : [];
+
+  return {
+    productNumber: row.productNumber,
+    name: row.name,
+    description,
+    grossPrice: row.grossPrice != null ? Number(row.grossPrice) : null,
+    shopwareProductId: row.shopwareProductId ?? null,
+    stock: Number(row.stock) || 0,
+    lengthMm: row.lengthMm != null ? Number(row.lengthMm) : null,
+    widthMm: row.widthMm != null ? Number(row.widthMm) : null,
+    heightMm: row.heightMm != null ? Number(row.heightMm) : null,
+    weightKg: row.weightKg != null ? Number(row.weightKg) : null,
+    shopEligible,
+    active: normalizePublishedValue(row.published) === 'yes',
+    properties,
+    filterablePropertyKeys: [...getFilterableSpecKeys()],
+    images: resolveShopwareImageInputs(row.productNumber, row.grafikname, row.imageNames),
+    variants,
+    categories: resolveShopwareCategoryNames(row.hauptA, row.unterA, row.hauptB, row.unterB)
+  };
+}
+
+// Persist the resolved Shopware variant (child) id onto every instance in a variant group.
+export async function setItemShopwareVariantId(itemUUID: string, variantId: string): Promise<void> {
+  await execute(`UPDATE items SET "ShopwareVariantId"=$2 WHERE "ItemUUID"=$1`, [itemUUID, variantId]);
+}
+
+// Resolve a snapshot from a queue job's payload. item-upsert jobs carry artikelNummer directly;
+// move/stock jobs carry only itemUUID, so resolve the Artikel_Nummer from the instance first.
+export async function getShopwareSyncSnapshotForPayload(payload: unknown): Promise<ShopwareSyncSnapshot | null> {
+  const p = (payload ?? {}) as { artikelNummer?: unknown; itemUUID?: unknown };
+  let artikelNummer = typeof p.artikelNummer === 'string' && p.artikelNummer ? p.artikelNummer : null;
+  if (!artikelNummer && typeof p.itemUUID === 'string' && p.itemUUID) {
+    const row = await queryOne<{ Artikel_Nummer: string | null }>(
+      `SELECT "Artikel_Nummer" FROM items WHERE "ItemUUID"=$1`,
+      [p.itemUUID]
+    );
+    artikelNummer = row?.Artikel_Nummer ?? null;
+  }
+  if (!artikelNummer) {
+    return null;
+  }
+  return getShopwareSyncSnapshot(artikelNummer);
+}
+
+// Persist the Shopware product id back onto the reference after a create, so future syncs skip the lookup.
+export async function setShopwareProductId(artikelNummer: string, productId: string): Promise<void> {
+  await execute(`UPDATE item_refs SET "ShopwareProductId"=$2 WHERE "Artikel_Nummer"=$1`, [artikelNummer, productId]);
+}
+
+export async function enqueueShopwareSyncJob(job: ShopwareSyncQueueInsert): Promise<ShopwareSyncQueueEntry | null> {
+  // Only record sync intent when the write path is enabled. Without this gate every persistItem/move/
+  // stock change enqueued a row that nothing drains (dispatch is unimplemented) — an unbounded leak.
+  if (!SHOPWARE_SYNC_ENABLED) {
+    return null;
+  }
   const now = new Date().toISOString();
   const entry = {
     CorrelationId: job.CorrelationId,
