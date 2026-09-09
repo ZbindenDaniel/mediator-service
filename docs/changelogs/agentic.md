@@ -4,6 +4,73 @@ Covers: AI enrichment pipeline, search, extraction, categorization, pricing, sup
 
 ---
 
+## 928. ✅ Planning: instance agentic flow (intake data → instance specs + reference reconciliation)
+**Why:** Intake produces rich per-instance data (`items.IntakeScan`, `items.InstanceSpecs`, quality
+condition answers, serial-keyed Phase-2 files) that the reference-keyed pipeline almost entirely
+ignores — only 3 keys reach it via the hardcoded `INTAKE_TO_SPEC` map, and `IntakeScan` is written but
+never read. The spec contracts also mismodel instance-varying fields (`RAM`/`Speicher`/`Akku`/OS) as
+reference-level, worked around by `ambiguousFields` + `InstanceSpecs`. Design: a separate, lightweight
+per-`ItemUUID` flow (no web search) that fills `scope:"instance"` spec fields from measured data and
+**reconciles** the physical device against its reference, emitting typed verdicts
+(`match`/`missing_on_ref`/`wrong_ref`/`instance_variance`) as propose-only operator insights.
+**Why (approach):** Organize everything as one run engine typed by `(scope, mode)` —
+scope ∈ reference|instance, mode ∈ extract|rework|reconcile — rather than a parallel pipeline; the
+"instance flow" is just scope=instance running rework(fill)+reconcile(compare). Reuses the fact that
+`rework` is already a mode of `runItemFlow` (`applyReworkPartialUpdate`, cat/pricing skipped). Add
+`scope`/`measuredSignal` to `SpecContractField` (default `reference`, full back-compat) as the single
+reconciliation authority — the quality/assembly contracts stay the fill sources (they already target
+instances). **Reference-change rule:** the instance flow never writes `item_refs`; its only route to
+change a ref is to *trigger a `rework` run* on that ref, which flows through the existing auto-approve
+gate (#51) — this reconciles "propose-only" with "auto-update based on evidence" (auto = auto-enqueue an
+evidence-backed rework, gate decides apply vs. review). Writes only `items.InstanceSpecs` directly;
+applied changes audited as `events` diffs (no new versioning subsystem). UI is a new **`KI-Runs` list
+type** reusing the item/box/activity list+detail+tab shell (list filterable by scope/mode/status; detail
+tabs: transcript / proposed changes / reconciliation), graduating today's admin KI-queue card. Migration:
+update contracts, leave stored data as-is (operators + rework agent #50 correct drift). Full design +
+phasing in [`docs/PLANNING_instance_flow.md`](../PLANNING_instance_flow.md).
+Later refinements (same #917 design):
+- **Scoped to compute/bootable devices** (the intake API's domain) — the contract `scope` tags and the
+  flow apply to laptops/PCs/servers/workstations, not monitors/phones/peripherals.
+- **The instance flow is not a `rework`** (that shorthand was dropped as confusing): its steps/prompts
+  differ (no web search; it compares measured intake evidence to the reference's already-gathered web
+  data). Reuse-vs-dedicated-flow is an explicit decision to validate (lean: a dedicated small flow).
+- **Evidence collected today** (grounded in `intake-image.http`): structured scan (cpu/ram/disks/gpu/
+  nic/battery) + Phase-2 files `memtest`/`SMART`/`battery`/`wipe-certificate`. **dmidecode/lspci/CPU-
+  stress are NOT collected** (earlier notes wrongly listed them) — only parsed equivalents exist;
+  extending the netboot image to add them is a later option. Prompt written so added evidence slots in.
+- **Reconciled with shipped AI-runs-optimization work** (#916/#917/#918): builds on the snapshot+diff+
+  restore (`agentic_run_snapshots`/`AgenticSnapshotsPanel`), search-sources panel, and grounding block
+  instead of duplicating them. Instance-field history = **extending `agentic_run_snapshots` to instance
+  scope** (its model already defers instance fields to "their own history later") rather than a separate
+  `agentic_run_history` table; the reconciliation's approve→rework reuses the existing rework path + the
+  pre-rework snapshot for rollback. UI + data inventories added to the planning doc (§14–16).
+- **The reconciliation object is the artifact**: evidence digest, per-field comparisons
+  (match/missing_on_ref/conflict/instance_variance), human-readable findings, **operator-gated proposed
+  actions** (propose-ref-rework, relink-Artikelnummer), an informational data-quality score, and a
+  status workflow. It is also the idempotence/staleness key (timestamp + contract version).
+- **Ref changes are operator-gated with no auto-trigger**: the flow only flags; an operator approves
+  (one click) to enqueue the existing `rework`. Auto-triggering the flow and the sweeper backfill are
+  **deferred to post-MVP** — MVP is operator-initiated end to end.
+- **Reconcile is item-read-only** (writes only the reconciliation object + owned instance-spec fills +
+  the informational score), dual-path (inline + standalone `mode=reconcile`), backfillable.
+- **Data stays on the item** (whole-`Langtext` approval — per-field rejected because `Langtext` bundles
+  many fields). Run **history** now builds on the shipped `agentic_run_snapshots` (extend to instance
+  scope) rather than a new table; the global KI-Runs list still needs a per-run log (transcript jsonb) —
+  scope TBD at build time.
+Re-validated vs. the shipped "new pipeline" contract work (2026-09, planning doc §17): spine holds, but
+the reference spec contracts were **redefined around capabilities** (`102.json`: `RAM-Slots`/`RAM-Kapazität`/
+`RAM-Typ`; `201.json` stripped to Prozessor/Display/Anschlüsse) — so the `scope`-field approach (§3) is
+**superseded** by a **separate instance-spec contract**; reconcile now compares installed-value ↔
+model-capability (not equality); `INTAKE_TO_SPEC` is **orphaned** (its target keys left the contract);
+and a new **Phase 0** stabilizes the mid-refactor, inconsistent reference contracts first. The restructure
+itself shipped undocumented (todo doc-debt).
+**Deferred:** Nothing built yet — design still iterating. `InstanceText` explicitly out of scope. All
+**auto-triggering deferred to post-MVP** (auto-run on intake `/complete`, the `sweepReconcile` backfill,
+and any data-quality-score gate). Resolved this pass: transcript = jsonb on the history row; data-quality
+score informational only for now; ref rework always stops for an operator; `wrong_ref` is surfaced to
+operators (no auto-trigger). Open at build time: reuse-vs-dedicated instance flow (validate prompt/step
+parity); the exact reconciliation-object schema; instance-spec conflict handling; which compute
+subcategories get `scope` tags beyond 201.
 ## 927. ✅ Rejected reviews feed a before→after correction diff into the next run
 **Why:** With the review wizard, the approve/reject decision is explicit and the per-step flags (`bad_format`, `wrong_physical_dimensions`, `information_present`) are no longer set — so a rejected-then-restarted run learned nothing about what the reviewer had corrected (its inline edits aren't persisted on reject, by design). Rather than derive lossy boolean flags from the edits, the wizard now composes a concrete, deterministic **before→after diff** of everything the reviewer touched (Artikelbeschreibung/Kurztext reworded, dimensions filled/changed, price changed, specs changed or removed) and, **on reject only**, folds it into `LastReviewNotes` under a labelled header (`"Vorherige Reviewer-Korrekturen (an diesen orientieren…)"`) together with the free notes. That notes stream already flows into the next run's extraction/categorizer/supervisor prompts (`reviewNotes` → `sanitizedReviewerNotes`) and is preserved across restart, so the next attempt gets "a human changed X→Y last time, follow it as far as the sources allow" — richer and unambiguous compared to a flag. On **approve** nothing is emitted: the edits are persisted to `item_refs`, so the corrected values are the next run's baseline.
 **Why a diff, not derived flags:** a flag says "dimensions were wrong"; the diff says "Höhe 26 mm, removed spec *Marketing*, renamed to *Lenovo ThinkPad X200*" — safe to follow, and it naturally expresses removals/rewordings a boolean cannot. It's guidance (the supervisor still validates), not a hard overwrite, so it doesn't risk re-introducing issues. Frontend-only change — the notes channel already existed. Covered by new `AgenticReviewWizard` tests (reject emits the diff; approve does not).
