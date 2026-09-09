@@ -56,7 +56,14 @@ its stored search sources) is the *comparison target* — the flow does **not** 
 Artifacts land as attachments/Phase-2 files; the flow resolves them via `lib/external-docs.ts`
 (serial/MAC fallback chain). Enumerated evidence is what makes reconciliation meaningful.
 
-## 3. Contract approach — `scope` on the spec contract (compute subcategories only)
+## 3. Contract approach — ⚠ SUPERSEDED, see §17
+
+> **The `scope`-field approach below is superseded by shipped work.** The reference spec contracts were
+> restructured around **model capabilities** (e.g. `102.json`: `RAM-Slots`/`RAM-Kapazität`/`RAM-Typ`),
+> removing installed-value fields — so there is nothing left to tag. The revised approach is a
+> **separate instance-spec contract**; see §17. Text kept for history.
+
+### (superseded) Contract approach — `scope` on the spec contract (compute subcategories only)
 
 Add optional fields to `SpecContractField` (`models/spec-contract.ts`):
 
@@ -345,3 +352,42 @@ machinery**, plus the reconcile logic and the global KI-Runs list.
 
 One LLM step inside an otherwise deterministic pipeline → cheap and safe to backfill.
 **Open:** MVP evidence scope (A vs B); one LLM step vs. splitting per-field fuzzy compare out.
+
+## 17. Plan re-validation vs. shipped agentic work (2026-09)
+
+Checked the plan against `main` after the "new pipeline" agentic work merged. **The spine holds;
+the contract foundation shifted.**
+
+**Holds unchanged:** the problem statement; reconcile as an item-read-only, backfillable step;
+operator-gated ref-rework (no auto-trigger); the KI-Runs list; reuse of shipped snapshots (#918),
+search-sources (#916), grounding (#917); data stays on the item; MVP operator-initiated.
+
+**Changed by shipped work:**
+
+1. **Reference contracts were redefined around capabilities, not tagged with `scope`.** `102.json` now
+   has `RAM-Slots`/`RAM-Kapazität`/`RAM-Typ` (model *supports*), `201.json` was stripped to
+   `Prozessor`/`Display`/`Anschlüsse`. `SpecContractField` has **no `scope` field**. → §3 superseded.
+2. **Revised contract approach: a separate instance-spec contract.** Define, per compute subcategory,
+   the **installed** fields (RAM, storage, OS, battery health, …) that live in `InstanceSpecs`, paralleling
+   the capability-focused reference contract. No `scope` tag on a mixed contract.
+3. **Reconcile compares installed-value ↔ model-capability**, not equality: installed RAM ≤
+   `RAM-Kapazität`, `RAM-Typ` ∈ supported, CPU/model identity matches. `wrong_ref` = installed config
+   impossible for the model, or identity mismatch. Sharper than the original equality comparison.
+4. **`INTAKE_TO_SPEC` is now orphaned** — it maps `ram_gb→RAM`/`storage_gb→Speicher`, but those keys
+   were removed from `201.json`, so `buildSpecContext` injects nothing for them (silent no-op). Installed
+   values already live in `InstanceSpecs` (via `deriveInstanceSpecsFromScan` + quality answers); the work
+   is to *contract* them and reconcile against capabilities, not to rebind this map.
+5. **New Phase 0 prerequisite: stabilize the reference contracts.** They are mid-refactor and
+   inconsistent (`201` lacks the storage/RAM-capability fields `102` has). Reconcile needs a consistent
+   capability model across compute subcategories first.
+6. **Doc debt:** the contract restructure shipped undocumented (commits "new pipeline" / "cleanup and
+   minor contract updates", no changelog Why). Close this regardless of this feature.
+
+**Revised phasing (replaces §11 Phase 1):**
+- **Phase 0** — stabilize + normalize the capability-oriented reference spec contracts across compute
+  subcategories; document the restructure.
+- **Phase 1′** — define the **instance-spec contract** per compute subcategory (installed fields +
+  `measuredSignal` bindings); persist measured values into `InstanceSpecs` consistently (retire the
+  orphaned `INTAKE_TO_SPEC` path). No LLM.
+- Phases 2–6 as before, but reconcile (Phase 3) compares installed ↔ capability per (2)/(3) above and
+  extends `agentic_run_snapshots` to instance scope (§8).

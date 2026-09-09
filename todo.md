@@ -340,16 +340,25 @@
 
 51. **Auto-approve follow-ups.** `AUTO_APPROVE` (default off) + `AUTO_APPROVE_MIN_CONFIDENCE` (default 0.8) added (agentic changelog #892). Follow-ups: per-subcategory confidence threshold instead of one global value; optional auto-reject counterpart; a bulk "promote auto_approved → approved" action (currently uses per-item Abschliessen); and extend the KI-queue state filter to select `auto_approved` (aligns with #12 multiselect agent states).
 
-53. **Instance agentic flow (design agreed — `docs/PLANNING_instance_flow.md`).** A per-`ItemUUID`
-  flow that consumes intake data (`IntakeScan`, `InstanceSpecs`, quality answers, Phase-2 files) to
-  fill instance-scoped specs and reconcile the device against its reference, emitting propose-only
-  `wrong_ref`/`missing_on_ref` insights (never writes `item_refs`). Phasing: (1) spec-contract
-  `scope`/`measuredSignal` + deterministic instance fill (replaces the hardcoded `INTAKE_TO_SPEC`
-  map, reads `IntakeScan`, persists scanned `cpu` — closes #47); (2) instance-keyed run identity on
-  `agentic_runs` (overlaps #2); (3) the flow + reconciliation verdicts, auto-triggered on intake
-  `/complete`; (4) UI insights panel + "change reference" action + auto-approve hard gate; (5) Phase-2
-  test-file summarization (the deferred "scan.txt augmentation" item) + reconciliation→auto-approve
-  signals. Open questions carried in the planning doc §10.
+53. **Instance agentic flow (design in progress — `docs/PLANNING_instance_flow.md`).** A per-`ItemUUID`
+  flow that consumes intake evidence + `InstanceSpecs` and reconciles the device against its reference,
+  emitting an operator-gated **reconciliation object** (never writes `item_refs`; ref changes only via
+  operator-approved `rework`). **Re-validated after the "new pipeline" contract work (plan §17):** the
+  `scope`-field idea is superseded — reference contracts were redefined around **capabilities**, so the
+  revised plan uses a **separate instance-spec contract**; reconcile compares installed-value ↔
+  capability; `INTAKE_TO_SPEC` is orphaned. Builds on shipped snapshots (#918)/search-sources (#916)/
+  grounding (#917). Revised phasing: (0) stabilize/normalize the capability-oriented reference spec
+  contracts; (1′) instance-spec contract + measured-signal binding; (2) instance-scope run history by
+  extending `agentic_run_snapshots`; (3) reconcile step; (4) operator actions; (5) KI-Runs list; (6)
+  automation. Open questions in the planning doc §13/§17.
+
+53b. **Doc-debt: the spec-contract restructure shipped undocumented.** The reference spec contracts were
+  redefined around model capabilities (`102.json` gained `RAM-Slots`/`RAM-Kapazität`/`RAM-Typ`;
+  `201.json` stripped to Prozessor/Display/Anschlüsse) with no changelog Why (commits "new pipeline" /
+  "cleanup and minor contract updates"). They are also **inconsistent** across compute subcategories
+  (201 lacks storage/RAM-capability fields 102 has). Document the intent + normalize the shape; note
+  that `INTAKE_TO_SPEC` (`ram_gb→RAM`/`storage_gb→Speicher`) is now orphaned for subcats whose contract
+  dropped those keys (silent no-op in `buildSpecContext`).
 
 52. **Pre-existing failing tests (not caused by the #889–894 work; documented for cleanup).** `schema-contract-compatibility.test.ts` asserts the supervisor prompt contains `schema-contract.md`, but the current `supervisor.md` was rewritten to a description-quality focus and no longer references it — the test expectation is stale. `test/agentic-direct-dispatch.test.ts` and `test/agentic-startup-resume.test.ts` fail in the local esbuild harness because the scheduled `invokeModel` isn't observed (`toHaveBeenCalledTimes(1)` → 0); verify against CI's Postgres/jest setup. All three fail identically on a clean tree.
    - ✅ **Harness `toMatchObject` gap fixed (testing #907):** the custom harness never implemented `toMatchObject` though 16 call sites use it; added it as a recursive subset matcher. Removed one spurious failure ("moves box placement"); local failing count 10→9.

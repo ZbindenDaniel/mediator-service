@@ -57,6 +57,13 @@ Later refinements (same #917 design):
   many fields). Run **history** now builds on the shipped `agentic_run_snapshots` (extend to instance
   scope) rather than a new table; the global KI-Runs list still needs a per-run log (transcript jsonb) —
   scope TBD at build time.
+Re-validated vs. the shipped "new pipeline" contract work (2026-09, planning doc §17): spine holds, but
+the reference spec contracts were **redefined around capabilities** (`102.json`: `RAM-Slots`/`RAM-Kapazität`/
+`RAM-Typ`; `201.json` stripped to Prozessor/Display/Anschlüsse) — so the `scope`-field approach (§3) is
+**superseded** by a **separate instance-spec contract**; reconcile now compares installed-value ↔
+model-capability (not equality); `INTAKE_TO_SPEC` is **orphaned** (its target keys left the contract);
+and a new **Phase 0** stabilizes the mid-refactor, inconsistent reference contracts first. The restructure
+itself shipped undocumented (todo doc-debt).
 **Deferred:** Nothing built yet — design still iterating. `InstanceText` explicitly out of scope. All
 **auto-triggering deferred to post-MVP** (auto-run on intake `/complete`, the `sweepReconcile` backfill,
 and any data-quality-score gate). Resolved this pass: transcript = jsonb on the history row; data-quality
