@@ -109,14 +109,15 @@ import {
   listStubs,
   createStub,
   closeStub,
-  initDb
+  initDb,
+  upsertTenant
 } from './db';
 import { createShopwareAdminClient } from './shopware/adminClient';
 import { createShopwareSyncClient } from './shopware/syncClient';
 import { processShopwareQueue } from './workers/processShopwareQueue';
 import { AgenticModelInvoker } from './agentic/invoker';
 import { loadTaxonomy, initTaxonomy } from './lib/taxonomy';
-import { resolveIdentity } from './lib/identity';
+import { resolveIdentity, configuredTenants } from './lib/identity';
 import type { RequestIdentity } from './lib/identity';
 import type { Item, LabelJob } from './db';
 import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
@@ -1151,6 +1152,16 @@ if (process.env.NODE_ENV !== 'test') {
       // Seed the taxonomy tables on first boot, then make the DB the authoritative source.
       const taxonomy = await initTaxonomy(console);
       console.info(`[server] Taxonomy ready (${taxonomy.length} categories).`);
+      // Seed the local tenants registry from the config group map (Phase 2b). Idempotent upsert; the
+      // registry is a display/FK target — it does not enforce isolation (that is Phase 3). No config
+      // tenants means a single-tenant deployment, so this is a no-op there.
+      try {
+        const tenants = configuredTenants();
+        for (const t of tenants) await upsertTenant({ id: t.id, label: t.label, active: true });
+        if (tenants.length) console.info(`[server] Tenant registry seeded (${tenants.length} tenants).`);
+      } catch (err) {
+        console.warn('[server] Tenant registry seeding failed (non-fatal).', err);
+      }
       // Sync printer queues from DB to CUPS on startup, then keep in sync periodically
       syncPrinterQueuesToCups().catch((err) => {
         console.warn('[server] Initial printer queue sync failed (CUPS may not be ready yet)', err);

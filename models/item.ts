@@ -69,6 +69,9 @@ export interface ItemInstance {
   // TODO(item-create): Keep creation payload expectations for Quality/Auf_Lager aligned across frontend and import flows.
   Quality?: QualityValue;
   QualityAssessment?: QualityAssessment | null;
+  // Owning tenant for private-logistics isolation (docs/PLANNING_TENANCY.md Phase 2). Nullable:
+  // legacy rows and single-tenant deployments leave it null; stamped on create from ctx.tenant.
+  TenantId?: string | null;
 }
 
 // TODO(langtext-contract): Remove legacy string fallback from ItemRef.Langtext once all callers consume structured payloads.

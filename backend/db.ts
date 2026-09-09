@@ -716,6 +716,7 @@ type ItemInstanceRow = {
   ShopwareVariantId: string | null;
   SerialNumber: string | null;
   MacAddress: string | null;
+  TenantId: string | null;
 };
 
 type ItemRefRow = {
@@ -760,7 +761,8 @@ function prepareInstanceRow(instance: ItemInstance): ItemInstanceRow {
     Quality: resolvedQuality,
     ShopwareVariantId: asNullableTrimmedString((instance as ItemInstance & { ShopwareVariantId?: string | null }).ShopwareVariantId),
     SerialNumber: asNullableTrimmedString(instance.SerialNumber),
-    MacAddress: asNullableTrimmedString(instance.MacAddress)
+    MacAddress: asNullableTrimmedString(instance.MacAddress),
+    TenantId: asNullableTrimmedString(instance.TenantId)
   };
 }
 
@@ -1016,9 +1018,9 @@ const UPSERT_ITEM_REFERENCE_SQL = `
 
 const UPSERT_ITEM_INSTANCE_SQL = `
   INSERT INTO items (
-    "ItemUUID","Artikel_Nummer","BoxID","Location","UpdatedAt","Datum_erfasst","Auf_Lager","Quality","ShopwareVariantId","SerialNumber","MacAddress"
+    "ItemUUID","Artikel_Nummer","BoxID","Location","UpdatedAt","Datum_erfasst","Auf_Lager","Quality","ShopwareVariantId","SerialNumber","MacAddress","TenantId"
   )
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
   ON CONFLICT("ItemUUID") DO UPDATE SET
     "Artikel_Nummer"=EXCLUDED."Artikel_Nummer",
     "BoxID"=EXCLUDED."BoxID",
@@ -1029,7 +1031,10 @@ const UPSERT_ITEM_INSTANCE_SQL = `
     "Quality"=EXCLUDED."Quality",
     "ShopwareVariantId"=EXCLUDED."ShopwareVariantId",
     "SerialNumber"=EXCLUDED."SerialNumber",
-    "MacAddress"=EXCLUDED."MacAddress"
+    "MacAddress"=EXCLUDED."MacAddress",
+    -- Preserve the existing owner on update: an upsert must never reassign a row to another tenant.
+    -- Only fills in when the row is still unassigned (legacy/null), so ownership is set once at create.
+    "TenantId"=COALESCE(items."TenantId", EXCLUDED."TenantId")
 `;
 
 async function upsertItemReferenceRow(row: ItemRefRow): Promise<void> {
@@ -1047,7 +1052,7 @@ async function upsertItemInstanceRow(row: ItemInstanceRow): Promise<void> {
   await execute(UPSERT_ITEM_INSTANCE_SQL, [
     row.ItemUUID, row.Artikel_Nummer, row.BoxID, row.Location,
     row.UpdatedAt, row.Datum_erfasst, row.Auf_Lager, row.Quality,
-    row.ShopwareVariantId, row.SerialNumber, row.MacAddress
+    row.ShopwareVariantId, row.SerialNumber, row.MacAddress, row.TenantId
   ]);
 }
 
@@ -1113,8 +1118,8 @@ export async function persistItem(item: Item): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const UPSERT_BOX_SQL = `
-  INSERT INTO boxes ("BoxID","LocationId","Label","CreatedAt","Notes","PhotoPath","PlacedBy","PlacedAt","UpdatedAt")
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+  INSERT INTO boxes ("BoxID","LocationId","Label","CreatedAt","Notes","PhotoPath","PlacedBy","PlacedAt","UpdatedAt","TenantId")
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
   ON CONFLICT("BoxID") DO UPDATE SET
     "LocationId"=COALESCE(EXCLUDED."LocationId", boxes."LocationId"),
     "Label"=COALESCE(EXCLUDED."Label", boxes."Label"),
@@ -1123,7 +1128,10 @@ const UPSERT_BOX_SQL = `
     "PhotoPath"=COALESCE(EXCLUDED."PhotoPath", boxes."PhotoPath"),
     "PlacedBy"=COALESCE(EXCLUDED."PlacedBy", boxes."PlacedBy"),
     "PlacedAt"=COALESCE(EXCLUDED."PlacedAt", boxes."PlacedAt"),
-    "UpdatedAt"=EXCLUDED."UpdatedAt"
+    "UpdatedAt"=EXCLUDED."UpdatedAt",
+    -- Preserve the existing owner on update: an upsert must never reassign a box to another tenant.
+    -- Only fills in when the box is still unassigned (legacy/null), so ownership is set once at create.
+    "TenantId"=COALESCE(boxes."TenantId", EXCLUDED."TenantId")
 `;
 
 // upsertBox kept for backward-compat import shape; callers should use runUpsertBox
@@ -1132,7 +1140,7 @@ export const upsertBox = {
     await execute(UPSERT_BOX_SQL, [
       box.BoxID, box.LocationId ?? null, box.Label ?? null, box.CreatedAt ?? null,
       box.Notes ?? null, box.PhotoPath ?? null, box.PlacedBy ?? null, box.PlacedAt ?? null,
-      box.UpdatedAt
+      box.UpdatedAt, box.TenantId ?? null
     ]);
   }
 };

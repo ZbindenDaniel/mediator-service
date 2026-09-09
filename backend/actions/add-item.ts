@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { resolveActor } from '../utils/actor';
+import { resolveTenant } from '../utils/tenant';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
@@ -129,6 +130,8 @@ const action = defineHttpAction({
             Auf_Lager: 1,
             Quality: item.Quality ?? null,
             ShopwareVariantId: item.ShopwareVariantId ?? null,
+            // Stamp the owning tenant on the new instance (Phase 2b). Null until forward-auth is live.
+            TenantId: resolveTenant(ctx),
             __skipReferencePersistence: true
           });
         } catch (createErr) {

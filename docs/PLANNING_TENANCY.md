@@ -89,7 +89,7 @@ in the remaining actor-bearing handlers (agentic/bulk/export/print/catalog/qr-sc
 - **Acceptance:** every request carries `{ user, tenant, role }`; the event log shows
   real users. **No data scoping yet** — behaviour unchanged.
 
-### Phase 2 — Additive tenant schema (behaviour-neutral)  ◐ 2a DONE (schema); 2b pending (stamp-on-create)
+### Phase 2 — Additive tenant schema (behaviour-neutral)  ✅ 2a DONE (schema); 2b DONE (stamp-on-create + registry seed)
 
 **Shipped (2a):** additive `initDb` migration — a `tenants` registry table (`Id`, `Label`,
 `Active`, `CreatedAt`) + nullable `TenantId` on the private-logistics tables (`items`, `boxes`,
@@ -97,9 +97,17 @@ in the remaining actor-bearing handlers (agentic/bulk/export/print/catalog/qr-sc
 `item_refs` (attribution; catalogue reads stay global), with tenant indexes. `db.ts` accessors
 `listTenants` / `getTenant` / `upsertTenant`. Fully behaviour-neutral: columns nullable, nothing
 stamped or filtered yet. Typecheck + 901 tests green (SQL exercised by the Postgres-gated suites).
-**Pending (2b):** stamp `TenantId` on create from `ctx.tenant`, and seed the `tenants` registry
-from the configured group map — deferred until forward-auth is verified on host (so `ctx.tenant` is
-meaningful) to avoid churn.
+**Shipped (2b):** `GET /api/whoami` echoes the resolved `ctx.identity` (makes the forward-auth chain
+observable/verifiable). A `resolveTenant(ctx)` helper (mirrors `resolveActor`) stamps `TenantId` on
+create in `create-box` / `add-item` / `import-item`; domain types (`ItemInstance`/`Item`, `Box`)
+carry an optional `TenantId`, and the items/boxes upserts preserve an already-set owner on conflict
+(`COALESCE(<table>."TenantId", EXCLUDED."TenantId")` — set once at create, never reassigned).
+Startup seeds the `tenants` registry from the config group map via `configuredTenants()` (idempotent,
+non-fatal, no-op single-tenant). Null/no-op until forward-auth is live + a tenant is configured, so
+still behaviour-neutral. 912 tests pass.
+**Deferred to Phase 3:** the remaining create/write paths (agentic/bulk/intake/`box_stubs`/
+`item_relations`/`quality_assessments`) get stamped where their scoping lands; legacy-`NULL` backfill
+needs the default-tenant decision.
 
 #### Original plan
 

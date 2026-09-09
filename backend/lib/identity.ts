@@ -68,6 +68,23 @@ export function loadTenantGroupMap(): TenantGroupMap {
 }
 export function resetTenantGroupMapCache(): void { cachedMap = null; }
 
+/**
+ * The tenants declared in the config group map, deduped by id — the source of truth for seeding the
+ * local `tenants` registry at startup (docs/PLANNING_TENANCY.md Phase 2b). Includes `defaultTenant`
+ * (the legacy/single-tenant fallback) when it isn't already listed. The platform-admin group is a
+ * role, not a tenant, so it is not emitted here.
+ */
+export function configuredTenants(map: TenantGroupMap = loadTenantGroupMap()): { id: string; label: string | null }[] {
+  const byId = new Map<string, { id: string; label: string | null }>();
+  for (const t of map.tenants) {
+    const id = (t.id || '').trim();
+    if (id) byId.set(id, { id, label: (t.label || '').trim() || null });
+  }
+  const def = (map.defaultTenant || '').trim();
+  if (def && !byId.has(def)) byId.set(def, { id: def, label: null });
+  return [...byId.values()];
+}
+
 function firstHeader(v: unknown): string | null {
   const s = Array.isArray(v) ? v[0] : v;
   return typeof s === 'string' && s.trim() ? s.trim() : null;

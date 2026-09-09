@@ -408,9 +408,15 @@
      handlers; proxy config templated, needs on-host verification before dropping
      Basic Auth); (2) **✅ 2a schema done** (#964: `tenants` table + nullable
      `TenantId` on logistics tables + `ContributedByTenant` on `item_refs` +
-     `listTenants`/`getTenant`/`upsertTenant`; neutral) — **2b pending** (stamp on
-     create, held for host-verified auth); (3) class-aware scoping in
-     `db.ts`; (4) tenant/user admin + self-registration. Auth mechanism decided
+     `listTenants`/`getTenant`/`upsertTenant`; neutral) — **✅ 2b done** (#965:
+     `GET /api/whoami` for observable identity; `resolveTenant(ctx)` stamps
+     `TenantId` on create in `create-box`/`add-item`/`import-item`; upserts
+     `COALESCE`-preserve an already-set owner, never reassign; startup seeds the
+     `tenants` registry from the config map via `configuredTenants()`; still
+     neutral until forward-auth is live); (3) class-aware scoping in
+     `db.ts` **← next enforcement step** (needs the default-tenant decision +
+     host-verified forward-auth; best verified against Postgres); (4) tenant/user
+     admin + self-registration. Auth mechanism decided
      (forward-auth + Authentik broker). **Proposed
      (plan §12.3) — two-tier visibility** on
      the reference↔instance seam: `item_refs` = shared catalogue (no `TenantId`,

@@ -20,4 +20,7 @@ export interface Box {
   TotalWeightKg?: number | null;
   // Count of child boxes (non-null only for shelf rows in list queries).
   BoxCount?: number | null;
+  // Owning tenant for private-logistics isolation (docs/PLANNING_TENANCY.md Phase 2). Nullable:
+  // legacy rows and single-tenant deployments leave it null; stamped on create from ctx.tenant.
+  TenantId?: string | null;
 }

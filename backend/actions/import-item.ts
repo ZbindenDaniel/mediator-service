@@ -1,6 +1,7 @@
 // TODO(agent): add action tests.
 import type { IncomingMessage, ServerResponse } from 'http';
 import { resolveActor } from '../utils/actor';
+import { resolveTenant } from '../utils/tenant';
 import fs from 'fs';
 import path from 'path';
 // TODO(agent): Capture structured Langtext ingestion telemetry to validate helper fallbacks before removing string pathways.
@@ -470,6 +471,8 @@ const action = defineHttpAction({
       const p = new URLSearchParams(raw);
       const actor = resolveActor(ctx, (p.get('actor') || '').trim());
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
+      // Owning tenant for boxes/items born via import (Phase 2b). Null until forward-auth is live.
+      const tenant = resolveTenant(ctx);
       const nowDate = new Date();
       const providedBoxId = (p.get('BoxID') || '').trim();
       const BoxID = providedBoxId ? providedBoxId : null;
@@ -1494,7 +1497,9 @@ const action = defineHttpAction({
       const itemDataList = itemUUIDs.map((uuid) => ({
         ...data,
         ItemUUID: uuid,
-        Auf_Lager: creationPlan.quantityPerItem
+        Auf_Lager: creationPlan.quantityPerItem,
+        // Owning tenant (Phase 2b); null until forward-auth. Upsert COALESCE never reassigns an owner.
+        TenantId: tenant
       }));
       // withTransaction provides atomicity for multi-step item+box+agentic persistence
       try {
@@ -1529,7 +1534,8 @@ const action = defineHttpAction({
               PhotoPath: boxPhotoPath,
               PlacedBy: null,
               PlacedAt: null,
-              UpdatedAt: now
+              UpdatedAt: now,
+              TenantId: tenant
             });
             if (!boxExistedBeforeUpsert) {
               await ctx.logEvent({

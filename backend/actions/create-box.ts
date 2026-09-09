@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { resolveActor } from '../utils/actor';
+import { resolveTenant } from '../utils/tenant';
 import { defineHttpAction } from './index';
 // TODO(agent): Align shelf label text with printed shelf A4 template once the layout is finalized.
 import type { CreateBoxPayload, CreateShelfPayload } from '../../models';
@@ -78,6 +79,8 @@ const action = defineHttpAction({
         console.error('[create-box] Missing actor');
         return sendJson(res, 400, { error: 'actor is required' });
       }
+      // Stamp the owning tenant on new boxes (Phase 2b). Null until forward-auth is live, so neutral.
+      const tenant = resolveTenant(ctx);
 
       const normalizedType = typeof data.type === 'string' ? data.type.trim().toLowerCase() : '';
       if (normalizedType === 'shelf') {
@@ -176,7 +179,8 @@ const action = defineHttpAction({
               PhotoPath: null,
               PlacedBy: payload.actor,
               PlacedAt: null,
-              UpdatedAt: payload.now
+              UpdatedAt: payload.now,
+              TenantId: tenant
             });
             await ctx.logEvent({
               Actor: payload.actor,
@@ -221,7 +225,8 @@ const action = defineHttpAction({
           PhotoPath: null,
           PlacedBy: actor,
           PlacedAt: null,
-          UpdatedAt: now
+          UpdatedAt: now,
+          TenantId: tenant
         });
         await ctx.logEvent({
           Actor: actor,
@@ -278,7 +283,8 @@ const action = defineHttpAction({
               PhotoPath: null,
               PlacedBy: payload.actor,
               PlacedAt: null,
-              UpdatedAt: payload.now
+              UpdatedAt: payload.now,
+              TenantId: tenant
             });
             await ctx.logEvent({
               Actor: payload.actor,

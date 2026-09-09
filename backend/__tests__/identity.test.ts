@@ -1,4 +1,4 @@
-import { resolveIdentity, loadTenantGroupMap, resetTenantGroupMapCache, type TenantGroupMap } from '../lib/identity';
+import { resolveIdentity, loadTenantGroupMap, resetTenantGroupMapCache, configuredTenants, type TenantGroupMap } from '../lib/identity';
 
 const MAP: TenantGroupMap = {
   platformAdminGroup: 'mediator-admin',
@@ -77,5 +77,29 @@ describe('loadTenantGroupMap (env)', () => {
     process.env.TENANT_GROUP_MAP = '{not json';
     resetTenantGroupMapCache();
     expect(loadTenantGroupMap().tenants).toEqual([]);
+  });
+});
+
+describe('configuredTenants', () => {
+  const map = (m: Partial<TenantGroupMap>): TenantGroupMap =>
+    ({ platformAdminGroup: 'admins', tenants: [], defaultTenant: null, ...m });
+
+  it('lists tenants from the map with labels', () => {
+    const result = configuredTenants(map({ tenants: [{ id: 'acme', label: 'ACME Inc', group: 'g-acme' }, { id: 'globex', group: 'g-globex' }] }));
+    expect(result).toEqual([{ id: 'acme', label: 'ACME Inc' }, { id: 'globex', label: null }]);
+  });
+
+  it('includes the default tenant when not already listed', () => {
+    const result = configuredTenants(map({ tenants: [{ id: 'acme', group: 'g-acme' }], defaultTenant: 'legacy' }));
+    expect(result).toContainEqual({ id: 'legacy', label: null });
+  });
+
+  it('does not duplicate the default tenant when it is already a listed tenant', () => {
+    const result = configuredTenants(map({ tenants: [{ id: 'acme', label: 'ACME', group: 'g-acme' }], defaultTenant: 'acme' }));
+    expect(result).toEqual([{ id: 'acme', label: 'ACME' }]);
+  });
+
+  it('returns an empty list for a single-tenant deployment (no config)', () => {
+    expect(configuredTenants(map({}))).toEqual([]);
   });
 });
