@@ -147,18 +147,23 @@ possible.
 
 ## 8. Run history & storage — latest-row snapshot + append-only history
 
-Today `agentic_runs` is one mutable row per `Artikel_Nummer` (`UNIQUE`), upserted — no history — and
-the transcript is a single per-item file, overwritten each run. Rather than convert `agentic_runs` to
-append-only in place (which would force changes on every existing reader — `getAgenticRun`, the
-item/box `LEFT JOIN ar.Artikel_Nummer = i.Artikel_Nummer`, the upsert dispatcher):
+**UPDATE (main shipped `agentic_run_snapshots`, #918 — build on it, don't reinvent).** Main now has a
+snapshot-before-run history of the **AI-written reference fields** (`Artikelbeschreibung`, `Langtext`,
+dimensions, price, categories…), keyed on `Artikel_Nummer`, retention "4 most recent + last approved",
+with a **diff view + non-destructive restore** in the KI tab (`AgenticSnapshotsPanel`). Its model
+comment explicitly says **instance fields (`InstanceSpecs`, serial/MAC) are deferred to "their own
+history later"** — that is precisely this feature's gap.
 
-> **Keep `agentic_runs` as the "latest run per target" snapshot** (existing readers untouched). **Add
-> an append-only `agentic_run_history`** row per completed run, carrying the **transcript as jsonb on
-> the row** (self-contained — no media dependency) + inputs + written diff + the reconciliation
-> object. The **KI-Runs list reads history**; item lists / export keep reading the snapshot.
-
-Existing data seeds as "run 1". Instance runs relax the snapshot key to `(scope, Artikel_Nummer,
-ItemUUID)`; only new code reads instance rows, so nothing legacy breaks.
+So the revised plan:
+- **Instance-field history = extend the snapshot model to instance scope** (an instance-keyed snapshot
+  capturing `InstanceSpecs` + the reconciliation object), rather than a separate `agentic_run_history`
+  table. Reuse `AgenticSnapshotsPanel`'s diff/restore.
+- `agentic_runs` stays the "latest run per target" snapshot; existing readers untouched. The
+  remaining genuinely-new piece for the **global KI-Runs list** is a per-run record (status + inputs +
+  transcript across *all* runs, not just the capped field-snapshots). Decide at build time whether that
+  is a light `agentic_run_log` or a widening of snapshots; the capped snapshot table is not a complete
+  per-run log.
+- Transcript still moves to jsonb (today a single overwritten per-item file).
 
 ## 9. What a run record carries (KI-Runs detail tabs)
 
@@ -246,3 +251,97 @@ target; detail carries the tabs in §9; the per-item quick trigger stays in `Ite
 - Data-quality score is **informational only** for now; a gating trigger is a later add.
 - `InstanceText` (custom per-instance prose) is **out of scope**.
 - UI is a new `KI-Runs` list type, not a separate "proposals" abstraction.
+
+---
+
+## 14. Relation to shipped AI-runs-optimization work (#916 / #917 / #918)
+
+A sibling effort ([`PLANNING_ai_runs_optimization.md`](PLANNING_ai_runs_optimization.md)) already
+shipped pieces this plan assumed it would build. Reuse, don't duplicate:
+
+| Shipped | What it gives us | How this feature reuses it |
+|---|---|---|
+| Run snapshots + diff + restore (#918, `AgenticSnapshotsPanel`, `agentic_run_snapshots`) | Per-item AI-field version history, before→after diff, non-destructive restore | Instance history = extend snapshots to instance scope (§8); reconciliation "approve → rework" uses the pre-rework snapshot for safe rollback |
+| Search-sources panel (#916, `AgenticSearchSources`) | Renders `LastSearchLinksJson` + query count in the KI tab | The reconcile "evidence / reference web data compared" view reuses this |
+| Grounding block (#917) | Injects `SubCategory` label + anchor into extraction/categorizer/supervisor | Reconcile compares measured vs. ref *within a known device class* — same anchor |
+| Review wizard (#953/#954) | Edit-in-place review, before→after correction diff into next run | The operator "approve proposed action" UX should match the wizard's patterns, not a new modal language |
+| Rework closure (sibling Thread 3, partly pending) | Rework reachable from review + failure-restores prior state | The reconciliation's `propose_ref_rework` action feeds the *same* rework path (`onReworkSubmit`) |
+
+Net: this feature is now mostly **instance-scope extensions of already-shipped reference-scope
+machinery**, plus the reconcile logic and the global KI-Runs list.
+
+## 15. UI/UX inventory (for layout decision) — EXISTS vs NEW
+
+**A. Global `KI-Runs` surface**
+- (NEW) Nav entry + list page (reuse `ItemListPage` shell); filters scope/mode/status/subcategory/
+  has-findings/date/target; columns target·scope+mode·status·quality·#findings·#open-actions·trigger·
+  time.
+- (NEW) Run-detail view with tabs (below).
+
+**B. Run-detail tabs**
+- (NEW) Übersicht — identity, status, timeline, trigger provenance, run graph, affected item(s).
+- (NEW) Eingaben & Kontext — evidence digest; **reuse `AgenticSearchSources`** for reference web data.
+- (PARTIAL) Transkript — exists as a per-item file; needs per-run jsonb + collapsible viewer (todo #7).
+- (PARTIAL) Änderungen — **reuse `AgenticSnapshotsPanel`** diff; extend to instance fields.
+- (EXISTS) Review & Verlauf — review state/decisions already tracked; add spawned-rework link.
+
+**C. Reconciliation object (Abgleich tab — the interactive heart, mostly NEW)**
+- (NEW) Field-comparison table: measured │ ref │ verdict │ confidence │ evidence link.
+- (NEW) Findings list with severity.
+- (NEW) Operator actions: **approve → ref rework** (reuse existing rework path `onReworkSubmit`),
+  **relink Artikelnummer** (reuse the intake candidate picker / `searchItemReferences`),
+  acknowledge/dismiss + status.
+- (NEW) Data-quality score badge (informational).
+
+**D. Item-level surfaces**
+- (EXISTS) `ItemKiTab` — already hosts snapshots panel, search sources, rework modal, run actions; add
+  a reconciliation summary card + deep-link.
+- (NEW) "Reconcile jetzt" trigger button (MVP entry), disabled when reconciliation is fresh.
+- (EXISTS/EXTEND) `ItemInstanceTab` — add instance-spec provenance + open-conflict finding inline.
+- (NEW) Optional item-list badge: `AiDataQuality` / open-findings column.
+
+**E. Admin / config**
+- (EXISTS pattern) Admin flag cards (reuse `AgenticDispatchCard`): later `AUTO_RECONCILE`; kill switch
+  already exists.
+- (EXISTS) KI-queue admin card → link to / graduate into the KI-Runs list.
+
+**F. Cross-cutting**
+- (NEW) Shared scope/mode/status chip component.
+- (LATER) Operator notification on reconcile finishing with `wrong_ref`.
+
+## 16. Data inventory & candidate flow steps (for prompt design)
+
+### Collected today (grounded in `docs/detailed/intake-image.http`)
+- **Structured scan** (`items.IntakeScan`): serial, mac, vendor, model, `cpu` (string), `ramMb`,
+  `disks[]` (name/sizeGb/type/serial/wwn/model), `components[]` (gpu/nic vendor/model/slotKey),
+  `batteryPercent`.
+- **Derived instance specs** (`deriveInstanceSpecsFromScan`): `Prozessor`, `RAM`, `Speicher`,
+  `Speichertyp` (canonicalized) → merged into `InstanceSpecs`.
+- **Quality answers** (`InstanceSpecs` + `quality_assessments`): cosmetic, keyboard layout/condition,
+  display, swollen battery, hinges, fan-dusty, battery_condition, …
+- **Phase-2 raw files** (serial-keyed, `intake-scans` dir): `memtest.txt`, `battery.txt`, per-drive
+  `smart-*.txt`, `wipe-certificate-*.txt`.
+
+### Missing vs. what was assumed
+- **dmidecode / lspci / CPU stress-test are NOT collected** — only their parsed equivalents (cpu
+  string, ramMb, disks, gpu/nic) exist as structured fields. No raw board/BIOS dump, no DIMM
+  slot/speed breakdown, no thermal/stability result.
+- Also absent: panel/display model, integrated-GPU line, network link speed.
+- **Two build options:** (A, MVP) reconcile from current data; (B, later) extend the netboot image +
+  `.http` contract to upload dmidecode/lspci/stress. Write the prompt so added evidence slots in.
+
+### Comparison target
+- The reference's web-derived `Langtext` + its stored sources (`LastSearchLinksJson`, surfaced by
+  `AgenticSearchSources`). The instance flow does **not** search the web itself.
+
+### Candidate flow steps (basis for prompt)
+1. **Assemble evidence** (deterministic) — load scan/specs/quality + parse Phase-2 files to a digest.
+2. **Normalize** to contract keys via `measuredSignal` + canonicalization (deterministic).
+3. **Per-field compare** measured vs. ref `Langtext` (deterministic; LLM only for fuzzy equivalence
+   like "i5-8350U" ≈ "Core i5 8th gen").
+4. **Big-picture reconcile** (the one LLM call) — findings, `wrong_ref` classification, proposed
+   actions, informational quality score; grounded by the #917 anchor block.
+5. **Emit the reconciliation object** (deterministic) — stamp version/timestamp, persist.
+
+One LLM step inside an otherwise deterministic pipeline → cheap and safe to backfill.
+**Open:** MVP evidence scope (A vs B); one LLM step vs. splitting per-field fuzzy compare out.

@@ -32,9 +32,18 @@ Later refinements (same #917 design):
 - **Scoped to compute/bootable devices** (the intake API's domain) — the contract `scope` tags and the
   flow apply to laptops/PCs/servers/workstations, not monitors/phones/peripherals.
 - **The instance flow is not a `rework`** (that shorthand was dropped as confusing): its steps/prompts
-  differ (no web search; it compares measured netboot evidence — dmidecode/lspci/memtest/CPU-stress/
-  SMART — to the reference's already-gathered web data). Reuse-vs-dedicated-flow is an explicit
-  decision to validate (lean: a dedicated small flow oriented on the existing one).
+  differ (no web search; it compares measured intake evidence to the reference's already-gathered web
+  data). Reuse-vs-dedicated-flow is an explicit decision to validate (lean: a dedicated small flow).
+- **Evidence collected today** (grounded in `intake-image.http`): structured scan (cpu/ram/disks/gpu/
+  nic/battery) + Phase-2 files `memtest`/`SMART`/`battery`/`wipe-certificate`. **dmidecode/lspci/CPU-
+  stress are NOT collected** (earlier notes wrongly listed them) — only parsed equivalents exist;
+  extending the netboot image to add them is a later option. Prompt written so added evidence slots in.
+- **Reconciled with shipped AI-runs-optimization work** (#916/#917/#918): builds on the snapshot+diff+
+  restore (`agentic_run_snapshots`/`AgenticSnapshotsPanel`), search-sources panel, and grounding block
+  instead of duplicating them. Instance-field history = **extending `agentic_run_snapshots` to instance
+  scope** (its model already defers instance fields to "their own history later") rather than a separate
+  `agentic_run_history` table; the reconciliation's approve→rework reuses the existing rework path + the
+  pre-rework snapshot for rollback. UI + data inventories added to the planning doc (§14–16).
 - **The reconciliation object is the artifact**: evidence digest, per-field comparisons
   (match/missing_on_ref/conflict/instance_variance), human-readable findings, **operator-gated proposed
   actions** (propose-ref-rework, relink-Artikelnummer), an informational data-quality score, and a
@@ -45,9 +54,9 @@ Later refinements (same #917 design):
 - **Reconcile is item-read-only** (writes only the reconciliation object + owned instance-spec fills +
   the informational score), dual-path (inline + standalone `mode=reconcile`), backfillable.
 - **Data stays on the item** (whole-`Langtext` approval — per-field rejected because `Langtext` bundles
-  many fields). Run **history** via **latest-row snapshot + append-only `agentic_run_history`**
-  (transcript jsonb on the row; existing `agentic_runs` readers untouched — no in-place append
-  migration) with existing data seeded as run 1.
+  many fields). Run **history** now builds on the shipped `agentic_run_snapshots` (extend to instance
+  scope) rather than a new table; the global KI-Runs list still needs a per-run log (transcript jsonb) —
+  scope TBD at build time.
 **Deferred:** Nothing built yet — design still iterating. `InstanceText` explicitly out of scope. All
 **auto-triggering deferred to post-MVP** (auto-run on intake `/complete`, the `sweepReconcile` backfill,
 and any data-quality-score gate). Resolved this pass: transcript = jsonb on the history row; data-quality
