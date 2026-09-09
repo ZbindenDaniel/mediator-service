@@ -1,5 +1,9 @@
 # PLANNING — Rework as a Coherent Feature (concept)
 
+> ⚠️ **SUPERSEDED — merged into [`PLANNING_ai_data_quality.md`](PLANNING_ai_data_quality.md).**
+> This doc's content lives on there: the rework levers (L1–L5) became Pillar D, and the contract
+> "smell" diagnosis became §2 / Phase 0. Kept for history; the unified plan is the source of truth.
+
 > **Status:** CONCEPT / thinking-out-loud. Nothing here is scheduled or agreed. This document
 > exists to make the *option space* legible so we can decide what — if anything — is worth building.
 > No code, no migrations, no lever-pulling yet.

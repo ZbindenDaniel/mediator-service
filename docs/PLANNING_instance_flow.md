@@ -1,5 +1,11 @@
 # Instance Agentic Flow — Planning
 
+> ⚠️ **SUPERSEDED — merged into [`PLANNING_ai_data_quality.md`](PLANNING_ai_data_quality.md).**
+> The instance flow + reconciliation object became Pillar E there, the KI-Runs list became Pillar A,
+> and §17's contract findings became Phase 0. This doc is retained as the **detailed reference for the
+> reconciliation-object field schema (§5) and the data/UI inventories (§15/§16)** until those migrate
+> into the unified plan; for direction and phasing, the unified plan is the source of truth.
+
 Status: **design in progress.** An **instance** agentic flow that consumes intake evidence (the
 netboot artifacts + instance specs) to fill instance specs and **reconcile** a physical compute
 device against its reference (`item_refs`) — producing a **reconciliation object** that flags
