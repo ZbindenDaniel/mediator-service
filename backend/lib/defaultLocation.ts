@@ -1,4 +1,5 @@
-import { defaultShelfLocationBySubcategory, itemCategories } from '../../models';
+import { defaultShelfLocationBySubcategory } from '../../models';
+import { getItemCategories } from './taxonomy';
 import { getBox, runUpsertBox } from '../db';
 
 interface EnsureDefaultLocationOptions {
@@ -40,7 +41,7 @@ function normalizeShelfSegment(value: unknown): string | null {
 }
 
 function resolveSubcategoryLabel(code: number): string | null {
-  for (const category of itemCategories) {
+  for (const category of getItemCategories()) {
     for (const subcategory of category.subcategories) {
       if (subcategory.code === code) {
         return subcategory.label;

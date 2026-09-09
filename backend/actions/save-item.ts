@@ -1,5 +1,6 @@
 // TODO(agent): add action tests.
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
 import fs from 'fs';
 import path from 'path';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
@@ -1052,7 +1053,7 @@ const action = defineHttpAction({
       let raw = '';
       for await (const chunk of req) raw += chunk;
       const data = raw ? JSON.parse(raw) : {};
-      const actor = (data.actor || '').trim();
+      const actor = resolveActor(ctx, (data.actor || '').trim());
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const existing = await ctx.getItem(itemId) || {};
       const mediaArtikelNummer = data.Artikel_Nummer || existing.Artikel_Nummer || null;

@@ -4,6 +4,7 @@ import Layout from './Layout';
 import { DialogProvider } from './dialog';
 import { PanelProvider, usePanelContext } from '../context/PanelContext';
 import { UserMarksProvider } from '../context/UserMarksContext';
+import { TaxonomyProvider } from '../context/TaxonomyContext';
 import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
@@ -16,6 +17,7 @@ import RecentActivitiesPage from './RecentActivitiesPage';
 import ChatPlaceholder from './ChatPlaceholder';
 import ShelfCreateForm from './ShelfCreateForm';
 import AdminPage from './AdminPage';
+import TaxonomyAdminPage from './admin/TaxonomyAdminPage';
 import PlacementScanView from './PlacementScanView';
 import StubListPage from './StubListPage';
 import HilfePage from './HilfePage';
@@ -75,6 +77,7 @@ export function AppRoutes() {
       <Route path="/chat" element={<ChatPlaceholder />} />
       <Route path="/placement/:targetId" element={<PlacementScanView />} />
       <Route path="/admin" element={<AdminPage />} />
+      <Route path="/admin/taxonomy" element={<TaxonomyAdminPage />} />
       <Route path="/admin/shelves/new" element={<Navigate to="/admin" replace />} />
       <Route path="/hilfe" element={<HilfePage />} />
     </Routes>
@@ -107,9 +110,11 @@ export default function App() {
       <DialogProvider>
         <PanelProvider>
           <UserMarksProvider>
-            <Layout>
-              <AppRoutes />
-            </Layout>
+            <TaxonomyProvider>
+              <Layout>
+                <AppRoutes />
+              </Layout>
+            </TaxonomyProvider>
           </UserMarksProvider>
         </PanelProvider>
       </DialogProvider>

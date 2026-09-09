@@ -33,6 +33,7 @@ import {
   resolveEventLogLevel
 } from '../models';
 import { normalizeQuality } from '../models/quality';
+import type { ItemCategoryDefinition } from '../models/item-categories';
 import type { QualityAssessment, QualityAssessmentInsert } from '../models/quality';
 import type { QualityCheckResponse } from '../models/quality-contract';
 import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
@@ -453,6 +454,31 @@ CREATE TABLE IF NOT EXISTS printer_queues (
   enabled     BOOLEAN NOT NULL DEFAULT TRUE,
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Category taxonomy as runtime data (seeded from config/taxonomy.seed.json on first
+-- boot; editable thereafter). See docs/PLANNING_TAXONOMY_EXTERNALIZATION.md (Phase 3).
+CREATE TABLE IF NOT EXISTS taxonomy_categories (
+  code           INTEGER PRIMARY KEY,
+  label_internal TEXT NOT NULL,
+  label_external TEXT NOT NULL,
+  sort_order     INTEGER NOT NULL DEFAULT 0,
+  active         BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS taxonomy_subcategories (
+  code                    INTEGER PRIMARY KEY,
+  parent_code             INTEGER NOT NULL REFERENCES taxonomy_categories(code) ON DELETE CASCADE ON UPDATE CASCADE,
+  label_internal          TEXT NOT NULL,
+  label_external          TEXT NOT NULL,
+  sort_order              INTEGER NOT NULL DEFAULT 0,
+  active                  BOOLEAN NOT NULL DEFAULT TRUE,
+  categorizer_description TEXT,
+  intake_enabled          BOOLEAN NOT NULL DEFAULT FALSE,
+  intake_label            TEXT,
+  intake_sort_order       INTEGER,
+  aliases                 TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_taxonomy_subcategories_parent ON taxonomy_subcategories(parent_code);
 `);
 
   // Additive column migrations — safe no-ops after first run
@@ -528,6 +554,28 @@ BEGIN
 END
 $do$;
 CREATE INDEX IF NOT EXISTS idx_events_meta_gin ON events USING GIN("Meta");
+
+-- Multi-tenancy (Phase 2 — docs/PLANNING_TENANCY.md). Additive + behaviour-neutral:
+-- a tenant registry + nullable TenantId on the PRIVATE LOGISTICS tables (items/boxes/
+-- shelves/stubs/instance-quality/instance-relations/events). The SHARED CATALOGUE
+-- (item_refs/item_ref_relations/agentic_runs) stays global; item_refs gets only an
+-- optional ContributedByTenant for attribution. Nothing filters on these yet.
+CREATE TABLE IF NOT EXISTS tenants (
+  "Id"        TEXT PRIMARY KEY,
+  "Label"     TEXT,
+  "Active"    BOOLEAN NOT NULL DEFAULT TRUE,
+  "CreatedAt" TEXT
+);
+ALTER TABLE items              ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE boxes              ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE box_stubs          ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE item_relations     ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE quality_assessments ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE events             ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE item_refs          ADD COLUMN IF NOT EXISTS "ContributedByTenant" TEXT;
+CREATE INDEX IF NOT EXISTS idx_items_tenant  ON items("TenantId");
+CREATE INDEX IF NOT EXISTS idx_boxes_tenant  ON boxes("TenantId");
+CREATE INDEX IF NOT EXISTS idx_events_tenant ON events("TenantId");
 `);
 
   console.info('[db] Postgres schema ready');
@@ -1916,6 +1964,201 @@ export async function setSystemSetting(key: string, value: string): Promise<void
     `INSERT INTO system_settings ("key","value") VALUES ($1,$2)
      ON CONFLICT ("key") DO UPDATE SET "value"=$2`,
     [key, value]
+  );
+}
+
+// --- Taxonomy (runtime category data; see docs/PLANNING_TAXONOMY_EXTERNALIZATION.md) ---
+
+interface TaxonomyCategoryRow {
+  code: number; label_internal: string; label_external: string; sort_order: number; active: boolean;
+}
+interface TaxonomySubcategoryRow {
+  code: number; parent_code: number; label_internal: string; label_external: string;
+  sort_order: number; active: boolean; categorizer_description: string | null;
+  intake_enabled: boolean; intake_label: string | null; intake_sort_order: number | null; aliases: string | null;
+}
+
+export async function countTaxonomyCategories(): Promise<number> {
+  const row = await queryOne<{ n: number }>(`SELECT COUNT(*)::int AS n FROM taxonomy_categories`);
+  return row ? Number(row.n) : 0;
+}
+
+/** Reads the taxonomy from the DB, assembled into the nested ItemCategoryDefinition[] shape. */
+export async function readTaxonomyFromDb(): Promise<ItemCategoryDefinition[]> {
+  const cats = await query<TaxonomyCategoryRow>(
+    `SELECT * FROM taxonomy_categories ORDER BY sort_order, code`
+  );
+  const subs = await query<TaxonomySubcategoryRow>(
+    `SELECT * FROM taxonomy_subcategories ORDER BY sort_order, code`
+  );
+  const byParent = new Map<number, ItemCategoryDefinition['subcategories']>();
+  for (const s of subs) {
+    let aliases: string[] | undefined;
+    try { aliases = s.aliases ? JSON.parse(s.aliases) : undefined; } catch { aliases = undefined; }
+    const list = byParent.get(s.parent_code) ?? [];
+    list.push({
+      code: s.code,
+      label: s.label_external, // compat: consumers read .label
+      labelExternal: s.label_external,
+      labelInternal: s.label_internal,
+      parentCode: s.parent_code,
+      sortOrder: s.sort_order,
+      active: s.active,
+      categorizerDescription: s.categorizer_description ?? undefined,
+      intakeEnabled: s.intake_enabled,
+      intakeLabel: s.intake_label ?? undefined,
+      intakeSortOrder: s.intake_sort_order ?? undefined,
+      aliases
+    });
+    byParent.set(s.parent_code, list);
+  }
+  return cats.map((c) => ({
+    code: c.code,
+    label: c.label_external,
+    labelExternal: c.label_external,
+    labelInternal: c.label_internal,
+    sortOrder: c.sort_order,
+    active: c.active,
+    subcategories: byParent.get(c.code) ?? []
+  }));
+}
+
+export async function taxonomyCategoryExists(code: number): Promise<boolean> {
+  return !!(await queryOne(`SELECT 1 FROM taxonomy_categories WHERE code=$1`, [code]));
+}
+export async function taxonomySubcategoryExists(code: number): Promise<boolean> {
+  return !!(await queryOne(`SELECT 1 FROM taxonomy_subcategories WHERE code=$1`, [code]));
+}
+
+/** Count of item instances referencing a subcategory code — used to guard hard deletes. */
+export async function countItemsForSubcategory(code: number): Promise<number> {
+  const row = await queryOne<{ n: number }>(
+    `SELECT COUNT(*)::int AS n FROM items WHERE "Unterkategorien_A" = $1`, [code]
+  );
+  return row ? Number(row.n) : 0;
+}
+
+export interface TaxonomyCategoryInput {
+  code: number; labelInternal: string; labelExternal: string; sortOrder?: number; active?: boolean;
+}
+export interface TaxonomySubcategoryInput extends TaxonomyCategoryInput {
+  parentCode: number;
+  categorizerDescription?: string | null;
+  intakeEnabled?: boolean;
+  intakeLabel?: string | null;
+  intakeSortOrder?: number | null;
+  aliases?: string[] | null;
+}
+
+export async function insertTaxonomyCategory(c: TaxonomyCategoryInput): Promise<void> {
+  await execute(
+    `INSERT INTO taxonomy_categories (code, label_internal, label_external, sort_order, active)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [c.code, c.labelInternal, c.labelExternal, c.sortOrder ?? 0, c.active ?? true]
+  );
+}
+
+export async function insertTaxonomySubcategory(s: TaxonomySubcategoryInput): Promise<void> {
+  await execute(
+    `INSERT INTO taxonomy_subcategories
+       (code, parent_code, label_internal, label_external, sort_order, active,
+        categorizer_description, intake_enabled, intake_label, intake_sort_order, aliases)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [
+      s.code, s.parentCode, s.labelInternal, s.labelExternal, s.sortOrder ?? 0, s.active ?? true,
+      s.categorizerDescription ?? null, s.intakeEnabled ?? false, s.intakeLabel ?? null,
+      s.intakeSortOrder ?? null, s.aliases ? JSON.stringify(s.aliases) : null
+    ]
+  );
+}
+
+// Partial updates — `code` is immutable and never updated (nor `parent_code`: reparenting is deferred).
+export async function updateTaxonomyCategory(
+  code: number,
+  patch: Partial<Pick<TaxonomyCategoryInput, 'labelInternal' | 'labelExternal' | 'sortOrder' | 'active'>>
+): Promise<number> {
+  const sets: string[] = []; const params: unknown[] = []; let i = 1;
+  const add = (col: string, val: unknown) => { sets.push(`${col}=$${i++}`); params.push(val); };
+  if (patch.labelInternal !== undefined) add('label_internal', patch.labelInternal);
+  if (patch.labelExternal !== undefined) add('label_external', patch.labelExternal);
+  if (patch.sortOrder !== undefined) add('sort_order', patch.sortOrder);
+  if (patch.active !== undefined) add('active', patch.active);
+  if (sets.length === 0) return 0;
+  params.push(code);
+  return execute(`UPDATE taxonomy_categories SET ${sets.join(', ')} WHERE code=$${i}`, params);
+}
+
+export async function updateTaxonomySubcategory(
+  code: number,
+  patch: Partial<Omit<TaxonomySubcategoryInput, 'code' | 'parentCode'>>
+): Promise<number> {
+  const sets: string[] = []; const params: unknown[] = []; let i = 1;
+  const add = (col: string, val: unknown) => { sets.push(`${col}=$${i++}`); params.push(val); };
+  if (patch.labelInternal !== undefined) add('label_internal', patch.labelInternal);
+  if (patch.labelExternal !== undefined) add('label_external', patch.labelExternal);
+  if (patch.sortOrder !== undefined) add('sort_order', patch.sortOrder);
+  if (patch.active !== undefined) add('active', patch.active);
+  if (patch.categorizerDescription !== undefined) add('categorizer_description', patch.categorizerDescription);
+  if (patch.intakeEnabled !== undefined) add('intake_enabled', patch.intakeEnabled);
+  if (patch.intakeLabel !== undefined) add('intake_label', patch.intakeLabel);
+  if (patch.intakeSortOrder !== undefined) add('intake_sort_order', patch.intakeSortOrder);
+  if (patch.aliases !== undefined) add('aliases', patch.aliases ? JSON.stringify(patch.aliases) : null);
+  if (sets.length === 0) return 0;
+  params.push(code);
+  return execute(`UPDATE taxonomy_subcategories SET ${sets.join(', ')} WHERE code=$${i}`, params);
+}
+
+/** Inserts the given taxonomy into the (assumed-empty) tables in one transaction. Idempotent via ON CONFLICT. */
+export async function seedTaxonomy(categories: ItemCategoryDefinition[]): Promise<void> {
+  await withTransaction(async (client) => {
+    for (const c of categories) {
+      await client.query(
+        `INSERT INTO taxonomy_categories (code, label_internal, label_external, sort_order, active)
+         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (code) DO NOTHING`,
+        [c.code, c.labelInternal ?? c.label, c.labelExternal ?? c.label, c.sortOrder ?? 0, c.active ?? true]
+      );
+      for (const s of c.subcategories) {
+        await client.query(
+          `INSERT INTO taxonomy_subcategories
+             (code, parent_code, label_internal, label_external, sort_order, active,
+              categorizer_description, intake_enabled, intake_label, intake_sort_order, aliases)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (code) DO NOTHING`,
+          [
+            s.code, c.code, s.labelInternal ?? s.label, s.labelExternal ?? s.label,
+            s.sortOrder ?? 0, s.active ?? true, s.categorizerDescription ?? null,
+            s.intakeEnabled ?? false, s.intakeLabel ?? null, s.intakeSortOrder ?? null,
+            s.aliases ? JSON.stringify(s.aliases) : null
+          ]
+        );
+      }
+    }
+  });
+}
+
+// --- Tenants registry (Phase 2 — docs/PLANNING_TENANCY.md) ---
+// A thin local registry (display label + active flag). Authentik stays the auth source of truth;
+// this is populated from it / by admins later. No scoping keys off it yet.
+export interface TenantRow {
+  Id: string;
+  Label: string | null;
+  Active: boolean;
+  CreatedAt: string | null;
+}
+
+export async function listTenants(): Promise<TenantRow[]> {
+  return query<TenantRow>(`SELECT * FROM tenants ORDER BY "Id"`);
+}
+
+export async function getTenant(id: string): Promise<TenantRow | null> {
+  return queryOne<TenantRow>(`SELECT * FROM tenants WHERE "Id" = $1`, [id]);
+}
+
+export async function upsertTenant(t: { id: string; label?: string | null; active?: boolean }): Promise<void> {
+  // On conflict update only Label/Active — CreatedAt is preserved (not in the SET list).
+  await execute(
+    `INSERT INTO tenants ("Id","Label","Active","CreatedAt") VALUES ($1,$2,$3,$4)
+     ON CONFLICT ("Id") DO UPDATE SET "Label" = EXCLUDED."Label", "Active" = EXCLUDED."Active"`,
+    [t.id, t.label ?? null, t.active ?? true, new Date().toISOString()]
   );
 }
 

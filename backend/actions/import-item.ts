@@ -1,5 +1,6 @@
 // TODO(agent): add action tests.
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
 import fs from 'fs';
 import path from 'path';
 // TODO(agent): Capture structured Langtext ingestion telemetry to validate helper fallbacks before removing string pathways.
@@ -467,7 +468,7 @@ const action = defineHttpAction({
       let raw = '';
       for await (const chunk of req) raw += chunk;
       const p = new URLSearchParams(raw);
-      const actor = (p.get('actor') || '').trim();
+      const actor = resolveActor(ctx, (p.get('actor') || '').trim());
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const nowDate = new Date();
       const providedBoxId = (p.get('BoxID') || '').trim();

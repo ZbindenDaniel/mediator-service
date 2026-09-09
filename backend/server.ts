@@ -115,6 +115,9 @@ import { createShopwareAdminClient } from './shopware/adminClient';
 import { createShopwareSyncClient } from './shopware/syncClient';
 import { processShopwareQueue } from './workers/processShopwareQueue';
 import { AgenticModelInvoker } from './agentic/invoker';
+import { loadTaxonomy, initTaxonomy } from './lib/taxonomy';
+import { resolveIdentity } from './lib/identity';
+import type { RequestIdentity } from './lib/identity';
 import type { Item, LabelJob } from './db';
 import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
 import { syncPrinterQueuesToCups, startPrinterQueueSyncInterval } from './utils/sync-printer-queues';
@@ -522,6 +525,8 @@ type ActionContext = {
     issues: string[];
     ready: boolean;
   };
+  // Forward-auth identity resolved per request (docs/PLANNING_TENANCY.md Phase 1).
+  identity: RequestIdentity;
 };
 
 const agenticServiceEnabled = true;
@@ -1104,6 +1109,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
             issues: [...shopwareConfigIssues],
             ready: shopwareConfigReady
           },
+          identity: resolveIdentity(req),
           generateItemUUID: generateItemId
         });
       } catch (err) {
@@ -1130,9 +1136,21 @@ function formatListenerUrl(protocol: 'http' | 'https', hostname: string, port: n
 }
 
 if (process.env.NODE_ENV !== 'test') {
+  // Fail fast on a malformed seed file before serving (also warms the fallback cache);
+  // DB seeding happens after initDb since it needs the taxonomy tables.
+  try {
+    loadTaxonomy();
+  } catch (err) {
+    console.error('[server] Failed to load category taxonomy seed — aborting startup.', err);
+    process.exit(1);
+  }
+
   initDb()
-    .then(() => {
+    .then(async () => {
       console.info('[server] Database schema initialized.');
+      // Seed the taxonomy tables on first boot, then make the DB the authoritative source.
+      const taxonomy = await initTaxonomy(console);
+      console.info(`[server] Taxonomy ready (${taxonomy.length} categories).`);
       // Sync printer queues from DB to CUPS on startup, then keep in sync periodically
       syncPrinterQueuesToCups().catch((err) => {
         console.warn('[server] Initial printer queue sync failed (CUPS may not be ready yet)', err);

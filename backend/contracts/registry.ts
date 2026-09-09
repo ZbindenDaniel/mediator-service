@@ -3,8 +3,7 @@ import path from 'path';
 import type { QualityContract } from '../../models/quality-contract';
 import type { SpecContract } from '../../models/spec-contract';
 import type { AssemblyContract } from '../../models/assembly-contract';
-
-const CONTRACTS_DIR = path.resolve(__dirname, '../../contracts');
+import { resolveContractReadPath, listContractCodes } from './paths';
 
 // Module-level caches — cleared on restart, populated lazily on first access.
 const qualityCache = new Map<string, QualityContract>();
@@ -23,7 +22,7 @@ function loadJsonFile<T>(filePath: string): T | null {
 
 function loadQualityContractByKey(key: string): QualityContract | null {
   if (qualityCache.has(key)) return qualityCache.get(key)!;
-  const contract = loadJsonFile<QualityContract>(path.join(CONTRACTS_DIR, 'quality', `${key}.json`));
+  const contract = loadJsonFile<QualityContract>(resolveContractReadPath(path.join('quality', `${key}.json`)));
   if (contract) qualityCache.set(key, contract);
   return contract;
 }
@@ -38,31 +37,39 @@ export function getQualityContract(subcategory: number): QualityContract | null 
 
 export function getSpecContract(subcategory: number): SpecContract | null {
   if (specCache.has(subcategory)) return specCache.get(subcategory)!;
-  const contract = loadJsonFile<SpecContract>(path.join(CONTRACTS_DIR, 'specs', `${subcategory}.json`));
+  const contract = loadJsonFile<SpecContract>(resolveContractReadPath(path.join('specs', `${subcategory}.json`)));
   if (contract) specCache.set(subcategory, contract);
   return contract;
 }
 
 export function getAssemblyContract(subCategory: number): AssemblyContract | null {
   if (assemblyCache.has(subCategory)) return assemblyCache.get(subCategory)!;
-  const contract = loadJsonFile<AssemblyContract>(path.join(CONTRACTS_DIR, 'assembly', `${subCategory}.json`));
+  const contract = loadJsonFile<AssemblyContract>(resolveContractReadPath(path.join('assembly', `${subCategory}.json`)));
   if (contract) assemblyCache.set(subCategory, contract);
   return contract;
 }
 
 export function listSpecContractSubcategories(): number[] {
   if (specSubcategoriesCache) return specSubcategoriesCache;
-  try {
-    const files = fs.readdirSync(path.join(CONTRACTS_DIR, 'specs'));
-    const codes = files
-      .filter(f => f.endsWith('.json'))
-      .map(f => parseInt(f.replace('.json', ''), 10))
-      .filter(n => !isNaN(n));
-    specSubcategoriesCache = codes;
-    return codes;
-  } catch {
-    return [];
-  }
+  const codes = listContractCodes('specs')
+    .map(k => parseInt(k, 10))
+    .filter(n => !isNaN(n));
+  specSubcategoriesCache = codes;
+  return codes;
+}
+
+/** Codes that have a contract of the given type (shipped ∪ overlay). Used for coverage display. */
+export function listContractSubcategories(type: 'quality' | 'specs' | 'assembly'): string[] {
+  return listContractCodes(type);
+}
+
+/** Clears all contract caches so a freshly uploaded/reverted contract is picked up immediately. */
+export function clearContractCaches(): void {
+  qualityCache.clear();
+  specCache.clear();
+  assemblyCache.clear();
+  specSubcategoriesCache = null;
+  filterableSpecKeysCache = null;
 }
 
 let filterableSpecKeysCache: Set<string> | null = null;

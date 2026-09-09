@@ -7,9 +7,9 @@ import { ItemEinheit, normalizeItemEinheit } from '../../models';
 import {
   canonicalizeCategoryLabel,
   getCategoryLabelFromCode,
-  getSubcategoryLabelFromCode,
-  itemCategories
+  getSubcategoryLabelFromCode
 } from '../../models';
+import { getItemCategories } from '../lib/taxonomy';
 import type { BoxLabelPayload, ItemLabelPayload, MarketingSheetPayload, ShelfLabelPayload } from '../lib/labelHtml';
 import { htmlForMarketingSheet, htmlForSmallItem } from '../lib/labelHtml';
 import { calculateCo2Impact } from '../lib/co2Calculator';
@@ -76,7 +76,7 @@ function logUnexpectedTemplateQuery(
 
 const shelfCategoryLookup = new Map<string, string>();
 try {
-  for (const category of itemCategories) {
+  for (const category of getItemCategories()) {
     const canonicalLabel = canonicalizeCategoryLabel(category.label).toUpperCase();
     if (!shelfCategoryLookup.has(canonicalLabel)) {
       shelfCategoryLookup.set(canonicalLabel, category.label);

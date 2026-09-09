@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
 import { defineHttpAction } from './index';
 import { clearItemLocation, generateShopwareCorrelationId } from '../db';
 
@@ -26,7 +27,7 @@ const action = defineHttpAction({
       for await (const c of req) raw += c;
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
-      const actor = (data.actor || '').trim();
+      const actor = resolveActor(ctx, (data.actor || '').trim());
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
 
       const fromBox = item.BoxID ?? null;

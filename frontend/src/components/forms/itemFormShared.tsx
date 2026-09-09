@@ -3,8 +3,7 @@ import type { AgenticRunStatus, Item, ItemRef, ItemReferenceEdit } from '../../.
 import { ItemEinheit, ITEM_EINHEIT_VALUES, isItemEinheit } from '../../../../models';
 import { describeQuality, normalizeQuality, QUALITY_MIN } from '../../../../models/quality';
 import { ensureUser, getUser } from '../../lib/user';
-import { itemCategories } from '../../data/itemCategories';
-import { buildItemCategoryLookups } from '../../lib/categoryLookup';
+import { useTaxonomy } from '../../context/TaxonomyContext';
 import type { ConfirmDialogOptions } from '../dialog';
 import { dialogService } from '../dialog';
 import { parseLangtext, stringifyLangtextEntries } from '../../lib/langtext';
@@ -871,11 +870,12 @@ export function ItemDetailsFields({
     [onUpdate, quantityReadonly]
   );
 
-  const categoryLookup = useMemo(() => buildItemCategoryLookups().haupt, []);
+  const { categories, lookups } = useTaxonomy();
+  const categoryLookup = lookups.haupt;
 
   const buildHauptOptions = useCallback(
     (currentValue?: number) => {
-      const options = itemCategories.map((category) => ({
+      const options = categories.map((category) => ({
         value: category.code.toString(),
         label: category.label
       }));
@@ -889,7 +889,7 @@ export function ItemDetailsFields({
 
       return options;
     },
-    [categoryLookup]
+    [categories, categoryLookup]
   );
 
   const buildUnterOptions = useCallback(

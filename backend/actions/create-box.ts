@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
 import { defineHttpAction } from './index';
 // TODO(agent): Align shelf label text with printed shelf A4 template once the layout is finalized.
 import type { CreateBoxPayload, CreateShelfPayload } from '../../models';
@@ -72,7 +73,7 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'Invalid JSON body' });
       }
 
-      const actor = (data.actor || '').trim();
+      const actor = resolveActor(ctx, (data.actor || '').trim());
       if (!actor) {
         console.error('[create-box] Missing actor');
         return sendJson(res, 400, { error: 'actor is required' });

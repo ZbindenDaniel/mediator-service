@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
 import { defineHttpAction } from './index';
 import { normalizeQuality } from '../../models/quality';
 import { stringifyLangtext } from '../lib/langtext';
@@ -44,7 +45,7 @@ const action = defineHttpAction({
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
 
-      const actor = (data.actor || '').trim();
+      const actor = resolveActor(ctx, (data.actor || '').trim());
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
 
       const serialNumber = 'SerialNumber' in data

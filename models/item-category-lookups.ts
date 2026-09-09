@@ -11,13 +11,15 @@ export interface ItemCategoryLookups {
   unter: Map<number, ItemSubcategoryWithParent>;
 }
 
-export function buildItemCategoryLookups(): ItemCategoryLookups {
+// Accepts an explicit category array so the runtime/DB-backed loader can build
+// lookups over loaded data; defaults to the hardcoded const for existing callers.
+export function buildItemCategoryLookups(categories: ItemCategoryDefinition[] = itemCategories): ItemCategoryLookups {
   const haupt = new Map<number, ItemCategoryDefinition>();
   const unter = new Map<number, ItemSubcategoryWithParent>();
 
   try {
     let previousCategoryCode = -Infinity;
-    for (const category of itemCategories) {
+    for (const category of categories) {
       if (category.code <= previousCategoryCode) {
         console.warn('Item categories are not strictly ascending by code', {
           current: category.code,
@@ -68,9 +70,9 @@ export function buildItemCategoryLookups(): ItemCategoryLookups {
       }
     }
 
-    if (haupt.size !== itemCategories.length) {
+    if (haupt.size !== categories.length) {
       console.error('Item category lookup size mismatch', {
-        expected: itemCategories.length,
+        expected: categories.length,
         actual: haupt.size
       });
     }

@@ -394,6 +394,87 @@
 
 ## Priority 3 — Infrastructure & Platform
 
+53. **New use case: spare-part cataloging (separate, multi-tenant deployment).**
+   Feature-disposition plan + gap list in
+   [`docs/PLANNING_NEW_USE_CASE.md`](docs/PLANNING_NEW_USE_CASE.md). Use case =
+   thorough spare-part cataloging (catalogue every reusable part); disassembly/
+   component lifecycle is the centerpiece to strengthen. Two greenfield
+   workstreams gate it:
+   - **G‑T1 Multi-tenancy (largest lift).** No `tenant`/`mandant`/`org_id`
+     concept exists anywhere. **Phased plan ready:**
+     [`docs/PLANNING_TENANCY.md`](docs/PLANNING_TENANCY.md) — identity-first:
+     (1) Authentik forward-auth → `ctx.{user,tenant,role}` **✅ code done** (#960:
+     `identity.ts` resolver + `ctx` injection + `resolveActor` on lifecycle
+     handlers; proxy config templated, needs on-host verification before dropping
+     Basic Auth); (2) **✅ 2a schema done** (#964: `tenants` table + nullable
+     `TenantId` on logistics tables + `ContributedByTenant` on `item_refs` +
+     `listTenants`/`getTenant`/`upsertTenant`; neutral) — **2b pending** (stamp on
+     create, held for host-verified auth); (3) class-aware scoping in
+     `db.ts`; (4) tenant/user admin + self-registration. Auth mechanism decided
+     (forward-auth + Authentik broker). **Proposed
+     (plan §12.3) — two-tier visibility** on
+     the reference↔instance seam: `item_refs` = shared catalogue (no `TenantId`,
+     read by all, writes guarded by `ContributedByTenant`); `items`/`boxes`/
+     shelves/instance-quality/logistics-events = **`TenantId`, hard-isolated**
+     (reads+writes filtered by `ctx.tenant`). Tenants+groups (normal/super/
+     platform-admin) from Authentik; resolved once at the chokepoint; class-aware
+     scoping in `db.ts`; additive nullable migration on logistics tables only.
+     Super users create their tenant's shelves; nobody sees another warehouse.
+     Catalogue view = shared ref + **global aggregate quantity** + own-tenant
+     instances only (locations private). DL1/2/3 **resolved:** keep global-unique
+     minted IDs (`BoxID`/shelf) + `TenantId` as a visibility column (no composite
+     key); real follow-on = **per-tenant shelf locations** (`shelfLocations` is a
+     global hardcoded list today, folds into §6 config externalization). Self-
+     registration via org token = Authentik enrollment only, no data-model impact.
+     Own phased plan.
+   - **G‑FF1 Feature-flag / capability system.** No unified toggle exists (ad-hoc
+     `*_ENABLED` env vars + client-side "simple mode" CSS). **Proposed (plan
+     §12.2):** one capability manifest → backend hard-gate at the dispatch
+     chokepoint (`server.ts:971`, `feature?` tag on `Action`) + frontend soft-hide
+     via a served `GET /api/app-config` and a `useFeature` hook reusing the
+     `simpleMode` CSS-class pattern. Coarse (1 flag/subsystem); prerequisite for
+     opting out AI / printing / shopware / intake / stubs / kivitendo.
+   - **Opt out:** AI flow, printing, intake API, shopware, stubs (remove-by-config);
+     kivitendo, transport boxes, inventory (out). **Strengthen:** stock handling,
+     traceability/event log, media (videos/text/wiki links), search. **Decide:**
+     D1 scanning/QR (recommend keep), D2 CO₂ scoring (recommend drop).
+   Category/config gaps found:
+   - **G‑C1** Taxonomy lives in 4 hand‑synced copies (`models/item-categories.ts`,
+     `frontend/src/data/itemCategories.ts` re‑export, `docs/data_struct.md` LLM
+     reference, `INTAKE_CATEGORIES`) — no generator enforces consistency.
+     **Phased plan ready:** [`docs/PLANNING_TAXONOMY_EXTERNALIZATION.md`](docs/PLANNING_TAXONOMY_EXTERNALIZATION.md)
+     — **runtime, DB-backed data object** (loaded at startup, served via
+     `GET /api/taxonomy`, seeded into DB from a shipped default, editable via admin
+     CRUD). Build-time codegen rejected: we ship one image, so it would force one
+     image per taxonomy. Backend stays synchronous via a startup cache
+     (`getItemCategories()`); frontend moves to a boot-fetch provider.
+     **Phase 1 ✅** (#937): backend loader+cache+validation, `GET /api/taxonomy`,
+     categorizer/intake/lookup consumers rerouted, seed shipped to dist; fixed
+     All-in-One→302 (printer) bug via a new `109 All-in-One`. **Phase 2 ✅** (#938):
+     `TaxonomyProvider` fetches `/api/taxonomy` at boot; all FE consumers use
+     `useTaxonomy()`; static `frontend/src/data/itemCategories.ts` deleted — FE no
+     longer imports the taxonomy at build time. **Phase 3 ✅** (#957): DB tables
+     `taxonomy_categories`/`taxonomy_subcategories` + `initTaxonomy()` (seed-on-init
+     from the file, then DB is authoritative; sync seed-file fallback; never
+     throws); `reloadTaxonomyFromDb()` for edits. **Phase 4 ✅** (#958): `/admin/taxonomy`
+     editor + `/api/admin/taxonomy` CRUD (live via `reloadTaxonomyFromDb`; codes
+     immutable) + file-based **contract overlay** (`CONTRACTS_OVERLAY_DIR`,
+     `admin-contracts` PUT/DELETE, download→edit→re-upload UI). **Taxonomy
+     externalization workstream complete** (G‑C1 closed). Follow-ups: in-use count
+     display, in-browser contract editor, reparenting, a dedicated 109 quality
+     contract.
+   - **G‑C2 / G‑K2** Taxonomy and contract files are a flat global namespace — no
+     scoping, so two use cases cannot coexist on one instance without new design.
+   - **G‑F1 / G‑F2** No use‑case/domain/tenant dimension exists in config at all;
+     "change the config for a use case" is greenfield.
+   - **G‑K3** ✅ resolved on main (the `disassembly/`→`assembly/` doc drift was
+     fixed by the intake-image/contract-docs sync work).
+   - Domain hardcodes to revisit for a new use case: `models/shelf-locations.ts`
+     (revamp sites), ERP booking group `453` (`backend/config.ts:366`),
+     `ERP_IMPORT_FORM_*`, `contracts/impact/co2.json`.
+
+
+
 33. ✅ **Admin mode / admin page for operational controls.** `/admin` page with import, export, shelf creation, print queue, KI queue, and system status. Gear icon in header nav. Old `/admin/shelves/new` redirects to `/admin`.
 
 33b. ✅ **Admin page: add password protection via ADMIN_SECRET.** If `ADMIN_SECRET` env var is set, backend rejects all `/api/admin/*` requests without a matching `Authorization: Bearer <secret>` header. Frontend shows a password gate on `/admin` that stores the entered value in `sessionStorage` and threads it through admin API calls (`/api/admin/label-queue`, `/api/admin/config`). Existing non-admin endpoints (`/api/overview`, `/api/export/items`, etc.) stay unprotected.

@@ -9,7 +9,6 @@ import {
   AGENTIC_RUN_STATUSES
 } from '../../../models';
 import { describeQuality, normalizeQuality, QUALITY_LABELS, QUALITY_MIN } from '../../../models/quality';
-import { itemCategories } from '../data/itemCategories';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import {
   clearItemListFilters,
@@ -28,6 +27,7 @@ import {
 import { groupItemsForDisplay, GroupedItemDisplay } from '../lib/itemGrouping';
 import { logError, logger } from '../utils/logger';
 import { useUserMarks } from '../context/UserMarksContext';
+import { useTaxonomy } from '../context/TaxonomyContext';
 import ItemList from './ItemList';
 import LoadingPage from './LoadingPage';
 
@@ -451,6 +451,7 @@ export default function ItemListPage() {
   const [qualityFilter, setQualityFilter] = useState<ItemListFilters['qualityFilter']>(ITEM_LIST_DEFAULT_FILTERS.qualityFilter);
   const [myMarksOnly, setMyMarksOnly] = useState(ITEM_LIST_DEFAULT_FILTERS.myMarksOnly);
   const { allMarkedUUIDs } = useUserMarks();
+  const { categories } = useTaxonomy();
   const [filtersReady, setFiltersReady] = useState(false);
   const latestFiltersRef = useRef<ItemListFilters>(ITEM_LIST_DEFAULT_FILTERS);
   const persistTimeoutRef = useRef<number | null>(null);
@@ -668,7 +669,7 @@ export default function ItemListPage() {
 
   const subcategoryOptions = useMemo<SubcategoryOption[]>(() => {
     try {
-      return itemCategories.flatMap((category) => (
+      return categories.flatMap((category) => (
         category.subcategories.map((subcategory) => ({
           value: subcategory.code.toString(),
           label: `${subcategory.code} · ${subcategory.label}`,
@@ -677,11 +678,11 @@ export default function ItemListPage() {
       ));
     } catch (error) {
       logError('Failed to build subcategory filter options', error, {
-        itemCategoriesCount: Array.isArray(itemCategories) ? itemCategories.length : 0
+        itemCategoriesCount: Array.isArray(categories) ? categories.length : 0
       });
       return [];
     }
-  }, []);
+  }, [categories]);
 
   const subcategoryLookup = useMemo(() => {
     try {
