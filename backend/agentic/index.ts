@@ -49,6 +49,7 @@ import {
 } from '../db';
 import { locateTranscript } from './flow/transcript';
 import { autoReworkConfig } from './config';
+import { computeReferenceFindings } from './reference-findings';
 import { getSpecContract } from '../contracts/registry';
 import { checkSpecGap } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
@@ -2541,7 +2542,23 @@ export async function getAgenticStatus(
     return { agentic: null };
   }
 
-  return { agentic: await fetchAgenticRun(resolved.artikelNummer, deps, logger) };
+  const run = await fetchAgenticRun(resolved.artikelNummer, deps, logger);
+  if (!run) {
+    return { agentic: null };
+  }
+  // Attach findings computed from the item's CURRENT content (not the run's frozen output) so review
+  // surfaces reflect live content + manual edits. Best-effort: a failure here never blocks status.
+  let currentFindings: import('../../models/agentic-findings').Finding[] = [];
+  try {
+    const ref = await deps.getItemReference(resolved.artikelNummer);
+    currentFindings = computeReferenceFindings(ref as Record<string, unknown> | null);
+  } catch (err) {
+    logger.warn?.('[agentic-service] Failed to compute current findings', {
+      artikelNummer: resolved.artikelNummer,
+      error: err instanceof Error ? err.message : err
+    });
+  }
+  return { agentic: { ...run, CurrentFindings: currentFindings } };
 }
 
 export async function checkAgenticHealth(

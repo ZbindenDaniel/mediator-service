@@ -1437,16 +1437,12 @@ export default function ItemDetail({ itemId }: Props) {
     return () => setPanelDetailLabel(null);
   }, [load]);
 
-  // Parsed once so both the KI tab (persistent) and the review wizard (transient) show the same findings.
-  const agenticFindings = useMemo<Finding[]>(() => {
-    if (!agentic?.FindingsJson) return [];
-    try {
-      const raw = JSON.parse(agentic.FindingsJson);
-      return Array.isArray(raw) ? (raw as Finding[]) : [];
-    } catch {
-      return [];
-    }
-  }, [agentic?.FindingsJson]);
+  // Findings computed from the item's CURRENT content (server attaches CurrentFindings on status read),
+  // so the KI tab + review wizard reflect live content and manual edits, not the last run's output.
+  const agenticFindings = useMemo<Finding[]>(
+    () => (Array.isArray(agentic?.CurrentFindings) ? agentic.CurrentFindings : []),
+    [agentic?.CurrentFindings]
+  );
 
   // Derived agentic state — computed before early returns so the hooks below can reference them
   const normalizedAgenticStatus = agentic ? normalizeAgenticRunStatus(agentic.Status) : null;
