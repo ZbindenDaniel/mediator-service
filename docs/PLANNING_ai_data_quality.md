@@ -220,7 +220,7 @@ Session plan (each independently shippable, ~4 sessions for the core; the Workbe
 | Session | Ships | Status |
 |---|---|---|
 | **A** | `finding` model + `contracts/standards.json` + deterministic `buildFindings()` (banned phrases + missing-required + intake conflicts) + tests **[engine]**; `FindingsJson` column + compute in `item-flow` + persist in result-handler + expose on `getAgenticRun` **[wiring]** | ✅ done (engine #929, wiring #930) |
-| **B** | Review-by-exception UI: findings panel atop `AgenticReviewWizard`, verified-collapse, evidence beside the flagged field, bounded asks | planned |
+| **B** | Review-by-exception UI: findings panel atop `AgenticReviewWizard`, verified-collapse, evidence beside the flagged field, bounded asks | ▶ started — "Zu prüfen" panel + per-field markers ✅ (#931); verified-collapse + per-finding bounded-ask interactions still to do |
 | **C** | Supervisor emits structured findings (tone/marketing/coherence) via `{{SUPERVISOR_REVIEW}}` + parser | planned |
 | **D** | Zero-findings ⇒ auto-approve (re-point the gate) + per-finding decision logging (override rates) | planned (dep: Phase 0 contract sanity) |
 | later | Workbench = global list keyed on open findings (Pillar A) | deferred |

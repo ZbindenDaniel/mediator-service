@@ -335,7 +335,7 @@
   - **Review-by-exception delivery (plan §6b), in progress:**
     - ✅ **Session A engine** — deterministic `buildFindings()` + `Finding`/`StandardsContract` model + `contracts/standards.json` (banned phrases) + tests (agentic #929).
     - ✅ **Session A wiring** — `FindingsJson` column on `agentic_runs`; findings computed in `item-flow` + persisted via result-handler + exposed on `getAgenticRun` (agentic #930). Full agentic suite green.
-    - ⏳ **Session B** — findings panel in `AgenticReviewWizard` + verified-collapse + evidence adjacency + bounded asks.
+    - ▶ **Session B** — ✅ "Zu prüfen" findings panel in `AgenticReviewWizard` + per-field markers (ui #931). ⏳ still: verified-collapse (hide unflagged fields), evidence from stored search sources, per-finding bounded-ask interactions (choose-A/B, one-click fix/drop).
     - ⏳ **Session C** — supervisor emits judgment findings via `{{SUPERVISOR_REVIEW}}`.
     - ⏳ **Session D** — zero-findings ⇒ auto-approve + per-finding decision logging (dep: Phase 0 contract sanity).
   - ✅ **Phase 1 — manual targeted rework (shipped).** "KI Überarbeitung" reuses the main pipeline to regenerate only operator-selected fields; `applyReworkPartialUpdate` preserves all other fields deterministically; categorizer/pricing skipped; UI is a field-picker + instruction modal in `ItemKiTab`. See agentic changelog #893.
