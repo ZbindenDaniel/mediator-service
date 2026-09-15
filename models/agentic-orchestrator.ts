@@ -1,4 +1,5 @@
 import type { AgenticRun } from './agentic-run';
+import type { Finding } from './agentic-findings';
 
 // TODO(agent): Monitor requestId propagation for model invocations to ensure downstream logging stays consistent.
 
@@ -158,4 +159,6 @@ export interface AgenticResultPayload extends Record<string, unknown> {
   autoApprovable?: boolean;
   /** Spec contract version this run completed against — stamped on the run for staleness detection. */
   specContractVersion?: number | null;
+  /** Deterministic review findings for this run (review-by-exception); persisted as FindingsJson. */
+  findings?: Finding[];
 }

@@ -21,8 +21,10 @@ import { prepareItemContext } from './context';
 import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
 import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
-import { getSpecContract } from '../..//contracts/registry';
+import { getSpecContract, getStandardsContract } from '../..//contracts/registry';
 import { canonicalizeSpecKeyRecord } from '../../../models/spec-contract';
+import { buildFindings } from '../findings';
+import type { Finding } from '../../../models/agentic-findings';
 
 const REVIEW_CONTEXT_NOTE_LIMIT = 2_000;
 
@@ -242,7 +244,8 @@ function buildCallbackPayload({
   sources,
   actor,
   autoApprovable,
-  specContractVersion
+  specContractVersion,
+  findings
 }: {
   artikelNummer: string;
   itemData: AgenticTarget;
@@ -258,6 +261,7 @@ function buildCallbackPayload({
   actor?: string | null;
   autoApprovable?: boolean;
   specContractVersion?: number | null;
+  findings?: Finding[];
 }): AgenticResultPayload {
   const resolvedStatus = status ?? (needsReview ? 'needs_review' : 'completed');
   const resolvedNeedsReview = typeof needsReview === 'boolean' ? needsReview : resolvedStatus !== 'completed';
@@ -290,7 +294,8 @@ function buildCallbackPayload({
     actor: resolvedActor,
     item: itemPayload,
     autoApprovable: autoApprovable === true,
-    specContractVersion: specContractVersion ?? null
+    specContractVersion: specContractVersion ?? null,
+    findings: Array.isArray(findings) ? findings : []
   };
 }
 
@@ -675,6 +680,22 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       extractionConfidence !== null &&
       extractionConfidence >= autoApproveConfig.minConfidence;
 
+    // Review-by-exception: emit deterministic findings from the same spec signals auto-approve uses
+    // (so "no blocking findings" tracks "clearly good") plus a banned-phrase scan over the output text.
+    // Reuses specCtx.missingRequired/ambiguousFields to stay aligned with the auto-approve gate.
+    const reviewTexts: Record<string, string> = {};
+    if (typeof finalData.Artikelbeschreibung === 'string') reviewTexts.Artikelbeschreibung = finalData.Artikelbeschreibung;
+    if (typeof finalData.Kurzbeschreibung === 'string') reviewTexts.Kurzbeschreibung = finalData.Kurzbeschreibung;
+    if (finalData.Langtext && typeof finalData.Langtext === 'object' && !Array.isArray(finalData.Langtext)) {
+      for (const [key, value] of Object.entries(finalData.Langtext as Record<string, unknown>)) {
+        if (typeof value === 'string') reviewTexts[key] = value;
+      }
+    }
+    const findings: Finding[] = buildFindings(
+      { texts: reviewTexts, missingRequired: specCtx.missingRequired, ambiguousFields: specCtx.ambiguousFields },
+      getStandardsContract()
+    );
+
     const payload = buildCallbackPayload({
       artikelNummer: itemId,
       itemData: finalData,
@@ -690,7 +711,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       error: extractionResult.success ? null : 'Supervisor flagged issues',
       sources: extractionResult.sources,
       autoApprovable,
-      specContractVersion
+      specContractVersion,
+      findings
     });
 
     await dispatchAgenticResult({

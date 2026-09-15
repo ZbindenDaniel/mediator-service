@@ -333,8 +333,8 @@
 
 50. **Rework mechanism.** — Now folded into the unified **AI Data Quality Lifecycle** plan [`docs/PLANNING_ai_data_quality.md`](docs/PLANNING_ai_data_quality.md) (Pillar D = rework as the single execution arm; levers L1–L5). That plan also absorbs the instance-flow/reconciliation plan and the contract-"smell" fix (Phase 0). (Concept ancestors: `PLANNING_rework_feature.md`, `PLANNING_instance_flow.md` — both superseded.)
   - **Review-by-exception delivery (plan §6b), in progress:**
-    - ✅ **Session A engine** — deterministic `buildFindings()` + `Finding`/`StandardsContract` model + `contracts/standards.json` (banned phrases) + tests (agentic #929). Pure, not yet wired.
-    - ⏳ **Session A wiring** — `FindingsJson` column on `agentic_runs`; compute findings in `item-flow` from `specCtx` (`missingRequired`/`ambiguousFields`) + run texts; persist in result-handler; expose in status read.
+    - ✅ **Session A engine** — deterministic `buildFindings()` + `Finding`/`StandardsContract` model + `contracts/standards.json` (banned phrases) + tests (agentic #929).
+    - ✅ **Session A wiring** — `FindingsJson` column on `agentic_runs`; findings computed in `item-flow` + persisted via result-handler + exposed on `getAgenticRun` (agentic #930). Full agentic suite green.
     - ⏳ **Session B** — findings panel in `AgenticReviewWizard` + verified-collapse + evidence adjacency + bounded asks.
     - ⏳ **Session C** — supervisor emits judgment findings via `{{SUPERVISOR_REVIEW}}`.
     - ⏳ **Session D** — zero-findings ⇒ auto-approve + per-finding decision logging (dep: Phase 0 contract sanity).
