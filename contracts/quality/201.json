@@ -1,32 +1,7 @@
 {
-  "version": 7,
+  "version": 8,
   "subCategory": 201,
   "questions": [
-    {
-      "id": "has_os",
-      "type": "boolean",
-      "question": "Betriebssystem installiert?"
-    },
-    {
-      "id": "os_installed",
-      "type": "text",
-      "question": "Welches Betriebssystem?",
-      "suggestions": [
-        "Ubuntu 24.04 LTS",
-        "Ubuntu 22.04 LTS",
-        "Debian 12 (Bookworm)",
-        "Linux Mint 22",
-        "Linux Mint 21.3",
-        "Fedora 41",
-        "openSUSE Leap 15.6",
-        "Manjaro",
-        "Zorin OS 17",
-        "Pop!_OS 22.04"
-      ],
-      "specField": "Betriebssystem",
-      "specValue": "%v",
-      "showIf": { "questionId": "has_os", "value": "true" }
-    },
     {
       "id": "keyboard_layout",
       "type": "select",
@@ -39,10 +14,10 @@
       "id": "keyboard_condition",
       "type": "select",
       "question": "Tastatur-Zustand?",
-      "values": ["Gut", "Abgenutzt", "Beschädigt"],
+      "values": ["Top", "Gut", "Abgenutzt", "Beschädigt"],
       "specField": "Tastatur-Zustand",
       "specValue": "%v",
-      "qualityImpact": { "Gut": 5, "Abgenutzt": 4, "Beschädigt": 2 }
+      "qualityImpact": { "Top": 4,  "Gut": 4, "Abgenutzt": 3, "Beschädigt": 2 }
     },
     {
       "id": "screen_condition",
@@ -52,6 +27,15 @@
       "specField": "Display-Zustand",
       "specValue": "%v",
       "qualityImpact": { "Einwandfrei": 5, "Kratzer": 4, "Flecken/Pixelfehler": 3 }
+    },
+    {
+      "id": "chassis_condition",
+      "type": "select",
+      "question": "Gehäuse-Zustand?",
+      "values": ["Einwandfrei", "Kratzer", "Beschädigt"],
+      "specField": "Display-Zustand",
+      "specValue": "%v",
+      "qualityImpact": { "Einwandfrei": 5, "Kratzer": 4, "Beschädigt": 3 }
     },
     {
       "id": "battery_swollen",
@@ -64,12 +48,6 @@
       "type": "boolean",
       "question": "Scharniere in Ordnung?",
       "qualityImpact": { "true": 5, "false": 2 }
-    },
-    {
-      "id": "fan_dusty",
-      "type": "boolean",
-      "question": "Lüfter verstaubt?",
-      "qualityImpact": { "true": 5, "false": 4 }
     }
   ]
 }

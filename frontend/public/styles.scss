@@ -1262,7 +1262,7 @@ div {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    width: min(520px, 100%);
+    min-width: min(520px, 100%);
     max-height: min(90vh, 680px);
     overflow-y: auto;
     background: var(--dialog, #ffffff);

@@ -18,13 +18,14 @@
       "id": "scratches",
       "type": "select",
       "question": "Kratzer?",
-      "values": ["Keine", "Leicht", "Deutlich"],
+      "values": ["Keine", "Leicht", "Abgenutzt", "Deutlich"],
       "specField": "Kratzer",
       "specValue": "%v",
       "qualityImpact": {
         "Keine": 5,
         "Leicht": 4,
-        "Deutlich": 3
+        "Abgenutzt":3,
+        "Deutlich": 2
       }
     }
   ]
