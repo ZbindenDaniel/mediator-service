@@ -1437,6 +1437,17 @@ export default function ItemDetail({ itemId }: Props) {
     return () => setPanelDetailLabel(null);
   }, [load]);
 
+  // Parsed once so both the KI tab (persistent) and the review wizard (transient) show the same findings.
+  const agenticFindings = useMemo<Finding[]>(() => {
+    if (!agentic?.FindingsJson) return [];
+    try {
+      const raw = JSON.parse(agentic.FindingsJson);
+      return Array.isArray(raw) ? (raw as Finding[]) : [];
+    } catch {
+      return [];
+    }
+  }, [agentic?.FindingsJson]);
+
   // Derived agentic state — computed before early returns so the hooks below can reference them
   const normalizedAgenticStatus = agentic ? normalizeAgenticRunStatus(agentic.Status) : null;
   const normalizedAgenticReview = agentic ? (agentic.ReviewState || '').trim().toLowerCase() : null;
@@ -1576,16 +1587,8 @@ export default function ItemDetail({ itemId }: Props) {
       }
     }
 
-    // Parse the run's persisted findings (review-by-exception) so the wizard can show "Zu prüfen".
-    let findings: Finding[] = [];
-    if (agentic?.FindingsJson) {
-      try {
-        const raw = JSON.parse(agentic.FindingsJson);
-        if (Array.isArray(raw)) findings = raw as Finding[];
-      } catch {
-        // Malformed FindingsJson must never block the review — just show no findings.
-      }
-    }
+    // Same findings the KI tab shows (parsed once at component level).
+    const findings: Finding[] = agenticFindings;
 
     const wizardData: AgenticReviewWizardData = {
       artikelbeschreibung: item?.Artikelbeschreibung ?? '',
@@ -2644,6 +2647,7 @@ export default function ItemDetail({ itemId }: Props) {
         tabContent = (
           <ItemKiTab
             agenticCardProps={agenticCardProps}
+            findings={agenticFindings}
             reviewWizardState={reviewWizardModalState?.data ?? null}
             onReviewWizardResolve={handleReviewWizardResolve}
             reworkFieldOptions={reworkFieldOptions}

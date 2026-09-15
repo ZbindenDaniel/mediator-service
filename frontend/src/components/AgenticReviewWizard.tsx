@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { logError } from '../utils/logger';
-import type { Finding, FindingSeverity } from '../../../models/agentic-findings';
+import type { Finding } from '../../../models/agentic-findings';
+import { FindingsPanel } from './FindingsPanel';
 
 // A single spec/contract field the reviewer can edit (blank value = remove the field).
 export interface ReviewWizardSpecField {
@@ -448,31 +449,6 @@ export function AgenticReviewWizard({ data, onResolve }: Props) {
     );
   }
 
-  const findingsPanel = findings.length > 0 ? (
-    <div className="review-findings" role="region" aria-label="Zu prüfen">
-      <div className="review-findings__title">Zu prüfen ({findings.length})</div>
-      <ul className="review-findings__list">
-        {findings.map((finding, index) => (
-          <li key={`${finding.field ?? 'item'}-${finding.ruleId ?? finding.type}-${index}`} className="review-findings__item">
-            <span
-              className="review-findings__badge"
-              style={SEVERITY_STYLE[finding.severity] ?? SEVERITY_STYLE.warn}
-            >
-              {SEVERITY_LABEL[finding.severity] ?? 'Prüfen'}
-            </span>
-            <div className="review-findings__body">
-              {finding.field ? <span className="review-findings__field">{finding.field}</span> : null}
-              <span className="review-findings__message">{finding.message}</span>
-              {finding.evidence ? (
-                <span className="review-findings__evidence muted">„{finding.evidence}“</span>
-              ) : null}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  ) : null;
-
   return (
     <div className="dialog-overlay" role="presentation" onClick={cancel}>
       <div
@@ -483,20 +459,12 @@ export function AgenticReviewWizard({ data, onResolve }: Props) {
         onClick={(event) => event.stopPropagation()}
       >
         <h2 className="dialog-title" id="agentic-review-wizard-title">{title}</h2>
-        {findingsPanel}
+        <FindingsPanel findings={findings} />
         {body}
         {footer}
       </div>
     </div>
   );
 }
-
-// Severity presentation for findings — kept inline so the panel is legible without a stylesheet dependency.
-const SEVERITY_LABEL: Record<FindingSeverity, string> = { block: 'Pflicht', warn: 'Prüfen', info: 'Hinweis' };
-const SEVERITY_STYLE: Record<FindingSeverity, React.CSSProperties> = {
-  block: { background: '#fdecea', color: '#a4262c' },
-  warn: { background: '#fff4e5', color: '#8a5300' },
-  info: { background: '#eef1f5', color: '#4a5568' }
-};
 
 export default AgenticReviewWizard;

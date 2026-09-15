@@ -8,9 +8,13 @@ import AgenticSpecFieldReviewModal, {
   type AgenticSpecFieldReviewResult
 } from '../AgenticSpecFieldReviewModal';
 import { AgenticReviewWizard, type AgenticReviewWizardData, type AgenticReviewWizardResult } from '../AgenticReviewWizard';
+import { FindingsPanel } from '../FindingsPanel';
+import type { Finding } from '../../../../models/agentic-findings';
 
 interface Props {
   agenticCardProps: AgenticStatusCardProps;
+  // Persistent findings for the current run ("Zu prüfen") — shown in the tab, not only during review.
+  findings?: Finding[];
   reviewWizardState?: AgenticReviewWizardData | null;
   onReviewWizardResolve?: (result: AgenticReviewWizardResult | null) => void;
   // Targeted rework ("KI Überarbeitung"): selectable fields + a submit handler. Kept local to this tab
@@ -31,6 +35,7 @@ interface Props {
 
 export default function ItemKiTab({
   agenticCardProps,
+  findings,
   reviewWizardState,
   onReviewWizardResolve,
   reworkFieldOptions,
@@ -95,6 +100,7 @@ export default function ItemKiTab({
         </div>
       )}
       <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
+      <FindingsPanel findings={findings ?? []} />
       {snapshotArtikelNummer ? (
         <AgenticSnapshotsPanel
           artikelNummer={snapshotArtikelNummer}
