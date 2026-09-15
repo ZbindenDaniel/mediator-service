@@ -19,4 +19,6 @@ export interface AgenticRun {
   // Spec contract version this run completed against; lets an idle sweep detect items enriched
   // against an outdated contract (stored < current) and re-apply it.
   SpecContractVersion?: number | null;
+  // Serialized `Finding[]` produced for this run (review-by-exception). JSON string or null.
+  FindingsJson?: string | null;
 }

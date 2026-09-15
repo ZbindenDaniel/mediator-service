@@ -91,6 +91,7 @@ import DetailTabBar from './DetailTabBar';
 import ItemReferenceTab from './item-tabs/ItemReferenceTab';
 import ItemKiTab from './item-tabs/ItemKiTab';
 import { type AgenticReviewWizardData, type AgenticReviewWizardResult, type ReviewWizardSpecField } from './AgenticReviewWizard';
+import type { Finding } from '../../../models/agentic-findings';
 import ItemInstanceTab from './item-tabs/ItemInstanceTab';
 import ItemImagesTab from './item-tabs/ItemImagesTab';
 import ItemAttachmentsTab from './item-tabs/ItemAttachmentsTab';
@@ -1575,6 +1576,17 @@ export default function ItemDetail({ itemId }: Props) {
       }
     }
 
+    // Parse the run's persisted findings (review-by-exception) so the wizard can show "Zu prüfen".
+    let findings: Finding[] = [];
+    if (agentic?.FindingsJson) {
+      try {
+        const raw = JSON.parse(agentic.FindingsJson);
+        if (Array.isArray(raw)) findings = raw as Finding[];
+      } catch {
+        // Malformed FindingsJson must never block the review — just show no findings.
+      }
+    }
+
     const wizardData: AgenticReviewWizardData = {
       artikelbeschreibung: item?.Artikelbeschreibung ?? '',
       kurzbeschreibung: item?.Kurzbeschreibung ?? '',
@@ -1583,7 +1595,8 @@ export default function ItemDetail({ itemId }: Props) {
       hoehe: item?.Höhe_mm != null ? String(item.Höhe_mm) : '',
       gewicht: item?.Gewicht_kg != null ? String(item.Gewicht_kg) : '',
       price: typeof item?.Verkaufspreis === 'number' && Number.isFinite(item.Verkaufspreis) ? String(item.Verkaufspreis) : '',
-      specFields
+      specFields,
+      findings
     };
 
     const wizardResult = await promptReviewWizard(wizardData);

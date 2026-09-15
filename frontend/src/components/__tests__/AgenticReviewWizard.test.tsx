@@ -27,6 +27,37 @@ function advanceToSummary() {
   clickButton('Weiter'); // 5 -> summary
 }
 
+describe('AgenticReviewWizard — findings panel (review by exception)', () => {
+  it('renders the "Zu prüfen" panel with count, messages and evidence when findings are present', () => {
+    const data: AgenticReviewWizardData = {
+      ...BASE_DATA,
+      findings: [
+        { type: 'missing_required', severity: 'block', field: 'Prozessor', message: 'Pflichtfeld „Prozessor“ fehlt.', ask: 'fix' },
+        {
+          type: 'banned_phrase',
+          severity: 'warn',
+          field: 'Artikelbeschreibung',
+          message: 'Garantie-Formulierung entfernen.',
+          evidence: 'mit einer Garantie von',
+          ask: 'fix',
+          ruleId: 'warranty-clause'
+        }
+      ]
+    };
+    render(<AgenticReviewWizard data={data} onResolve={jest.fn()} />);
+    // getByText throws if absent, so these assert presence.
+    expect(screen.getByText('Zu prüfen (2)')).toBeTruthy();
+    expect(screen.getByText('Pflichtfeld „Prozessor“ fehlt.')).toBeTruthy();
+    expect(screen.getByText('Garantie-Formulierung entfernen.')).toBeTruthy();
+    expect(screen.getByText('„mit einer Garantie von“')).toBeTruthy();
+  });
+
+  it('renders no findings panel when there are none', () => {
+    render(<AgenticReviewWizard data={BASE_DATA} onResolve={jest.fn()} />);
+    expect(screen.queryByText(/^Zu prüfen/)).toBeNull();
+  });
+});
+
 describe('AgenticReviewWizard', () => {
   it('approve path captures edits, dimensions, price, shop flag and tagged notes', () => {
     const onResolve = jest.fn();
