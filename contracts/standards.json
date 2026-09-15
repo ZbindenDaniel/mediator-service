@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "bannedPhrases": [
+    {
+      "id": "warranty-clause",
+      "pattern": "mit einer Garantie von",
+      "message": "Herstellergarantie-Formulierung aus dem Quelltext übernommen – für Gebrauchtware nicht erwünscht. Bitte entfernen.",
+      "fields": ["Artikelbeschreibung", "Kurzbeschreibung"],
+      "severity": "warn"
+    },
+    {
+      "id": "scope-of-delivery",
+      "pattern": "im Lieferumfang enthalten",
+      "message": "Lieferumfang-Textbaustein aus dem Quelltext übernommen – trifft auf Gebrauchtware meist nicht zu. Bitte prüfen/entfernen.",
+      "fields": ["Artikelbeschreibung", "Kurzbeschreibung"],
+      "severity": "warn"
+    },
+    {
+      "id": "brand-new",
+      "pattern": "fabrikneu",
+      "message": "„fabrikneu“ passt nicht zu einem Second-Hand-Artikel.",
+      "fields": ["Artikelbeschreibung", "Kurzbeschreibung"],
+      "severity": "warn"
+    },
+    {
+      "id": "marketing-jetzt-kaufen",
+      "pattern": "jetzt kaufen",
+      "message": "Marketing-/Call-to-Action-Text gehört nicht in die Artikelbeschreibung.",
+      "fields": ["Artikelbeschreibung", "Kurzbeschreibung"],
+      "severity": "info"
+    }
+  ]
+}

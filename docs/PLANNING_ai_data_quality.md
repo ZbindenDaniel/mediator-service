@@ -202,6 +202,35 @@ Phase 0 is the prerequisite because the graders are currently measuring against 
 
 ---
 
+## 6b. Delivery — the `finding` primitive + slice plan (what we're actually building)
+
+The load-bearing primitive is a **finding**: `{ type, severity, field, message, evidence?, suggestion?, ask, ruleId? }`
+(`models/agentic-findings.ts`). A run produces the data **and** a `findings[]`. Every pillar is a
+*producer* of findings (standards, reconciliation, gap/conflict checks) or a *consumer* (review UI,
+auto-approve, Workbench). Review becomes "answer the findings," not "inspect everything."
+
+Rules live in two places, both feeding the same list:
+- **Deterministic** (`backend/agentic/findings.ts` + `contracts/standards.json`): banned/source-copied
+  phrases, missing-required, intake conflicts. No LLM. This is where the "mit einer Garantie von…" /
+  "Im Lieferumfang enthalten…" filter lives — a runtime-editable rule set.
+- **Judgment** (later): the supervisor LLM emits findings for tone/coherence via `{{SUPERVISOR_REVIEW}}`.
+
+Session plan (each independently shippable, ~4 sessions for the core; the Workbench is separate/later):
+
+| Session | Ships | Status |
+|---|---|---|
+| **A** | `finding` model + `contracts/standards.json` + deterministic `buildFindings()` (banned phrases + missing-required + intake conflicts) + tests **[engine]**; then `FindingsJson` column + compute in `item-flow` + persist in result-handler + expose in status read **[wiring]** | engine ✅ (this branch); wiring next |
+| **B** | Review-by-exception UI: findings panel atop `AgenticReviewWizard`, verified-collapse, evidence beside the flagged field, bounded asks | planned |
+| **C** | Supervisor emits structured findings (tone/marketing/coherence) via `{{SUPERVISOR_REVIEW}}` + parser | planned |
+| **D** | Zero-findings ⇒ auto-approve (re-point the gate) + per-finding decision logging (override rates) | planned (dep: Phase 0 contract sanity) |
+| later | Workbench = global list keyed on open findings (Pillar A) | deferred |
+
+Reuse notes grounded in code: `ambiguousFields` + `missingRequired` are **already computed** in
+`buildSpecContext` (`item-flow.ts`) and thrown away at the UI; the wizard already renders a
+per-field conflict hint + required/empty styling (`AgenticReviewWizard.tsx`), so the UI scaffolding
+for findings-adjacency largely exists. `FindingsJson` is an additive column mirroring how
+`Confidence`/`SpecContractVersion` were added (`db.ts`).
+
 ## 7. Open questions (carry into build)
 
 - **Quality grade formula:** what exactly composes it (completeness/conformance/freshness weights), and
