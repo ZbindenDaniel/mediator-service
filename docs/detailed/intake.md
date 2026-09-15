@@ -80,6 +80,15 @@ request contract is in [`intake-image.http`](intake-image.http).
 The `select_ref` response echoes the scanned identity as `scan: { vendor, model }` so the
 TUI can pre-fill the new-reference fields from what was already scanned.
 
+Candidate lookup (`findRefCandidates`) reuses `searchItemReferences` (the `/api/search?scope=refs`
+matcher: rows hitting ≥ 50 % of the tokens are preferred; when none does, the best weaker matches
+are returned instead of nothing — see ui #958). Because DMI vendor strings carry corporate filler
+(`Intel(R) Client Systems`, `Dell Inc.`) that pushes real matches below that threshold, the term is
+first cleaned by `buildRefSearchTerm` (marks + filler stripped, tokens deduped) so the right refs
+rank first, and the search falls back vendor+model → model → vendor if a term has no hit at all.
+Diagnose with the `[intake-start] ref candidates` log line (terms tried + count) and the `[search]`
+line (which says `relaxed` when the 50 % bar was not reached).
+
 ### `POST /api/intake/{intakeKey}/answer`
 
 Two types dispatched by `type` field:

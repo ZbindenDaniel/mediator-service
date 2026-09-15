@@ -6,7 +6,7 @@ Shopware ERP integration — HTTP client for the Shopware API and queue manageme
 ## Contents
 - `client.ts` — Shopware **store-api** client (read): OAuth **or** static-access-token auth, product
   search, and a `checkConnection()` probe (used by the admin connection check).
-- `adminClient.ts` — Shopware **Admin-API** client (write): resolves a product by `productNumber`,
+- `adminClient.ts` — Shopware **Admin-API** client (write): resolves a product by its persisted id (verified to still exist) or `productNumber`,
   creates it if missing (resolved/default tax + currency), sets absolute stock, and reconciles its
   **filterable properties** from the Langtext spec map (`upsertProduct`). Bearer-token auth
   (client-credentials grant preferred; static access token accepted).

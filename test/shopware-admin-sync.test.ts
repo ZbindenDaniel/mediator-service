@@ -74,6 +74,38 @@ describe('ShopwareAdminClient.upsertProduct', () => {
     expect(calls2.some((c) => c.method === 'PATCH' || (c.method === 'POST' && /\/api\/product$/.test(c.url)))).toBe(false);
   });
 
+  test('re-creates the product when the cached ShopwareProductId no longer exists (shop DB reset)', async () => {
+    const calls: Call[] = [];
+    const fetchImpl = mkFetch([
+      tokenRoute, taxRoute, salesChannelRoute,
+      { match: (u) => u.includes('/api/search-ids/product'), res: () => ({ status: 200, body: { data: [] } }) },
+      { match: (u) => u.includes('/api/search/product'), res: () => ({ status: 200, body: { data: [] } }) },
+      { match: (u, i) => /\/api\/product$/.test(u) && i.method === 'POST', res: () => ({ status: 204 }) }
+    ], calls);
+    const client = createShopwareAdminClient(cfg, { fetchImpl, logger: log });
+    const r = await client.upsertProduct({ productNumber: 'A-1', name: 'n', stock: 1, grossPrice: 1, shopwareProductId: 'stale' });
+    expect(r.action).toBe('created');
+    expect(r.productId).not.toBe('stale');
+    expect(calls.some((c) => c.method === 'PATCH' && /\/api\/product\/stale$/.test(c.url))).toBe(false);
+    expect(calls.some((c) => c.method === 'POST' && /\/api\/product$/.test(c.url))).toBe(true);
+  });
+
+  test('trusts the cached ShopwareProductId when it still exists (no productNumber lookup)', async () => {
+    const calls: Call[] = [];
+    const fetchImpl = mkFetch([
+      tokenRoute, taxRoute, salesChannelRoute,
+      { match: (u) => u.includes('/api/search-ids/product'), res: () => ({ status: 200, body: { data: ['cached'] } }) },
+      // Only the variant-children lookup (parentId filter) is expected here — not a productNumber lookup.
+      { match: (u) => u.includes('/api/search/product'), res: () => ({ status: 200, body: { data: [] } }) },
+      { match: (u, i) => /\/api\/product\/cached$/.test(u) && i.method === 'PATCH', res: () => ({ status: 204 }) }
+    ], calls);
+    const client = createShopwareAdminClient(cfg, { fetchImpl, logger: log });
+    const r = await client.upsertProduct({ productNumber: 'A-1', name: 'n', stock: 1, grossPrice: 1, shopwareProductId: 'cached' });
+    expect(r).toMatchObject({ action: 'updated', productId: 'cached' });
+    const byNumber = calls.filter((c) => c.url.includes('/api/search/product') && c.body?.filter?.some((f: any) => f.field === 'productNumber'));
+    expect(byNumber).toEqual([]);
+  });
+
   test('creates a product when none matches, with resolved tax/currency and computed net', async () => {
     const calls: Call[] = [];
     const admin = createShopwareAdminClient(cfg, { logger: log, fetchImpl: mkFetch([
@@ -222,6 +254,19 @@ describe('createShopwareSyncClient.dispatchJob', () => {
     const r = await client.dispatchJob({ correlationId: 'c', jobType: 'item-upsert', payload: { artikelNummer: 'A-1' }, attempt: 1 });
     expect(r.ok).toBe(true);
     expect(persisted).toEqual({ pn: 'A-1', pid: 'newid' });
+  });
+
+  test('re-persists the product id when it differs from the cached one, but not when unchanged', async () => {
+    const persisted: Array<{ pn: string; pid: string }> = [];
+    const mk = (productId: string) => createShopwareSyncClient({
+      adminClient: { upsertProduct: async () => ({ action: 'updated', productId }) },
+      loadSnapshot: async () => ({ ...snap, shopwareProductId: 'cached' }),
+      persistProductId: async (pn, pid) => { persisted.push({ pn, pid }); }, logger: log
+    });
+    await mk('cached').dispatchJob({ correlationId: 'c', jobType: 'item-upsert', payload: {}, attempt: 1 });
+    expect(persisted).toEqual([]);
+    await mk('resolved').dispatchJob({ correlationId: 'c', jobType: 'item-upsert', payload: {}, attempt: 1 });
+    expect(persisted).toEqual([{ pn: 'A-1', pid: 'resolved' }]);
   });
 
   test('classifies 4xx as terminal and 5xx/network as retryable', async () => {

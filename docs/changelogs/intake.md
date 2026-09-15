@@ -4,6 +4,34 @@ Covers: device intake cataloguing flow, quality questions at intake, netboot arc
 
 ---
 
+## 957. ✅ Intake `select_ref` empty for a clearly-named device — DMI vendor noise starved the ref search
+**Why:** Operator report: a booted Intel NUC returned **no reference candidates** although refs with that
+name exist. The only trace was an untagged `search Intel(R) Client Systems intel nuc (refs) → 0 references`
+line. Root cause is arithmetic, not data: `findRefCandidates` joined the raw DMI `vendor` + `model` into one
+term, and `searchItemReferences` requires **≥ 50 % of the tokens** to hit a ref field. `Intel(R) Client
+Systems intel nuc` is 5 tokens → needs 3; an `Intel NUC 8 …` ref hits `intel` and `nuc` only (and `intel(r)`
+never LIKE-matches because of the glued `(R)`) → 2 < 3 → zero rows. Every vendor with corporate filler
+(`Dell Inc.`, `ASUSTeK COMPUTER INC.`, `Micro-Star International Co., Ltd.`) has the same exposure.
+**What:** `buildRefSearchTerm` (exported, unit-tested) strips `(R)`/`(TM)`/`(C)`/®/™ marks and trailing
+punctuation, drops a small corporate-filler stoplist (`inc`, `corp`, `ltd`, `gmbh`, `computer`, `client`,
+`systems`, `international`, …) and dedupes tokens case-insensitively, so the term becomes `Intel nuc`. On top,
+the lookup now **falls back** vendor+model → model only → vendor only, stopping at the first non-empty
+result — the model is the discriminating part, and the operator must never be left with an empty list
+when *anything* plausible exists. A `[intake-start] ref candidates` log records vendor/model, the terms tried
+and the count. The two untagged `console.log("search…")` lines in `search.ts` now carry `[search]`, which
+is why the reported log line had no tag.
+**Why (approach):** Fixed at the intake caller rather than loosening the global `searchItemReferences`
+threshold: the 50 % rule is what keeps the manual item-creation search precise for operator-typed terms,
+and DMI noise is an intake-specific input problem. A stoplist + fallback beats guessing per-vendor
+patterns, and the fallback guarantees a floor even for filler words not in the list.
+**Deferred:** No change to the image's choice of DMI field (see todo `0z6` — `sku` / `system-version`
+would be a better model key for HP/Lenovo than `system-product-name`). The **"attachments don't land on the
+server"** report is not reproduced here: the Phase-2 upload path (`POST /api/items/SN:…/external-docs/<dir>`)
+logs a `[media-audit]` line on every start/success/error, and the reported device log had none — so either
+the station never reached Phase 2 (plausible: the flow stalled at `select_ref` with no candidates) or the
+uploads never left the station. Check server logs for `[media-audit]` with `scope: 'external-docs'` for
+that serial before touching backend code.
+
 ## 949. ✅ Intake can match a booted device onto a pre-existing instance (not just create a new one)
 **Why:** Items catalogued **before** the intake API — or by hand — typically have no serial and no
 MAC on file. `/api/intake/start` matches a booted device to an existing item **only by serial/MAC**,

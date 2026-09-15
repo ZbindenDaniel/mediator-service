@@ -161,6 +161,19 @@
   (system-sku-number), which HP/Dell use as a full commercial identifier. When the agentic model-name
   enrichment runs, prefer `sku` as the lookup key over the product name. Separate from 0z5.
 
+0z9. **Search: surface `relaxed: true` in the UI.** Since ui #958 `/api/search` returns weaker matches
+  (below the 50 % token rule) instead of nothing and flags them `relaxed`. The ~8 frontend consumers
+  (`Header`, `RefSearchInput`, `ItemMatchSelection`, `useSimilarItems`, `ArtikelNummerLookupStep`, …) ignore
+  the flag; a small "keine genauen Treffer — ähnliche Ergebnisse" hint would tell the operator why the list
+  looks loose.
+
+0z8. **Intake: verify Phase-2 attachments reach the server.** Operator report (with intake #957): "attachments
+  don't land on the server" for an Intel NUC. Not reproduced backend-side — the upload handler emits a
+  `[media-audit]` line (start/success/error) for every `POST /api/items/SN:…/external-docs/<dir>`, and the
+  device's server log showed none, so the request most likely never arrived (flow stalled at `select_ref`
+  with 0 candidates — fixed in #957 — or a station-side upload failure). Next: re-run an intake on that
+  device and grep the server log for `[media-audit]` + the serial; if absent, debug `phase2.sh` on the image.
+
 0z7. **Add a CI JSON-lint over `contracts/`.** The invalid-JSON bug in `quality/201.json` (intake #914) was
   invisible because both contract loaders swallow parse errors and return `null`. A cheap `node -e JSON.parse`
   (or `jq empty`) sweep over `contracts/**/*.json` in CI would catch the next one at commit time.

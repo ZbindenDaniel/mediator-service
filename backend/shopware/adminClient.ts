@@ -274,6 +274,30 @@ export class ShopwareAdminClient {
     return SYSTEM_DEFAULT_CURRENCY_ID;
   }
 
+  // A persisted ShopwareProductId can go stale (the shop DB gets reset/re-imported while the mediator
+  // keeps its mapping) — a blind PATCH on it fails with WRITE_TYPE_INTEND_ERROR. Verify the cached id
+  // still exists, else fall back to the productNumber lookup so the product is re-created.
+  async resolveExistingProductId(snapshot: ShopwareProductSnapshot): Promise<string | null> {
+    if (snapshot.shopwareProductId) {
+      if (await this.productExists(snapshot.shopwareProductId)) {
+        return snapshot.shopwareProductId;
+      }
+      this.logger.warn?.('[shopware-admin] Cached ShopwareProductId no longer exists; resolving by productNumber', {
+        productNumber: snapshot.productNumber,
+        shopwareProductId: snapshot.shopwareProductId
+      });
+    }
+    return this.findProductIdByNumber(snapshot.productNumber);
+  }
+
+  private async productExists(id: string): Promise<boolean> {
+    const data = await this.request<{ data?: string[] }>('POST', '/api/search-ids/product', {
+      filter: [{ type: 'equals', field: 'id', value: id }],
+      limit: 1
+    });
+    return (data?.data?.length ?? 0) > 0;
+  }
+
   async findProductIdByNumber(productNumber: string): Promise<string | null> {
     const data = await this.request<{ data?: Array<{ id: string }> }>('POST', '/api/search/product', {
       filter: [{ type: 'equals', field: 'productNumber', value: productNumber }],
@@ -518,7 +542,7 @@ export class ShopwareAdminClient {
   // full mediator-authoritative data (name, description, price, active, stock) is written on both create
   // and update, then its filterable properties are reconciled.
   async upsertProduct(snapshot: ShopwareProductSnapshot): Promise<ShopwareUpsertResult> {
-    const existingId = snapshot.shopwareProductId || (await this.findProductIdByNumber(snapshot.productNumber));
+    const existingId = await this.resolveExistingProductId(snapshot);
 
     if (snapshot.shopEligible === false) {
       if (existingId) {
