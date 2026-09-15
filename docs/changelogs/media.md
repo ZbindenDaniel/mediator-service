@@ -4,6 +4,10 @@ Covers: item photos, file attachments, external docs (EAN/Serial/MAC-keyed), Web
 
 ---
 
+## 959. ✅ Item images tab can capture photos directly from the camera
+**Why:** Adding a photo on the item detail *Fotos* tab always went through the OS file picker, so on a tablet/phone the operator had to leave the app, shoot, and come back. `PhotoCaptureModal` (already used by `ItemCreate` for the Typenschild OCR photo) is now reused in `ItemImagesTab` behind a "Foto aufnehmen" button; the captured data URL rides the existing `persistMediaUpdate({ action: 'add' })` path via a new `handleMediaCapture` in `ItemDetail`, so slot resolution, the 3-slot limit, and the in-progress guard are identical to the file flow. The button is hidden when `navigator.mediaDevices.getUserMedia` is missing (same check as `ItemCreate`) so a non-camera desktop sees no change.
+**Deferred:** The "Keine freien Plätze" alert fires after the shot rather than before opening the camera (modal state lives in the tab, the slot count in `ItemDetail`); acceptable for a 3-slot maximum. No rear-camera preference (`facingMode`) — `PhotoCaptureModal` requests `{ video: true }` for all callers.
+
 ## 916. ✅ Fallback-chain alt-doc directories: MAC-keyed wipe reports now surface in the UI too
 **Why:** #915 unblocked the *write* (the netboot image's `MAC:`-keyed uploads stopped 422-ing), but
 only the write path honored the fallback — the UI list, the item-detail payload, and the file-serve

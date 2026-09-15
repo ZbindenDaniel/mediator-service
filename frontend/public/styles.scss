@@ -846,6 +846,13 @@ textarea {
     width: 100%;
 }
 
+.item-media-gallery__capture {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+    width: 100%;
+}
+
 .item-media-gallery--stacked {
     flex-direction: column;
     flex-wrap: nowrap;

@@ -1348,6 +1348,36 @@ export default function ItemDetail({ itemId }: Props) {
     [itemId, persistMediaUpdate, readFileAsDataUrl]
   );
 
+  // Camera captures already arrive as a data URL, so they skip the hidden file input entirely.
+  const handleMediaCapture = useCallback(
+    async (dataUrl: string) => {
+      if (isMediaSaving) {
+        logger.warn?.('ItemDetail: Media update already in progress; ignoring capture.', { itemId });
+        return;
+      }
+
+      const nextSlot = resolveNextMediaSlot();
+      if (nextSlot === null) {
+        try {
+          await dialogService.alert({
+            title: 'Keine freien Plätze',
+            message: 'Es sind bereits alle Medienplätze belegt.'
+          });
+        } catch (error) {
+          console.error('ItemDetail: Failed to alert about full media slots', error);
+        }
+        return;
+      }
+
+      try {
+        await persistMediaUpdate({ slotIndex: nextSlot, dataUrl, action: 'add' });
+      } catch (error) {
+        logError('ItemDetail: Failed to persist captured media', error, { itemId, slotIndex: nextSlot });
+      }
+    },
+    [isMediaSaving, itemId, persistMediaUpdate, resolveNextMediaSlot]
+  );
+
   const handleMediaRemove = useCallback(
     async (asset: GalleryAsset) => {
       if (isMediaSaving) {
@@ -2679,6 +2709,7 @@ export default function ItemDetail({ itemId }: Props) {
             mediaAssets={mediaAssets}
             mediaFileInputRef={mediaFileInputRef}
             onAdd={handleMediaAdd}
+            onCapture={handleMediaCapture}
             onRemove={handleMediaRemove}
             onFileChange={handleMediaFileChange}
           />
