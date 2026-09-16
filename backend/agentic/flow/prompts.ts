@@ -14,6 +14,7 @@ const CATEGORIZER_PROMPT_PATH = path.join(PROMPTS_DIR, 'categorizer.md');
 const JSON_CORRECTION_PROMPT_PATH = path.join(PROMPTS_DIR, 'json-correction.md');
 const PRICING_PROMPT_PATH = path.join(PROMPTS_DIR, 'pricing.md');
 const PRICING_RULES_PATH = path.join(PROMPTS_DIR, 'pricing-rules.md');
+const WORDING_PROMPT_PATH = path.join(PROMPTS_DIR, 'wording.md');
 const SEARCH_PLANNER_PROMPT_PATH = path.join(PROMPTS_DIR, 'search-planner.md');
 const SEARCH_SOURCES_PROMPT_PATH = path.join(PROMPTS_DIR, 'search-sources.md');
 const CHAT_PROMPT_PATH = path.join(PROMPTS_DIR, 'chat.md');
@@ -430,6 +431,7 @@ export interface LoadPromptsResult {
   supervisor: string;
   categorizer: string;
   pricing: string;
+  wording: string;
   jsonCorrection: string;
   searchPlanner: string;
   shopware?: string | null;
@@ -442,13 +444,14 @@ export interface LoadChatPromptOptions {
 export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromptsOptions): Promise<LoadPromptsResult> {
   try {
     // TODO(agent): Revisit whether optional source context still improves planner quality telemetry.
-    const [format, extractTemplate, supervisorTemplate, categorizerTemplate, pricingTemplate, pricingRules, searchPlannerTemplate, searchSources] = await Promise.all([
+    const [format, extractTemplate, supervisorTemplate, categorizerTemplate, pricingTemplate, pricingRules, wordingTemplate, searchPlannerTemplate, searchSources] = await Promise.all([
       readPromptFile(FORMAT_PATH, { itemId, prompt: 'format', logger }),
       readPromptFile(EXTRACT_PROMPT_PATH, { itemId, prompt: 'extract', logger }),
       readPromptFile(SUPERVISOR_PROMPT_PATH, { itemId, prompt: 'supervisor', logger }),
       readPromptFile(CATEGORIZER_PROMPT_PATH, { itemId, prompt: 'categorizer', logger }),
       readPromptFile(PRICING_PROMPT_PATH, { itemId, prompt: 'pricing', logger }),
       readPromptFile(PRICING_RULES_PATH, { itemId, prompt: 'pricing-rules', logger }),
+      readPromptFile(WORDING_PROMPT_PATH, { itemId, prompt: 'wording', logger }),
       readPromptFile(SEARCH_PLANNER_PROMPT_PATH, { itemId, prompt: 'search-planner', logger }),
       readPromptFile(SEARCH_SOURCES_PROMPT_PATH, { itemId, prompt: 'search-sources', logger })
     ]);
@@ -467,6 +470,7 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
       logger
     });
     const pricing = composePromptTemplate({ promptName: 'pricing', promptTemplate: pricingTemplate, itemId, logger });
+    const wording = composePromptTemplate({ promptName: 'wording', promptTemplate: wordingTemplate, itemId, logger });
     const searchPlannerComposedTemplate = composePromptTemplate({
       promptName: 'search-planner',
       promptTemplate: searchPlannerTemplate,
@@ -523,7 +527,7 @@ export async function loadPrompts({ itemId, logger, includeShopware }: LoadPromp
       promptTemplateVersions: PROMPT_TEMPLATE_VERSIONS
     });
 
-    return { format, extract, supervisor, categorizer, pricing: composedPricing, jsonCorrection, searchPlanner, shopware };
+    return { format, extract, supervisor, categorizer, pricing: composedPricing, wording, jsonCorrection, searchPlanner, shopware };
   } catch (err) {
     if (err instanceof FlowError) {
       throw err;

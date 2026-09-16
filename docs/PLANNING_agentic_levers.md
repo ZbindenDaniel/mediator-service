@@ -64,7 +64,7 @@ smallest change.
 | L0b | **Findings reflect current content** | `getAgenticStatus` + ref | compute on read, not from run output | freshness / decay | S | ✅ shipped (#933) |
 | L0c | **Show findings** | `AgenticReviewWizard` | "Zu prüfen" panel in KI tab + wizard | surface | S | ✅ shipped (#931/#932) |
 | **L2a** | **Standards → extraction (prevention)** | `extract.md` + guidance channel | inject `standards.json` so the model avoids junk; keep extraction focused on *correct data* | fewer defects at source | S | — |
-| **L2b** ★ | **Separate wording/standards step** | new post-extraction step (reuses invoker/LLM plumbing) | a compact pass that checks prose against standards → **wording findings** (keeps `supervisor.md` lean; extraction stays about data) | "same issues every review" | M | operator-preferred shape |
+| **L2b** ★ | **Separate wording step** | `flow/item-flow-wording.ts` (new) | post-extraction LLM pass that **rewrites** the prose into house style, stripping fluff/source-copy per `standards.json` (facts unchanged); flag `WORDING_STEP` | "same issues every review" | M | ✅ shipped (agentic #934) |
 | **L3** | **Auto-approve on clean** | `AUTO_APPROVE` gate | repoint gate to **no blocking findings AND wording/standards pass** | throughput valve | S | **depends on L2b** |
 | **L5** | **Per-finding actions + verified-collapse (keep summary)** | wizard + `FindingsPanel` | choose-A/B, one-click fix/drop; collapse clean fields; **retain the summary/decision step** | review by exception | M | — |
 | **L6** | **Supervisor emits (lean) findings** | `supervisor.md` | emit a small list of *coherence/plausibility* findings (wording lives in L2b), not PASS/FAIL | judgment findings | M | — |

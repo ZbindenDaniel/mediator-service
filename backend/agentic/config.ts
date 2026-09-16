@@ -299,3 +299,12 @@ export const autoApproveConfig: { enabled: boolean; minConfidence: number } = {
 export const autoReworkConfig: { enabled: boolean } = {
   enabled: resolveBooleanFlag('AUTO_REWORK')
 };
+
+// Wording step: when enabled, a dedicated LLM pass runs AFTER extraction and rewrites the two prose
+// fields (Artikelbeschreibung, Kurzbeschreibung) into the house style, filtering out fluff/marketing
+// and source-copied phrases per contracts/standards.json — without changing facts. Lets extraction
+// stay fact-oriented and moves style into one place. Default OFF (opt-in) — it rewrites customer-facing
+// copy, so it is rolled out behind a flag; a failure falls back to extraction's wording.
+export const wordingConfig: { enabled: boolean } = {
+  enabled: resolveBooleanFlag('WORDING_STEP')
+};

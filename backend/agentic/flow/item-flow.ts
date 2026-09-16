@@ -1,5 +1,5 @@
 // TODO(agent): Revisit item flow orchestration once planner surfaces richer item metadata requirements.
-import { agentActorId, autoApproveConfig } from '../config';
+import { agentActorId, autoApproveConfig, wordingConfig } from '../config';
 import type { AgenticResultPayload } from '../result-handler';
 import { createRateLimiter, DEFAULT_DELAY_MS, type RateLimiterLogger } from '../utils/rate-limiter';
 import { FlowError } from './errors';
@@ -24,6 +24,7 @@ import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWr
 import { getSpecContract, getStandardsContract } from '../..//contracts/registry';
 import { canonicalizeSpecKeyRecord } from '../../../models/spec-contract';
 import { buildFindings } from '../findings';
+import { runWordingStage } from './item-flow-wording';
 import type { Finding } from '../../../models/agentic-findings';
 
 const REVIEW_CONTEXT_NOTE_LIMIT = 2_000;
@@ -408,7 +409,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     };
 
     const shopwareAvailable = isShopwareConfigured();
-    const { format, extract, supervisor, categorizer, pricing, jsonCorrection, searchPlanner, shopware } = await loadPrompts({
+    const { format, extract, supervisor, categorizer, pricing, wording, jsonCorrection, searchPlanner, shopware } = await loadPrompts({
       itemId,
       logger,
       includeShopware: shopwareAvailable
@@ -651,6 +652,33 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     });
 
     checkCancellation();
+
+    // Wording stage (opt-in, WORDING_STEP): after extraction has the facts, a dedicated LLM pass
+    // rewrites the two prose fields into the house style and strips fluff/marketing/source-copied
+    // phrases (contracts/standards.json), without changing facts. Skipped in rework mode (targeted
+    // field regen owns its own field selection); a failure keeps extraction's wording, never blocks.
+    if (wordingConfig.enabled && !reworkMode && extractionResult.success && extractionResult.data) {
+      try {
+        const wordingResult = await runWordingStage({
+          llm: deps.llm,
+          logger,
+          itemId,
+          wordingPrompt: wording,
+          candidate: extractionResult.data,
+          standards: getStandardsContract(),
+          reviewNotes: reviewerNotes,
+          transcriptWriter
+        });
+        if (wordingResult) {
+          const data = extractionResult.data as Record<string, unknown>;
+          if (typeof wordingResult.Artikelbeschreibung === 'string') data.Artikelbeschreibung = wordingResult.Artikelbeschreibung;
+          if (typeof wordingResult.Kurzbeschreibung === 'string') data.Kurzbeschreibung = wordingResult.Kurzbeschreibung;
+        }
+      } catch (err) {
+        logger.warn?.({ err, msg: 'wording stage failed; keeping extraction wording', itemId });
+      }
+      checkCancellation();
+    }
 
     // In rework mode, produce a partial update deterministically: start from the ORIGINAL item and
     // accept the model's output ONLY for the selected keys. This preserves every other field
