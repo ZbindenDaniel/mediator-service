@@ -39,6 +39,18 @@ describe('parseWordingResponse', () => {
     expect(parseWordingResponse('{"Artikelbeschreibung":"X1","Kurzbeschreibung":"   "}')).toEqual({ Artikelbeschreibung: 'X1' });
   });
 
+  it('maps a non-empty Spezifikationen object back to Langtext (tidied key names)', () => {
+    const raw = '{"Kurzbeschreibung":"Notebook.","Spezifikationen":{"Prozessor":"Intel Core i5","Speichertyp":"SSD"}}';
+    expect(parseWordingResponse(raw)).toEqual({
+      Kurzbeschreibung: 'Notebook.',
+      Langtext: { Prozessor: 'Intel Core i5', Speichertyp: 'SSD' }
+    });
+  });
+
+  it('never blanks specs: an empty or missing Spezifikationen leaves Langtext untouched', () => {
+    expect(parseWordingResponse('{"Artikelbeschreibung":"X1","Spezifikationen":{}}')).toEqual({ Artikelbeschreibung: 'X1' });
+  });
+
   it('returns null when nothing usable / invalid JSON', () => {
     expect(parseWordingResponse('{"Kurzbeschreibung":""}')).toBeNull();
     expect(parseWordingResponse('not json')).toBeNull();

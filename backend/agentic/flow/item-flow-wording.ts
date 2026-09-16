@@ -16,13 +16,17 @@ const WORDING_TIMEOUT_MS = 20000;
 const WordingResponseSchema = z
   .object({
     Artikelbeschreibung: z.union([z.string(), z.null()]).optional(),
-    Kurzbeschreibung: z.union([z.string(), z.null()]).optional()
+    Kurzbeschreibung: z.union([z.string(), z.null()]).optional(),
+    // The LLM-facing alias for Langtext; the model may return cleaned-up spec key names/values here.
+    Spezifikationen: z.union([z.record(z.unknown()), z.null()]).optional()
   })
   .passthrough();
 
 export interface WordingResult {
   Artikelbeschreibung?: string;
   Kurzbeschreibung?: string;
+  // Spec object with tidied key names, mapped back from the model's "Spezifikationen".
+  Langtext?: Record<string, unknown>;
 }
 
 // Renders the runtime-editable standards into a compact instruction list the wording model applies.
@@ -53,8 +57,14 @@ export function parseWordingResponse(raw: string): WordingResult | null {
   const result: WordingResult = {};
   const artikel = validated.data.Artikelbeschreibung;
   const kurz = validated.data.Kurzbeschreibung;
+  const spez = validated.data.Spezifikationen;
   if (typeof artikel === 'string' && artikel.trim()) result.Artikelbeschreibung = artikel.trim();
   if (typeof kurz === 'string' && kurz.trim()) result.Kurzbeschreibung = kurz.trim();
+  // Accept a rewritten spec object only when it's a non-empty plain object — never let the step blank
+  // out the specs (an empty/absent Spezifikationen leaves extraction's Langtext untouched upstream).
+  if (spez && typeof spez === 'object' && !Array.isArray(spez) && Object.keys(spez).length > 0) {
+    result.Langtext = spez as Record<string, unknown>;
+  }
   return Object.keys(result).length > 0 ? result : null;
 }
 

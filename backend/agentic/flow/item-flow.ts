@@ -673,6 +673,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
           const data = extractionResult.data as Record<string, unknown>;
           if (typeof wordingResult.Artikelbeschreibung === 'string') data.Artikelbeschreibung = wordingResult.Artikelbeschreibung;
           if (typeof wordingResult.Kurzbeschreibung === 'string') data.Kurzbeschreibung = wordingResult.Kurzbeschreibung;
+          // Reworded specs (tidied key names): overlaid here, then canonicalizeSpecKeyRecord below still
+          // folds any known variant keys onto their canonical contract key.
+          if (wordingResult.Langtext) data.Langtext = wordingResult.Langtext;
         }
       } catch (err) {
         logger.warn?.({ err, msg: 'wording stage failed; keeping extraction wording', itemId });
