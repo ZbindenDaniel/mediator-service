@@ -33,6 +33,26 @@ Everything the target needs is *latent* in code today. We lever these, we don't 
 
 ---
 
+## 1b. Two facts from the code that shape the levers
+
+**Instance data is barely used today (and is currently broken).** The *only* pipeline use of measured
+data is a 3-key map `INTAKE_TO_SPEC = { ram_gb→RAM, storage_gb→Speicher, drive_type→Speichertyp }`
+feeding `ambiguousFields` (conflict hint in review). Because the contracts were restructured to
+capabilities (`RAM`/`Speicher` removed from `201.json`), the map now matches nothing → **silent no-op**
+for laptops. `IntakeScan` is written but never read; scanned CPU only pre-fills quality questions.
+⇒ The exemplar layer is essentially unused. **L7 is where instance data first becomes real**, and its
+prerequisite is fixing/replacing this orphaned mapping.
+
+**We already have three learning loops** (L8 extends these, doesn't invent):
+1. **Per-item reject feedback (#954):** reject diff → `LastReviewNotes` → parsed by
+   `summarizeReviewDirectives` → next run of *that item*.
+2. **Cross-item few-shot (`example-selector.ts`):** 2 most recent **approved** items injected as redacted
+   examples into extraction — the model learns "what good looks like" from history.
+3. **Subcategory aggregation (`review-automation-signals.ts`):** last-10 reviews per subcategory → issue
+   rates; currently **dormant** (flags sent at non-blocking defaults).
+
+---
+
 ## 2. The levers (ordered by leverage)
 
 Effort: **S** ≈ hours, **M** ≈ a session, **L** ≈ multi-session. Each row is one existing part + the
@@ -43,18 +63,19 @@ smallest change.
 | L0 | **Findings from signals we already compute** | `ambiguousFields`, `missingRequired`, texts | scan them into a `findings[]` | the unit of review | S | ✅ shipped (#929/#930) |
 | L0b | **Findings reflect current content** | `getAgenticStatus` + ref | compute on read, not from run output | freshness / decay | S | ✅ shipped (#933) |
 | L0c | **Show findings** | `AgenticReviewWizard` | "Zu prüfen" panel in KI tab + wizard | surface | S | ✅ shipped (#931/#932) |
-| **L1** | **Scope tag on findings** | `models/agentic-findings.ts` | add `scope: 'reference'\|'exemplar'` (all current = reference) | ref/exemplar axis | S | next |
-| **L2** | **Standards into the prompt (prevention)** | guidance-injection channel | render `standards.json` into `{{EXTRACTION_REVIEW}}`/`{{SUPERVISOR_REVIEW}}` | stop producing junk | S | — |
-| **L3** | **Auto-approve on zero findings** | `AUTO_APPROVE` gate | repoint gate from confidence → no blocking findings | throughput valve | S | — |
-| **L4** | **Legible sweeper** | `sweepContractRework` | add a `logEvent` + a dry-run count endpoint | trust the re-grade | S | — |
-| **L5** | **Per-finding actions + verified-collapse** | wizard + `FindingsPanel` | choose-A/B, one-click fix/drop; collapse clean fields | review by exception | M | — |
-| **L6** | **Supervisor emits findings (detection)** | `supervisor.md` | output a small findings list, not PASS/FAIL; parse into `findings[]` | judgment findings | M | — |
-| **L7** | **Exemplar findings on read** | `reference-findings.ts` + `ambiguousFields` | fold `InstanceSpecs`-vs-ref conflicts into on-read findings | exemplar layer | M | — |
-| **L8** | **Reject-feedback → standards candidate** | `LastReviewNotes` loop | count recurring reviewer corrections, surface as a suggested rule | standards grow themselves | M | — |
-| **L9** | **Run provenance** | `agentic_runs` | add `TriggerReason` column, show it | legibility, KI-Runs list | S | — |
+| **L2a** | **Standards → extraction (prevention)** | `extract.md` + guidance channel | inject `standards.json` so the model avoids junk; keep extraction focused on *correct data* | fewer defects at source | S | — |
+| **L2b** ★ | **Separate wording/standards step** | new post-extraction step (reuses invoker/LLM plumbing) | a compact pass that checks prose against standards → **wording findings** (keeps `supervisor.md` lean; extraction stays about data) | "same issues every review" | M | operator-preferred shape |
+| **L3** | **Auto-approve on clean** | `AUTO_APPROVE` gate | repoint gate to **no blocking findings AND wording/standards pass** | throughput valve | S | **depends on L2b** |
+| **L5** | **Per-finding actions + verified-collapse (keep summary)** | wizard + `FindingsPanel` | choose-A/B, one-click fix/drop; collapse clean fields; **retain the summary/decision step** | review by exception | M | — |
+| **L6** | **Supervisor emits (lean) findings** | `supervisor.md` | emit a small list of *coherence/plausibility* findings (wording lives in L2b), not PASS/FAIL | judgment findings | M | — |
+| **L7** | **Exemplar findings on read** | `reference-findings.ts` + `InstanceSpecs` | compare measured-vs-ref → **exemplar-scope** findings. **Prereq: fix orphaned `INTAKE_TO_SPEC`** (§1b) | make instance data real | M | — |
+| **L8** | **Standards learn from review** | `example-selector.ts` + `review-automation-signals.ts` | feed **finding decisions** into the (dormant) aggregation → surface recurring ones as **standards-rule candidates**; pair with the few-shot loop | self-improving standards | M | — |
+| **L1** | **Scope tag on findings** | `models/agentic-findings.ts` | add `scope: 'reference'\|'exemplar'` | ref/exemplar axis | S | cosmetic until L7 |
+| **L4** | *(optional)* Legible sweeper | `sweepContractRework` | `logEvent` + dry-run count | trust auto re-run | S | low priority |
+| **L9** | *(optional)* Run provenance | `agentic_runs` | add `TriggerReason` | legibility | S | low priority |
 
-Each of L1–L9 is independent. None requires a new subsystem. Pulling L1–L5 already delivers a real
-review-by-exception gate; L6–L9 deepen it.
+None requires rebuilding the pipeline. **L2b is the one genuinely new step** — small, and the operator's
+own shape (harden extraction on data, do wording separately) rather than bloating the supervisor.
 
 ---
 
@@ -73,15 +94,19 @@ We revisit each only when the levers below it are in and have produced evidence.
 
 ---
 
-## 4. Suggested order
+## 4. Suggested order (revised with operator remarks)
 
-1. **L1 + L2 + L3** (all S) — scope the findings, steer generation, drain the queue. One session.
-2. **L4 + L9** (S) — make the auto-work legible before anyone trusts it.
-3. **L5** (M) — turn the panel into an actual review interaction.
-4. **L6** (M) — widen *what* gets caught (tone/coherence).
-5. **L7, L8** (M) — the exemplar axis + self-growing standards, once the base is trusted.
+1. **L2a + L2b** — extraction focuses on correct data; the separate **wording/standards step** emits
+   wording findings. The highest-leverage mechanic; also the prerequisite for L3.
+2. **L3** — auto-approve on clean, once the wording pass is trustworthy.
+3. **L5** — turn the panel into a real review interaction (bounded actions + verified-collapse, keep the
+   summary step).
+4. **L6** — lean supervisor findings (coherence/plausibility).
+5. **L7** (after the `INTAKE_TO_SPEC` fix) + **L8** (standards learn from review) + **L1** scope tag.
+6. *Optional, anytime:* L4, L9.
 
-Stop after any step and the pipeline is still whole.
+Stop after any step and the pipeline is still whole. **Mechanics first** — the dedicated review UI
+component (justified by the volume of findings × scope × grade) is parked until the mechanics are in.
 
 ---
 
