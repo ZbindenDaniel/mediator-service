@@ -77,6 +77,15 @@
 
 ## Priority 1 — Bugs & Active Work
 
+0ze. ✅ **Manual ERP sync left `LastSyncedAt` unset on unpadded-Artikelnummer refs (erp-sync #960).**
+  The handler passed `markRefsSynced` the zero-padded media-folder scope (`001158`) instead of the raw stored
+  key (`1158`), so the `item_refs` UPDATE matched nothing for refs stored unpadded — no sync timestamp, and
+  the mark is fire-and-forget so it stayed HTTP 200. Fixed via `resolveSyncedArtikelNummern` (raw as-stored set).
+  **Follow-ups (deferred):** (a) `item_refs."Artikel_Nummer"` is inconsistently stored (some padded, some raw) —
+  a one-time canonicalization is risky since it's a join key across items/agentic/shopware; left untouched.
+  (b) The media-folder resolver has the same padded-vs-raw assumption for *file* lookups, but that only causes
+  "image missing" (graceful skip + Grafikname fallback), not a silent sync-state miss.
+
 0zd. ✅ **Event-log CSV round-trip corrupted `Meta` into `[object Object]` → re-import dropped the event (erp-sync #936).**
   `events.Meta` is a `jsonb` column, so `pg` returns it as a parsed JS object; `export-data.ts`'s `toCsvValue`
   serialized cells with `String(value)`, turning the object into the literal `"[object Object]"` in `events.csv`.

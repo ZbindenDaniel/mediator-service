@@ -283,6 +283,24 @@ export function resolveArtikelNummerMirrorScope(
   return Array.from(resolved);
 }
 
+// The set of Artikel_Nummer values to mark synced (LastSyncedAt) — kept as the raw, as-stored
+// values so the item_refs UPDATE matches. Distinct from resolveArtikelNummerMirrorScope, which
+// zero-pads for media folder names; padding as a DB key silently missed refs stored unpadded.
+export function resolveSyncedArtikelNummern(
+  items: Array<{ Artikel_Nummer?: string | null }>
+): string[] {
+  const resolved = new Set<string>();
+
+  for (const item of items) {
+    const raw = typeof item.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : '';
+    if (raw) {
+      resolved.add(raw);
+    }
+  }
+
+  return Array.from(resolved);
+}
+
 interface ScriptExecutionResult {
   exitCode: number;
   stdout: string;
@@ -646,6 +664,9 @@ const action = defineHttpAction({
 
       const boxes = typeof ctx.listBoxes === 'function' ? await ctx.listBoxes() : [];
       const scopedArtikelNummern = resolveArtikelNummerMirrorScope(approvedItems, console);
+      // LastSyncedAt is keyed on item_refs."Artikel_Nummer" as stored (raw), whereas scopedArtikelNummern
+      // is zero-padded for media folder names — passing the padded form missed refs stored unpadded.
+      const syncedArtikelNummern = resolveSyncedArtikelNummern(approvedItems);
       const explicitMediaSources = resolveExplicitMediaMirrorSources(approvedItems, console);
       console.info('[sync-erp] script_item_scope', {
         requestedInstanceCount: itemIds.length,
@@ -788,8 +809,8 @@ const action = defineHttpAction({
       });
 
       if (scriptResult.exitCode === 0) {
-        if (scopedArtikelNummern.length > 0 && typeof ctx.markRefsSynced === 'function') {
-          void ctx.markRefsSynced(scopedArtikelNummern).catch(
+        if (syncedArtikelNummern.length > 0 && typeof ctx.markRefsSynced === 'function') {
+          void ctx.markRefsSynced(syncedArtikelNummern).catch(
             (err: unknown) => console.error('[sync-erp] Failed to mark refs synced', err)
           );
         }

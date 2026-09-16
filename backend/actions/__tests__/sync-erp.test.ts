@@ -6,6 +6,7 @@ import action, {
   buildErpSyncScriptEnv,
   resolveArtikelNummerMirrorScope,
   resolveExplicitMediaMirrorSources,
+  resolveSyncedArtikelNummern,
   resolveErpSyncScriptPath,
   validateErpSyncScriptPath
 } from '../sync-erp';
@@ -119,6 +120,34 @@ describe('sync-erp payload normalization', () => {
     expect(logger.warn).toHaveBeenCalledWith('[sync-erp] artikelnummer_missing_for_media_scope', {
       itemId: 'I-MISSING-0001'
     });
+  });
+
+  it('marks refs synced using the raw Artikel_Nummer, not the zero-padded media folder form', () => {
+    // Regression: markRefsSynced matches item_refs."Artikel_Nummer" as stored. Refs stored unpadded
+    // (e.g. "1158") never got LastSyncedAt because the padded media-scope form ("001158") matched no row.
+    const resolved = resolveSyncedArtikelNummern([
+      { Artikel_Nummer: '1158' },
+      { Artikel_Nummer: '14013' },
+      { Artikel_Nummer: '000056' },
+      { Artikel_Nummer: '1158' }, // duplicate instance of the same ref
+      { Artikel_Nummer: '  3676  ' },
+      { Artikel_Nummer: null },
+      { Artikel_Nummer: '   ' }
+    ]);
+
+    // Unpadded values are preserved verbatim, whitespace trimmed, duplicates collapsed, blanks dropped.
+    expect(resolved).toEqual(['1158', '14013', '000056', '3676']);
+  });
+
+  it('keeps padded and unpadded variants distinct as DB keys (unlike the media scope)', () => {
+    // resolveArtikelNummerMirrorScope merges 123/000123 into one folder; the DB-key set must not,
+    // since they would be separate item_refs rows.
+    const resolved = resolveSyncedArtikelNummern([
+      { Artikel_Nummer: '123' },
+      { Artikel_Nummer: '000123' }
+    ]);
+
+    expect(resolved).toEqual(['123', '000123']);
   });
 
   it('resolves filename-only metadata entries via Artikel_Nummer media folder conventions', () => {
