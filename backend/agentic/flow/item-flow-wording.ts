@@ -11,8 +11,6 @@ import { appendTranscriptSection, type AgentTranscriptWriter, type TranscriptSec
 // source-copied phrases — without adding or changing facts. It is intentionally small: one LLM call,
 // prose-only, and a failure returns null so the caller keeps extraction's wording.
 
-const WORDING_TIMEOUT_MS = 20000;
-
 const WordingResponseSchema = z
   .object({
     Artikelbeschreibung: z.union([z.string(), z.null()]).optional(),
@@ -128,25 +126,13 @@ export async function runWordingStage({
     { role: 'user', content: userPayload }
   ];
 
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  let timedOut = false;
-  let wordingRes;
-  try {
-    const timeoutPromise = new Promise<null>((resolve) => {
-      timeoutId = setTimeout(() => {
-        timedOut = true;
-        logger?.warn?.({ msg: 'wording stage timed out', itemId, timeoutMs: WORDING_TIMEOUT_MS });
-        resolve(null);
-      }, WORDING_TIMEOUT_MS);
-    });
-    const invokePromise = llm.invoke(messages).catch((err) => {
-      if (!timedOut) logger?.error?.({ err, msg: 'wording llm invocation failed', itemId });
-      return null;
-    });
-    wordingRes = await Promise.race([invokePromise, timeoutPromise]);
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-  }
+  // No tight per-stage timeout: like the extraction stage, the model call is bounded by the global
+  // undici HTTP timeout (MODEL_HTTP_*_TIMEOUT_MS, default 10 min). A local model is slow to generate a
+  // full rewrite, so a short hard cap here just killed otherwise-good runs (a 20s cap was timing out).
+  const wordingRes = await llm.invoke(messages).catch((err) => {
+    logger?.error?.({ err, msg: 'wording llm invocation failed', itemId });
+    return null;
+  });
   if (!wordingRes) return null;
 
   const raw = stringifyLangChainContent(wordingRes.content, { context: 'itemFlow.wording', logger });
