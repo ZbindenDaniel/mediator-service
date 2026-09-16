@@ -1,5 +1,5 @@
 // TODO(agent): Revisit item flow orchestration once planner surfaces richer item metadata requirements.
-import { agentActorId, autoApproveConfig, wordingConfig } from '../config';
+import { agentActorId, autoApproveConfig } from '../config';
 import type { AgenticResultPayload } from '../result-handler';
 import { createRateLimiter, DEFAULT_DELAY_MS, type RateLimiterLogger } from '../utils/rate-limiter';
 import { FlowError } from './errors';
@@ -653,11 +653,12 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     checkCancellation();
 
-    // Wording stage (opt-in, WORDING_STEP): after extraction has the facts, a dedicated LLM pass
-    // rewrites the two prose fields into the house style and strips fluff/marketing/source-copied
-    // phrases (contracts/standards.json), without changing facts. Skipped in rework mode (targeted
-    // field regen owns its own field selection); a failure keeps extraction's wording, never blocks.
-    if (wordingConfig.enabled && !reworkMode && extractionResult.success && extractionResult.data) {
+    // Wording stage: after extraction has the facts, a dedicated LLM pass rewrites the prose fields
+    // into the house style and strips fluff/marketing/source-copied phrases (contracts/standards.json),
+    // without changing facts, and tidies Langtext spec key names. A normal pipeline stage (not flagged —
+    // like extraction/supervisor/pricing). Skipped in rework mode (targeted field regen owns its own
+    // field selection); a failure keeps extraction's wording and never blocks the run.
+    if (!reworkMode && extractionResult.success && extractionResult.data) {
       try {
         const wordingResult = await runWordingStage({
           llm: deps.llm,
