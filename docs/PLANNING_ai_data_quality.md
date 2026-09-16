@@ -1,5 +1,11 @@
 # PLANNING — AI Data Quality Lifecycle (the one plan)
 
+> ⚑ **Role: TARGET / north-star, not the working plan.** This describes the destination and its shape.
+> The **working plan is [`PLANNING_agentic_levers.md`](PLANNING_agentic_levers.md)** — small changes to
+> the *existing* pipeline that move toward this target. Use this doc for the *why* and the finished
+> shape; decide what to build next in the levers doc. (Reset after the planning drifted into a
+> from-scratch redesign; see the levers doc's premise.)
+
 > **Status:** DESIGN / thinking consolidated. This is the single plan that supersedes and folds in
 > [`PLANNING_rework_feature.md`](PLANNING_rework_feature.md) (rework levers) and
 > [`PLANNING_instance_flow.md`](PLANNING_instance_flow.md) (instance flow + reconciliation + KI-Runs).
