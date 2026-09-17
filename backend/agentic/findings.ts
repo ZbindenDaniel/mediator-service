@@ -117,7 +117,16 @@ export function buildFindings(input: FindingsInput, standards: StandardsContract
     .map((entry) => entry.finding);
 }
 
-/** Convenience for the auto-approve gate (later slice): does any finding block approval? */
+/** Convenience: does any finding block approval (severity 'block')? */
 export function hasBlockingFindings(findings: Finding[]): boolean {
   return findings.some((finding) => finding.severity === 'block');
+}
+
+/**
+ * Auto-approve gate (L3): a run's output is "clean" — safe to settle without a human — when no finding
+ * needs attention, i.e. none is `block` (missing-required) or `warn` (banned phrase / intake conflict).
+ * Info-level style hints are tolerated; an operator raises a rule's severity to make it gate.
+ */
+export function isAutoApprovable(findings: Finding[]): boolean {
+  return findings.every((finding) => finding.severity === 'info');
 }

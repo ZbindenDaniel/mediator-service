@@ -283,10 +283,12 @@ function resolveUnitInterval(fallback: number, ...keys: Array<keyof NodeJS.Proce
   return parsed;
 }
 
-// Auto-approval: when enabled, a run whose extraction is clearly good (supervisor PASS + confidence ≥
-// minConfidence + no missing-required fields + no ambiguous fields) is finalized as `auto_approved`
-// instead of forced into manual review. Default OFF — enabling it is a deliberate operator choice,
-// and `auto_approved` items are ERP-eligible (operators sort by state and decide what to sync).
+// Auto-approval: when enabled, a run whose output is "clean" — no review finding of severity block
+// (missing-required) or warn (banned phrase / intake conflict); info-level style hints tolerated — is
+// finalized as `auto_approved` instead of forced into manual review. Default OFF — enabling it is a
+// deliberate operator choice, and `auto_approved` items are ERP-eligible (operators sort by state and
+// decide what to sync). NOTE: the findings-clean gate (L3) replaced the old confidence threshold;
+// `minConfidence` / `AUTO_APPROVE_MIN_CONFIDENCE` is retained for back-compat but no longer gates.
 export const autoApproveConfig: { enabled: boolean; minConfidence: number } = {
   enabled: resolveBooleanFlag('AUTO_APPROVE'),
   minConfidence: resolveUnitInterval(0.8, 'AUTO_APPROVE_MIN_CONFIDENCE')

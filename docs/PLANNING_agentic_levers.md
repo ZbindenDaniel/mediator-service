@@ -65,7 +65,7 @@ smallest change.
 | L0c | **Show findings** | `AgenticReviewWizard` | "Zu prüfen" panel in KI tab + wizard | surface | S | ✅ shipped (#931/#932) |
 | **L2a** | **Standards → extraction (prevention)** | `extract.md` + guidance channel | inject `standards.json` so the model avoids junk; keep extraction focused on *correct data* | fewer defects at source | S | — |
 | **L2b** ★ | **Separate wording step** | `flow/item-flow-wording.ts` (new) | post-extraction LLM pass that **rewrites** the prose into house style + tidies Langtext keys, stripping fluff/source-copy per `standards.json` (facts unchanged); normal always-on stage (no flag) | "same issues every review" | M | ✅ shipped (agentic #934) |
-| **L3** | **Auto-approve on clean** | `AUTO_APPROVE` gate | repoint gate to **no blocking findings AND wording/standards pass** | throughput valve | S | **depends on L2b** |
+| **L3** | **Auto-approve on clean** | `AUTO_APPROVE` gate | repoint gate to **no block/warn findings** (`isAutoApprovable`); implicitly requires the wording pass | throughput valve | S | ✅ shipped (agentic #935) |
 | **L5** | **Per-finding actions + verified-collapse (keep summary)** | wizard + `FindingsPanel` | choose-A/B, one-click fix/drop; collapse clean fields; **retain the summary/decision step** | review by exception | M | — |
 | **L6** | **Supervisor emits (lean) findings** | `supervisor.md` | emit a small list of *coherence/plausibility* findings (wording lives in L2b), not PASS/FAIL | judgment findings | M | — |
 | **L7** | **Exemplar findings on read** | `reference-findings.ts` + `InstanceSpecs` | compare measured-vs-ref → **exemplar-scope** findings. **Prereq: fix orphaned `INTAKE_TO_SPEC`** (§1b) | make instance data real | M | — |
@@ -96,11 +96,10 @@ We revisit each only when the levers below it are in and have produced evidence.
 
 ## 4. Suggested order (revised with operator remarks)
 
-1. **L2a + L2b** — extraction focuses on correct data; the separate **wording/standards step** emits
-   wording findings. The highest-leverage mechanic; also the prerequisite for L3.
-2. **L3** — auto-approve on clean, once the wording pass is trustworthy.
+1. ✅ **L2b** — separate wording step (shipped, #934).
+2. ✅ **L3** — auto-approve on clean, gated on findings (shipped, #935).
 3. **L5** — turn the panel into a real review interaction (bounded actions + verified-collapse, keep the
-   summary step).
+   summary step). ← **next**
 4. **L6** — lean supervisor findings (coherence/plausibility).
 5. **L7** (after the `INTAKE_TO_SPEC` fix) + **L8** (standards learn from review) + **L1** scope tag.
 6. *Optional, anytime:* L4, L9.

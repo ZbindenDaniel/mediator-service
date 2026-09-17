@@ -1,4 +1,4 @@
-import { buildFindings, hasBlockingFindings } from '../findings';
+import { buildFindings, hasBlockingFindings, isAutoApprovable } from '../findings';
 import type { StandardsContract } from '../../../models/agentic-findings';
 
 const standards: StandardsContract = {
@@ -90,6 +90,13 @@ describe('buildFindings — deterministic review findings', () => {
     // block = missing_required, then intake_conflict + banned(warn) warranty, then info banned marketing.
     expect(findings[0].type).toBe('missing_required');
     expect(findings[findings.length - 1].ruleId).toBe('marketing');
+  });
+
+  it('isAutoApprovable: clean (no findings) or info-only ⇒ true; any block/warn ⇒ false', () => {
+    expect(isAutoApprovable([])).toBe(true);
+    expect(isAutoApprovable([{ type: 'banned_phrase', severity: 'info', field: 'Kurzbeschreibung', message: 'x', ask: 'fix' }])).toBe(true);
+    expect(isAutoApprovable([{ type: 'missing_required', severity: 'block', field: 'Prozessor', message: 'x', ask: 'fix' }])).toBe(false);
+    expect(isAutoApprovable([{ type: 'banned_phrase', severity: 'warn', field: 'Artikelbeschreibung', message: 'x', ask: 'fix' }])).toBe(false);
   });
 
   it('is a no-op when there are no rules and no gaps', () => {
