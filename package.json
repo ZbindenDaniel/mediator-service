@@ -10,6 +10,7 @@
     "start": "node dist/backend/server.js",
     "test": "npm run prebuild && node scripts/run-tests.js",
     "smoke": "ts-node --transpile-only scripts/smoke-server.ts",
+    "try:wording": "ts-node --transpile-only scripts/try-wording.ts",
     "migrate": "node scripts/migrate-sqlite-to-postgres.js"
   },
   "dependencies": {

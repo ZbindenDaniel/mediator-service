@@ -9,6 +9,7 @@ One-off maintenance, migration, and debugging scripts — not part of the produc
 - `normalize-category-values.ts` / `.js` — one-time in-place repair of float-formatted category strings (e.g. `"201.0"` → `"201"`) in the `item_refs` category TEXT columns
 - `media-migration.py` — migrates media files to the new directory layout
 - `dump-agentic-search-events.ts` — debug: dumps agentic search event fixtures from DB for analysis
+- `try-wording.ts` — dev harness for the agentic **wording stage**: runs it against your Ollama on a built-in messy fixture (or `npm run try:wording -- path/to/item.json`) and prints the rewrite + timing, so you can tune `prompts/wording.md` / `contracts/standards.json` without restarting full runs. Needs `MODEL_*` env pointing at Ollama.
 - `smoke-server.ts` — production smoke test: starts server, checks key endpoints, exits
 - `build.js` / `prebuild.js` — frontend asset build helpers (run via `npm run build`)
 - `run-tests.js` — test runner wrapper
