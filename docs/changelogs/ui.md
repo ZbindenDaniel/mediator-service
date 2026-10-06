@@ -4,6 +4,10 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 961. ✅ Item list: price filter (with/without price) and price sort
+**Why:** Operators need to find items still missing a price and to scan by value. Cloned the existing `imageFilter` plumbing (`ItemListFilters.priceFilter`, localStorage persistence + validation, active-filter description, header reset, `ItemDetail` neighbour navigation) rather than adding a server-side filter — the list is already filtered/sorted client-side in `filterAndSortItems`. "No price" = `Verkaufspreis` null/empty/0, matching the existing CHF ✓/— column. Price sort puts unpriced rows last in **both** directions (other nullable sorts use −∞) because in ascending order hundreds of 0-priced refs would otherwise bury every real price. While sorting by price the CHF column shows the amount (else ✓) so the order is visible. Jest gained a `moduleNameMapper` for the bare `models` alias the frontend uses — that unresolved import is why the earlier item-list tests were commented out; new `test/item-list-price.test.ts` covers filter + sort.
+**Deferred:** price-range filter (min/max) — not requested. The older commented-out `item-list-quality`/`item-list-columns` tests are still disabled; they may now be revivable with the mapper but use stale option shapes.
+
 ## 958. ✅ Search never returns an empty list when weaker matches exist (50 % token rule relaxed on miss)
 **Why:** Operator principle: "always try to deliver results". `/api/search` (items, boxes, refs — and
 through `searchItemReferences` also intake `select_ref`, `useSimilarItems`, `RefSearchInput`, …) required

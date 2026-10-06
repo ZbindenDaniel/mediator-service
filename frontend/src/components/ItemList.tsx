@@ -346,7 +346,12 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                   )}
                 </td>
                 <td className="col-number">{group.summary.Artikel_Nummer?.trim() || representative?.Artikel_Nummer?.trim() || '—'}</td>
-                <td className="col-price optional-column">{(typeof representative?.Verkaufspreis === 'number' && representative.Verkaufspreis > 0) ? '✓' : '—'}</td>
+                <td className="col-price optional-column">
+                  {(typeof representative?.Verkaufspreis === 'number' && representative.Verkaufspreis > 0)
+                    // Show the amount only when sorting by price — otherwise the ✓ keeps the column narrow.
+                    ? (sortKey === 'price' ? representative.Verkaufspreis.toFixed(2) : '✓')
+                    : '—'}
+                </td>
                 <td className="col-image optional-column">{(representative?.ImageNames || representative?.Grafikname) ? '✓' : '—'}</td>
                 <td className="col-desc">{representative?.Artikelbeschreibung ?? '—'}</td>
                 <td className="col-box">

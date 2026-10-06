@@ -8,6 +8,7 @@ import QrScanButton from './QrScanButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
 import type { Box, Item, EventLog, BoxDetailResponse } from '../../../models';
+import { BOX_COLORS } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { groupItemsForDisplay } from '../lib/itemGrouping';
 import { ensureUser } from '../lib/user';
@@ -40,6 +41,11 @@ import QualityBadge from './QualityBadge';
 interface Props {
   boxId: string;
 }
+
+// Matches the .box-list-row--shelf fallback accent in styles.scss.
+const SHELF_DEFAULT_COLOR = '#3b82f6';
+// Reuse the Standort palette as picker suggestions; slice drops alpha (e.g. Pink's '#d8698eff') that <input type="color"> rejects.
+const SHELF_COLOR_SWATCHES = Array.from(new Set(BOX_COLORS.map((color) => color.hex.slice(0, 7).toLowerCase())));
 
 function resolveActorName(actor?: string | null): string {
   return actor && actor.trim() ? actor : 'System';
@@ -99,6 +105,8 @@ export default function BoxDetail({ boxId }: Props) {
 
   const [note, setNote] = useState('');
   const [label, setLabel] = useState('');
+  // '' = no custom colour (list falls back to the default shelf accent).
+  const [shelfColor, setShelfColor] = useState('');
   const [noteFeedback, setNoteFeedback] = useState<NoteFeedback>(null);
   const [shelfFeedback, setShelfFeedback] = useState<NoteFeedback>(null);
   const [isSavingNote, setIsSavingNote] = useState(false);
@@ -391,6 +399,7 @@ export default function BoxDetail({ boxId }: Props) {
         setBox(data.box);
         setNote(data.box?.Notes || '');
         setLabel(typeof data.box?.Label === 'string' ? data.box.Label : '');
+        setShelfColor(typeof data.box?.Color === 'string' ? data.box.Color : '');
         setPanelDetailLabel(typeof data.box?.Label === 'string' && data.box.Label.trim() ? `${data.box.Label.trim()} – ${boxId}` : boxId);
         setNoteFeedback(null);
         setShelfFeedback(null);
@@ -653,12 +662,14 @@ export default function BoxDetail({ boxId }: Props) {
       logger.info('[shelf-detail] Saving shelf label/notes', {
         boxId: box.BoxID,
         hasLabel: Boolean(trimmedLabel),
-        hasNotes: Boolean(trimmedNotes)
+        hasNotes: Boolean(trimmedNotes),
+        color: shelfColor || null
       });
       const payload = {
         actor,
         Label: trimmedLabel,
-        notes: trimmedNotes
+        notes: trimmedNotes,
+        color: shelfColor
       };
       const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
         method: 'POST',
@@ -667,7 +678,7 @@ export default function BoxDetail({ boxId }: Props) {
       });
       const responseBody = await res.json().catch(() => ({}));
       if (res.ok) {
-        setBox((current) => current ? { ...current, Label: trimmedLabel || null, Notes: trimmedNotes } : current);
+        setBox((current) => current ? { ...current, Label: trimmedLabel || null, Notes: trimmedNotes, Color: shelfColor || null } : current);
         setShelfFeedback({ type: 'success', message: 'Regal gespeichert' });
         logger.info('[shelf-detail] Shelf label/notes saved', { boxId: box.BoxID, status: res.status });
       } else {
@@ -687,7 +698,7 @@ export default function BoxDetail({ boxId }: Props) {
     } finally {
       setIsSavingShelfDetails(false);
     }
-  }, [box, label, note]);
+  }, [box, label, note, shelfColor]);
 
   // TODO(box-detail-photo-autosave): Add retry/backoff support for repeated photo save failures.
   const handlePhotoFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -969,6 +980,27 @@ export default function BoxDetail({ boxId }: Props) {
                       <div className="row">
                         <label htmlFor="shelf-label">Label</label>
                         <input id="shelf-label" type="text" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Regalname" disabled={isSavingShelfDetails} />
+                      </div>
+                      <div className="row">
+                        <label htmlFor="shelf-color">Farbe</label>
+                        <div className="shelf-color-picker">
+                          {/* Native picker can't be empty, so "no colour" is tracked separately and shown as the default accent. */}
+                          <input
+                            id="shelf-color"
+                            type="color"
+                            list="shelf-color-swatches"
+                            value={shelfColor || SHELF_DEFAULT_COLOR}
+                            onChange={(event) => { setShelfColor(event.target.value); if (shelfFeedback && shelfFeedback.type !== 'info') setShelfFeedback(null); }}
+                            disabled={isSavingShelfDetails}
+                          />
+                          <datalist id="shelf-color-swatches">
+                            {SHELF_COLOR_SWATCHES.map((hex) => <option key={hex} value={hex} />)}
+                          </datalist>
+                          <span className="muted">{shelfColor || 'Standard'}</span>
+                          {shelfColor ? (
+                            <button type="button" className="btn" onClick={() => setShelfColor('')} disabled={isSavingShelfDetails}>Zurücksetzen</button>
+                          ) : null}
+                        </div>
                       </div>
                       <div className="row">
                         <label htmlFor="shelf-notes">Notizen</label>

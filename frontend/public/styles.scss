@@ -2852,7 +2852,20 @@ button:focus {
 
 .box-list-row--shelf {
     background-color: var(--surface-alt, #f8fafc);
-    border-left: 3px solid var(--accent, #3b82f6);
+    border-left: 3px solid var(--shelf-color, var(--accent, #3b82f6));
+}
+
+.shelf-color-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    input[type="color"] {
+        width: 44px;
+        height: 32px;
+        padding: 2px;
+        cursor: pointer;
+    }
 }
 
 // TODO(filter-bar-layout): Revisit filter bar spacing once filter count grows further.

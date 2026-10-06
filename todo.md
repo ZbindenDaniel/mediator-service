@@ -423,6 +423,10 @@
 
 32. **Add filtered activities view.** Unfiltered activity streams are hard to use for investigation. **Goal:** add focused filters using existing activity data paths.
 
+34. **Round-trip shelf `Color` through box backup export/import.** Shelf colours (storage #960) live in `boxes."Color"` but aren't in `export-items.ts` `boxColumns` / `importer.ts` box field handling / `UPSERT_BOX_SQL`, so a restore into a fresh DB loses them (same-DB re-import keeps them via `COALESCE`).
+
+35. **Revive commented-out item list tests.** `test/item-list-quality.test.ts` and `test/item-list-columns.test.ts` were disabled because jest couldn't resolve the bare `models` alias; the mapper now exists (ui #961), so they only need updating to the current `ItemListComputationOptions` shape.
+
 ---
 
 ## Priority 3 — Infrastructure & Platform
