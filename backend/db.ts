@@ -458,6 +458,8 @@ CREATE TABLE IF NOT EXISTS printer_queues (
   // Additive column migrations — safe no-ops after first run
   await execBatch(`
 ALTER TABLE item_refs ADD COLUMN IF NOT EXISTS "LastSyncedAt" TEXT;
+-- Shelf marker colour (#rrggbb) picked in the shelf notes tab; drives the box-list row accent.
+ALTER TABLE boxes ADD COLUMN IF NOT EXISTS "Color" TEXT;
 ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedAt" TEXT;
 ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedBy" TEXT;
 ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "Confidence" FLOAT;
