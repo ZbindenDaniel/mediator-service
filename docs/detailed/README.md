@@ -37,6 +37,7 @@ Use this directory as the single navigation root for deep-dive operational and i
 | [`Shopware integration.md`](./Shopware%20integration.md) | Shopware product discovery, sync queue architecture |
 | [`glossary.md`](./glossary.md) | Canonical terminology: Item/ItemRef/ItemInstance, Box/Shelf/Location |
 | [`traceability-matrix.md`](./traceability-matrix.md) | Doc-to-code mapping: domain → backend actions → frontend components |
+| [`tenancy.md`](./tenancy.md) | Multi-tenancy: current identity/stamping state, why `tenant` is null, how to drive it (whoami, group map, Authentik) |
 
 ## Topic changelogs
 
