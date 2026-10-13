@@ -4,6 +4,10 @@ Covers: item creation, editing, quality assessment, specs, accessories, spare pa
 
 ---
 
+## 973. ✅ Plan: laptop parts catalogue (nested assemblies + quality roll-up)
+**Why:** The catalogue deployment needs the colleagues' laptop parts list (3 nesting levels, ~55 rows mixing parts, defects and group headers) modelled without a new abstraction. Plan in `docs/PLANNING_PARTS_CATALOGUE.md`: part type = subcategory (new Hauptkategorie 210), position = assembly slot, nesting = an assembly contract on the child's subcategory (Zerlegen already loads by the item's own subcategory). Parent quality = min(own answers, per-slot `max(childEffective, qualityFloor)`) — chosen over full mapping tables because operators set one "how critical" number per part. Additive extensions only: `qualityFloor`, canonical presence values (+`notApplicable`/`integrated` slot states), `multi` question type (JSON-array answer, because `,` is itself a key), `group-<haupt>` shared contracts, a real contract validator. Reviewed against code: article-less components have no subcategory (fix: effective subcategory from parent slot), the quality review trusts a client-sent subcategory, `QUALITY_DEFAULT=3` would cap parents, `COALESCE(r."Quality", i."Quality")` hides instance quality, and `contracts/README.md` overstates startup validation.
+**Deferred:** all implementation (5 phases in the plan); floors, taxonomy confirmation and "Fest verbaut" semantics await domain input (plan §10).
+
 ## 959. ✅ Spec contract for 109 (All-in-One)
 **Why:** The `109 All-in-One` subcategory added during taxonomy externalization (#937) had no
 dedicated spec contract, so it fell back to `general`. Added `contracts/specs/109.json` — modelled

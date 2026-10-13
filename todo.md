@@ -398,7 +398,10 @@
    Feature-disposition plan + gap list in
    [`docs/PLANNING_NEW_USE_CASE.md`](docs/PLANNING_NEW_USE_CASE.md). Use case =
    thorough spare-part cataloging (catalogue every reusable part); disassembly/
-   component lifecycle is the centerpiece to strengthen. Two greenfield
+   component lifecycle is the centerpiece to strengthen. **Laptop parts model + quality roll-up planned (#973):**
+   [`docs/PLANNING_PARTS_CATALOGUE.md`](docs/PLANNING_PARTS_CATALOGUE.md) — 5 phases; start with
+   Phase 1 (validator, effective subcategory, `QUALITY_DEFAULT` split, quality COALESCE order).
+   Domain input pending (floors, taxonomy tree, "Fest verbaut") — plan §10. Two greenfield
    workstreams gate it:
    - **G‑T1 Multi-tenancy (largest lift).** No `tenant`/`mandant`/`org_id`
      concept exists anywhere. **Phased plan ready:**
@@ -524,10 +527,14 @@
 
 ### Still Open
 - **Admin cards don't validate API responses (#974 finding):** e.g. `SystemStatusCard` renders `/api/media/health` without checking `res.ok`/shape; an unexpected body (`imageProbe` missing) throws during render and, without an error boundary, blanks the whole page. Add response checks + an error boundary around admin cards.
+- **Contracts README overstates validation (#973):** `contracts/README.md` says contracts are validated against their TS shapes at startup; they are only JSON-parsed (admin upload checks top-level shape only). Fix = Phase 1 of `docs/PLANNING_PARTS_CATALOGUE.md`.
+- **Quality review trusts client `subCategory` (#973):** `quality-review.ts` scores with whatever subcategory the client sends; article-less in-device components have no subcategory at all (it lives only on `item_refs`). Fix planned in parts-catalogue Phase 1.
+- **Item views prefer article quality over instance quality (#973):** `COALESCE(r."Quality", i."Quality")` in `db.ts` item select — investigate why before flipping (needed for per-instance roll-up).
 - **Feature-flag gaps (#970):** image upload in create/edit forms isn't covered by `item-images`; box notes stay editable in the box edit form with `box-notes` off; old `SHOPWARE_SYNC_ENABLED`/`ERP_SYNC_ENABLED` not folded into the manifest. Fine for the POC; decide if the catalogue deployment needs them.
 - **Platform-admin model:** `PLANNING_NEW_USE_CASE.md` §12.3 says platform admins are the `super` users of a designated admin tenant; the implementation (`identity.ts`) uses a separate `platformAdminGroup` (`mediator-admin`). Settle when defining `super` powers.
 
 - **Revive flag-based review metrics (deferred).** The review wizard makes one explicit approve/reject decision and, on reject, feeds a concrete before→after correction diff + notes into the next run (chosen over deriving flags — a diff is richer and unambiguous). Consequence: `bad_format` / `wrong_physical_dimensions` / `information_present` are sent at non-blocking defaults, so `AgenticReviewMetricsRows` (`% Schlecht formatiert / Falsche Dimensionen / Info unvollständig`) now reads all-positive. If those dashboards are still wanted, derive the flags **purely for metrics** (e.g. text edited ⇒ bad_format, dimension edited ⇒ wrong_physical_dimensions, required spec blanked ⇒ information_present=false), decoupled from the re-run path. Not needed for extraction quality.
+- For the **laptop parts catalogue** (#973, plan §10): per-part quality floor table (colleagues); confirm taxonomy 210 tree; "Fest verbaut" roll-up semantics; should a manual `Quality` override survive a roll-up recompute?
 - For **spare parts `drive_type`**, should this question move to the disassembly contract storage slot (needs `qualityQuestion[]` array support on parts) or stay in quality/201.json as a follow-up spec question? Currently stays in quality/201.json (TBD).
 - For **spare parts bidirectional suggestions**, when a device's quality check says "PS missing", should the system surface matching PS units in inventory for the operator? Deferred to phase 2 — needs structured spec matching.
 - For **shelf totals**, should weight/item count include nested boxes only, loose items only, or both?
