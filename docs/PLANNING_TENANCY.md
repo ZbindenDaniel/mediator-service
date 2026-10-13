@@ -64,10 +64,13 @@ username, groups, tenant, role }` via a config-driven `group→{tenant,role}` ma
 behaviour-neutral (nothing gates on it yet), `ADMIN_SECRET` stays break-glass. (1c) `resolveActor(ctx,
 requestActor)` prefers the authenticated username for the event-log `Actor`, applied to the item/box
 lifecycle write handlers (falls back to the typed actor until forward-auth is live). (1b) proxy
-config is **templated, not active**: `config/nginx/mediator.authentik.conf.example` + a Traefik
-snippet + Authentik provider/outpost/group runbook in `docs/setup.md` "Phase 1b", with the
-spoof-protection (headers set only from the outpost) called out — **needs on-host verification before
-Basic Auth is dropped.** Tests: identity resolver + actor helper. **Follow-up:** adopt `resolveActor`
+config is **opt-in, not default** (#968): `docker-compose.authentik.yml` + full
+`config/nginx/mediator.authentik.conf` (local nginx) and `docker-compose.prod.authentik.yaml`
+(host Traefik: `ak-strip` → `ak-auth` middlewares, Authentik services, machine router for
+`/api/admin/` + `/api/intake/`; deploy workflow includes it when the host `.env` has
+`AUTHENTIK_ENABLED=true`), plus backend `AUTH_REQUIRED` fail-closed gate. Runbook:
+`docs/detailed/identity-provider.md`. **Needs local, then on-host verification before Basic Auth is
+dropped.** Tests: identity resolver + actor helper. **Follow-up:** adopt `resolveActor`
 in the remaining actor-bearing handlers (agentic/bulk/export/print/catalog/qr-scan).
 
 #### Original plan

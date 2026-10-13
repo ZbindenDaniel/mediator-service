@@ -163,6 +163,11 @@ if (!PRINTER_QUEUE_MARKETING) {
 export const LP_COMMAND = (process.env.LP_COMMAND || 'lp').trim() || 'lp';
 export const ADMIN_SECRET = (process.env.ADMIN_SECRET || '').trim();
 export const INTAKE_TOKEN = (process.env.INTAKE_TOKEN || '').trim();
+// Public deployments: data routes reject requests that carry no forward-auth identity (utils/require-identity.ts).
+export const AUTH_REQUIRED = parseBooleanFlag(process.env.AUTH_REQUIRED, 'AUTH_REQUIRED') ?? false;
+if (AUTH_REQUIRED && !INTAKE_TOKEN) {
+  console.warn('[config] AUTH_REQUIRED is on but INTAKE_TOKEN is unset; intake station requests will be rejected.');
+}
 export const LPSTAT_COMMAND = (process.env.LPSTAT_COMMAND || 'lpstat').trim() || 'lpstat';
 // CUPS_HOST: optional explicit TCP override (e.g. cups:631). Leave unset in Docker compose —
 // CUPS_SERVER env var points cups binaries at the Unix socket instead (CUPS 2.4 dropped

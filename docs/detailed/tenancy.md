@@ -128,20 +128,12 @@ stamping work: send a create with these headers, then inspect the row's `TenantI
 
 ### C. Full path: Authentik + forward-auth proxy
 
-The real deployment. Summarised here; the step-by-step (provider, embedded outpost, groups, nginx
-swap, Traefik snippet, verification incl. the spoof test) lives in
-[`docs/setup.md`](../setup.md) **"Phase 1b — forward-auth wiring"**.
-
-1. In Authentik: create a **Proxy Provider** + application, enable the **embedded outpost**, and
-   create the **groups** you referenced in the map (`tenant-revamp`, `tenant-revamp-admin`,
-   `mediator-admin`). Assign users to groups.
-2. Put the proxy in front of the app using
-   [`config/nginx/mediator.authentik.conf.example`](../../config/nginx/mediator.authentik.conf.example)
-   (dev/nginx) or the Traefik `forwardAuth` snippet (prod) — both inject the two headers from the
-   outpost response **only**, overwriting any client copy.
-3. Set `TENANT_GROUP_MAP` to match the group names. Restart.
-4. Log in through Authentik and hit `/api/whoami` — it now shows the real user, their tenant, and
-   role. Drop nginx Basic Auth once this is verified.
+The real deployment, via opt-in override files: `docker-compose.authentik.yml` (local nginx, config
+[`config/nginx/mediator.authentik.conf`](../../config/nginx/mediator.authentik.conf)) or
+`docker-compose.prod.authentik.yaml` (host Traefik, enabled by `AUTHENTIK_ENABLED=true`). Both
+switch on `AUTH_REQUIRED`. The step-by-step with checks (outpost `authentik_host`, provider,
+groups, spoof test) is in [`identity-provider.md`](./identity-provider.md) "Setup, in order".
+Once logged in, `/api/whoami` shows the real user, their tenant, and role.
 
 ## What stamping does today
 
@@ -204,5 +196,5 @@ From [`docs/PLANNING_TENANCY.md`](../PLANNING_TENANCY.md) §5 — worth deciding
 | `whoami` endpoint | [`backend/actions/whoami.ts`](../../backend/actions/whoami.ts) |
 | Schema (`tenants`, `TenantId` columns) + upserts | [`backend/db.ts`](../../backend/db.ts) |
 | Stamp-on-create | `backend/actions/{create-box,add-item,import-item}.ts` |
-| Proxy template + Authentik runbook | [`config/nginx/mediator.authentik.conf.example`](../../config/nginx/mediator.authentik.conf.example), [`docs/setup.md`](../setup.md) |
+| Proxy template + Authentik runbook | [`config/nginx/mediator.authentik.conf`](../../config/nginx/mediator.authentik.conf), [`docs/setup.md`](../setup.md) |
 | Config reference | [`.env.example`](../../.env.example) (`TENANT_GROUP_MAP*`) |

@@ -118,6 +118,7 @@ import { processShopwareQueue } from './workers/processShopwareQueue';
 import { AgenticModelInvoker } from './agentic/invoker';
 import { loadTaxonomy, initTaxonomy } from './lib/taxonomy';
 import { resolveIdentity, configuredTenants } from './lib/identity';
+import { isRequestAllowed } from './utils/require-identity';
 import type { RequestIdentity } from './lib/identity';
 import type { Item, LabelJob } from './db';
 import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
@@ -721,6 +722,10 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     }
 
     const url = new URL(req.url, resolveRequestBase(req));
+    if (!isRequestAllowed(req, url.pathname)) {
+      sendJson(res, 401, { error: 'Unauthorized' });
+      return;
+    }
     if (url.pathname === '/' && req.method === 'GET') {
       const p = path.join(PUBLIC_DIR, 'index.html');
       try {

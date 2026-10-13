@@ -6,8 +6,10 @@ services:
       POSTGRES_USER: mediator
       POSTGRES_PASSWORD: mediator
       POSTGRES_DB: mediator
+    # Host-local only: published on all interfaces it would expose the DB (default password) to the
+    # internet once the VM is public. Host tools/backups still reach it on 127.0.0.1.
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - mediator-postgres:/var/lib/postgresql/data
     restart: unless-stopped

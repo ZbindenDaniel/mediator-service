@@ -59,6 +59,9 @@ the mediator database.
 | `MEDIA_ROOT_DIR` | (unset) | Absolute mounted media root directory used to derive fixed paths: `<root>/shopbilder` (WebDAV) and `<root>/shopbilder-import` (ERP mirror). URLs are rejected. |
 | `ALT_DOC_DIRS_FILE` | (unset) | Absolute path to a JSON file containing alternative document directory configurations. Each entry links a filesystem/WebDAV mount to a per-item identifier for retrieving documents (wipe reports, test results, certificates, datasheets). See [Alternative document directories](#alternative-document-directories) below. |
 | `INTAKE_TOKEN` | (unset) | Shared secret for the device intake station API. Sent as `X-Intake-Token` header by intake scripts. When unset, intake endpoints accept all requests (development mode). |
+| `AUTH_REQUIRED` | `false` | When true, `/api/`, `/media/`, `/prints/` and `/external-docs/` answer 401 unless the request carries a forward-auth identity (`X-authentik-username`); `/api/admin/` also accepts the `ADMIN_SECRET` bearer and `/api/intake/` the `INTAKE_TOKEN`. Set by the Authentik compose overrides. See `docs/detailed/identity-provider.md`. |
+| `AUTHENTIK_ENABLED` | (unset) | Production host only: `true` makes the deploy workflow include `docker-compose.prod.authentik.yaml`. Not read by the backend. |
+| `MEDIATOR_DOMAIN` / `AUTHENTIK_DOMAIN` | `erfassung.<VM_IP>.nip.io` / `auth.<VM_IP>.nip.io` | Public hostnames for the app and the Authentik login in `docker-compose.prod.authentik.yaml`. |
 
 Example mounted media root path: `/mnt` (Linux) or `/Volumes` (macOS). The service derives WebDAV at `<root>/shopbilder` and ERP mirror at `<root>/shopbilder-import`. `davs://` URLs are not accepted; only local filesystem mount paths are supported.
 
