@@ -1,4 +1,5 @@
 import whoamiAction from '../whoami';
+import { resetTenantGroupMapCache } from '../../lib/identity';
 import type { RequestIdentity } from '../../lib/identity';
 
 function mockRes() {
@@ -23,7 +24,7 @@ describe('GET /api/whoami action', () => {
     await whoamiAction.handle({} as any, res as any, { identity } as any);
     expect(res.statusCode).toBe(200);
     expect(res.headers['Content-Type']).toBe('application/json');
-    expect(JSON.parse(res.body)).toEqual({ identity });
+    expect(JSON.parse(res.body)).toEqual({ identity, tenantLabel: null });
   });
 
   it('falls back to an unauthenticated identity when ctx has none', async () => {
@@ -31,7 +32,29 @@ describe('GET /api/whoami action', () => {
     await whoamiAction.handle({} as any, res as any, {} as any);
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body)).toEqual({
-      identity: { authenticated: false, username: null, groups: [], tenant: null, role: null }
+      identity: { authenticated: false, username: null, groups: [], tenant: null, role: null },
+      tenantLabel: null
     });
+  });
+
+  it('adds the tenant display name from the group map', async () => {
+    const prev = process.env.TENANT_GROUP_MAP;
+    process.env.TENANT_GROUP_MAP = JSON.stringify({
+      platformAdminGroup: 'mediator-admin',
+      tenants: [{ id: 'revamp', label: 'revamp-it', group: 'tenant-revamp' }],
+      defaultTenant: null
+    });
+    resetTenantGroupMapCache();
+    try {
+      const identity: RequestIdentity = {
+        authenticated: true, username: 'alice', groups: ['tenant-revamp'], tenant: 'revamp', role: 'normal'
+      };
+      const res = mockRes();
+      await whoamiAction.handle({} as any, res as any, { identity } as any);
+      expect(JSON.parse(res.body).tenantLabel).toBe('revamp-it');
+    } finally {
+      if (prev === undefined) delete process.env.TENANT_GROUP_MAP; else process.env.TENANT_GROUP_MAP = prev;
+      resetTenantGroupMapCache();
+    }
   });
 });

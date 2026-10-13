@@ -5,6 +5,7 @@ import { DialogProvider } from './dialog';
 import { PanelProvider, usePanelContext } from '../context/PanelContext';
 import { UserMarksProvider } from '../context/UserMarksContext';
 import { TaxonomyProvider } from '../context/TaxonomyContext';
+import { IdentityProvider } from '../context/IdentityContext';
 import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
@@ -106,18 +107,20 @@ export default function App() {
   }, []);
 
   return (
-    <Router>
-      <DialogProvider>
-        <PanelProvider>
-          <UserMarksProvider>
-            <TaxonomyProvider>
-              <Layout>
-                <AppRoutes />
-              </Layout>
-            </TaxonomyProvider>
-          </UserMarksProvider>
-        </PanelProvider>
-      </DialogProvider>
-    </Router>
+    <IdentityProvider>
+      <Router>
+        <DialogProvider>
+          <PanelProvider>
+            <UserMarksProvider>
+              <TaxonomyProvider>
+                <Layout>
+                  <AppRoutes />
+                </Layout>
+              </TaxonomyProvider>
+            </UserMarksProvider>
+          </PanelProvider>
+        </DialogProvider>
+      </Router>
+    </IdentityProvider>
   );
 }

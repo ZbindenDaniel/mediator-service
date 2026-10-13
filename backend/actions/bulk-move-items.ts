@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import type { BulkMoveResult } from '../db';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -33,7 +34,7 @@ const action = defineHttpAction({
         console.warn('[bulk-move-items] Failed to parse request body', parseErr);
       }
 
-      const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
+      const actor = resolveActor(ctx, typeof data.actor === 'string' ? data.actor : '');
       const toBoxId = typeof data.toBoxId === 'string' ? data.toBoxId.trim() : '';
       const confirm = isConfirmed(data.confirm);
       const itemIdsInput: unknown[] = Array.isArray(data.itemIds) ? data.itemIds : [];

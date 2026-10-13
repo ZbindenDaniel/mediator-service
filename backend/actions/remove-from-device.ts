@@ -3,6 +3,7 @@ import { defineHttpAction } from './index';
 import { execute, queryOne, withTransaction } from '../db-client';
 import { insertQualityAssessment, updateItemQualityAssessment, generateShopwareCorrelationId } from '../db';
 import { graduateComponentInTx, needsGraduation, WriteOnceIdentityError } from '../lib/graduate-component';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -63,7 +64,7 @@ const action = defineHttpAction({
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
 
-      const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
+      const actor = resolveActor(ctx, typeof data.actor === 'string' ? data.actor : '');
       const toBoxId = typeof data.toBoxId === 'string' ? data.toBoxId.trim() : '';
       // Contract signal: whether extracting this part turns the parent into a spare-part donor.
       // Decoupled from extraction — a drive pulled from a device sold whole must NOT mark it.

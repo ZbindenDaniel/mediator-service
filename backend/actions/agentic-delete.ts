@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { deleteAgenticRun } from '../agentic';
 import { resolveAgenticRequestContext } from './agentic-request-context';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -64,7 +65,7 @@ const action = defineHttpAction({
       }
     }
 
-    const actor = typeof payload.actor === 'string' ? payload.actor.trim() : '';
+    const actor = resolveActor(ctx, typeof payload.actor === 'string' ? payload.actor : '');
     const reason = typeof payload.reason === 'string' && payload.reason.trim() ? payload.reason.trim() : null;
     if (!actor) {
       console.warn('Agentic delete missing actor');

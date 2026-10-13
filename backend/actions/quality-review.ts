@@ -8,6 +8,7 @@ import {
   assemblyToQualityContract,
 } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -41,7 +42,7 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'invalid JSON body' });
       }
 
-      const reviewed_by = typeof data.reviewed_by === 'string' ? data.reviewed_by.trim() : '';
+      const reviewed_by = resolveActor(ctx, typeof data.reviewed_by === 'string' ? data.reviewed_by : '');
       if (!reviewed_by) return sendJson(res, 400, { error: 'reviewed_by is required' });
 
       if (typeof data.answers !== 'object' || data.answers === null || Array.isArray(data.answers)) {

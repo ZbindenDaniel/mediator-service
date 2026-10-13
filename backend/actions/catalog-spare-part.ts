@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { withTransaction, query } from '../db-client';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -84,7 +85,7 @@ const action = defineHttpAction({
       const artikelbeschreibung = typeof data.artikelbeschreibung === 'string' ? data.artikelbeschreibung.trim() : '';
       const hersteller = typeof data.hersteller === 'string' ? data.hersteller.trim() : '';
       const subCategory = typeof data.subCategory === 'number' ? data.subCategory : null;
-      const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
+      const actor = resolveActor(ctx, typeof data.actor === 'string' ? data.actor : '');
       const slotKey = typeof data.slotKey === 'string' ? data.slotKey.trim() : '';
       const instanceSpecs = data.instanceSpecs && typeof data.instanceSpecs === 'object' && !Array.isArray(data.instanceSpecs)
         ? data.instanceSpecs as Record<string, string>
@@ -167,7 +168,7 @@ const action = defineHttpAction({
       try { data = JSON.parse(raw || '{}'); } catch {}
 
       const artikelNummer = typeof data.artikelNummer === 'string' ? data.artikelNummer.trim() : '';
-      const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
+      const actor = resolveActor(ctx, typeof data.actor === 'string' ? data.actor : '');
       const slotKey = typeof data.slotKey === 'string' ? data.slotKey.trim() : '';
       const instanceSpecs = data.instanceSpecs && typeof data.instanceSpecs === 'object' && !Array.isArray(data.instanceSpecs)
         ? data.instanceSpecs as Record<string, string>

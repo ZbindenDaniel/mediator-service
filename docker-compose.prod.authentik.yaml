@@ -32,9 +32,10 @@ services:
       # overwrites X-authentik-* when the outpost returns them, so stripping makes spoofing impossible.
       - "traefik.http.routers.erfassung.rule=Host(`${MEDIATOR_DOMAIN:-erfassung.${VM_IP}.nip.io}`)"
       - "traefik.http.routers.erfassung.middlewares=ak-strip@docker,ak-auth@docker"
-      # Machine routes (ADMIN_SECRET bearer, X-Intake-Token): no browser login possible, so no
-      # forward-auth — but still stripped, and the backend checks their tokens.
-      - "traefik.http.routers.erfassung-machine.rule=Host(`${MEDIATOR_DOMAIN:-erfassung.${VM_IP}.nip.io}`) && (PathPrefix(`/api/admin/`) || PathPrefix(`/api/intake/`))"
+      # Intake station (X-Intake-Token): a machine can't do a browser login, so no forward-auth,
+      # but still stripped, and the backend checks the token. /api/admin/ is NOT here: it goes
+      # through the login, and the ADMIN_SECRET bearer only works from inside the host.
+      - "traefik.http.routers.erfassung-machine.rule=Host(`${MEDIATOR_DOMAIN:-erfassung.${VM_IP}.nip.io}`) && PathPrefix(`/api/intake/`)"
       - "traefik.http.routers.erfassung-machine.priority=100"
       - "traefik.http.routers.erfassung-machine.tls=true"
       - "traefik.http.routers.erfassung-machine.service=erfassung"

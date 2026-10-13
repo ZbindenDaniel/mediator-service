@@ -108,9 +108,10 @@ keeps nginx Basic Auth (dev) / the plain Traefik router (prod). The step-by-step
 | Proxy config | `config/nginx/mediator.authentik.conf` | Labels in `docker-compose.prod.authentik.yaml` (`ak-strip` + `ak-auth` middlewares) |
 | Login UI | `http://localhost:9000` | `https://${AUTHENTIK_DOMAIN}` (default `auth.${VM_IP}.nip.io`) |
 
-Both set `AUTH_REQUIRED=true` on the app (data routes 401 without an identity) and keep two
-**machine routes** without forward-auth: `/api/admin/` (`ADMIN_SECRET` bearer) and `/api/intake/`
-(`X-Intake-Token`).
+Both set `AUTH_REQUIRED=true` on the app (data routes 401 without an identity) and keep one
+**machine route** without forward-auth: `/api/intake/` (`X-Intake-Token`). `/api/admin/` is
+forward-authed and role-gated (`platform-admin`); the `ADMIN_SECRET` bearer is break-glass from
+inside the host only (`docker exec mediator curl -H 'Authorization: Bearer …' localhost:8080/api/admin/…`).
 
 **Spoof protection (do not remove):** the backend trusts the identity headers. nginx sets them only
 from the outpost response or blanks them; Traefik runs `ak-strip` (deletes client copies) *before*

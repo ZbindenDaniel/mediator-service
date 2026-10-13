@@ -10,6 +10,7 @@ import { dialogService } from './dialog';
 import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
 import { ensureUser } from '../lib/user';
 import { logger } from '../utils/logger';
+import { useIdentity } from '../context/IdentityContext';
 
 // TODO(agentic): Introduce bulk agentic trigger entry point alongside relocation actions.
 // TODO(agent): Fold ERP sync UX into shared bulk action helpers once backend status polling exists.
@@ -303,6 +304,7 @@ export default function BulkItemActionBar({
   const hasSelection = selectedCount > 0;
   // Admin-only actions (e.g. Shop-Sync) are shown only to operators logged into the admin page — i.e.
   // those who hold the admin token. Read once; the endpoint re-validates it anyway.
+  const identity = useIdentity();
   const [adminToken] = useState<string>(() => {
     try { return sessionStorage.getItem('adminSecret') ?? ''; } catch { return ''; }
   });
@@ -1221,7 +1223,7 @@ export default function BulkItemActionBar({
           <span>Kivi Sync 🥝</span>
         </button>
 
-        {adminToken ? (
+        {adminToken || identity.isPlatformAdmin ? (
           <button
             className="bulk-item-action-bar__button"
             disabled={isProcessing || !hasSelection}

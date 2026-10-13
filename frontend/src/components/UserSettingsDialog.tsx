@@ -1,5 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DialogButtons, DialogContent, DialogOverlay } from './dialog/presentational';
+import { useIdentity } from '../context/IdentityContext';
+import type { Role } from '../context/IdentityContext';
+
+const ROLE_LABELS: Record<Role, string> = {
+  'platform-admin': 'Plattform-Administration',
+  super: 'Organisations-Administration',
+  normal: 'Benutzer'
+};
+
+// Authentik's embedded outpost ends the session and redirects to the login.
+const LOGOUT_URL = '/outpost.goauthentik.io/sign_out';
 
 interface Props {
   currentUser: string;
@@ -9,6 +20,7 @@ interface Props {
 }
 
 export default function UserSettingsDialog({ currentUser, currentSimpleMode, onSave, onCancel }: Props) {
+  const identity = useIdentity();
   const [username, setUsername] = useState(currentUser);
   const [simpleMode, setSimpleModeState] = useState(currentSimpleMode);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -32,19 +44,32 @@ export default function UserSettingsDialog({ currentUser, currentSimpleMode, onS
     <DialogOverlay onDismiss={onCancel}>
       <DialogContent
         heading="Benutzereinstellungen"
-        message="Benutzername und Anzeigemodus anpassen."
+        message={identity.authenticated ? 'Angemeldet über das Benutzerkonto.' : 'Benutzername und Anzeigemodus anpassen.'}
         role="dialog"
       >
-        <label className="dialog-field">
-          <span>Benutzername</span>
-          <input
-            ref={inputRef}
-            type="text"
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            onKeyDown={(event) => { if (event.key === 'Enter') handleConfirm(); }}
-          />
-        </label>
+        {identity.authenticated ? (
+          // The login decides who you are; a free-text name would undermine the audit trail.
+          <dl className="user-settings__identity">
+            <dt>Benutzer</dt>
+            <dd>{identity.username}</dd>
+            <dt>Organisation</dt>
+            <dd>{identity.tenantLabel ?? identity.tenant ?? '—'}</dd>
+            <dt>Rolle</dt>
+            <dd>{identity.role ? ROLE_LABELS[identity.role] : '—'}</dd>
+            <dd className="user-settings__logout"><a href={LOGOUT_URL}>Abmelden</a></dd>
+          </dl>
+        ) : (
+          <label className="dialog-field">
+            <span>Benutzername</span>
+            <input
+              ref={inputRef}
+              type="text"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              onKeyDown={(event) => { if (event.key === 'Enter') handleConfirm(); }}
+            />
+          </label>
+        )}
         <label className="dialog-field dialog-field--checkbox">
           <input
             type="checkbox"

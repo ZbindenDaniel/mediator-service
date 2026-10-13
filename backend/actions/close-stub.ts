@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -18,7 +19,7 @@ const action = defineHttpAction({
       const id = pathParts[pathParts.length - 1] ?? '';
       if (!id) return sendJson(res, 400, { error: 'id is required' });
 
-      const closedBy = url.searchParams.get('closedBy') ?? 'unknown';
+      const closedBy = resolveActor(ctx, url.searchParams.get('closedBy')) || 'unknown';
       const closedAt = new Date().toISOString();
 
       const closed = await ctx.closeStub(id, closedBy, closedAt);

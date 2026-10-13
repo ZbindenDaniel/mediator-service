@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { randomBytes } from 'crypto';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -28,7 +29,7 @@ const action = defineHttpAction({
 
       const shelfId = (body.shelfId ?? '').trim();
       const description = (body.description ?? '').trim();
-      const createdBy = (body.createdBy ?? 'unknown').trim();
+      const createdBy = resolveActor(ctx, body.createdBy ?? 'unknown');
       const numberLooseItems = Math.max(0, parseInt(body.numberLooseItems ?? '0', 10) || 0);
       const notes = (body.notes ?? '').trim() || null;
 

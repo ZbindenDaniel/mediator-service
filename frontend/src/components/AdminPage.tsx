@@ -13,7 +13,7 @@ import ShopwareStatusCard from './admin/ShopwareStatusCard';
 import AgenticDispatchCard from './admin/AgenticDispatchCard';
 import AdminGate from './admin/AdminGate';
 
-type AuthStatus = 'checking' | 'ok' | 'locked';
+type AuthStatus = 'checking' | 'ok' | 'locked' | 'forbidden';
 
 export default function AdminPage() {
   const [token, setToken] = useState<string>(() => sessionStorage.getItem('adminSecret') ?? '');
@@ -27,6 +27,9 @@ export default function AdminPage() {
         const res = await fetch('/api/admin/config', { headers });
         if (res.status === 401) {
           setAuthStatus('locked');
+        } else if (res.status === 403) {
+          // Logged in but not an admin: the password can't help, so don't offer the gate.
+          setAuthStatus('forbidden');
         } else {
           setAuthStatus('ok');
         }
@@ -55,6 +58,15 @@ export default function AdminPage() {
       <div className="admin-page">
         <h1 className="admin-page__title">Administration</h1>
         <p className="muted">Lade…</p>
+      </div>
+    );
+  }
+
+  if (authStatus === 'forbidden') {
+    return (
+      <div className="admin-page">
+        <h1 className="admin-page__title">Administration</h1>
+        <p className="muted">Kein Zugriff. Die Administration ist Plattform-Administratoren vorbehalten.</p>
       </div>
     );
   }

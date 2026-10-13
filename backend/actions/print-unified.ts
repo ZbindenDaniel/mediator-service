@@ -16,6 +16,7 @@ import { calculateCo2Impact } from '../lib/co2Calculator';
 import type { PrintFileResult, PrintLabelType } from '../print';
 import { resolvePrinterQueue } from '../print';
 import { buildItemCategoryLookups } from '../../models/item-category-lookups';
+import { resolveActor } from '../utils/actor';
 
 const LABEL_TEMPLATES: Record<PrintLabelType, string> = {
   box: '62x100',
@@ -359,10 +360,7 @@ export async function handleUnifiedPrintRequest(
           return sendJson(res, 400, { error: 'invalid label type' });
         }
       }
-      if (typeof payload.actor !== 'string') {
-        return sendJson(res, 400, { error: 'actor required' });
-      }
-      actor = payload.actor.trim();
+      actor = resolveActor(ctx, typeof payload.actor === 'string' ? payload.actor : '');
       if (!actor) {
         return sendJson(res, 400, { error: 'actor required' });
       }

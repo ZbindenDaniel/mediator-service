@@ -3,6 +3,7 @@ import { defineHttpAction } from './index';
 import { AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_REJECTED, type ItemRef } from '../../models';
 import { getAgenticStatus, normalizeAgenticStatusUpdate } from '../agentic';
 import { resolvePriceByCategoryAndType } from '../lib/priceLookup';
+import { resolveActor } from '../utils/actor';
 
 // TODO(agentic-ui): Consolidate agentic status shaping once a shared typed client is available.
 // TODO(agent): Extract review-time side effects (like price defaults) into a dedicated helper to simplify reuse.
@@ -734,7 +735,7 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'Invalid JSON body' });
       }
 
-      const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
+      const actor = resolveActor(ctx, typeof data.actor === 'string' ? data.actor : '');
       const specValues: Record<string, string> = data.specValues && typeof data.specValues === 'object' && !Array.isArray(data.specValues)
         ? Object.fromEntries(
             Object.entries(data.specValues as Record<string, unknown>)

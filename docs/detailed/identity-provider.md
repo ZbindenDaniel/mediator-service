@@ -87,6 +87,8 @@ run first: it's the same setup with the same clicks, minus DNS and certificates.
 1. **Configure.** In `.env`, set `AUTHENTIK_SECRET_KEY` (`openssl rand -base64 60`),
    `AUTHENTIK_PG_PASSWORD`, `AUTHENTIK_BOOTSTRAP_PASSWORD`, `TENANT_GROUP_MAP` (as above), and
    `INTAKE_TOKEN` if you use the intake station.
+   Pick the final `AUTHENTIK_PG_PASSWORD` now. Changing it later needs an extra step (see
+   *When something's off*).
 2. **Start with the Authentik override:**
    `docker compose -f docker-compose.yml -f docker-compose.authentik.yml up -d --build`
    ✔ `docker compose ps` shows everything healthy. Authentik takes 1–2 minutes, and nginx waits
@@ -134,7 +136,7 @@ addition to `docker-compose.prod.yaml`.
    AUTHENTIK_ENABLED=true                 # the deploy workflow adds the Authentik override from now on
    MEDIATOR_DOMAIN=erfassung.example.org
    AUTHENTIK_DOMAIN=auth.example.org
-   ADMIN_SECRET=<long random>            # still reachable from the internet until Stage 2
+   ADMIN_SECRET=<long random>            # emergency key, only usable from inside the server
    INTAKE_TOKEN=<long random>            # required: intake requests are rejected without it
    ```
    Use strong values for `AUTHENTIK_PG_PASSWORD` and `AUTHENTIK_BOOTSTRAP_PASSWORD`. Unlike
@@ -154,8 +156,8 @@ addition to `docker-compose.prod.yaml`.
 The app **trusts the name-tag headers completely**. That's safe only if users can never set those
 headers themselves, and three things guarantee it:
 
-- **nginx** sets the headers only from the outpost's answer. On the two machine routes
-  (`/api/admin/`, `/api/intake/`), which skip the login, it blanks them.
+- **nginx** sets the headers only from the outpost's answer. On the one machine route
+  (`/api/intake/`), which skips the login, it blanks them.
 - **Traefik** first deletes any client copies (the `ak-strip` middleware), then runs the login
   check (`ak-auth`). The order matters: Traefik only overwrites headers the outpost actually
   returns.
@@ -165,16 +167,34 @@ headers themselves, and three things guarantee it:
 Never publish the backend's port 8080, and never "simplify" those header lines away. If you do,
 anyone can claim to be anyone with a single curl command.
 
+## Admin access and user info
+
+- **Admin panel:** members of the `mediator-admin` group (role *platform-admin*) see the
+  *Administration* link and get straight in. Everyone else doesn't see the link, and calling an
+  admin API returns *403 Forbidden*.
+- **Emergency key (`ADMIN_SECRET`):** with Authentik on, `/api/admin/` goes through the login like
+  everything else, so the password alone gets nobody in from outside. If Authentik is down, use it
+  from the server itself:
+  ```bash
+  docker exec mediator curl -s -H "Authorization: Bearer $ADMIN_SECRET" localhost:8080/api/admin/config
+  ```
+- **Who did what:** when logged in, the app records the login name for every action (event log,
+  prints, reviews, stubs, marks). Names typed into the browser are ignored. Double-click the name
+  in the top-right corner to see your account, organisation and role, and to log out.
+- **Without Authentik** (Basic Auth): unchanged. The name is typed in, and the admin page asks for
+  the password.
+
 ## What it does — and doesn't do — yet
 
 | Works today | Not yet (later phases) |
 |---|---|
 | Every request gets an identity (`/api/whoami` shows it) | Users **still see every tenant's data**. Nothing is filtered by tenant (Phase 3). |
-| The event log records the real username as the Actor | Nobody is blocked from editing another tenant's items (Phase 3) |
-| New items and boxes are stamped with the creator's `TenantId` | Admin pages are still guarded by `ADMIN_SECRET`, not by role (Phase 4) |
-| The `tenants` table is filled from the map at startup | Tenant/user management inside the app (Phase 4) |
+| Every action is recorded under the real login name | Nobody is blocked from editing another tenant's items (Phase 3) |
+| Admin panel by role (`mediator-admin`) | Tenant admins (*super*) have no extra powers yet; what they may do is still to be defined |
+| New items and boxes are stamped with the creator's `TenantId` | Tenant/user management inside the app (Phase 4) |
 
-So for now, logging in tells the app **who you are**, but doesn't yet limit **what you can see**.
+So for now, logging in tells the app **who you are** and whether you're an admin, but doesn't yet
+limit **which items you can see**.
 
 ## When something's off
 
@@ -184,8 +204,11 @@ So for now, logging in tells the app **who you are**, but doesn't yet limit **wh
 | `authenticated: true` but `tenant: null` | None of the user's groups is in the map, and there's no `defaultTenant`. Group names must match **exactly**. |
 | `role: null` | The user is logged in, but no tenant was resolved (see the row above) |
 | You're always redirected to the login page, even after logging in | *External host* in the Proxy Provider doesn't match the URL in the browser, so the cookie is set for the wrong domain |
-| nginx 500 on every page | nginx can't reach `authentik-server:9000`. Is the container up and on the same Docker network? |
+| nginx 500 on every page | nginx can't reach `authentik-server:9000`. Is the container up and on the same Docker network? It also happens for about a minute after Authentik restarts. |
+| `authentik-server` never gets healthy; its log says `password authentication failed for user "authentik"` | `AUTHENTIK_PG_PASSWORD` was changed in `.env` after the first start. Postgres only takes the password when it creates its data. Fix without losing your Authentik setup: `docker exec authentik-postgresql sh -c 'printf "%s\n" "ALTER USER CURRENT_USER PASSWORD :'"'"'pw'"'"';" \| psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v pw="$POSTGRES_PASSWORD"'`, then `docker restart authentik-server authentik-worker` |
 | After logging in at Authentik you're bounced to `localhost:9000` or a wrong host | The embedded outpost's `authentik_host` isn't set to the browser-reachable login URL |
 | `401 Unauthorized` (JSON) instead of a login redirect | The request reached the app without passing the proxy login. Check that you're using the proxy URL, and in prod that `AUTHENTIK_ENABLED=true` is in the host `.env` |
 | The intake station gets 401 | `INTAKE_TOKEN` isn't set on the server, or the station sends a different one |
+| An admin sees "Kein Zugriff" on the admin page | Their Authentik user isn't in the `platformAdminGroup` (default `mediator-admin`), or the group name in `TENANT_GROUP_MAP` differs |
+| My old marks are gone after switching to Authentik | Marks are stored per username. Old ones are under the name typed before; rename them in `user_item_marks` if the login name differs |
 | You changed the map and nothing happened | The map is read once and cached. Restart the app. |

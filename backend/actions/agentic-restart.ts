@@ -3,6 +3,7 @@ import { defineHttpAction } from './index';
 import { restartAgenticRun } from '../agentic';
 import { AGENTIC_REVIEW_SPEC_MAX_ENTRIES, AGENTIC_REVIEW_SPEC_MAX_TOKENS_PER_ENTRY } from '../../models';
 import { resolveAgenticRequestContext } from './agentic-request-context';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -117,7 +118,7 @@ const action = defineHttpAction({
       }
     }
 
-    const actor = typeof payload.actor === 'string' ? payload.actor.trim() : '';
+    const actor = resolveActor(ctx, typeof payload.actor === 'string' ? payload.actor : '');
     if (!actor) {
       console.warn('Agentic restart missing actor');
       return sendJson(res, 400, { error: 'actor is required' });
@@ -147,7 +148,8 @@ const action = defineHttpAction({
           : '';
     const normalizedReviewDecision = reviewDecisionRaw ? reviewDecisionRaw.trim().toLowerCase() : '';
     const normalizedReviewNotes = reviewNotesRaw ? reviewNotesRaw.trim() : '';
-    const normalizedReviewActor = reviewActorRaw ? reviewActorRaw.trim() : '';
+    // Only an actual review carries a reviewer; don't invent one for a plain restart.
+    const normalizedReviewActor = reviewActorRaw ? resolveActor(ctx, reviewActorRaw) : '';
     const normalizedReview = reviewPayload
       ? {
           decision: normalizedReviewDecision || null,

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getUser, setUser as persistUser } from '../lib/user';
 import { getSimpleMode, setSimpleMode } from '../lib/simpleMode';
 import UserSettingsDialog from './UserSettingsDialog';
+import { useIdentity } from '../context/IdentityContext';
 import { GoArchive, GoListUnordered, GoPlus, GoLog, GoSearch, GoGift, GoHash, GoTools, GoQuestion } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
@@ -34,6 +35,9 @@ export default function Header() {
   const searchFormRef = useRef<HTMLFormElement | null>(null);
   const [user, setUserState] = useState(() => getUser().trim());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const identity = useIdentity();
+  // Without a login (Basic Auth) the admin page keeps its own password gate, so the link stays.
+  const showAdminLink = !identity.authenticated || identity.isPlatformAdmin;
   const [navOpen, setNavOpen] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
 
@@ -194,9 +198,11 @@ export default function Header() {
             <Link to="/stubs" aria-label="Fundsachen" title="Fundsachen" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoGift aria-hidden="true" />
             </Link>
-            <Link to="/admin" aria-label="Administration" title="Administration" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
-              <GoTools aria-hidden="true" />
-            </Link>
+            {showAdminLink && (
+              <Link to="/admin" aria-label="Administration" title="Administration" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+                <GoTools aria-hidden="true" />
+              </Link>
+            )}
             <Link to="/hilfe" className="simple-keep" aria-label="Hilfe" title="Hilfe" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoQuestion aria-hidden="true" />
             </Link>
@@ -266,8 +272,8 @@ export default function Header() {
         <div
           className="user"
           onDoubleClick={handleUserDoubleClick}
-          title="Doppelklicken zum Bearbeiten des Benutzernamens"
-          aria-label="Benutzername, doppelklicken zum Bearbeiten"
+          title={identity.authenticated ? 'Doppelklicken für Benutzereinstellungen' : 'Doppelklicken zum Bearbeiten des Benutzernamens'}
+          aria-label={identity.authenticated ? 'Angemeldeter Benutzer, doppelklicken für Einstellungen' : 'Benutzername, doppelklicken zum Bearbeiten'}
         >
           {user}
         </div>

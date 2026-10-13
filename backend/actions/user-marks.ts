@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { getUserMarks, markItem, unmarkItem, getUserMark, getItemMarks, getAllMarkedItemUUIDs } from '../db';
+import { resolveActor } from '../utils/actor';
+import type { RequestIdentity } from '../lib/identity';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -21,7 +23,7 @@ const action = defineHttpAction({
     (path === '/api/user-marks' || path.startsWith('/api/user-marks?') || path.startsWith('/api/user-marks/item/') || path === '/api/user-marks/all')
     && ['GET', 'POST', 'DELETE'].includes(method),
 
-  async handle(req: IncomingMessage, res: ServerResponse) {
+  async handle(req: IncomingMessage, res: ServerResponse, ctx?: { identity?: RequestIdentity }) {
     const method = req.method || 'GET';
     const url = new URL(req.url || '/', 'http://localhost');
 
@@ -38,7 +40,8 @@ const action = defineHttpAction({
     }
 
     if (method === 'GET') {
-      const username = url.searchParams.get('username')?.trim() || '';
+      // Logged in → always your own marks; the query param only counts without forward-auth.
+      const username = resolveActor(ctx, url.searchParams.get('username'));
       if (!username) return sendJson(res, 400, { error: 'username is required' });
       const marks = await getUserMarks(username);
       return sendJson(res, 200, {
@@ -48,7 +51,7 @@ const action = defineHttpAction({
     }
 
     const body = await readJson(req) as Record<string, unknown>;
-    const username = typeof body.username === 'string' ? body.username.trim() : '';
+    const username = resolveActor(ctx, typeof body.username === 'string' ? body.username : '');
     const itemUUID = typeof body.itemUUID === 'string' ? body.itemUUID.trim() : '';
 
     if (!username || !itemUUID) {

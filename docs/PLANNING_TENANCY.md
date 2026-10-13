@@ -70,8 +70,10 @@ config is **opt-in, not default** (#968): `docker-compose.authentik.yml` + full
 `/api/admin/` + `/api/intake/`; deploy workflow includes it when the host `.env` has
 `AUTHENTIK_ENABLED=true`), plus backend `AUTH_REQUIRED` fail-closed gate. Runbook:
 `docs/detailed/identity-provider.md`. **Needs local, then on-host verification before Basic Auth is
-dropped.** Tests: identity resolver + actor helper. **Follow-up:** adopt `resolveActor`
-in the remaining actor-bearing handlers (agentic/bulk/export/print/catalog/qr-scan).
+dropped.** Tests: identity resolver + actor helper. **Follow-up ✅ done (#969):** `resolveActor`
+adopted in the remaining actor-bearing handlers (agentic, bulk, export, print, catalog, qr-scan,
+stubs, quality review, user marks); the frontend uses the login name (`getUser()` via
+`IdentityContext`) and the user settings show the Authentik identity read-only.
 
 #### Original plan
 
@@ -140,6 +142,11 @@ needs the default-tenant decision.
   stock totals) is shared; a platform admin sees everything.
 
 ### Phase 4 — Tenant/user admin + onboarding
+**Shipped early (#969):** platform-admin gating of `/api/admin/*` (decision §5.5): `requireAdminAuth`
+admits role `platform-admin` or the `ADMIN_SECRET` bearer; `/api/admin/` is forward-authed so the
+bearer is break-glass from inside the host only; the FE shows the admin link/shop-sync by role.
+Pulled ahead of Phase 3 because it is small and independent. `super` powers still undefined.
+
 - **Role gating:** `super` creates its tenant's shelves + manages its users;
   `platform-admin` manages tenants. Reuses the identity plumbing (and the same
   gate mechanism a later feature-flag system would use).
@@ -184,9 +191,8 @@ needs the default-tenant decision.
    revamp-it deployment becomes tenant #1).
 4. **Where global aggregate quantity surfaces** (catalogue/search views) — which
    screens show the network-wide total.
-5. **Admin endpoints:** do the current `ADMIN_SECRET`-gated `/api/admin/*` routes
-   become **role-gated** (`platform-admin`), with `ADMIN_SECRET` kept only as
-   break-glass? (Lean: yes.)
+5. **Admin endpoints — RESOLVED (#969): yes.** Role-gated (`platform-admin`);
+   `ADMIN_SECRET` kept as break-glass, reachable only from inside the host.
 
 ---
 

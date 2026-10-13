@@ -340,7 +340,7 @@
 
 51. **Auto-approve follow-ups.** `AUTO_APPROVE` (default off) + `AUTO_APPROVE_MIN_CONFIDENCE` (default 0.8) added (agentic changelog #892). Follow-ups: per-subcategory confidence threshold instead of one global value; optional auto-reject counterpart; a bulk "promote auto_approved → approved" action (currently uses per-item Abschliessen); and extend the KI-queue state filter to select `auto_approved` (aligns with #12 multiselect agent states).
 
-52. **Pre-existing failing tests (not caused by the #889–894 work; documented for cleanup).** `schema-contract-compatibility.test.ts` asserts the supervisor prompt contains `schema-contract.md`, but the current `supervisor.md` was rewritten to a description-quality focus and no longer references it — the test expectation is stale. `test/agentic-direct-dispatch.test.ts` and `test/agentic-startup-resume.test.ts` fail in the local esbuild harness because the scheduled `invokeModel` isn't observed (`toHaveBeenCalledTimes(1)` → 0); verify against CI's Postgres/jest setup. All three fail identically on a clean tree. **Update 2026-10-13:** on a clean tree Jest now reports 6 failing suites / 18 tests (`admin-contracts`, `admin-taxonomy`, `intake-categories`, `csv-ingest-insertdateset`, plus the two agentic ones), and `npm test` (custom harness `scripts/run-tests.js`) aborts on `it.each is not a function` in `forward-agentic-trigger.test.ts`. `tsc --noEmit` fails on a missing `undici` type module.
+52. **Pre-existing failing tests (not caused by the #889–894 work; documented for cleanup).** `schema-contract-compatibility.test.ts` asserts the supervisor prompt contains `schema-contract.md`, but the current `supervisor.md` was rewritten to a description-quality focus and no longer references it — the test expectation is stale. `test/agentic-direct-dispatch.test.ts` and `test/agentic-startup-resume.test.ts` fail in the local esbuild harness because the scheduled `invokeModel` isn't observed (`toHaveBeenCalledTimes(1)` → 0); verify against CI's Postgres/jest setup. All three fail identically on a clean tree. **Update 2026-10-13:** on a clean tree Jest now reports 6 failing suites / 18 tests (`admin-contracts`, `admin-taxonomy`, `intake-categories`, `csv-ingest-insertdateset`, plus the two agentic ones), and `npm test` (custom harness `scripts/run-tests.js`) aborts on `it.each is not a function` in `forward-agentic-trigger.test.ts`. `tsc --noEmit` fails on a missing `undici` type module. The `admin-contracts`/`admin-taxonomy` failures are environmental: the tests pick up `ADMIN_SECRET` from the local `.env` and get 401.
    - ✅ **Harness `toMatchObject` gap fixed (testing #907):** the custom harness never implemented `toMatchObject` though 16 call sites use it; added it as a recursive subset matcher. Removed one spurious failure ("moves box placement"); local failing count 10→9.
    - **Still failing locally (9):** esbuild harness can't resolve named exports from bundled `../../agentic` (`deleteAgenticRun`/`checkAgenticHealth is not a function`), plus mock/env gaps (`window is not defined`, missing `.env`/media fixtures, `ts-jest` preset not found). Suspected CI-green (jest+Postgres); needs verification against CI rather than product-code changes.
    - **`intake-specs-assembly.test.ts` — "human-judgment condition questions" fails on a clean tree** (found during intake #912). `loadSubCategoryContract(201)` (the `lib/quality-contracts` loader) returns `null` under jest so `sub!.questions` throws, while the `contracts/registry` loader used by the same suite resolves fine — a path-resolution mismatch between the two contract loaders in the test env, not a product bug. Reconcile the loaders' base-dir resolution (or the test's expectation) so the subcategory contract loads under jest.
@@ -418,10 +418,10 @@
      host-verified forward-auth; best verified against Postgres;
      before that, verify forward-auth locally then on the host per
      `docs/detailed/identity-provider.md` Part A/B incl. the spoof test).
-     **Phase 1b ✅ built (#968, opt-in overrides; verified locally 2026-10-13, host pending). Next: Phase 1 audit + Phase 4 role gating**
-     — `requireAdminAuth` accepts role `platform-admin`, `/api/admin/` goes
-     through forward-auth, `ADMIN_SECRET` internal-only, FE reads `/api/whoami`
-     (admin nav, username, logout). Then Stage 3 isolation. Open: intake station
+     **Phase 1b ✅ built (#968, opt-in overrides; verified locally 2026-10-13, host pending).
+     Phase 1 audit + Phase 4 admin role gating ✅ (#969, browser check pending).
+     Next: Phase 3 isolation** (incl. catalogue write guard via `ContributedByTenant`
+     and the DL2 global stock total). Open: intake station
      rows get `defaultTenant` (per-station tenant?); SPA has no graceful
      session-expiry handling; (4) tenant/user
      admin + self-registration. Auth mechanism decided
@@ -517,6 +517,7 @@
 ## Open Questions
 
 ### Still Open
+- **Platform-admin model:** `PLANNING_NEW_USE_CASE.md` §12.3 says platform admins are the `super` users of a designated admin tenant; the implementation (`identity.ts`) uses a separate `platformAdminGroup` (`mediator-admin`). Settle when defining `super` powers.
 
 - **Revive flag-based review metrics (deferred).** The review wizard makes one explicit approve/reject decision and, on reject, feeds a concrete before→after correction diff + notes into the next run (chosen over deriving flags — a diff is richer and unambiguous). Consequence: `bad_format` / `wrong_physical_dimensions` / `information_present` are sent at non-blocking defaults, so `AgenticReviewMetricsRows` (`% Schlecht formatiert / Falsche Dimensionen / Info unvollständig`) now reads all-positive. If those dashboards are still wanted, derive the flags **purely for metrics** (e.g. text edited ⇒ bad_format, dimension edited ⇒ wrong_physical_dimensions, required spec blanked ⇒ information_present=false), decoupled from the re-run path. Not needed for extraction quality.
 - For **spare parts `drive_type`**, should this question move to the disassembly contract storage slot (needs `qualityQuestion[]` array support on parts) or stay in quality/201.json as a follow-up spec question? Currently stays in quality/201.json (TBD).

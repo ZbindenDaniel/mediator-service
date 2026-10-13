@@ -14,6 +14,7 @@ import { MEDIA_DIR } from '../lib/media';
 import { resolvePathWithinRoot } from '../lib/path-guard';
 import { defineHttpAction } from './index';
 import { collectMediaAssets, isAllowedMediaAsset } from './save-item';
+import { resolveActor } from '../utils/actor';
 
 // TODO(agent): Monitor ZIP export throughput once media directories grow to validate stream backpressure handling.
 // TODO(agent): Ensure export serializer stays reusable for ERP sync actions to avoid diverging payload formats.
@@ -1400,7 +1401,7 @@ const action = defineHttpAction({
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
       const url = new URL(req.url || '', PUBLIC_ORIGIN);
-      const actor = (url.searchParams.get('actor') || '').trim();
+      const actor = resolveActor(ctx, url.searchParams.get('actor'));
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       let exportMode: ExportMode;
       let modeSource: 'default' | 'explicit';

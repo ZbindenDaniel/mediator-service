@@ -4208,6 +4208,29 @@ button:focus {
     color: var(--fg);
 }
 
+.user-settings__identity {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 12px;
+    margin: 0;
+    font-size: 0.95rem;
+    color: var(--fg);
+
+    dt {
+        color: var(--muted);
+    }
+
+    dd {
+        margin: 0;
+        overflow-wrap: anywhere;
+    }
+
+    .user-settings__logout {
+        grid-column: 1 / -1;
+        margin-top: 4px;
+    }
+}
+
 .dialog-field--checkbox {
     flex-direction: row;
     align-items: center;

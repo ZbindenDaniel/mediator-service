@@ -8,6 +8,7 @@ import {
   type AgenticRunReviewMetadata
 } from '../../models';
 import { resolveAgenticRequestContext } from './agentic-request-context';
+import { resolveActor } from '../utils/actor';
 // TODO(agentic-start-flow): Extract shared agentic start/restart validation once UI start flows stabilize.
 // TODO(agentic-bulk-restart): Revisit whether already-existing runs from non-bulk contexts should be restart-eligible.
 
@@ -393,10 +394,16 @@ const action = defineHttpAction({
     }
 
     const contextLabel = typeof parsed?.context === 'string' ? parsed.context : 'api-proxy';
-    const payload: AgenticRunTriggerPayload =
+    const rawPayload: AgenticRunTriggerPayload =
       parsed && typeof parsed === 'object' && parsed.payload && typeof parsed.payload === 'object'
         ? parsed.payload
         : parsed;
+    // Resolved here, not in forwardAgenticTrigger: that helper is shared with internal callers
+    // (bulk queue, restarts) that pass their own actor and have no request identity.
+    const payload: AgenticRunTriggerPayload = {
+      ...rawPayload,
+      actor: resolveActor(ctx, typeof rawPayload?.actor === 'string' ? rawPayload.actor : '') || null
+    };
 
     try {
       const result = await forwardAgenticTrigger(payload, {

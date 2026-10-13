@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
+import { configuredTenants } from '../lib/identity';
 import type { RequestIdentity } from '../lib/identity';
 
 // Observable identity endpoint (docs/PLANNING_TENANCY.md Phase 1). Returns the identity the
@@ -19,8 +20,13 @@ const action = defineHttpAction({
     const identity: RequestIdentity = ctx?.identity ?? {
       authenticated: false, username: null, groups: [], tenant: null, role: null
     };
+    // Display name for the user settings dialog; from the config map, which is what seeds the
+    // tenants registry, so no DB round trip is needed.
+    const tenantLabel = identity.tenant
+      ? configuredTenants().find((t) => t.id === identity.tenant)?.label ?? null
+      : null;
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ identity }));
+    res.end(JSON.stringify({ identity, tenantLabel }));
   }
 });
 

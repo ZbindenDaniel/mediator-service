@@ -183,7 +183,7 @@ From [`docs/PLANNING_TENANCY.md`](../PLANNING_TENANCY.md) §5 — worth deciding
    Authentik as the sole source?
 3. **Where the global aggregate quantity surfaces** (which catalogue/search screens show the
    network-wide total vs. own-tenant stock).
-4. **Admin endpoints**: do the `ADMIN_SECRET`-gated `/api/admin/*` routes become role-gated
+4. ~~**Admin endpoints**~~ **Resolved (#969):** role-gated (`platform-admin`), `ADMIN_SECRET` break-glass from inside the host only. Was: do the `ADMIN_SECRET`-gated `/api/admin/*` routes become role-gated
    (`platform-admin`), with `ADMIN_SECRET` kept only as break-glass?
 
 ## Key files
