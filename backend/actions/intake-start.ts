@@ -180,6 +180,7 @@ function logIntakeResolution(
 }
 
 const action = defineHttpAction({
+  feature: 'intake',
   key: 'intake-start',
   label: 'Intake start',
   appliesTo: () => false,

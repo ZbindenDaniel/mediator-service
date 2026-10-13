@@ -420,8 +420,14 @@
      `docs/detailed/identity-provider.md` Part A/B incl. the spoof test).
      **Phase 1b ✅ built (#968, opt-in overrides; verified locally 2026-10-13, host pending).
      Phase 1 audit + Phase 4 admin role gating ✅ (#969, browser check pending).
-     Next: Phase 3 isolation** (incl. catalogue write guard via `ContributedByTenant`
-     and the DL2 global stock total). Open: intake station
+     Deployment feature flags ✅ (#970, browser check pending).
+     Next: org admin tab** (orgs + contact + Authentik group + sites in DB, seeded
+     from `TENANT_GROUP_MAP`, see PLANNING_TENANCY §2a), **then revised Phase 3**
+     (shared reads with server-side redaction of location/cataloguer, owner-only
+     edits incl. catalogue `ContributedByTenant`). Open for Phase 3: exact redacted
+     field list (notes? images? logs?), may org B add instances under org A's
+     reference, contact email per org. Later: role permissions (delete, bulk,
+     shelf create) together with defining `super`. Open: intake station
      rows get `defaultTenant` (per-station tenant?); SPA has no graceful
      session-expiry handling; (4) tenant/user
      admin + self-registration. Auth mechanism decided
@@ -517,6 +523,7 @@
 ## Open Questions
 
 ### Still Open
+- **Feature-flag gaps (#970):** image upload in create/edit forms isn't covered by `item-images`; box notes stay editable in the box edit form with `box-notes` off; old `SHOPWARE_SYNC_ENABLED`/`ERP_SYNC_ENABLED` not folded into the manifest. Fine for the POC; decide if the catalogue deployment needs them.
 - **Platform-admin model:** `PLANNING_NEW_USE_CASE.md` §12.3 says platform admins are the `super` users of a designated admin tenant; the implementation (`identity.ts`) uses a separate `platformAdminGroup` (`mediator-admin`). Settle when defining `super` powers.
 
 - **Revive flag-based review metrics (deferred).** The review wizard makes one explicit approve/reject decision and, on reject, feeds a concrete before→after correction diff + notes into the next run (chosen over deriving flags — a diff is richer and unambiguous). Consequence: `bad_format` / `wrong_physical_dimensions` / `information_present` are sent at non-blocking defaults, so `AgenticReviewMetricsRows` (`% Schlecht formatiert / Falsche Dimensionen / Info unvollständig`) now reads all-positive. If those dashboards are still wanted, derive the flags **purely for metrics** (e.g. text edited ⇒ bad_format, dimension edited ⇒ wrong_physical_dimensions, required spec blanked ⇒ information_present=false), decoupled from the re-run path. Not needed for extraction quality.

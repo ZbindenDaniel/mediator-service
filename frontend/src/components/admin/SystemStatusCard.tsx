@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { logError } from '../../utils/logger';
+import { useFeatures } from '../../context/FeaturesContext';
 
 interface AdminConfig {
   mediaStorageMode: string;
@@ -44,6 +45,7 @@ export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
   const [co2Labels, setCo2Labels] = useState<Record<string, number> | null>(null);
   const [mediaHealth, setMediaHealth] = useState<MediaHealth | null>(null);
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus | null>(null);
+  const features = useFeatures();
 
   useEffect(() => {
     const authHeaders: Record<string, string> = authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
@@ -70,12 +72,15 @@ export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
         .then(r => r.json() as Promise<MediaHealth>)
         .then(d => setMediaHealth(d))
         .catch(err => logError('Failed to load media health', err)),
-      fetch('/api/printer/status')
-        .then(r => r.json() as Promise<PrinterStatus>)
-        .then(d => setPrinterStatus(d))
-        .catch(err => logError('Failed to load printer status', err)),
+      // Blocked (404) when printing is off; the printer row then simply stays hidden.
+      features.printing
+        ? fetch('/api/printer/status')
+          .then(r => r.json() as Promise<PrinterStatus>)
+          .then(d => setPrinterStatus(d))
+          .catch(err => logError('Failed to load printer status', err))
+        : Promise.resolve(),
     ]);
-  }, [authToken, onAuthFailure]);
+  }, [authToken, onAuthFailure, features.printing]);
 
   return (
     <div className="card">
@@ -120,7 +125,7 @@ export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
           </div>
         </>
       )}
-      {co2Labels !== null && ((co2Labels['high'] ?? 0) + (co2Labels['medium'] ?? 0)) > 0 && (
+      {features.statistics && co2Labels !== null && ((co2Labels['high'] ?? 0) + (co2Labels['medium'] ?? 0)) > 0 && (
         <div className="admin-status-row">
           <span>CO₂ Potenzial:</span>
           <strong>{(co2Labels['high'] ?? 0) + (co2Labels['medium'] ?? 0)} Geräte</strong>

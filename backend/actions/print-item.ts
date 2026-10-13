@@ -6,6 +6,7 @@ import { handleUnifiedPrintRequest } from './print-unified';
 // TODO(agent): Monitor ignored template query logs while the 29x90 item label remains fixed.
 
 const action = defineHttpAction({
+  feature: 'printing',
   key: 'print-item',
   label: 'Print item label',
   appliesTo: () => false,

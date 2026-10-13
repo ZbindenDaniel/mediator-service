@@ -18,6 +18,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'item-attachments',
   key: 'item-external-docs-write',
   label: 'Item external documents write/delete',
   appliesTo: () => false,

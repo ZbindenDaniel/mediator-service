@@ -22,6 +22,7 @@ function parseAgenticDeleteRoute(path: string): { itemId: string; legacyRoute: b
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-delete',
   label: 'Agentic delete',
   appliesTo: (entity) => entity.type === 'Item',

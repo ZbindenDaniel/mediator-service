@@ -48,6 +48,7 @@ async function buildSettingsResponse() {
 }
 
 const action = defineHttpAction({
+  feature: 'printing',
   key: 'admin-printer-settings',
   label: 'Admin: printer settings',
   appliesTo: () => false,

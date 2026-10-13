@@ -35,6 +35,7 @@ function buildConfigSummary() {
 }
 
 const action = defineHttpAction({
+  feature: 'shopware',
   key: 'admin-shopware',
   label: 'Admin: Shopware status & connection check',
   appliesTo: () => false,

@@ -22,6 +22,7 @@ function parseAgenticSearchLinkRoute(path: string): { itemId: string; legacyRout
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-search-link-delete',
   label: 'Agentic search link delete',
   appliesTo: (entity) => entity.type === 'Item',

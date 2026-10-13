@@ -38,6 +38,7 @@ function extractQueueName(urlPath: string): string | null {
 }
 
 const action = defineHttpAction({
+  feature: 'printing',
   key: 'admin-printer-queues',
   label: 'Admin: printer queues',
   appliesTo: () => false,

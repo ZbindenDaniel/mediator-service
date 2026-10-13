@@ -217,6 +217,7 @@ function mergedContractQuestions(unterkategorienA: number | null) {
 const ROUTE_RE = /^\/api\/intake\/([^/]+)\/answer$/;
 
 const action = defineHttpAction({
+  feature: 'intake',
   key: 'intake-answer',
   label: 'Intake answer',
   appliesTo: () => false,

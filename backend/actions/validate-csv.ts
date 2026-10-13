@@ -50,6 +50,7 @@ function validateRow(row: Record<string, any>): string[] {
 }
 
 const action = defineHttpAction({
+  feature: 'import-export',
   key: 'validate-csv',
   label: 'Validate CSV',
   appliesTo: () => false,

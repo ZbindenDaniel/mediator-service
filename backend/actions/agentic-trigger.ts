@@ -365,6 +365,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-trigger',
   label: 'Agentic trigger proxy',
   appliesTo: () => false,

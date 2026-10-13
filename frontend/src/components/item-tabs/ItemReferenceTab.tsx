@@ -3,6 +3,7 @@ import ShopBadge from '../ShopBadge';
 import ZubehoerBadge from '../ZubehoerBadge';
 import { normalizeDetailValue } from '../../lib/itemDetailFormatting';
 import type { Item } from '../../../../models';
+import { useFeature } from '../../context/FeaturesContext';
 
 interface Props {
   item: Item;
@@ -21,11 +22,12 @@ export default function ItemReferenceTab({
   onEdit,
   onShopStatus
 }: Props) {
+  const shopwareEnabled = useFeature('shopware');
   return (
     <>
       <div className="tab-actions">
         <button type="button" className="btn" onClick={onEdit}>Bearbeiten</button>
-        <button type="button" className="btn" onClick={onShopStatus}>Shopartikel</button>
+        {shopwareEnabled && <button type="button" className="btn" onClick={onShopStatus}>Shopartikel</button>}
       </div>
       <div className="card">
       <div className="item-reference-tab__badges">

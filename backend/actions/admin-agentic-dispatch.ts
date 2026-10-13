@@ -13,6 +13,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 const SETTING_KEY = 'agentic_auto_dispatch_enabled';
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'admin-agentic-dispatch',
   label: 'Admin: Agentic Auto-Dispatch Toggle',
   appliesTo: () => false,

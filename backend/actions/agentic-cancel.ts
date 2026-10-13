@@ -22,6 +22,7 @@ function parseAgenticCancelRoute(path: string): { itemId: string; legacyRoute: b
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-cancel',
   label: 'Agentic cancel',
   appliesTo: (entity) => entity.type === 'Item',

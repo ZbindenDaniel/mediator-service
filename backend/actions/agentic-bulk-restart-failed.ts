@@ -9,6 +9,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-bulk-restart-failed',
   label: 'Agentic bulk restart failed',
   appliesTo: () => false,

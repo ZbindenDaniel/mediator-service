@@ -7,6 +7,7 @@ import { dialogService } from './dialog';
 import { requestPrintLabel } from '../utils/printLabelRequest';
 import { AUTO_PRINT_ITEM_LABEL_CONFIG } from '../utils/printSettings';
 import QrScanButton from './QrScanButton';
+import { useFeature } from '../context/FeaturesContext';
 // TODO(agent): Remove hardcoded relocation defaults once backend exposes canonical location metadata endpoints.
 
 interface Props {
@@ -20,6 +21,7 @@ interface RelocateOptions {
 
 // TODO(agent): Confirm backend analytics don't require the default-location relocation flow.
 export default function RelocateItemCard({ itemId, onRelocated }: Props) {
+  const printingEnabled = useFeature('printing');
   const location = useLocation();
   const navigate = useNavigate();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -266,7 +268,7 @@ export default function RelocateItemCard({ itemId, onRelocated }: Props) {
         });
         return;
       }
-      if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled) {
+      if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled && printingEnabled) {
         try {
           const printResult = await requestPrintLabel({ itemId, actor });
           if (!printResult.ok) {

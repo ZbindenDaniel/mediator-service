@@ -18,6 +18,8 @@ import LocationTag from './LocationTag';
 import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
 import QualityBadge from './QualityBadge';
+import { useFeatures } from '../context/FeaturesContext';
+import { BOX_TAB_FEATURES, resolveTab } from '../lib/tabFeatures';
 
 // TODO(agent): Verify the LocationTag rendering still aligns with the detailed box metadata layout.
 // TODO(agent): Confirm location tags remain navigable only when LocationId is valid and link targets are encoded correctly.
@@ -142,6 +144,7 @@ export default function BoxDetail({ boxId }: Props) {
   }, [box?.BoxID, box?.LocationId]);
   const shouldLinkLocation = Boolean(normalizedLocationId);
   const { activeTab, setEntity, setMainView, setPanelDetailLabel } = usePanelContext();
+  const features = useFeatures();
   const handleRowNavigate = useCallback((itemId: string | null | undefined, source: 'click' | 'keyboard') => {
     if (!itemId) {
       logger.warn('Attempted to navigate from box detail row without item id', { boxId, source });
@@ -501,10 +504,10 @@ export default function BoxDetail({ boxId }: Props) {
   }, [boxId]);
 
   useEffect(() => {
-    if ((activeTab ?? 'info') === 'stubs') {
+    if (resolveTab(activeTab, 'info', BOX_TAB_FEATURES, features) === 'stubs') {
       void loadStubs();
     }
-  }, [activeTab, loadStubs]);
+  }, [activeTab, features, loadStubs]);
 
   useEffect(() => {
     if (!isPhotoModalOpen) {
@@ -774,7 +777,7 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box?.BoxID]);
 
-  const effectiveTab = activeTab ?? 'info';
+  const effectiveTab = resolveTab(activeTab, 'info', BOX_TAB_FEATURES, features);
 
   if (isLoading) {
     return <LoadingPage message="Behälter wird geladen…" />;
@@ -808,19 +811,21 @@ export default function BoxDetail({ boxId }: Props) {
         {box && (
           <div className="tab-actions">
             <PrintLabelButton boxId={box.BoxID} inline />
-            <button
-              type="button"
-              className="btn mobile-only"
-              onClick={() => navigate(`/placement/${encodeURIComponent(box.BoxID)}?mode=items`)}
-            >
-              Einscannen
-            </button>
+            {features['qr-scan'] && (
+              <button
+                type="button"
+                className="btn mobile-only"
+                onClick={() => navigate(`/placement/${encodeURIComponent(box.BoxID)}?mode=items`)}
+              >
+                Einscannen
+              </button>
+            )}
             <QrScanButton
               searchTarget={box.BoxID}
               searchLabel={box.Label ?? box.BoxID}
               label="Finden"
             />
-            {isShelf && (
+            {isShelf && features['qr-scan'] && (
               <button
                 type="button"
                 className="btn mobile-only"

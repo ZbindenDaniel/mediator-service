@@ -175,6 +175,7 @@ async function createZipArchive(options: ZipArchiveOptions): Promise<void> {
 }
 
 const action = defineHttpAction({
+  feature: 'import-export',
   key: 'export-data',
   label: 'Export data',
   appliesTo: () => false,

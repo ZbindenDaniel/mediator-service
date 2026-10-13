@@ -29,6 +29,7 @@ import QualityReviewStep from './QualityReviewStep';
 import type { QualityReviewResult } from './QualityReviewStep';
 import QualityBadge from './QualityBadge';
 import ArtikelNummerLookupStep from './ArtikelNummerLookupStep';
+import { useFeature } from '../context/FeaturesContext';
 
 // TODO(agentic-trigger-skip-ui): Suppress alerts for already-queued agentic runs.
 
@@ -610,6 +611,8 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
   const location = useLocation();
   const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({}));
   const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
+  const agenticEnabled = useFeature('agentic');
+  const printingEnabled = useFeature('printing');
   const [creationStep, setCreationStep] = useState<CreationStep>('artikelLookup');
   const [selectedRef, setSelectedRef] = useState<SimilarItem | null>(null);
   const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({}));
@@ -720,6 +723,11 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
 
   useEffect(() => {
     let cancelled = false;
+    // AI off in this deployment: stay on the manual flow and don't probe the (blocked) health API.
+    if (!agenticEnabled) {
+      setShouldUseAgenticForm(false);
+      return () => { cancelled = true; };
+    }
 
     async function checkAgenticHealth() {
       try {
@@ -763,7 +771,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [agenticEnabled]);
 
   const baseDraft = useMemo(
     () => ({
@@ -1273,7 +1281,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
       }
 
       // TODO(agent): Validate auto-print behavior against production printers once enabled.
-      if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled) {
+      if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled && printingEnabled) {
         const einheit = resolveAutoPrintEinheit(submissionData.Einheit);
         const autoPrintTargets = resolveAutoPrintTargets({
           createdItem,

@@ -41,6 +41,7 @@ function resolveLabels(body: Record<string, unknown>): { labelExternal: string; 
 }
 
 const action = defineHttpAction({
+  feature: 'admin-taxonomy',
   key: 'admin-taxonomy',
   label: 'Admin: taxonomy',
   appliesTo: () => false,

@@ -54,6 +54,35 @@ together" needs real logins + audit regardless of tenancy.
 
 ---
 
+## 2a. Revision — meeting of 2026-10-13 (supersedes parts of §2 and Phase 3)
+
+The cataloguing project (a smaller, separate deployment where other organisations catalogue
+items, POC stage) changed several assumptions:
+
+- **Visibility: shared reads with redaction, not hard isolation.** Everyone may read every item,
+  including *which org holds what* and quantity/availability. Hidden from other orgs: the
+  location (box/shelf, shown as the owning org's name instead:
+  `item.tenant == me.tenant ? box.label : tenant.name`) and the cataloguer ("Erfasser").
+  Other orgs' boxes/shelves stay invisible. Redaction must happen server-side in every response
+  carrying those fields (lists, detail, search, export, logs/events). Supersedes DL2's
+  "total only, never tenant rows".
+- **Edits: only the creating org**, for instances *and* catalogue references (the
+  `ContributedByTenant` guard).
+- **Ordering happens outside the tool**, maybe a mailto link, so an org needs a contact email.
+- **Org management (decided, option C):** orgs live in the app DB and are edited in an admin tab
+  (id, name, contact email, linked Authentik group, sites with floors). Authentik keeps only users
+  and groups; the link is the **group name**. `TENANT_GROUP_MAP` seeds the table on first start
+  (taxonomy pattern: seed → DB authoritative → admin edit, no restart). `platformAdminGroup` stays
+  in `.env` to avoid lock-out. Rejected: domain data in Authentik attributes (no validation, orgs
+  can't self-maintain, mixes identity and domain data) and two-way sync.
+- **Warehouses = per-org sites** (today's hardcoded `models/shelf-locations.ts`), stored with the
+  org; site IDs unique across orgs because shelf IDs are global. How orgs get their sites
+  (registration / revamp / CSV) is still open in the protocol; the admin tab covers "defined by
+  revamp".
+- **Feature flags first** (deployment-level, done in #970), then org admin tab, then the revised
+  Phase 3. **Role permissions** (e.g. who may delete) are a separate concept, defined later
+  together with the `super` role.
+
 ## 3. Phases
 
 ### Phase 1 — Identity into the backend (prerequisite; independently valuable)  ✅ CODE DONE (proxy needs host verification)
@@ -128,7 +157,7 @@ needs the default-tenant decision.
 - **Acceptance:** schema in place, new logistics rows carry their tenant, nothing is
   filtered or hidden yet.
 
-### Phase 3 — Class-aware scoping (the enforcement)
+### Phase 3 — Class-aware scoping (the enforcement)  ⚠️ REVISED — read §2a first
 - **Logistics:** reads *and* writes filtered by `ctx.tenant` with **no shared
   fallback**, enforced in the `db.ts` logistics functions (not per handler) so it
   can't be bypassed. Destructive ops assert ownership.

@@ -118,6 +118,7 @@ import { processShopwareQueue } from './workers/processShopwareQueue';
 import { AgenticModelInvoker } from './agentic/invoker';
 import { loadTaxonomy, initTaxonomy } from './lib/taxonomy';
 import { resolveIdentity, configuredTenants } from './lib/identity';
+import { loadFeatures, isFeatureEnabled, FEATURE_KEYS } from './lib/features';
 import { isRequestAllowed } from './utils/require-identity';
 import type { RequestIdentity } from './lib/identity';
 import type { Item, LabelJob } from './db';
@@ -346,6 +347,17 @@ function parseAufLagerValue(value: unknown, itemId: string): number {
   return 0;
 }
 
+// Validate the feature manifest before any background job below reads it: a typo must stop the
+// app, not silently leave e.g. the AI dispatcher running (backend/lib/features.ts).
+try {
+  const features = loadFeatures();
+  const disabled = FEATURE_KEYS.filter((k) => !features[k]);
+  if (disabled.length) console.info('[features] Disabled in this deployment:', disabled.join(', '));
+} catch (err) {
+  console.error('[server] Invalid feature manifest — aborting startup.', err);
+  process.exit(1);
+}
+
 async function runPrintWorker(): Promise<void> {
   const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   await recoverStaleLabelJobs(staleThreshold);
@@ -444,7 +456,9 @@ async function runPrintWorker(): Promise<void> {
     void updateLabelJobStatus(job.Id, 'Error', (e as Error).message);
   }
 }
-setInterval(runPrintWorker, 750);
+if (isFeatureEnabled('printing')) {
+  setInterval(runPrintWorker, 750);
+}
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -531,7 +545,7 @@ type ActionContext = {
   identity: RequestIdentity;
 };
 
-const agenticServiceEnabled = true;
+const agenticServiceEnabled = isFeatureEnabled('agentic');
 
 const agenticInvoker = new AgenticModelInvoker({ logger: console });
 const boundAgenticInvokeModel = agenticInvoker.invoke.bind(agenticInvoker);
@@ -608,7 +622,7 @@ if (agenticServiceEnabled) {
 // was retired as dead in #936); revisit if it needs to be tunable per deployment.
 const SHOPWARE_SYNC_POLL_INTERVAL_MS = 10_000;
 
-if (SHOPWARE_SYNC_ENABLED) {
+if (SHOPWARE_SYNC_ENABLED && isFeatureEnabled('shopware')) {
   if (!shopwareConfigReady) {
     console.warn('[server] SHOPWARE_SYNC_ENABLED=true but Shopware config is incomplete; sync worker not started.', {
       issues: shopwareConfigIssues
@@ -668,6 +682,7 @@ setInterval(() => {
 
     const enabled = await getSystemSetting('erp_nightly_sync_enabled');
     if (enabled !== 'true') return;
+    if (!isFeatureEnabled('erp-sync')) return;
     if (!ERP_SYNC_ENABLED) {
       console.info('[nightly-erp-sync] Skipped: ERP_SYNC_ENABLED is false');
       return;
@@ -862,6 +877,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       }
     }
 
+    // Help docs live outside the action registry, so the `help` feature is gated here.
+    if (url.pathname.startsWith('/api/user-docs') && !isFeatureEnabled('help')) {
+      sendJson(res, 404, { error: 'Not found' });
+      return;
+    }
     if (url.pathname === '/api/user-docs' && req.method === 'GET') {
       const USER_DOCS_DIR = path.join(__dirname, '../../docs/user');
       try {
@@ -1022,6 +1042,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
     // Remaining request handling delegated to actions
     const action = actions.find((a) => a.matches?.(url.pathname, req.method || 'GET'));
+    // A disabled feature's API looks like it doesn't exist (404), so hidden UI can't be bypassed.
+    if (action?.feature && !isFeatureEnabled(action.feature)) {
+      sendJson(res, 404, { error: 'Not found' });
+      return;
+    }
     if (action) {
       try {
         // console.log('Handling action', action.key);

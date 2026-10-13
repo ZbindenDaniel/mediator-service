@@ -5,6 +5,7 @@ Shared TypeScript type definitions — the single source of truth for data shape
 
 ## Contents
 - `item.ts` — Item, ItemRef, ItemInstance, field definitions
+- `features.ts` — the list of deployment feature keys (shared by backend gate and frontend hiding)
 - `item-detail.ts` — ItemDetail view shape (joined query result)
 - `item-relation.ts` — accessory / spare-part relationships between items
 - `item-categories.ts` / `item-category-lookups.ts` — category taxonomy

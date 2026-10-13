@@ -653,6 +653,7 @@ function parseAgenticStatusRoute(path: string): { itemId: string; action: string
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-status',
   label: 'Agentic status',
   appliesTo: (entity) => entity.type === 'Item',

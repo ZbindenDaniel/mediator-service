@@ -8,6 +8,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'stubs',
   key: 'close-stub',
   label: 'Close stub',
   appliesTo: () => false,

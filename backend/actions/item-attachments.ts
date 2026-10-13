@@ -25,6 +25,7 @@ function productDir(folder: string): string {
 }
 
 const action = defineHttpAction({
+  feature: 'item-attachments',
   key: 'item-attachments',
   label: 'Item attachments',
   appliesTo: () => false,

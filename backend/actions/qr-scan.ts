@@ -9,6 +9,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'qr-scan',
   key: 'qr-scan',
   label: 'QR scan audit log',
   appliesTo: () => false,

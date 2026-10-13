@@ -38,6 +38,7 @@ Use this directory as the single navigation root for deep-dive operational and i
 | [`glossary.md`](./glossary.md) | Canonical terminology: Item/ItemRef/ItemInstance, Box/Shelf/Location |
 | [`traceability-matrix.md`](./traceability-matrix.md) | Doc-to-code mapping: domain → backend actions → frontend components |
 | [`identity-provider.md`](./identity-provider.md) | Plain-language crash course: what Authentik/forward-auth are, request flow, groups→tenant/role, ordered setup with checks, troubleshooting |
+| [`feature-flags.md`](./feature-flags.md) | Deployment feature flags: the feature list, how to switch features off per deployment, what is blocked vs. hidden, how to add a new flag |
 | [`tenancy.md`](./tenancy.md) | Multi-tenancy: current identity/stamping state, why `tenant` is null, how to drive it (whoami, group map, Authentik) |
 
 ## Topic changelogs

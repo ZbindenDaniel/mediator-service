@@ -518,6 +518,7 @@ export async function handleUnifiedPrintRequest(
 }
 
 const action = defineHttpAction({
+  feature: 'printing',
   key: 'print-unified',
   label: 'Print label (unified)',
   appliesTo: () => false,

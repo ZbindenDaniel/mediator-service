@@ -49,6 +49,7 @@ function resolveArtikelNummerForAgentic(itemId: string, legacyRoute: boolean): s
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-trigger-failure',
   label: 'Agentic trigger failure',
   appliesTo: (entity) => entity.type === 'Item',

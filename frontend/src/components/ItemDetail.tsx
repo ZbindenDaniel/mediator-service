@@ -118,6 +118,8 @@ import {
   resolveDetailEinheit,
   resolveQuantityEinheit,
 } from '../lib/itemDetailFormatting';
+import { useFeatures } from '../context/FeaturesContext';
+import { ITEM_TAB_FEATURES, resolveTab } from '../lib/tabFeatures';
 import { fetchSpecContract } from '../lib/contractsApi';
 
 interface Props {
@@ -173,6 +175,8 @@ export default function ItemDetail({ itemId }: Props) {
   const [compatibleParentRefs, setCompatibleParentRefs] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [co2Impact, setCo2Impact] = useState<{ label: Co2ImpactLabel; score?: number } | null>(null);
+  const features = useFeatures();
+  const statisticsEnabled = features.statistics;
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [neighborIds, setNeighborIds] = useState<{ previousId: string | null; nextId: string | null }>({
@@ -640,7 +644,7 @@ export default function ItemDetail({ itemId }: Props) {
       ['Verkaufspreis', item.Verkaufspreis ?? null]
     );
 
-    if (co2Impact && co2Impact.label !== 'irrelevant') {
+    if (statisticsEnabled && co2Impact && co2Impact.label !== 'irrelevant') {
       const co2Label = CO2_IMPACT_LABEL_DE[co2Impact.label];
       const co2Display = typeof co2Impact.score === 'number'
         ? `${co2Label} (~${Math.round(co2Impact.score)} kg CO₂)`
@@ -649,7 +653,7 @@ export default function ItemDetail({ itemId }: Props) {
     }
 
     return rows;
-  }, [agentic, co2Impact, events, item, langtextRows, qualitySummary.value, resolveUnterkategorieLabel]);
+  }, [agentic, co2Impact, events, item, langtextRows, qualitySummary.value, resolveUnterkategorieLabel, statisticsEnabled]);
 
   const { referenceDetailRows, instanceDetailRows } = useMemo(() => {
     const referenceRows: [string, React.ReactNode][] = [];
@@ -2613,7 +2617,7 @@ export default function ItemDetail({ itemId }: Props) {
     };
 
     let tabContent: React.ReactNode;
-    switch (activeTab ?? 'instance') {
+    switch (resolveTab(activeTab, 'instance', ITEM_TAB_FEATURES, features)) {
       case 'reference':
         tabContent = (
           <ItemReferenceTab

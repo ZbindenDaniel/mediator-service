@@ -17,6 +17,8 @@ Domain service utilities — the shared logic layer between action handlers and 
 - `intake-quality-map.ts` — maps intake station answers to quality assessment format
 - `alt-doc-resolver.ts` — resolves alternative external-document directory paths (ALT_DOC_DIRS_FILE)
 - `path-guard.ts` — prevents path traversal in file serving
+- `features.ts` — deployment feature flags: parses `FEATURES`/`FEATURES_FILE` (fail-fast on typos), `isFeatureEnabled()` for the action gate and background jobs
+- `identity.ts` — resolves forward-auth headers into `{ username, groups, tenant, role }`
 
 ## Relations
 - Used by: `../actions/` (all domain operations), `../agentic/` (media, quality, langtext)

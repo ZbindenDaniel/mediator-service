@@ -18,6 +18,7 @@ async function readBody(req: IncomingMessage): Promise<string> {
 }
 
 const action = defineHttpAction({
+  feature: 'stubs',
   key: 'create-stub',
   label: 'Create stub',
   appliesTo: () => false,

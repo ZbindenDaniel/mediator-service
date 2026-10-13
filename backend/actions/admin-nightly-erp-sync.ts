@@ -8,6 +8,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'erp-sync',
   key: 'admin-nightly-erp-sync',
   label: 'Admin: Nightly ERP Sync Toggle',
   appliesTo: () => false,

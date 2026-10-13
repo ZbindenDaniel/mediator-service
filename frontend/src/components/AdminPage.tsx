@@ -12,6 +12,7 @@ import NightlyErpSyncCard from './admin/NightlyErpSyncCard';
 import ShopwareStatusCard from './admin/ShopwareStatusCard';
 import AgenticDispatchCard from './admin/AgenticDispatchCard';
 import AdminGate from './admin/AdminGate';
+import { Feature } from '../context/FeaturesContext';
 
 type AuthStatus = 'checking' | 'ok' | 'locked' | 'forbidden';
 
@@ -83,21 +84,38 @@ export default function AdminPage() {
   return (
     <div className="admin-page">
       <h1 className="admin-page__title">Administration</h1>
-      <nav className="admin-page__nav" style={{ marginBottom: 12 }}>
-        <Link to="/admin/taxonomy">Taxonomie verwalten →</Link>
-      </nav>
+      <Feature name="admin-taxonomy">
+        <nav className="admin-page__nav" style={{ marginBottom: 12 }}>
+          <Link to="/admin/taxonomy">Taxonomie verwalten →</Link>
+        </nav>
+      </Feature>
+      {/* Each card sits behind the feature it belongs to; cards without a subsystem have their own admin-* flag. */}
       <div className="admin-page__grid">
-        <ImportCard />
-        <ExportCard />
-        <ShelfCreateForm />
-        <PrintQueueCard authToken={token} onAuthFailure={handleAuthFailure} />
-        <PrinterQueuesCard authToken={token} onAuthFailure={handleAuthFailure} />
-        <PrinterSettingsCard authToken={token} onAuthFailure={handleAuthFailure} />
-        <AgenticOverviewCard />
-        <AgenticDispatchCard authToken={token} onAuthFailure={handleAuthFailure} />
-        <SystemStatusCard authToken={token} onAuthFailure={handleAuthFailure} />
-        <NightlyErpSyncCard authToken={token} onAuthFailure={handleAuthFailure} />
-        <ShopwareStatusCard authToken={token} onAuthFailure={handleAuthFailure} />
+        <Feature name="import-export">
+          <ImportCard />
+          <ExportCard />
+        </Feature>
+        <Feature name="admin-shelf-create">
+          <ShelfCreateForm />
+        </Feature>
+        <Feature name="printing">
+          <PrintQueueCard authToken={token} onAuthFailure={handleAuthFailure} />
+          <PrinterQueuesCard authToken={token} onAuthFailure={handleAuthFailure} />
+          <PrinterSettingsCard authToken={token} onAuthFailure={handleAuthFailure} />
+        </Feature>
+        <Feature name="agentic">
+          <AgenticOverviewCard />
+          <AgenticDispatchCard authToken={token} onAuthFailure={handleAuthFailure} />
+        </Feature>
+        <Feature name="admin-system-status">
+          <SystemStatusCard authToken={token} onAuthFailure={handleAuthFailure} />
+        </Feature>
+        <Feature name="erp-sync">
+          <NightlyErpSyncCard authToken={token} onAuthFailure={handleAuthFailure} />
+        </Feature>
+        <Feature name="shopware">
+          <ShopwareStatusCard authToken={token} onAuthFailure={handleAuthFailure} />
+        </Feature>
       </div>
     </div>
   );

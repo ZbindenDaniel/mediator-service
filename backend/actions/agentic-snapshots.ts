@@ -27,6 +27,7 @@ function stripQuery(url: string): string {
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-snapshots',
   label: 'Agentic run snapshots',
   appliesTo: (entity) => entity.type === 'Item',

@@ -30,6 +30,7 @@ import { useUserMarks } from '../context/UserMarksContext';
 import { useTaxonomy } from '../context/TaxonomyContext';
 import ItemList from './ItemList';
 import LoadingPage from './LoadingPage';
+import { useFeatures } from '../context/FeaturesContext';
 
 // TODO(agentic): Extend item list page sorting and filtering controls for enriched inventory views.
 // TODO(agentic-status-ui): Replace single-select status filtering with quick filters once reviewer workflows expand.
@@ -423,6 +424,7 @@ export default function ItemListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { setEntity, setMultiSelection, clearSelection, clearMultiSelection } = usePanelContext();
   const setBulkSelection = useSetBulkSelection();
+  const features = useFeatures();
   const [items, setItems] = useState<Item[]>([]);
   const [placementFilter, setPlacementFilter] = useState<ItemListFilters['placementFilter']>(ITEM_LIST_DEFAULT_FILTERS.placementFilter);
   const [isLoading, setIsLoading] = useState(true);
@@ -802,15 +804,16 @@ export default function ItemListPage() {
       normalizedSubcategoryFilter,
       normalizedBoxFilter,
       stockFilter,
-      normalizedAgenticFilter,
-      shopPublicationFilter,
+      // Hidden filters must not keep filtering (e.g. a saved KI filter after AI was switched off).
+      normalizedAgenticFilter: features.agentic ? normalizedAgenticFilter : null,
+      shopPublicationFilter: features.shopware ? shopPublicationFilter : 'all',
       imageFilter,
       sortKey,
       sortDirection,
       qualityThreshold,
       qualityFilter
     });
-    if (!myMarksOnly) return sorted;
+    if (!myMarksOnly || !features['item-marks']) return sorted;
     return sorted.filter((group) =>
       group.items.some((item) => item.ItemUUID && allMarkedUUIDs.has(item.ItemUUID))
     );
@@ -828,6 +831,9 @@ export default function ItemListPage() {
     shopPublicationFilter,
     qualityThreshold,
     qualityFilter,
+    features.agentic,
+    features.shopware,
+    features['item-marks'],
     myMarksOnly,
     allMarkedUUIDs
   ]);
@@ -1037,9 +1043,9 @@ export default function ItemListPage() {
                     <option value="artikelnummer">Artikelnummer</option>
                     <option value="box">Behälter</option>
                     <option value="entryDate">Erfasst am</option>
-                    <option value="lastSynced">Zuletzt synchronisiert</option>
-                    <option value="agenticLastRun">KI-Datum</option>
-                    <option value="agenticStatus">Ki-Status</option>
+                    {features['erp-sync'] && <option value="lastSynced">Zuletzt synchronisiert</option>}
+                    {features.agentic && <option value="agenticLastRun">KI-Datum</option>}
+                    {features.agentic && <option value="agenticStatus">Ki-Status</option>}
                     <option value="quality">Qualität</option>
                     <option value="uuid">UUID</option>
                     <option value="stock">Bestand</option>
@@ -1127,6 +1133,7 @@ export default function ItemListPage() {
               </select>
             </label>
           </div> */}
+              {features.agentic && (
               <div className="filter-grid__item">
                 <div className="filter-control">
                   <span>Ki-Status</span>
@@ -1151,7 +1158,9 @@ export default function ItemListPage() {
                   </details>
                 </div>
               </div>
+              )}
 
+              {features.shopware && (
               <div className="filter-grid__item">
                 <label className="filter-control">
                   <span>Shopstatus</span>
@@ -1167,6 +1176,7 @@ export default function ItemListPage() {
                   </select>
                 </label>
               </div>
+              )}
 
               <div className="filter-grid__item">
                 <label className="filter-control">
@@ -1228,6 +1238,7 @@ export default function ItemListPage() {
                 </label>
               </div>
 
+              {features['item-marks'] && (
               <div className="filter-grid__item">
                 <label className="filter-control--checkbox">
                   <input
@@ -1239,6 +1250,7 @@ export default function ItemListPage() {
                   <span>Markiert</span>
                 </label>
               </div>
+              )}
             </div>
           </div>
         </div>

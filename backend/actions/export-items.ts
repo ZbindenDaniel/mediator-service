@@ -1394,6 +1394,7 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
 }
 
 const action = defineHttpAction({
+  feature: 'import-export',
   key: 'export-items',
   label: 'Export items',
   appliesTo: () => false,

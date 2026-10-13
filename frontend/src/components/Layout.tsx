@@ -10,6 +10,7 @@ import MultiItemSummary from './MultiItemSummary';
 import BulkItemActionBar from './BulkItemActionBar';
 import { getUser } from '../lib/user';
 import OverviewPanel from './OverviewPanel';
+import { useFeatures } from '../context/FeaturesContext';
 
 function MultiItemDetailPanel() {
   const { multiSelection } = usePanelContext();
@@ -36,10 +37,12 @@ function MultiItemDetailPanel() {
 export default function Layout({ children }: { children: ReactNode }) {
   const { entityType, entityId, activeTab, multiSelection, setEntity, clearSelection, mobileShowDetail, setMobileShowDetail, loadRevision, panelDetailLabel } = usePanelContext();
   const { pathname } = useLocation();
+  const { statistics: statisticsEnabled, help: helpEnabled } = useFeatures();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!getUser() && !pathname.startsWith('/hilfe') && !pathname.startsWith('/admin')) {
+    // The first-steps redirect only makes sense while the help page exists.
+    if (helpEnabled && !getUser() && !pathname.startsWith('/hilfe') && !pathname.startsWith('/admin')) {
       navigate('/hilfe?doc=Erste-Schritte', { replace: true });
     }
   // only run on mount — pathname intentionally excluded to avoid redirect loops during navigation
@@ -104,7 +107,11 @@ export default function Layout({ children }: { children: ReactNode }) {
                     <BoxDetail key={`${entityId}-${loadRevision}`} boxId={entityId} />
                   ) : (
                     <div className="panel-tab-body">
-                      <OverviewPanel />
+                      {statisticsEnabled ? (
+                        <OverviewPanel />
+                      ) : (
+                        <p className="muted">Artikel oder Behälter auswählen, um Details zu sehen.</p>
+                      )}
                     </div>
                   )}
                 </div>

@@ -70,6 +70,7 @@ function parseAgenticRestartRoute(path: string): { itemId: string; legacyRoute: 
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-restart',
   label: 'Agentic restart',
   appliesTo: (entity) => entity.type === 'Item',

@@ -16,6 +16,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
 }
 
 const action = defineHttpAction({
+  feature: 'item-marks',
   key: 'user-marks',
   label: 'User item marks',
   appliesTo: () => false,

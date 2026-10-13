@@ -33,6 +33,7 @@ function buildIntakeCategories(): IntakeCategoryEntry[] {
 }
 
 const action = defineHttpAction({
+  feature: 'intake',
   key: 'intake-categories',
   label: 'Intake categories',
   appliesTo: () => false,

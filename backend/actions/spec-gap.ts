@@ -11,6 +11,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'spec-gap',
   label: 'Spec gap analysis',
   appliesTo: () => false,

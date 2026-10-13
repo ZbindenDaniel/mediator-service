@@ -24,6 +24,7 @@ type AgenticBulkQueueResult = {
 };
 
   const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-bulk-queue',
   label: 'Agentic bulk queue',
   appliesTo: () => false,

@@ -71,6 +71,7 @@ HTTP boundary only. Handlers validate inputs and return responses. Business logi
 - One exported handler per file
 - File name must reflect the endpoint it serves (e.g., `move-item.ts` → `POST /api/items/:id/move`)
 - No shared mutable state between handlers
+- An action that belongs to an optional feature declares `feature: '<key>'` (see `models/features.ts`); the dispatcher answers 404 while that feature is disabled. Core actions declare none
 
 ## Decisions
 - **Flat file structure over sub-folders**: the volume of actions is manageable as a flat list; sub-folders would add navigation overhead with little grouping benefit

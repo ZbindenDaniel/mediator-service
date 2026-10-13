@@ -266,6 +266,13 @@ These do not exist today and gate the "multi-tenant + opt-out" requirements.
   appears — the shared catalogue implies a single shared taxonomy anyway.
 
 ### 10.2 Feature-flag / capability system (enables "opt out by config")
+
+> **Status (2026-10-13, #970): implemented, deployment-level only.** Manifest via `FEATURES`/
+> `FEATURES_FILE`, action `feature` tag + dispatcher 404 gate, jobs gated, `GET /api/app-config` +
+> `FeaturesContext`. Deviations from §12.2: no per-tenant/per-role flags (no use case, decided
+> 2026-10-13); UI gated at mount instead of the CSS-class pattern (hidden components must not call
+> blocked APIs); simple mode stays a separate per-user toggle; old `*_ENABLED` env switches kept
+> (AND-ed with the flag). Runbook: `docs/detailed/feature-flags.md`.
 - **Confirmed absent:** toggles today are ad-hoc per integration
   (`SHOPWARE_SYNC_ENABLED`, `ERP_SYNC_ENABLED`, …) plus a client-side "simple mode"
   CSS class. Nothing disables a backend feature *and* hides its UI from one source.

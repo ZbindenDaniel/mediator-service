@@ -3,6 +3,7 @@ import type { PrintLabelType } from '../../../models';
 import { ensureUser } from '../lib/user';
 import { logError, logger } from '../utils/logger';
 import { requestPrintLabel } from '../utils/printLabelRequest';
+import { useFeature } from '../context/FeaturesContext';
 
 interface Props {
   boxId?: string;
@@ -29,7 +30,7 @@ function formatPrintReason(reason: string): string {
   return 'Druckfehler';
 }
 
-export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline = false }: Props) {
+function PrintLabelButtonInner({ boxId, itemId, onPrintStart, inline = false }: Props) {
   const [status, setStatus] = useState('');
   const [preview, setPreview] = useState('');
   const [printSent, setPrintSent] = useState<boolean | null>(null);
@@ -221,4 +222,9 @@ export default function PrintLabelButton({ boxId, itemId, onPrintStart, inline =
       {labelDialog}
     </div>
   );
+}
+
+// Gate in a wrapper (not an early return inside) so the inner component's hooks always run in order.
+export default function PrintLabelButton(props: Props) {
+  return useFeature('printing') ? <PrintLabelButtonInner {...props} /> : null;
 }

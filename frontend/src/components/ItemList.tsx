@@ -13,6 +13,7 @@ import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import type { GroupedItemDisplay } from '../lib/itemGrouping';
 import type { ItemListSortKey } from '../lib/itemListFiltersStorage';
 import { logError, logger } from '../utils/logger';
+import { useFeatures } from '../context/FeaturesContext';
 
 // TODO(agent): Confirm item list location tags remain legible without the color metadata.
 // TODO: Replace plain table layout with a virtualized list for better performance on large datasets.
@@ -95,6 +96,7 @@ export default function ItemList({
   onSelect,
   sortKey
 }: Props) {
+  const features = useFeatures();
   const safeItems = items ?? [];
   const selectAllRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
@@ -155,10 +157,10 @@ export default function ItemList({
             <th className="col-desc">Artikel</th>
             <th className="col-box">Behälter</th>
             <th className="col-location">Lagerort</th>
-            <th className="col-agentic optional-column">Ki</th>
+            {features.agentic && <th className="col-agentic optional-column">Ki</th>}
             <th className="col-stock optional-column">Anzahl</th>
             <th className="col-quality optional-column">Qualität</th>
-            <th className="col-shop optional-column">Shop</th>
+            {features.shopware && <th className="col-shop optional-column">Shop</th>}
             <th className="col-zubehoer optional-column">Zub.</th>
             <th className="col-subcategory optional-column">Unterkategorie A</th>
             {(sortKey === 'entryDate' || sortKey === 'lastSynced' || sortKey === 'agenticLastRun') && (
@@ -383,14 +385,16 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                     <LocationTag item={locationItem} itemId={representativeItemId} />
                   )}
                 </td>
-                <td className="col-agentic optional-column">{agenticLabel}</td>
+                {features.agentic && <td className="col-agentic optional-column">{agenticLabel}</td>}
                 <td className="col-stock optional-column">{countValue}</td>
                 <td className="col-quality optional-column">
                   <QualityBadge compact value={qualityValue} />
                 </td>
-                <td className="col-shop optional-column">
-                  <ShopBadge compact shopartikel={shopartikelValue} publishedStatus={publishedStatusValue} />
-                </td>
+                {features.shopware && (
+                  <td className="col-shop optional-column">
+                    <ShopBadge compact shopartikel={shopartikelValue} publishedStatus={publishedStatusValue} />
+                  </td>
+                )}
                 <td className="col-zubehoer optional-column">
                   <ZubehoerBadge compact mode={zubehoerMode} />
                 </td>

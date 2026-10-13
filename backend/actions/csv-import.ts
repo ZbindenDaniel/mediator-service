@@ -42,6 +42,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'import-export',
   key: 'csv-import',
   label: 'CSV import',
   appliesTo: () => false,

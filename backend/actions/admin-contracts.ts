@@ -65,6 +65,7 @@ function validateContract(type: ContractType, doc: unknown): string | null {
 const UPLOAD_ROUTE = /^\/api\/admin\/contracts\/(quality|specs|assembly)\/([A-Za-z0-9_-]+)$/;
 
 const action = defineHttpAction({
+  feature: 'admin-taxonomy',
   key: 'admin-contracts',
   label: 'Admin: contracts',
   appliesTo: () => false,

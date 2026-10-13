@@ -14,6 +14,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 const CHAT_SESSION_DIR = path.join(process.cwd(), 'data', 'chat-sessions');
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'chat',
   label: 'Chat agent',
   appliesTo: () => false,
