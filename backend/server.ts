@@ -124,6 +124,7 @@ import { reloadTenantsFromDb, getTenantRows, getSites } from './lib/tenants';
 import { shelfLocations } from '../models/shelf-locations';
 import { loadFeatures, isFeatureEnabled, FEATURE_KEYS } from './lib/features';
 import { isRequestAllowed } from './utils/require-identity';
+import { sendAppShellFile } from './utils/app-shell';
 import type { RequestIdentity } from './lib/identity';
 import type { Item, LabelJob } from './db';
 import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
@@ -748,9 +749,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     if (url.pathname === '/' && req.method === 'GET') {
       const p = path.join(PUBLIC_DIR, 'index.html');
       try {
-        const html = fs.readFileSync(p);
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        return res.end(html);
+        return sendAppShellFile(req, res, p, 'text/html; charset=utf-8');
       } catch (err) {
         console.error('Failed to serve index.html', err);
         res.writeHead(500); return res.end('Internal error');
@@ -760,9 +759,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     if (url.pathname === '/bundle.js' && req.method === 'GET') {
       const p = path.join(PUBLIC_DIR, 'bundle.js');
       try {
-        const js = fs.readFileSync(p);
-        res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-        return res.end(js);
+        return sendAppShellFile(req, res, p, 'text/javascript; charset=utf-8');
       } catch (err) {
         console.error('Bundle not found', err);
         res.writeHead(404); return res.end('Not found');
@@ -772,9 +769,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     if (url.pathname === '/bundle.css' && req.method === 'GET') {
       const p = path.join(PUBLIC_DIR, 'styles.css');
       try {
-        const css = fs.readFileSync(p);
-        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
-        return res.end(css);
+        return sendAppShellFile(req, res, p, 'text/css; charset=utf-8');
       } catch {
         res.writeHead(404); return res.end('Not found');
       }
@@ -1034,9 +1029,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     if (req.method === 'GET' && !url.pathname.startsWith('/api')) {
       const p = path.join(PUBLIC_DIR, 'index.html');
       try {
-        const html = fs.readFileSync(p);
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        return res.end(html);
+        return sendAppShellFile(req, res, p, 'text/html; charset=utf-8');
       } catch (err) {
         console.error('Failed to serve SPA fallback', err);
         res.writeHead(404); return res.end('Not found');

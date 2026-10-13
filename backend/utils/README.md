@@ -5,6 +5,7 @@ Backend utility modules — auth, settings, CSV helpers, print client, intake au
 ## Files
 - `actor.ts` — `resolveActor(ctx, requestActor)`: the logged-in username wins over a client-sent actor name (audit trail)
 - `admin-auth.ts` — admin access: logged-in platform admin, or the `ADMIN_SECRET` bearer (break-glass; reachable only from inside the host when Authentik is on)
+- `app-shell.ts` — serves index.html / bundle.js / bundle.css with `Cache-Control: no-cache` + ETag, so browsers pick up a new frontend after a deploy (304 when unchanged)
 - `app-settings.ts` — reads and writes runtime app settings (printer config, sync toggles) persisted in the DB
 - `csv-utils.ts` — CSV parsing and serialization helpers used by import/export actions
 - `cups-client.ts` — wraps CUPS commands (`lp`, `lpstat`, `lpadmin`, `lpinfo`) for the print subsystem
