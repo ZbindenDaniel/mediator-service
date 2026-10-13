@@ -26,7 +26,7 @@ its own login.
 | **Proxy Provider** | A setting inside Authentik that says *"protect this app using forward-auth"*. Without it the outpost doesn't know our app exists. | Configured in the Authentik admin UI |
 | **Reverse proxy** (nginx in dev, Traefik in prod) | The doorman. Before passing each request to the app, it asks the outpost about it, then adds the name-tag headers. | [`config/nginx/mediator.authentik.conf`](../../config/nginx/mediator.authentik.conf), [`docker-compose.prod.authentik.yaml`](../../docker-compose.prod.authentik.yaml) |
 | **The app (backend)** | Reads the name tag and turns it into `{ user, tenant, role }` | [`backend/lib/identity.ts`](../../backend/lib/identity.ts) |
-| **Group map** (`TENANT_GROUP_MAP`) | The translation table from Authentik group names to our tenants and roles | `.env` or a JSON file |
+| **Organisationen page** | Organisations, their sites, and which Authentik group belongs to each | *Administration → Organisationen verwalten* (seeded from `TENANT_GROUP_MAP`) |
 
 ## What happens on one request
 
@@ -58,8 +58,9 @@ Authentik before letting the request through.
 
 ## Users, groups, tenants, roles
 
-Authentik only knows about **users** and **groups**. *Tenant* and *role* are ideas that exist
-only in our app. The group map connects them:
+Authentik only knows about **users** and **groups**. *Organisation* (tenant) and *role* are ideas
+that exist only in our app. Each organisation in the app is **linked to an Authentik group by its
+name**:
 
 | You put a user in this Authentik group… | …and the app treats them as |
 |---|---|
@@ -68,14 +69,30 @@ only in our app. The group map connects them:
 | `mediator-admin` (the `platformAdminGroup`) | role **platform-admin** (looks after every tenant) |
 | none of the above | the `defaultTenant` from the map, if one is set |
 
-The matching map in `.env`:
+**To add an organisation:**
+
+1. In Authentik, create a group (e.g. `tenant-zurichrepair`) and put the org's users in it.
+2. In the app, go to *Administration → Organisationen verwalten*. Create the org (ID, name) and
+   enter that group name. Optionally add a contact email (for orders) and its sites (warehouse
+   locations with floors).
+
+It's live immediately, with no restart. The org's users get their org on their next request.
+
+**What lives where:**
+
+- **Authentik:** users, passwords, group membership.
+- **App (Organisationen page):** the org, its name, contact, sites, and which Authentik group
+  belongs to it.
+- **`.env`:** only the platform-admin group (`platformAdminGroup`, kept out of the UI so you can't
+  lock yourself out) and the `defaultTenant` for requests without a login.
+
+`TENANT_GROUP_MAP` in `.env` is now only the **starting point**: on first start its orgs are copied
+into the app, and later edits in the page win. The full map still works on its own for a deployment
+without the page, e.g. a fresh local test:
 
 ```bash
 TENANT_GROUP_MAP='{"platformAdminGroup":"mediator-admin","tenants":[{"id":"revamp","label":"revamp-it","group":"tenant-revamp","superGroup":"tenant-revamp-admin"}],"defaultTenant":"revamp"}'
 ```
-
-To add an organisation: **create its group(s) in Authentik**, **add one entry to `tenants`** in
-the map, and restart the app. That's all — there's no "create tenant" button anywhere.
 
 ## Setup, in order
 
@@ -209,6 +226,7 @@ limit **which items you can see**.
 | After logging in at Authentik you're bounced to `localhost:9000` or a wrong host | The embedded outpost's `authentik_host` isn't set to the browser-reachable login URL |
 | `401 Unauthorized` (JSON) instead of a login redirect | The request reached the app without passing the proxy login. Check that you're using the proxy URL, and in prod that `AUTHENTIK_ENABLED=true` is in the host `.env` |
 | The intake station gets 401 | `INTAKE_TOKEN` isn't set on the server, or the station sends a different one |
-| An admin sees "Kein Zugriff" on the admin page | Their Authentik user isn't in the `platformAdminGroup` (default `mediator-admin`), or the group name in `TENANT_GROUP_MAP` differs |
+| An admin sees "Kein Zugriff" on the admin page | Their Authentik user isn't in the `platformAdminGroup` (default `mediator-admin`) |
+| A logged-in user has `tenant: null` | Their group isn't linked to any **active** org on the Organisationen page (names must match exactly), and there's no `defaultTenant` |
 | My old marks are gone after switching to Authentik | Marks are stored per username. Old ones are under the name typed before; rename them in `user_item_marks` if the login name differs |
 | You changed the map and nothing happened | The map is read once and cached. Restart the app. |

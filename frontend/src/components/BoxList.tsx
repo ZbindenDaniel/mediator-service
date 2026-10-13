@@ -5,7 +5,7 @@ import { formatDate } from '../lib/format';
 import { logError, logger } from '../utils/logger';
 import LocationTag from './LocationTag';
 import type { BoxTypeFilter } from './boxListUtils';
-import { shelfLocations } from '../data/shelfLocations';
+import { getShelfLocations } from '../data/shelfLocations';
 
 // TODO(agent): Validate that the box list layout still reads clearly without color metadata.
 // TODO(agent): Confirm shelf label formatting stays aligned with box list expectations.
@@ -156,7 +156,7 @@ export default function BoxList({ boxes, searchValue, sortKey, typeFilter, locat
                 <span>Standort</span>
                 <select id="box-location-filter" value={locationFilter} onChange={handleLocationFilterChange}>
                   <option value="all">Alle Standorte</option>
-                  {shelfLocations.map((loc) => (
+                  {getShelfLocations().map((loc) => (
                     <option key={loc.id} value={loc.id}>{loc.label}</option>
                   ))}
                 </select>

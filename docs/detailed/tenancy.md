@@ -69,10 +69,12 @@ Resolution logic (`resolveIdentity`), per request:
 | In a tenant's `group` | that tenant | `normal` |
 | Authenticated but no group matches | `defaultTenant` | `normal` if a tenant resolved, else `null` |
 
-The **`tenants` DB table** is just a local registry (id, label, active) seeded from this map at
-startup (`configuredTenants()` → `upsertTenant`). It's a display/FK target — it does **not** drive
-resolution and does **not** enforce anything. Seeding is idempotent and a no-op when the map has no
-tenants.
+The **`tenants` DB table** is the org directory (#971): name, contact email, linked Authentik
+group(s), active flag, plus its **sites** (`tenant_sites`). It is edited on *Administration →
+Organisationen verwalten* and **drives resolution**: once loaded, logins resolve through the DB's
+group links instead of the config map's `tenants`. The config map seeds it on first start
+(insert-if-missing; admin edits win) and keeps `platformAdminGroup` + `defaultTenant`. Step by step:
+[`identity-provider.md`](./identity-provider.md) "To add an organisation"
 
 ## Making `tenant` non-null — three ladders
 

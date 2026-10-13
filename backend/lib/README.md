@@ -19,6 +19,7 @@ Domain service utilities — the shared logic layer between action handlers and 
 - `path-guard.ts` — prevents path traversal in file serving
 - `features.ts` — deployment feature flags: parses `FEATURES`/`FEATURES_FILE` (fail-fast on typos), `isFeatureEnabled()` for the action gate and background jobs
 - `identity.ts` — resolves forward-auth headers into `{ username, groups, tenant, role }`
+- `tenants.ts` — in-memory org directory (orgs + sites) loaded from the DB, refreshed on every admin write; feeds identity resolution and `canUseSite()` for shelf creation
 
 ## Relations
 - Used by: `../actions/` (all domain operations), `../agentic/` (media, quality, langtext)

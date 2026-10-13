@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { resolveActor } from '../utils/actor';
 import { resolveTenant } from '../utils/tenant';
+import { canUseSite, getSite } from '../lib/tenants';
 import { defineHttpAction } from './index';
 // TODO(agent): Align shelf label text with printed shelf A4 template once the layout is finalized.
 import type { CreateBoxPayload, CreateShelfPayload } from '../../models';
@@ -118,6 +119,14 @@ const action = defineHttpAction({
             messages.push(`Invalid fields: ${invalidFields.join(', ')}`);
           }
           return sendJson(res, 400, { error: messages.join('. ') });
+        }
+        // Sites come from the org directory now; before, any location string was accepted.
+        const site = getSite(location!);
+        if (!site || !site.floors.includes(floor!)) {
+          return sendJson(res, 400, { error: `Unknown site/floor: ${location}-${floor}` });
+        }
+        if (!canUseSite(site, ctx?.identity)) {
+          return sendJson(res, 403, { error: `Site ${location} belongs to another organisation` });
         }
         const rawLabel =
           typeof shelfPayload.label === 'string'

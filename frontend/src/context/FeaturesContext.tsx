@@ -1,6 +1,8 @@
 import React, { createContext, PropsWithChildren, ReactNode, useContext, useEffect, useState } from 'react';
 import { FEATURE_KEYS } from '../../../models/features';
 import type { FeatureKey } from '../../../models/features';
+import { setShelfLocations } from '../data/shelfLocations';
+import type { SiteDefinition } from '../data/shelfLocations';
 
 // Deployment feature flags, fetched once at boot from GET /api/app-config. The backend is the
 // security boundary (disabled APIs answer 404); this only hides the UI so users never reach them.
@@ -22,8 +24,10 @@ export function FeaturesProvider({ children }: PropsWithChildren) {
     let cancelled = false;
     void fetch('/api/app-config')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((data: { features?: Partial<FeatureSet> }) => {
+      .then((data: { features?: Partial<FeatureSet>; sites?: SiteDefinition[] }) => {
         if (cancelled) return;
+        // The same boot config carries the warehouse sites (shelf labels + shelf creation).
+        if (Array.isArray(data.sites)) setShelfLocations(data.sites);
         setFeatures({ ...ALL_ON, ...(data.features ?? {}) });
       })
       .catch((err) => {

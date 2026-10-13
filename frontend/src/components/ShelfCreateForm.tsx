@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { shelfLocations } from '../data/shelfLocations';
+import { getShelfLocations } from '../data/shelfLocations';
+import { useIdentity } from '../context/IdentityContext';
 import { ensureUser } from '../lib/user';
 import { logger, logError } from '../utils/logger';
 import { dialogService } from './dialog';
@@ -24,7 +25,15 @@ export default function ShelfCreateForm() {
   const [mintedId, setMintedId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const locationLookup = useMemo(() => new Map(shelfLocations.map((entry) => [entry.id, entry])), []);
+  const identity = useIdentity();
+  // Same rule as the backend (lib/tenants.ts canUseSite): unassigned sites for everyone, an org's
+  // sites for its members, all sites for platform admins.
+  const shelfLocations = useMemo(
+    () => getShelfLocations().filter((site) =>
+      !site.tenantId || identity.isPlatformAdmin || site.tenantId === identity.tenant),
+    [identity.isPlatformAdmin, identity.tenant]
+  );
+  const locationLookup = useMemo(() => new Map(shelfLocations.map((entry) => [entry.id, entry])), [shelfLocations]);
   const activeLocation = locationLookup.get(location);
   const floorOptions = activeLocation?.floors ?? [];
 

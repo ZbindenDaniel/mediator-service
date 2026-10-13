@@ -576,6 +576,22 @@ ALTER TABLE item_refs          ADD COLUMN IF NOT EXISTS "ContributedByTenant" TE
 CREATE INDEX IF NOT EXISTS idx_items_tenant  ON items("TenantId");
 CREATE INDEX IF NOT EXISTS idx_boxes_tenant  ON boxes("TenantId");
 CREATE INDEX IF NOT EXISTS idx_events_tenant ON events("TenantId");
+
+-- Organisations admin (docs/PLANNING_TENANCY.md §2a): the app owns org data; Authentik only users +
+-- groups, linked by group name. Sites = an org's warehouse locations (were hardcoded in
+-- models/shelf-locations.ts). Site ids are global because they are encoded in shelf ids.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS "ContactEmail"        TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS "AuthentikGroup"      TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS "AuthentikSuperGroup" TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_authentik_group ON tenants("AuthentikGroup") WHERE "AuthentikGroup" IS NOT NULL;
+CREATE TABLE IF NOT EXISTS tenant_sites (
+  "Id"        TEXT PRIMARY KEY,
+  "TenantId"  TEXT REFERENCES tenants("Id"),
+  "Label"     TEXT NOT NULL,
+  "Floors"    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  "SortOrder" INTEGER NOT NULL DEFAULT 0,
+  "CreatedAt" TEXT
+);
 `);
 
   console.info('[db] Postgres schema ready');
@@ -2144,8 +2160,8 @@ export async function seedTaxonomy(categories: ItemCategoryDefinition[]): Promis
 }
 
 // --- Tenants registry (Phase 2 — docs/PLANNING_TENANCY.md) ---
-// A thin local registry (display label + active flag). Authentik stays the auth source of truth;
-// this is populated from it / by admins later. No scoping keys off it yet.
+// The app owns org data (docs/PLANNING_TENANCY.md §2a): seeded from the config map, then edited in
+// the admin page. Authentik only holds users + groups; AuthentikGroup links the two.
 export interface TenantRow {
   Id: string;
   Label: string | null;
@@ -2161,13 +2177,106 @@ export async function getTenant(id: string): Promise<TenantRow | null> {
   return queryOne<TenantRow>(`SELECT * FROM tenants WHERE "Id" = $1`, [id]);
 }
 
-export async function upsertTenant(t: { id: string; label?: string | null; active?: boolean }): Promise<void> {
-  // On conflict update only Label/Active — CreatedAt is preserved (not in the SET list).
-  await execute(
-    `INSERT INTO tenants ("Id","Label","Active","CreatedAt") VALUES ($1,$2,$3,$4)
-     ON CONFLICT ("Id") DO UPDATE SET "Label" = EXCLUDED."Label", "Active" = EXCLUDED."Active"`,
-    [t.id, t.label ?? null, t.active ?? true, new Date().toISOString()]
+// --- Organisations admin (docs/PLANNING_TENANCY.md §2a) ---
+export interface TenantAdminRow extends TenantRow {
+  ContactEmail: string | null;
+  AuthentikGroup: string | null;
+  AuthentikSuperGroup: string | null;
+}
+
+export interface TenantSiteRow {
+  Id: string;
+  TenantId: string | null;
+  Label: string;
+  Floors: string[];
+  SortOrder: number;
+}
+
+export async function listTenantsForAdmin(): Promise<TenantAdminRow[]> {
+  return query<TenantAdminRow>(`SELECT * FROM tenants ORDER BY "Label" NULLS LAST, "Id"`);
+}
+
+export async function listTenantSites(): Promise<TenantSiteRow[]> {
+  return query<TenantSiteRow>(
+    `SELECT "Id","TenantId","Label","Floors","SortOrder" FROM tenant_sites ORDER BY "SortOrder", "Id"`
   );
+}
+
+export async function insertTenant(t: {
+  id: string; label: string; contactEmail: string | null;
+  authentikGroup: string | null; authentikSuperGroup: string | null;
+}): Promise<void> {
+  await execute(
+    `INSERT INTO tenants ("Id","Label","Active","CreatedAt","ContactEmail","AuthentikGroup","AuthentikSuperGroup")
+     VALUES ($1,$2,TRUE,$3,$4,$5,$6)`,
+    [t.id, t.label, new Date().toISOString(), t.contactEmail, t.authentikGroup, t.authentikSuperGroup]
+  );
+}
+
+export async function updateTenant(id: string, t: {
+  label: string; active: boolean; contactEmail: string | null;
+  authentikGroup: string | null; authentikSuperGroup: string | null;
+}): Promise<number> {
+  return execute(
+    `UPDATE tenants SET "Label"=$2, "Active"=$3, "ContactEmail"=$4, "AuthentikGroup"=$5, "AuthentikSuperGroup"=$6
+     WHERE "Id"=$1`,
+    [id, t.label, t.active, t.contactEmail, t.authentikGroup, t.authentikSuperGroup]
+  );
+}
+
+/**
+ * Seeds an org from the config group map without overwriting admin edits: inserts it if missing,
+ * otherwise only fills fields that are still empty (the DB is authoritative once edited).
+ */
+export async function seedTenant(t: {
+  id: string; label: string | null; authentikGroup: string | null; authentikSuperGroup: string | null;
+}): Promise<void> {
+  await execute(
+    `INSERT INTO tenants ("Id","Label","Active","CreatedAt","AuthentikGroup","AuthentikSuperGroup")
+     VALUES ($1,$2,TRUE,$3,$4,$5)
+     ON CONFLICT ("Id") DO UPDATE SET
+       "Label" = COALESCE(tenants."Label", EXCLUDED."Label"),
+       "AuthentikGroup" = COALESCE(tenants."AuthentikGroup", EXCLUDED."AuthentikGroup"),
+       "AuthentikSuperGroup" = COALESCE(tenants."AuthentikSuperGroup", EXCLUDED."AuthentikSuperGroup")`,
+    [t.id, t.label, new Date().toISOString(), t.authentikGroup, t.authentikSuperGroup]
+  );
+}
+
+export async function countTenantSites(): Promise<number> {
+  const row = await queryOne<{ n: string }>(`SELECT COUNT(*)::text AS n FROM tenant_sites`);
+  return Number(row?.n ?? 0);
+}
+
+export async function insertTenantSite(site: {
+  id: string; tenantId: string | null; label: string; floors: string[]; sortOrder?: number;
+}): Promise<void> {
+  await execute(
+    `INSERT INTO tenant_sites ("Id","TenantId","Label","Floors","SortOrder","CreatedAt") VALUES ($1,$2,$3,$4::jsonb,$5,$6)`,
+    [site.id, site.tenantId, site.label, JSON.stringify(site.floors), site.sortOrder ?? 0, new Date().toISOString()]
+  );
+}
+
+export async function updateTenantSite(id: string, site: {
+  tenantId: string | null; label: string; floors: string[]; sortOrder?: number;
+}): Promise<number> {
+  return execute(
+    `UPDATE tenant_sites SET "TenantId"=$2, "Label"=$3, "Floors"=$4::jsonb, "SortOrder"=COALESCE($5, "SortOrder") WHERE "Id"=$1`,
+    [id, site.tenantId, site.label, JSON.stringify(site.floors), site.sortOrder ?? null]
+  );
+}
+
+export async function deleteTenantSite(id: string): Promise<number> {
+  return execute(`DELETE FROM tenant_sites WHERE "Id"=$1`, [id]);
+}
+
+/** Shelves already minted on a site (optionally one floor). Shelf ids are S-<site>-<floor>-<n>. */
+export async function countShelvesOnSite(siteId: string, floor?: string): Promise<number> {
+  const prefix = floor ? `S-${siteId}-${floor}-` : `S-${siteId}-`;
+  const row = await queryOne<{ n: string }>(
+    `SELECT COUNT(*)::text AS n FROM boxes WHERE "BoxID" LIKE $1`,
+    [prefix.replace(/[\\%_]/g, (c) => `\\${c}`) + '%']
+  );
+  return Number(row?.n ?? 0);
 }
 
 export async function listRecentBoxes(): Promise<any[]> {

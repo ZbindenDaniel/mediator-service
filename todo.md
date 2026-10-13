@@ -421,8 +421,8 @@
      **Phase 1b ✅ built (#968, opt-in overrides; verified locally 2026-10-13, host pending).
      Phase 1 audit + Phase 4 admin role gating ✅ (#969, browser check pending).
      Deployment feature flags ✅ (#970, browser check pending).
-     Next: org admin tab** (orgs + contact + Authentik group + sites in DB, seeded
-     from `TENANT_GROUP_MAP`, see PLANNING_TENANCY §2a), **then revised Phase 3**
+     Org admin page ✅ (#971, browser check pending).
+     Next: revised Phase 3**
      (shared reads with server-side redaction of location/cataloguer, owner-only
      edits incl. catalogue `ContributedByTenant`). Open for Phase 3: exact redacted
      field list (notes? images? logs?), may org B add instances under org A's

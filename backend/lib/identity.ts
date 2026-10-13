@@ -62,11 +62,26 @@ function parseMapFromEnv(): TenantGroupMap {
   }
 }
 
+// Orgs from the DB (lib/tenants.ts), once loaded. They replace the config map's `tenants`; the
+// config keeps platformAdminGroup + defaultTenant (admin access must not be editable in the UI).
+let tenantDirectory: TenantMapEntry[] | null = null;
+
+export function setTenantDirectory(entries: TenantMapEntry[] | null): void {
+  tenantDirectory = entries;
+}
+
 export function loadTenantGroupMap(): TenantGroupMap {
+  if (!cachedMap) cachedMap = parseMapFromEnv();
+  return tenantDirectory ? { ...cachedMap, tenants: tenantDirectory } : cachedMap;
+}
+
+/** The config map only (ignores the DB directory) — the seed source for the tenants table. */
+export function loadConfigTenantGroupMap(): TenantGroupMap {
   if (!cachedMap) cachedMap = parseMapFromEnv();
   return cachedMap;
 }
-export function resetTenantGroupMapCache(): void { cachedMap = null; }
+
+export function resetTenantGroupMapCache(): void { cachedMap = null; tenantDirectory = null; }
 
 /**
  * The tenants declared in the config group map, deduped by id — the source of truth for seeding the

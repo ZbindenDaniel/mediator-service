@@ -84,11 +84,12 @@ export default function AdminPage() {
   return (
     <div className="admin-page">
       <h1 className="admin-page__title">Administration</h1>
-      <Feature name="admin-taxonomy">
-        <nav className="admin-page__nav" style={{ marginBottom: 12 }}>
+      <nav className="admin-page__nav" style={{ marginBottom: 12, display: 'flex', gap: 16 }}>
+        <Link to="/admin/organisationen">Organisationen verwalten →</Link>
+        <Feature name="admin-taxonomy">
           <Link to="/admin/taxonomy">Taxonomie verwalten →</Link>
-        </nav>
-      </Feature>
+        </Feature>
+      </nav>
       {/* Each card sits behind the feature it belongs to; cards without a subsystem have their own admin-* flag. */}
       <div className="admin-page__grid">
         <Feature name="import-export">

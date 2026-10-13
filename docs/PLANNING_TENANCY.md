@@ -69,7 +69,7 @@ items, POC stage) changed several assumptions:
 - **Edits: only the creating org**, for instances *and* catalogue references (the
   `ContributedByTenant` guard).
 - **Ordering happens outside the tool**, maybe a mailto link, so an org needs a contact email.
-- **Org management (decided, option C):** orgs live in the app DB and are edited in an admin tab
+- **Org management (decided, option C) — ✅ built (#971):** orgs live in the app DB and are edited in an admin tab
   (id, name, contact email, linked Authentik group, sites with floors). Authentik keeps only users
   and groups; the link is the **group name**. `TENANT_GROUP_MAP` seeds the table on first start
   (taxonomy pattern: seed → DB authoritative → admin edit, no restart). `platformAdminGroup` stays

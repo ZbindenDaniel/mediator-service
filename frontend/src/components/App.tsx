@@ -20,6 +20,7 @@ import ChatPlaceholder from './ChatPlaceholder';
 import ShelfCreateForm from './ShelfCreateForm';
 import AdminPage from './AdminPage';
 import TaxonomyAdminPage from './admin/TaxonomyAdminPage';
+import OrganisationsAdminPage from './admin/OrganisationsAdminPage';
 import PlacementScanView from './PlacementScanView';
 import StubListPage from './StubListPage';
 import HilfePage from './HilfePage';
@@ -82,6 +83,7 @@ export function AppRoutes() {
       <Route path="/chat" element={gate(features.agentic, <ChatPlaceholder />)} />
       <Route path="/placement/:targetId" element={gate(features['qr-scan'], <PlacementScanView />)} />
       <Route path="/admin" element={<AdminPage />} />
+      <Route path="/admin/organisationen" element={<OrganisationsAdminPage />} />
       <Route path="/admin/taxonomy" element={gate(features['admin-taxonomy'], <TaxonomyAdminPage />)} />
       <Route path="/admin/shelves/new" element={<Navigate to="/admin" replace />} />
       <Route path="/hilfe" element={gate(features.help, <HilfePage />)} />

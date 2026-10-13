@@ -110,14 +110,18 @@ import {
   createStub,
   closeStub,
   initDb,
-  upsertTenant
+  seedTenant,
+  countTenantSites,
+  insertTenantSite
 } from './db';
 import { createShopwareAdminClient } from './shopware/adminClient';
 import { createShopwareSyncClient } from './shopware/syncClient';
 import { processShopwareQueue } from './workers/processShopwareQueue';
 import { AgenticModelInvoker } from './agentic/invoker';
 import { loadTaxonomy, initTaxonomy } from './lib/taxonomy';
-import { resolveIdentity, configuredTenants } from './lib/identity';
+import { resolveIdentity, loadConfigTenantGroupMap } from './lib/identity';
+import { reloadTenantsFromDb, getTenantRows, getSites } from './lib/tenants';
+import { shelfLocations } from '../models/shelf-locations';
 import { loadFeatures, isFeatureEnabled, FEATURE_KEYS } from './lib/features';
 import { isRequestAllowed } from './utils/require-identity';
 import type { RequestIdentity } from './lib/identity';
@@ -1186,11 +1190,26 @@ if (process.env.NODE_ENV !== 'test') {
       // registry is a display/FK target — it does not enforce isolation (that is Phase 3). No config
       // tenants means a single-tenant deployment, so this is a no-op there.
       try {
-        const tenants = configuredTenants();
-        for (const t of tenants) await upsertTenant({ id: t.id, label: t.label, active: true });
-        if (tenants.length) console.info(`[server] Tenant registry seeded (${tenants.length} tenants).`);
+        // Seed orgs from the config map (insert-if-missing; admin edits in the DB win), then the
+        // old hardcoded sites once, assigned to the default org if there is one.
+        const configMap = loadConfigTenantGroupMap();
+        for (const t of configMap.tenants) {
+          await seedTenant({ id: t.id, label: t.label ?? null, authentikGroup: t.group, authentikSuperGroup: t.superGroup ?? null });
+        }
+        const seededIds = new Set(configMap.tenants.map((t) => t.id));
+        if (configMap.defaultTenant && !seededIds.has(configMap.defaultTenant)) {
+          await seedTenant({ id: configMap.defaultTenant, label: null, authentikGroup: null, authentikSuperGroup: null });
+        }
+        if ((await countTenantSites()) === 0) {
+          for (const [i, loc] of shelfLocations.entries()) {
+            await insertTenantSite({ id: loc.id, tenantId: configMap.defaultTenant, label: loc.label, floors: [...loc.floors], sortOrder: i });
+          }
+          console.info(`[server] Seeded ${shelfLocations.length} sites from models/shelf-locations.ts.`);
+        }
+        await reloadTenantsFromDb();
+        console.info(`[server] Org directory loaded (${getTenantRows().length} orgs, ${getSites().length} sites).`);
       } catch (err) {
-        console.warn('[server] Tenant registry seeding failed (non-fatal).', err);
+        console.warn('[server] Org directory seeding/loading failed (non-fatal; config map stays in use).', err);
       }
       // Sync printer queues from DB to CUPS on startup, then keep in sync periodically
       syncPrinterQueuesToCups().catch((err) => {
