@@ -151,17 +151,32 @@ Once logged in, `/api/whoami` shows the real user, their tenant, and role.
 Not yet stamped (deferred with Phase 3, where their scoping lands): `box_stubs`, `item_relations`,
 `quality_assessments`, and the agentic/bulk/intake create paths.
 
-## What is NOT enforced yet (Phase 3)
+## What is enforced (Phase 3a: writes)
 
-- **No read filtering.** Lists, searches, box/shelf views return rows regardless of `TenantId`.
-  A `revamp` user still sees another tenant's warehouse.
-- **No write/ownership guard.** Nothing stops editing/deleting another tenant's row.
-- **No catalogue vs. logistics split in queries**, no cross-tenant aggregate quantity, no
-  platform-admin bypass, no legacy-`NULL` backfill.
+Rule: `owner(row) = row.TenantId ?? defaultTenant` (`backend/lib/ownership.ts`).
 
-All of that is the Phase 3 work, concentrated in the `db.ts` logistics functions so it can't be
-bypassed per-handler. It needs the **default-tenant decision** (revamp-it = tenant #1) and is best
-verified against a real Postgres.
+| Requester | May change |
+|---|---|
+| No login (Basic Auth deployment, the live system) | everything, as before |
+| Platform admin | everything |
+| Logged in with org X | only rows owned by X; catalogue entries only if contributed by X |
+| Logged in without an org | nothing (read-only) |
+
+- **Handlers** answer `403` ("Gehört einer anderen Organisation…") before writing; bulk operations
+  are all-or-nothing and list the foreign rows.
+- **Safety net:** the item, catalogue-entry and box upserts in `db.ts` only overwrite a row its owner
+  may change (checked in SQL). A blocked overwrite logs `[tenancy] Blocked overwrite…`.
+- An org can stock items of **another org's catalogue entry**: the item is its own, the entry stays
+  untouched (read-only for it).
+- Rows created from a parent (spare parts, in-device components, relations, Fundsachen) inherit the
+  parent's owner.
+- **Joining tenancy later** (e.g. revamp): set `defaultTenant` and all unowned rows belong to that
+  org, with no data migration.
+
+## What is NOT enforced yet (Phase 3b: reads)
+
+- **No redaction yet.** Everyone still sees other orgs' box/shelf, cataloguer and logs. Next step.
+- No global stock total yet (DL2).
 
 ## Inspecting state
 

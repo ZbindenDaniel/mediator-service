@@ -27,6 +27,7 @@ import { applySpecContract } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
 import { calculateCo2Impact } from '../lib/co2Calculator';
 import { query as dbQuery, withTransaction } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
 
 const MEDIA_PREFIX = '/media/';
 // TODO(item-detail-reference): Confirm reference payload expectations once API consumers update.
@@ -1241,6 +1242,9 @@ const action = defineHttpAction({
         console.error('[save-item] Missing Artikel_Nummer for reference update', { itemId });
         return sendJson(res, 400, { error: 'Artikel_Nummer is required for reference update' });
       }
+      // This PUT edits the catalogue entry, so the entry's owner decides (it may differ from the
+      // item's owner: an org may stock items of another org's entry, which stays read-only for it).
+      if (!(await guardWrite(ctx, res, 'ref', artikelNummer))) return;
       let existingReference: ItemRef | null = null;
       try {
         if (ctx.getItemReference) {

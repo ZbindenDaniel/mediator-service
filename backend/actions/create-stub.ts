@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { randomBytes } from 'crypto';
 import { resolveActor } from '../utils/actor';
+import { guardWrite } from '../utils/write-guard';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -35,6 +36,7 @@ const action = defineHttpAction({
       const notes = (body.notes ?? '').trim() || null;
 
       if (!shelfId) return sendJson(res, 400, { error: 'shelfId is required' });
+      if (!(await guardWrite(ctx, res, 'box', shelfId))) return;
       if (!description) return sendJson(res, 400, { error: 'description is required' });
 
       const id = randomBytes(16).toString('hex');

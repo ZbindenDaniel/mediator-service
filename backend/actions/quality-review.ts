@@ -9,6 +9,7 @@ import {
 } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveActor } from '../utils/actor';
+import { guardWrite } from '../utils/write-guard';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -26,6 +27,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/quality-review$/);
       const itemUUID = match ? decodeURIComponent(match[1]) : '';
       if (!itemUUID) return sendJson(res, 400, { error: 'invalid item id' });
+      if (req.method !== 'GET' && !(await guardWrite(ctx, res, 'item', itemUUID))) return;
 
       const item = await ctx.getItem(itemUUID);
       if (!item) return sendJson(res, 404, { error: 'item not found' });

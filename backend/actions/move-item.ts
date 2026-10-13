@@ -3,6 +3,7 @@ import { resolveActor } from '../utils/actor';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId, insertQualityAssessment, updateItemQualityAssessment } from '../db';
 import { withTransaction, queryOne } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -19,6 +20,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/move$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
+      if (!(await guardWrite(ctx, res, 'item', uuid))) return;
       const item = await ctx.getItem(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
       let raw = '';
@@ -30,6 +32,8 @@ const action = defineHttpAction({
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
 
       if (!toBoxId) return sendJson(res, 400, { error: 'toBoxId is required' });
+      // Moving into another org's box would put stock into its warehouse.
+      if (!(await guardWrite(ctx, res, 'box', toBoxId))) return;
       const dest = await ctx.getBox(toBoxId);
       if (!dest) {
         console.warn('[move-item] Destination box not found', { itemId: uuid, boxId: toBoxId });

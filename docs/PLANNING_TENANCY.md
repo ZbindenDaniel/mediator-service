@@ -158,6 +158,18 @@ needs the default-tenant decision.
   filtered or hidden yet.
 
 ### Phase 3 — Class-aware scoping (the enforcement)  ⚠️ REVISED — read §2a first
+
+**Confirmed rules (2026-10-13):** the live system stays unchanged (no login = unrestricted); no
+backfill, `owner(row) = TenantId ?? defaultTenant`; logged in without an org = read-only; references
+read-only for other orgs (`ContributedByTenant ?? defaultTenant`), instances from another org's
+reference belong to the creator; grey zone (serial/MAC, intake data, photos, attachments) stays
+visible for now.
+
+**3a ✅ Writes (#976):** policy in `lib/ownership.ts`; DB safety net in the item/catalogue/box upserts
+(`ON CONFLICT … DO UPDATE … WHERE owner = requester`, request context via `AsyncLocalStorage`);
+handler guards (`utils/write-guard.ts`) on every write route; owners inherited on raw inserts
+(spare parts, in-device components, relations, stubs). **3b next:** read redaction (location chain,
+people, item logs, foreign boxes invisible, search/QR/export by box id).
 - **Logistics:** reads *and* writes filtered by `ctx.tenant` with **no shared
   fallback**, enforced in the `db.ts` logistics functions (not per handler) so it
   can't be bypassed. Destructive ops assert ownership.

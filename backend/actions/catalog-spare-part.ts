@@ -2,6 +2,8 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { withTransaction, query } from '../db-client';
 import { resolveActor } from '../utils/actor';
+import { guardWrite } from '../utils/write-guard';
+import { resolveTenant } from '../utils/tenant';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -50,6 +52,7 @@ const action = defineHttpAction({
       const match = urlPath.match(SPARE_PART_LINK_DELETE_ROUTE);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
+      if (!(await guardWrite(ctx, res, 'item', uuid))) return;
 
       const item = await ctx.getItem(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
@@ -73,6 +76,8 @@ const action = defineHttpAction({
       const match = urlPath.match(SPARE_PARTS_NEW_REF_ROUTE);
       const parentUuid = match ? decodeURIComponent(match[1]) : '';
       if (!parentUuid) return sendJson(res, 400, { error: 'invalid item id' });
+      // Disassembling a device creates parts from it: the device must be the requester's own.
+      if (!(await guardWrite(ctx, res, 'item', parentUuid))) return;
 
       const parentItem = await ctx.getItem(parentUuid);
       if (!parentItem) return sendJson(res, 404, { error: 'parent item not found' });
@@ -113,20 +118,21 @@ const action = defineHttpAction({
 
       await withTransaction(async (client) => {
         await client.query(
-          `INSERT INTO item_refs ("Artikel_Nummer","Artikelbeschreibung","Hersteller","Unterkategorien_A")
-           VALUES ($1,$2,$3,$4)`,
-          [next, artikelbeschreibung, hersteller || null, subCategory]
+          `INSERT INTO item_refs ("Artikel_Nummer","Artikelbeschreibung","Hersteller","Unterkategorien_A","ContributedByTenant")
+           VALUES ($1,$2,$3,$4,$5)`,
+          [next, artikelbeschreibung, hersteller || null, subCategory, resolveTenant(ctx)]
         );
 
         await client.query(
-          `INSERT INTO items ("ItemUUID","Artikel_Nummer","BoxID","Location","Auf_Lager","InstanceSpecs","Datum_erfasst","UpdatedAt")
-           VALUES ($1,$2,NULL,$3,1,$4,$5,$5)`,
-          [newItemUUID, next, deviceLabel, instanceSpecsJson, now]
+          // A part taken out of a device belongs to the device's owner.
+          `INSERT INTO items ("ItemUUID","Artikel_Nummer","BoxID","Location","Auf_Lager","InstanceSpecs","Datum_erfasst","UpdatedAt","TenantId")
+           VALUES ($1,$2,NULL,$3,1,$4,$5,$5,(SELECT "TenantId" FROM items WHERE "ItemUUID" = $6))`,
+          [newItemUUID, next, deviceLabel, instanceSpecsJson, now, parentUuid]
         );
 
         await client.query(
-          `INSERT INTO item_relations ("ParentItemUUID","ChildItemUUID","RelationType","SlotKey","CreatedAt","UpdatedAt")
-           VALUES ($1,$2,'Zerlegt_aus',$3,NOW(),NOW())`,
+          `INSERT INTO item_relations ("ParentItemUUID","ChildItemUUID","RelationType","SlotKey","CreatedAt","UpdatedAt","TenantId")
+           VALUES ($1,$2,'Zerlegt_aus',$3,NOW(),NOW(),(SELECT "TenantId" FROM items WHERE "ItemUUID" = $1))`,
           [parentUuid, newItemUUID, slotKey || null]
         );
 
@@ -158,6 +164,8 @@ const action = defineHttpAction({
       const match = urlPath.match(SPARE_PARTS_ROUTE);
       const parentUuid = match ? decodeURIComponent(match[1]) : '';
       if (!parentUuid) return sendJson(res, 400, { error: 'invalid item id' });
+      // Disassembling a device creates parts from it: the device must be the requester's own.
+      if (!(await guardWrite(ctx, res, 'item', parentUuid))) return;
 
       const parentItem = await ctx.getItem(parentUuid);
       if (!parentItem) return sendJson(res, 404, { error: 'parent item not found' });
@@ -191,14 +199,14 @@ const action = defineHttpAction({
 
       await withTransaction(async (client) => {
         await client.query(
-          `INSERT INTO items ("ItemUUID","Artikel_Nummer","BoxID","Location","Auf_Lager","InstanceSpecs","Datum_erfasst","UpdatedAt")
-           VALUES ($1,$2,NULL,$3,1,$4,$5,$5)`,
-          [newItemUUID, artikelNummer, deviceLabel, instanceSpecsJson, now]
+          `INSERT INTO items ("ItemUUID","Artikel_Nummer","BoxID","Location","Auf_Lager","InstanceSpecs","Datum_erfasst","UpdatedAt","TenantId")
+           VALUES ($1,$2,NULL,$3,1,$4,$5,$5,(SELECT "TenantId" FROM items WHERE "ItemUUID" = $6))`,
+          [newItemUUID, artikelNummer, deviceLabel, instanceSpecsJson, now, parentUuid]
         );
 
         await client.query(
-          `INSERT INTO item_relations ("ParentItemUUID","ChildItemUUID","RelationType","SlotKey","CreatedAt","UpdatedAt")
-           VALUES ($1,$2,'Zerlegt_aus',$3,NOW(),NOW())`,
+          `INSERT INTO item_relations ("ParentItemUUID","ChildItemUUID","RelationType","SlotKey","CreatedAt","UpdatedAt","TenantId")
+           VALUES ($1,$2,'Zerlegt_aus',$3,NOW(),NOW(),(SELECT "TenantId" FROM items WHERE "ItemUUID" = $1))`,
           [parentUuid, newItemUUID, slotKey || null]
         );
 

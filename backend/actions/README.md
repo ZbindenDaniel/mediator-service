@@ -71,6 +71,7 @@ HTTP boundary only. Handlers validate inputs and return responses. Business logi
 - One exported handler per file
 - File name must reflect the endpoint it serves (e.g., `move-item.ts` → `POST /api/items/:id/move`)
 - No shared mutable state between handlers
+- A handler that changes items, boxes, Fundsachen or catalogue entries calls `guardWrite`/`guardWriteMany` (or `guardCreate` for new rows) from `utils/write-guard.ts` before writing; rows it creates with its own SQL inherit the owner (`TenantId`) from their parent row
 - An action that belongs to an optional feature declares `feature: '<key>'` (see `models/features.ts`); the dispatcher answers 404 while that feature is disabled. Core actions declare none
 
 ## Decisions

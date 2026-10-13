@@ -99,13 +99,14 @@ export async function syncInDeviceComponents(
       // In-device component: no Artikel_Nummer, no BoxID — excluded from lists/export/print
       // until it graduates.
       await client.query(
-        `INSERT INTO items ("ItemUUID","Artikel_Nummer","BoxID","Location","Auf_Lager","SerialNumber","InstanceSpecs","Datum_erfasst","UpdatedAt")
-         VALUES ($1, NULL, NULL, NULL, 1, $2, $3, $4, $4)`,
-        [uuid, rawSerial, specsJson, ts]
+        // Components belong to the device's owner.
+        `INSERT INTO items ("ItemUUID","Artikel_Nummer","BoxID","Location","Auf_Lager","SerialNumber","InstanceSpecs","Datum_erfasst","UpdatedAt","TenantId")
+         VALUES ($1, NULL, NULL, NULL, 1, $2, $3, $4, $4, (SELECT "TenantId" FROM items WHERE "ItemUUID" = $5))`,
+        [uuid, rawSerial, specsJson, ts, parentUUID]
       );
       await client.query(
-        `INSERT INTO item_relations ("ParentItemUUID","ChildItemUUID","RelationType","SlotKey","CreatedAt","UpdatedAt")
-         VALUES ($1, $2, 'Zerlegt_aus', $3, NOW(), NOW())`,
+        `INSERT INTO item_relations ("ParentItemUUID","ChildItemUUID","RelationType","SlotKey","CreatedAt","UpdatedAt","TenantId")
+         VALUES ($1, $2, 'Zerlegt_aus', $3, NOW(), NOW(), (SELECT "TenantId" FROM items WHERE "ItemUUID" = $1))`,
         [parentUUID, uuid, slotKey || null]
       );
 

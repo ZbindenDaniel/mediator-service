@@ -7,6 +7,7 @@ import { getFilterableSpecKeys } from './contracts/registry';
 import { resolveShopwareImageInputs } from './lib/shopware-media';
 import type { ShopwareImageInput } from './shopware/adminClient';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
+import { writeScopeParams } from './lib/ownership';
 import type {
   ShopwareSyncQueueEntry,
   ShopwareSyncQueueInsert,
@@ -1002,9 +1003,10 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     "Artikel_Nummer", "Suchbegriff", "Grafikname", "ImageNames", "Artikelbeschreibung", "Verkaufspreis", "Kurzbeschreibung",
     "Langtext", "Hersteller", "Länge_mm", "Breite_mm", "Höhe_mm", "Gewicht_kg",
     "Hauptkategorien_A", "Unterkategorien_A", "Hauptkategorien_B", "Unterkategorien_B",
-    "Veröffentlicht_Status", "Quality", "Shopartikel", "Artikeltyp", "Einheit", "EntityType", "EAN", "ShopwareProductId"
+    "Veröffentlicht_Status", "Quality", "Shopartikel", "Artikeltyp", "Einheit", "EntityType", "EAN", "ShopwareProductId",
+    "ContributedByTenant"
   )
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
   ON CONFLICT("Artikel_Nummer") DO UPDATE SET
     "Suchbegriff"=EXCLUDED."Suchbegriff",
     "Grafikname"=EXCLUDED."Grafikname",
@@ -1029,7 +1031,11 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     "Einheit"=EXCLUDED."Einheit",
     "EntityType"=EXCLUDED."EntityType",
     "EAN"=EXCLUDED."EAN",
-    "ShopwareProductId"=EXCLUDED."ShopwareProductId"
+    "ShopwareProductId"=EXCLUDED."ShopwareProductId",
+    "ContributedByTenant"=COALESCE(item_refs."ContributedByTenant", EXCLUDED."ContributedByTenant")
+  -- Tenancy safety net (lib/ownership.ts): only the owning org may overwrite an existing catalogue
+  -- entry. $27 unrestricted, $28 requester org, $29 default org (owner of unstamped rows).
+  WHERE $27 OR COALESCE(item_refs."ContributedByTenant", $29) = $28
 `;
 
 const UPSERT_ITEM_INSTANCE_SQL = `
@@ -1051,25 +1057,40 @@ const UPSERT_ITEM_INSTANCE_SQL = `
     -- Preserve the existing owner on update: an upsert must never reassign a row to another tenant.
     -- Only fills in when the row is still unassigned (legacy/null), so ownership is set once at create.
     "TenantId"=COALESCE(items."TenantId", EXCLUDED."TenantId")
+  -- Tenancy safety net: only the owning org may overwrite an existing item ($13 unrestricted,
+  -- $14 requester org, $15 default org).
+  WHERE $13 OR COALESCE(items."TenantId", $15) = $14
 `;
 
+// A guarded upsert that matched an existing row of another org changes nothing (0 rows); log it so a
+// write that "succeeded" without effect is diagnosable. Handlers reject such writes earlier with 403.
+function warnIfBlocked(rowCount: number, kind: string, id: unknown): void {
+  if (rowCount === 0) console.warn(`[tenancy] Blocked overwrite of another organisation's ${kind}`, { id });
+}
+
 async function upsertItemReferenceRow(row: ItemRefRow): Promise<void> {
-  await execute(UPSERT_ITEM_REFERENCE_SQL, [
+  const [unrestricted, requesterTenant, defaultOrg] = writeScopeParams();
+  const n = await execute(UPSERT_ITEM_REFERENCE_SQL, [
     row.Artikel_Nummer, row.Suchbegriff, row.Grafikname, row.ImageNames, row.Artikelbeschreibung,
     row.Verkaufspreis, row.Kurzbeschreibung, row.Langtext, row.Hersteller,
     row.Länge_mm, row.Breite_mm, row.Höhe_mm, row.Gewicht_kg,
     row.Hauptkategorien_A, row.Unterkategorien_A, row.Hauptkategorien_B, row.Unterkategorien_B,
     row.Veröffentlicht_Status, row.Quality, row.Shopartikel, row.Artikeltyp,
-    row.Einheit, row.EntityType, row.EAN, row.ShopwareProductId
+    row.Einheit, row.EntityType, row.EAN, row.ShopwareProductId,
+    requesterTenant, unrestricted, requesterTenant, defaultOrg
   ]);
+  warnIfBlocked(n, 'catalogue entry', row.Artikel_Nummer);
 }
 
 async function upsertItemInstanceRow(row: ItemInstanceRow): Promise<void> {
-  await execute(UPSERT_ITEM_INSTANCE_SQL, [
+  const [unrestricted, requesterTenant, defaultOrg] = writeScopeParams();
+  const n = await execute(UPSERT_ITEM_INSTANCE_SQL, [
     row.ItemUUID, row.Artikel_Nummer, row.BoxID, row.Location,
     row.UpdatedAt, row.Datum_erfasst, row.Auf_Lager, row.Quality,
-    row.ShopwareVariantId, row.SerialNumber, row.MacAddress, row.TenantId
+    row.ShopwareVariantId, row.SerialNumber, row.MacAddress, row.TenantId,
+    unrestricted, requesterTenant, defaultOrg
   ]);
+  warnIfBlocked(n, 'item', row.ItemUUID);
 }
 
 async function runItemPersistenceStatements(payload: ItemPersistencePayload): Promise<void> {
@@ -1148,16 +1169,22 @@ const UPSERT_BOX_SQL = `
     -- Preserve the existing owner on update: an upsert must never reassign a box to another tenant.
     -- Only fills in when the box is still unassigned (legacy/null), so ownership is set once at create.
     "TenantId"=COALESCE(boxes."TenantId", EXCLUDED."TenantId")
+  -- Tenancy safety net: only the owning org may overwrite an existing box ($11 unrestricted,
+  -- $12 requester org, $13 default org).
+  WHERE $11 OR COALESCE(boxes."TenantId", $13) = $12
 `;
 
 // upsertBox kept for backward-compat import shape; callers should use runUpsertBox
 export const upsertBox = {
   async run(box: Box): Promise<void> {
-    await execute(UPSERT_BOX_SQL, [
+    const [unrestricted, requesterTenant, defaultOrg] = writeScopeParams();
+    const n = await execute(UPSERT_BOX_SQL, [
       box.BoxID, box.LocationId ?? null, box.Label ?? null, box.CreatedAt ?? null,
       box.Notes ?? null, box.PhotoPath ?? null, box.PlacedBy ?? null, box.PlacedAt ?? null,
-      box.UpdatedAt, box.TenantId ?? null
+      box.UpdatedAt, box.TenantId ?? null,
+      unrestricted, requesterTenant, defaultOrg
     ]);
+    warnIfBlocked(n, 'box', box.BoxID);
   }
 };
 
@@ -2277,6 +2304,34 @@ export async function countShelvesOnSite(siteId: string, floor?: string): Promis
     [prefix.replace(/[\\%_]/g, (c) => `\\${c}`) + '%']
   );
   return Number(row?.n ?? 0);
+}
+
+// --- Ownership lookups for the tenancy write guards (utils/write-guard.ts) ---
+// `undefined` = row not found (the handler reports that itself); otherwise the raw owner column.
+export async function getRowOwner(kind: 'item' | 'box' | 'ref', id: string): Promise<string | null | undefined> {
+  const sql = kind === 'item'
+    ? `SELECT "TenantId" AS owner FROM items WHERE "ItemUUID" = $1`
+    : kind === 'box'
+      ? `SELECT "TenantId" AS owner FROM boxes WHERE "BoxID" = $1`
+      : `SELECT "ContributedByTenant" AS owner FROM item_refs WHERE "Artikel_Nummer" = $1`;
+  const row = await queryOne<{ owner: string | null }>(sql, [id]);
+  return row ? row.owner : undefined;
+}
+
+export async function getItemOwners(itemUUIDs: string[]): Promise<Map<string, string | null>> {
+  const rows = await query<{ id: string; owner: string | null }>(
+    `SELECT "ItemUUID" AS id, "TenantId" AS owner FROM items WHERE "ItemUUID" = ANY($1::text[])`,
+    [itemUUIDs]
+  );
+  return new Map(rows.map((r) => [r.id, r.owner]));
+}
+
+export async function getRefOwners(artikelNummern: string[]): Promise<Map<string, string | null>> {
+  const rows = await query<{ id: string; owner: string | null }>(
+    `SELECT "Artikel_Nummer" AS id, "ContributedByTenant" AS owner FROM item_refs WHERE "Artikel_Nummer" = ANY($1::text[])`,
+    [artikelNummern]
+  );
+  return new Map(rows.map((r) => [r.id, r.owner]));
 }
 
 export async function listRecentBoxes(): Promise<any[]> {
@@ -3516,8 +3571,9 @@ export async function createStub(params: {
   notes: string | null;
 }): Promise<void> {
   await execute(
-    `INSERT INTO box_stubs ("Id","ShelfId","Description","NumberLooseItems","NumberLooseBoxes","CreatedAt","CreatedBy","IsActive","Notes")
-     VALUES ($1,$2,$3,$4,0,$5,$6,1,$7)`,
+    // A stub belongs to its shelf's owner.
+    `INSERT INTO box_stubs ("Id","ShelfId","Description","NumberLooseItems","NumberLooseBoxes","CreatedAt","CreatedBy","IsActive","Notes","TenantId")
+     VALUES ($1,$2,$3,$4,0,$5,$6,1,$7,(SELECT "TenantId" FROM boxes WHERE "BoxID" = $2))`,
     [params.id, params.shelfId, params.description, params.numberLooseItems, params.createdAt, params.createdBy, params.notes ?? null]
   );
 }

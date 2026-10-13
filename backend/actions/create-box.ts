@@ -6,6 +6,7 @@ import { defineHttpAction } from './index';
 // TODO(agent): Align shelf label text with printed shelf A4 template once the layout is finalized.
 import type { CreateBoxPayload, CreateShelfPayload } from '../../models';
 import { withTransaction } from '../db-client';
+import { guardCreate } from '../utils/write-guard';
 
 // TODO(agent): Verify shelf ID padding once the label template specification is clarified.
 // TODO(agent): Remove category-based shelf label fallback assumptions from any remaining admin tooling.
@@ -82,6 +83,7 @@ const action = defineHttpAction({
       }
       // Stamp the owning tenant on new boxes (Phase 2b). Null until forward-auth is live, so neutral.
       const tenant = resolveTenant(ctx);
+      if (!guardCreate(ctx, res)) return;
 
       const normalizedType = typeof data.type === 'string' ? data.type.trim().toLowerCase() : '';
       if (normalizedType === 'shelf') {

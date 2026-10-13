@@ -7,14 +7,8 @@ const state = {
 
 const fakeClient = {
   query: jest.fn(async (sql: string, params: any[] = []) => {
-    if (sql.includes('FROM items WHERE "SerialNumber"')) {
-      const has = state.existingSerials.has(params[0]);
-      return { rows: has ? [{ ItemUUID: 'x' }] : [], rowCount: has ? 1 : 0 };
-    }
-    if (sql.includes('FROM items WHERE "ItemUUID"')) {
-      const has = state.existingUUIDs.has(params[0]);
-      return { rows: has ? [{ x: 1 }] : [], rowCount: has ? 1 : 0 };
-    }
+    // INSERTs first: they contain an owner subquery (FROM items WHERE "ItemUUID") that the lookup
+    // branches below would otherwise match.
     if (sql.startsWith('INSERT INTO items')) {
       state.existingUUIDs.add(params[0]);
       state.existingSerials.add(params[1]);
@@ -24,6 +18,14 @@ const fakeClient = {
     if (sql.startsWith('INSERT INTO item_relations')) {
       state.inserts.push({ sql, params });
       return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes('FROM items WHERE "SerialNumber"')) {
+      const has = state.existingSerials.has(params[0]);
+      return { rows: has ? [{ ItemUUID: 'x' }] : [], rowCount: has ? 1 : 0 };
+    }
+    if (sql.includes('FROM items WHERE "ItemUUID"')) {
+      const has = state.existingUUIDs.has(params[0]);
+      return { rows: has ? [{ x: 1 }] : [], rowCount: has ? 1 : 0 };
     }
     return { rows: [], rowCount: 0 };
   }),
@@ -63,6 +65,9 @@ describe('syncInDeviceComponents', () => {
     expect(itemInserts).toHaveLength(2);
     // No Artikel_Nummer, no BoxID for an in-device component.
     expect(itemInserts[0].params[1]).toBe('SER-A'); // SerialNumber slot
+    // The component inherits the device's owner (tenancy): parent UUID feeds the owner subquery.
+    expect(itemInserts[0].sql).toContain('"TenantId"');
+    expect(itemInserts[0].params[4]).toBe('I-100-0001');
     const relInserts = state.inserts.filter((i) => i.sql.startsWith('INSERT INTO item_relations'));
     expect(relInserts).toHaveLength(2);
     expect(relInserts[0].sql).toContain("'Zerlegt_aus'");

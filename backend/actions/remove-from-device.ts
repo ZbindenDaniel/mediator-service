@@ -4,6 +4,8 @@ import { execute, queryOne, withTransaction } from '../db-client';
 import { insertQualityAssessment, updateItemQualityAssessment, generateShopwareCorrelationId } from '../db';
 import { graduateComponentInTx, needsGraduation, WriteOnceIdentityError } from '../lib/graduate-component';
 import { resolveActor } from '../utils/actor';
+import { guardWrite } from '../utils/write-guard';
+import { resolveTenant } from '../utils/tenant';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -36,9 +38,9 @@ async function resolveGraduationRef(
   const maxStr: string | null = await ctx.getMaxArtikelNummer();
   const next = String((maxStr ? parseInt(maxStr, 10) : 0) + 1).padStart(6, '0');
   await execute(
-    `INSERT INTO item_refs ("Artikel_Nummer","Artikelbeschreibung","Hersteller","Unterkategorien_A")
-     VALUES ($1,$2,$3,$4)`,
-    [next, artikelbeschreibung, hersteller || null, subCategory]
+    `INSERT INTO item_refs ("Artikel_Nummer","Artikelbeschreibung","Hersteller","Unterkategorien_A","ContributedByTenant")
+     VALUES ($1,$2,$3,$4,$5)`,
+    [next, artikelbeschreibung, hersteller || null, subCategory, resolveTenant(ctx)]
   );
   return { artikelNummer: next };
 }
@@ -55,6 +57,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/remove-from-device$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
+      if (!(await guardWrite(ctx, res, 'item', uuid))) return;
 
       const item = await ctx.getItem(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
@@ -73,6 +76,7 @@ const action = defineHttpAction({
 
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       if (!toBoxId) return sendJson(res, 400, { error: 'toBoxId is required' });
+      if (!(await guardWrite(ctx, res, 'box', toBoxId))) return;
 
       // Verify the item has a Zerlegt_aus relation to get the parent device UUID
       const relation = await queryOne<{ ParentItemUUID: string }>(

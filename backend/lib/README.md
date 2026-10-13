@@ -19,6 +19,7 @@ Domain service utilities — the shared logic layer between action handlers and 
 - `path-guard.ts` — prevents path traversal in file serving
 - `features.ts` — deployment feature flags: parses `FEATURES`/`FEATURES_FILE` (fail-fast on typos), `isFeatureEnabled()` for the action gate and background jobs
 - `identity.ts` — resolves forward-auth headers into `{ username, groups, tenant, role }`
+- `ownership.ts` — tenancy write rules: `owner = TenantId ?? defaultTenant`, `canWrite`/`canCreate`, unrestricted for no-login requests + platform admins + background jobs; request context (`runWithIdentity`) for the DB safety net
 - `tenants.ts` — in-memory org directory (orgs + sites) loaded from the DB, refreshed on every admin write; feeds identity resolution and `canUseSite()` for shelf creation
 
 ## Relations
@@ -31,3 +32,6 @@ Reusable domain logic only. HTTP request/response handling belongs in `../action
 ## Rules
 - Functions here are stateless where possible — take inputs, return outputs
 - No direct Express `req`/`res` imports — this layer is HTTP-agnostic
+
+## Decisions
+- **Request context via `AsyncLocalStorage` (`ownership.ts`)** — new pattern, deliberately narrow. Catalogue entries, items and boxes are written from over a dozen paths (save, import, intake, AI results, snapshots), some outside requests. Instead of threading an identity parameter through every persistence function, the dispatcher runs each action inside `runWithIdentity()`, and the three central upserts in `db.ts` read it for their owner guard. Only these owner guards use it; everything else still gets its data through `ctx`. No context = background job = unrestricted (same as before tenancy).

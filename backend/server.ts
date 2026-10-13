@@ -125,6 +125,7 @@ import { shelfLocations } from '../models/shelf-locations';
 import { loadFeatures, isFeatureEnabled, FEATURE_KEYS } from './lib/features';
 import { isRequestAllowed } from './utils/require-identity';
 import { sendAppShellFile } from './utils/app-shell';
+import { runWithIdentity } from './lib/ownership';
 import type { RequestIdentity } from './lib/identity';
 import type { Item, LabelJob } from './db';
 import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
@@ -1056,7 +1057,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
             },
             now: () => new Date()
           });
-        await action.handle?.(req, res, {
+        const identity = resolveIdentity(req);
+        // Request context for the DB layer's tenancy safety net (lib/ownership.ts).
+        await runWithIdentity(identity, async () => action.handle?.(req, res, {
           upsertBox,
           runUpsertBox,
           persistItem,
@@ -1137,9 +1140,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
             issues: [...shopwareConfigIssues],
             ready: shopwareConfigReady
           },
-          identity: resolveIdentity(req),
+          identity,
           generateItemUUID: generateItemId
-        });
+        }));
       } catch (err) {
         console.error('Action handler failed', err);
         sendJson(res, 500, { error: 'Internal error' });

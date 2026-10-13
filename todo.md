@@ -425,7 +425,9 @@
      Phase 1 audit + Phase 4 admin role gating ✅ (#969, browser check pending).
      Deployment feature flags ✅ (#970, browser check pending).
      Org admin page ✅ (#971, browser check pending).
-     Next: revised Phase 3**
+     Phase 3a writes ✅ (#976). Next: Phase 3b reads** (redaction of location chain /
+     people / item logs, foreign boxes invisible, search/QR/export by box id; see
+     PLANNING_TENANCY Phase 3). Then: revised Phase 3 leftovers
      (shared reads with server-side redaction of location/cataloguer, owner-only
      edits incl. catalogue `ContributedByTenant`). Open for Phase 3: exact redacted
      field list (notes? images? logs?), may org B add instances under org A's

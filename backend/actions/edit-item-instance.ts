@@ -4,6 +4,7 @@ import { defineHttpAction } from './index';
 import { normalizeQuality } from '../../models/quality';
 import { stringifyLangtext } from '../lib/langtext';
 import { execute, queryOne } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
 
 // Normalize an operator-supplied InstanceSpecs object into a canonical string→string map.
 // Returns `null` (clear the column) when no meaningful entries remain, so deleting every
@@ -37,6 +38,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/instance$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
+      if (!(await guardWrite(ctx, res, 'item', uuid))) return;
       const item = await queryOne('SELECT "ItemUUID" FROM items WHERE "ItemUUID" = $1', [uuid]);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
 

@@ -4,6 +4,7 @@ import path from 'path';
 import { defineHttpAction } from './index';
 import { MEDIA_UPLOAD_STAGING_DIR, formatArtikelNummerForMedia } from '../lib/media';
 import { queryOne, query, execute, insert } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
 
 const ATTACHMENT_ROUTE_RE = /^\/api\/item\/([^/]+)\/attachments(?:\/(\d+))?$/;
 const INSTANCES_SUBDIR = 'instances';
@@ -45,6 +46,7 @@ const action = defineHttpAction({
     );
     if (!itemRow) return sendJson(res, 404, { error: 'item not found' });
     const artikelNummer = itemRow.Artikel_Nummer ?? null;
+    if (req.method !== 'GET' && !(await guardWrite(ctx, res, 'item', itemUUID))) return;
 
     // ── GET: list attachments ─────────────────────────────────────────────────
     // Return this instance's own files plus any product-level files for its Artikel_Nummer,
