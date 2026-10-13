@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { GoOrganization, GoTag } from 'react-icons/go';
 import ImportCard from './ImportCard';
 import ShelfCreateForm from './ShelfCreateForm';
 import ExportCard from './admin/ExportCard';
@@ -83,11 +84,17 @@ export default function AdminPage() {
 
   return (
     <div className="admin-page">
-      <h1 className="admin-page__title">Administration</h1>
-      <nav className="admin-page__nav" style={{ marginBottom: 12, display: 'flex', gap: 16 }}>
-        <Link to="/admin/organisationen">Organisationen verwalten →</Link>
+      <div className="admin-page__header">
+        <h1 className="admin-page__title">Administration</h1>
+      </div>
+      <nav className="admin-page__nav" aria-label="Verwaltungsbereiche">
+        <Link className="admin-link" to="/admin/organisationen">
+          <GoOrganization aria-hidden="true" /> Organisationen verwalten
+        </Link>
         <Feature name="admin-taxonomy">
-          <Link to="/admin/taxonomy">Taxonomie verwalten →</Link>
+          <Link className="admin-link" to="/admin/taxonomy">
+            <GoTag aria-hidden="true" /> Taxonomie verwalten
+          </Link>
         </Feature>
       </nav>
       {/* Each card sits behind the feature it belongs to; cards without a subsystem have their own admin-* flag. */}

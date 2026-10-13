@@ -523,6 +523,7 @@
 ## Open Questions
 
 ### Still Open
+- **Admin cards don't validate API responses (#974 finding):** e.g. `SystemStatusCard` renders `/api/media/health` without checking `res.ok`/shape; an unexpected body (`imageProbe` missing) throws during render and, without an error boundary, blanks the whole page. Add response checks + an error boundary around admin cards.
 - **Feature-flag gaps (#970):** image upload in create/edit forms isn't covered by `item-images`; box notes stay editable in the box edit form with `box-notes` off; old `SHOPWARE_SYNC_ENABLED`/`ERP_SYNC_ENABLED` not folded into the manifest. Fine for the POC; decide if the catalogue deployment needs them.
 - **Platform-admin model:** `PLANNING_NEW_USE_CASE.md` §12.3 says platform admins are the `super` users of a designated admin tenant; the implementation (`identity.ts`) uses a separate `platformAdminGroup` (`mediator-admin`). Settle when defining `super` powers.
 

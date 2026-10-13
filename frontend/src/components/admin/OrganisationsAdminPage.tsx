@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { setShelfLocations } from '../../data/shelfLocations';
+import { dialogService } from '../dialog';
 import type { SiteDefinition } from '../../data/shelfLocations';
 
 // Organisations admin (docs/PLANNING_TENANCY.md §2a): orgs, their Authentik group link and their
@@ -55,7 +56,10 @@ export default function OrganisationsAdminPage() {
       try {
         const res = await fetch('/api/admin/tenants', { headers: authHeaders() });
         if (!res.ok) throw new Error(res.status === 403 ? 'Kein Zugriff.' : `HTTP ${res.status}`);
-        apply(await res.json());
+        const snap: Snapshot = await res.json();
+        apply(snap);
+        // Open the first org right away instead of an empty detail panel.
+        setSelectedId((prev) => prev ?? snap.tenants[0]?.id ?? null);
       } catch (err) {
         setError(`Organisationen konnten nicht geladen werden: ${(err as Error).message}`);
       }
@@ -85,50 +89,52 @@ export default function OrganisationsAdminPage() {
   const selected = orgs.find((o) => o.id === selectedId) ?? null;
   const showUnassigned = selectedId === UNASSIGNED;
 
+  const isError = Boolean(error);
+
   return (
     <div className="admin-page">
-      <div className="admin-page__header" style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+      <div className="admin-page__header">
         <h1 className="admin-page__title">Organisationen</h1>
-        <Link to="/admin">← Administration</Link>
+        <Link className="admin-link admin-link--quiet" to="/admin">← Administration</Link>
       </div>
-      <p className="muted">
-        Benutzer und Gruppen werden in Authentik verwaltet. Hier wird eine Organisation über den
-        Gruppennamen mit Authentik verknüpft. Plattform-Admins: Gruppe „{data?.platformAdminGroup ?? '…'}“.
+      <p className="admin-page__intro muted">
+        Benutzer und Gruppen verwaltest du in Authentik. Hier legst du eine Organisation an und
+        verknüpfst sie über den <strong>Gruppennamen</strong>. Plattform-Admins sind in der Gruppe
+        „{data?.platformAdminGroup ?? '…'}“.
       </p>
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
-      {message && <p className="muted" aria-live="polite">{message}</p>}
+      {isError && <div className="admin-flash admin-flash--error" role="alert">{error}</div>}
+      {!isError && message && <div className="admin-flash" aria-live="polite">{message}</div>}
 
-      <div className="row" style={{ display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
-        <div className="card" style={{ flex: '1 1 260px', maxWidth: 360 }}>
-          <h3>Organisationen</h3>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+      <div className="admin-split">
+        <div className="card">
+          <div className="admin-section-title">
+            <h3>Organisationen</h3>
+            <span className="admin-list__meta">{orgs.length}</span>
+          </div>
+          <ul className="admin-list">
             {orgs.map((o) => (
               <li key={o.id}>
                 <button
                   type="button"
+                  className={`admin-list__item${o.id === selectedId ? ' is-selected' : ''}${o.active ? '' : ' is-inactive'}`}
                   onClick={() => setSelectedId(o.id)}
-                  style={{
-                    width: '100%', textAlign: 'left', padding: '6px 8px', border: 'none', cursor: 'pointer',
-                    background: o.id === selectedId ? 'var(--surface-selected, #eef)' : 'transparent',
-                    opacity: o.active ? 1 : 0.5
-                  }}
+                  aria-current={o.id === selectedId ? 'true' : undefined}
                 >
-                  <strong>{o.label ?? o.id}</strong>{!o.active ? ' (inaktiv)' : ''}
-                  <span className="muted"> · {o.sites.length} Standorte{o.authentikGroup ? '' : ' · keine Gruppe'}</span>
+                  <span className="admin-list__label" title={o.label ?? o.id}>{o.label ?? o.id}</span>
+                  {!o.authentikGroup && <span className="admin-pill" title="Ohne Gruppe kann sich niemand dieser Organisation zuordnen">keine Gruppe</span>}
+                  <span className="admin-list__meta">{o.sites.length} Standort{o.sites.length === 1 ? '' : 'e'}</span>
                 </button>
               </li>
             ))}
             <li>
               <button
                 type="button"
+                className={`admin-list__item${showUnassigned ? ' is-selected' : ''}`}
                 onClick={() => setSelectedId(UNASSIGNED)}
-                style={{
-                  width: '100%', textAlign: 'left', padding: '6px 8px', border: 'none', cursor: 'pointer',
-                  background: showUnassigned ? 'var(--surface-selected, #eef)' : 'transparent'
-                }}
+                aria-current={showUnassigned ? 'true' : undefined}
               >
-                <em>Standorte ohne Organisation</em>
-                <span className="muted"> · {data?.unassignedSites.length ?? 0}</span>
+                <span className="admin-list__label"><em>Standorte ohne Organisation</em></span>
+                <span className="admin-list__meta">{data?.unassignedSites.length ?? 0}</span>
               </button>
             </li>
           </ul>
@@ -137,24 +143,30 @@ export default function OrganisationsAdminPage() {
           }} />
         </div>
 
-        <div className="card" style={{ flex: '2 1 360px' }}>
+        <div className="card">
           {selected ? (
             <>
-              <h3>{selected.label ?? selected.id} <span className="muted">({selected.id})</span></h3>
+              <div className="admin-section-title">
+                <h3>{selected.label ?? selected.id} <span className="admin-code">{selected.id}</span></h3>
+                {!selected.active && <span className="admin-pill admin-pill--muted">inaktiv</span>}
+              </div>
               <OrgEditor key={selected.id} org={selected} onSave={(patch) => send('PUT', `/api/admin/tenants/${encodeURIComponent(selected.id)}`, patch)} />
-              <h4>Standorte</h4>
+              <div className="admin-section-title">
+                <h4>Standorte</h4>
+                <span className="admin-list__meta">Regal-IDs: S-‹Standort›-‹Stockwerk›-‹Nr›</span>
+              </div>
               <SiteList sites={selected.sites} orgs={orgs} send={send} />
               <AddSiteForm tenantId={selected.id} onAdd={(body) => send('POST', '/api/admin/sites', body)} />
             </>
           ) : showUnassigned ? (
             <>
-              <h3>Standorte ohne Organisation</h3>
-              <p className="muted">Für alle nutzbar. Einer Organisation zuweisen, sobald sie ihre eigenen Standorte hat.</p>
+              <div className="admin-section-title"><h3>Standorte ohne Organisation</h3></div>
+              <p className="admin-page__intro muted">Für alle nutzbar. Einer Organisation zuweisen, sobald sie eigene Standorte hat.</p>
               <SiteList sites={data?.unassignedSites ?? []} orgs={orgs} send={send} />
               <AddSiteForm tenantId={null} onAdd={(body) => send('POST', '/api/admin/sites', body)} />
             </>
           ) : (
-            <p className="muted">Organisation auswählen oder neu anlegen.</p>
+            <p className="admin-empty">Organisation auswählen oder unten links neu anlegen.</p>
           )}
         </div>
       </div>
@@ -167,34 +179,61 @@ function AddOrgForm({ onAdd }: { onAdd: (body: { id: string; label: string; auth
   const [label, setLabel] = useState('');
   const [group, setGroup] = useState('');
   return (
-    <div style={{ marginTop: 10, borderTop: '1px solid var(--border,#ddd)', paddingTop: 8, display: 'grid', gap: 6 }}>
-      <strong className="muted">Neue Organisation</strong>
-      <input value={id} onChange={(e) => setId(e.target.value.toLowerCase())} placeholder="ID (z.B. zurichrepair), nicht änderbar" />
-      <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Name" />
-      <input value={group} onChange={(e) => setGroup(e.target.value)} placeholder="Authentik-Gruppe (z.B. tenant-zurichrepair)" />
-      <button type="button" disabled={!id || !label} onClick={() => void onAdd({ id: id.trim(), label: label.trim(), authentikGroup: group.trim() }).then(() => { setId(''); setLabel(''); setGroup(''); })}>
-        Anlegen
-      </button>
-    </div>
+    <details className="admin-add">
+      <summary>＋ Organisation anlegen</summary>
+      <div className="admin-form">
+        <label className="admin-field admin-field--wide">
+          <span>ID (Kleinbuchstaben, nicht änderbar)</span>
+          <input value={id} onChange={(e) => setId(e.target.value.toLowerCase())} placeholder="z.B. zurichrepair" />
+        </label>
+        <label className="admin-field admin-field--wide">
+          <span>Name</span>
+          <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="z.B. Zurich Repair" />
+        </label>
+        <label className="admin-field admin-field--wide">
+          <span>Authentik-Gruppe</span>
+          <input value={group} onChange={(e) => setGroup(e.target.value)} placeholder="z.B. tenant-zurichrepair" />
+        </label>
+        <div className="admin-actions">
+          <button
+            type="button"
+            className="admin-btn"
+            disabled={!id || !label}
+            onClick={() => void onAdd({ id: id.trim(), label: label.trim(), authentikGroup: group.trim() }).then(() => { setId(''); setLabel(''); setGroup(''); })}
+          >
+            Anlegen
+          </button>
+        </div>
+      </div>
+    </details>
   );
 }
 
 function OrgEditor({ org, onSave }: { org: Org; onSave: (patch: Record<string, unknown>) => Promise<boolean> }) {
-  const [label, setLabel] = useState(org.label ?? '');
-  const [contactEmail, setContactEmail] = useState(org.contactEmail ?? '');
-  const [group, setGroup] = useState(org.authentikGroup ?? '');
-  const [superGroup, setSuperGroup] = useState(org.authentikSuperGroup ?? '');
-  const [active, setActive] = useState(org.active);
+  const initial = {
+    label: org.label ?? '',
+    contactEmail: org.contactEmail ?? '',
+    authentikGroup: org.authentikGroup ?? '',
+    authentikSuperGroup: org.authentikSuperGroup ?? '',
+    active: org.active
+  };
+  const [form, setForm] = useState(initial);
+  const initialKey = JSON.stringify(initial);
+  useEffect(() => { setForm(initial); }, [initialKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const set = <K extends keyof typeof initial>(key: K, value: (typeof initial)[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const dirty = (Object.keys(initial) as (keyof typeof initial)[]).some((k) => form[k] !== initial[k]);
   return (
-    <div style={{ display: 'grid', gap: 6, maxWidth: 480 }}>
-      <label className="dialog-field"><span>Name</span><input value={label} onChange={(e) => setLabel(e.target.value)} /></label>
-      <label className="dialog-field"><span>Kontakt-E-Mail (für Bestellungen)</span><input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} /></label>
-      <label className="dialog-field"><span>Authentik-Gruppe (Benutzer)</span><input value={group} onChange={(e) => setGroup(e.target.value)} /></label>
-      <label className="dialog-field"><span>Authentik-Gruppe (Organisations-Admins, optional)</span><input value={superGroup} onChange={(e) => setSuperGroup(e.target.value)} /></label>
-      <label className="dialog-field dialog-field--checkbox"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /><span>Aktiv (inaktiv = Logins dieser Gruppe gehören zu keiner Organisation)</span></label>
-      <button type="button" onClick={() => void onSave({ label, contactEmail, authentikGroup: group, authentikSuperGroup: superGroup, active })}>
-        Speichern
-      </button>
+    <div className="admin-form">
+      <label className="admin-field"><span>Name</span><input value={form.label} onChange={(e) => set('label', e.target.value)} /></label>
+      <label className="admin-field"><span>Kontakt-E-Mail (für Bestellungen)</span><input type="email" value={form.contactEmail} onChange={(e) => set('contactEmail', e.target.value)} /></label>
+      <label className="admin-field"><span>Authentik-Gruppe (Benutzer)</span><input value={form.authentikGroup} onChange={(e) => set('authentikGroup', e.target.value)} placeholder="tenant-…" /></label>
+      <label className="admin-field"><span>Authentik-Gruppe (Org-Admins, optional)</span><input value={form.authentikSuperGroup} onChange={(e) => set('authentikSuperGroup', e.target.value)} placeholder="tenant-…-admin" /></label>
+      <div className="admin-actions admin-field--wide">
+        <label className="admin-check" title="Inaktiv: Logins dieser Gruppe gehören zu keiner Organisation">
+          <input type="checkbox" checked={form.active} onChange={(e) => set('active', e.target.checked)} /> aktiv
+        </label>
+        <button type="button" className="admin-btn" disabled={!dirty} onClick={() => void onSave(form)}>Speichern</button>
+      </div>
     </div>
   );
 }
@@ -204,10 +243,17 @@ function SiteList({ sites, orgs, send }: {
   orgs: Org[];
   send: (method: string, url: string, body?: unknown) => Promise<boolean>;
 }) {
-  if (sites.length === 0) return <p className="muted">Keine Standorte.</p>;
+  if (sites.length === 0) return <p className="admin-empty">Noch keine Standorte.</p>;
   return (
-    <div style={{ display: 'grid', gap: 8 }}>
-      {sites.map((s) => <SiteEditor key={`${s.id}-${s.tenantId}`} site={s} orgs={orgs} send={send} />)}
+    <div className="admin-table" role="table" aria-label="Standorte">
+      <div className="admin-table__row admin-table__head" role="row">
+        <span role="columnheader">ID</span>
+        <span role="columnheader">Bezeichnung</span>
+        <span role="columnheader">Stockwerke</span>
+        <span role="columnheader">Organisation</span>
+        <span role="columnheader" className="visually-hidden">Aktionen</span>
+      </div>
+      {sites.map((s) => <SiteEditor key={s.id} site={s} orgs={orgs} send={send} />)}
     </div>
   );
 }
@@ -217,21 +263,34 @@ function SiteEditor({ site, orgs, send }: {
   orgs: Org[];
   send: (method: string, url: string, body?: unknown) => Promise<boolean>;
 }) {
-  const [label, setLabel] = useState(site.label);
-  const [floors, setFloors] = useState(site.floors.join(', '));
-  const [tenantId, setTenantId] = useState(site.tenantId ?? '');
+  const initial = { label: site.label, floors: site.floors.join(', '), tenantId: site.tenantId ?? '' };
+  const [form, setForm] = useState(initial);
+  const initialKey = JSON.stringify(initial);
+  useEffect(() => { setForm(initial); }, [initialKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dirty = form.label !== initial.label || form.floors !== initial.floors || form.tenantId !== initial.tenantId;
   const url = `/api/admin/sites/${encodeURIComponent(site.id)}`;
+  const remove = async () => {
+    const ok = await dialogService.confirm({
+      title: 'Standort löschen',
+      message: `Standort ${site.id} („${site.label}“) wirklich löschen? Nur möglich, solange er keine Regale hat.`,
+      confirmLabel: 'Löschen',
+      cancelLabel: 'Abbrechen'
+    });
+    if (ok) await send('DELETE', url);
+  };
   return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid var(--border,#ddd)', paddingTop: 6 }}>
-      <strong style={{ minWidth: 60 }}>{site.id}</strong>
-      <input aria-label={`Bezeichnung ${site.id}`} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Bezeichnung" />
-      <input aria-label={`Stockwerke ${site.id}`} value={floors} onChange={(e) => setFloors(e.target.value)} placeholder="Stockwerke, z.B. 0, 1" style={{ width: 120 }} />
-      <select aria-label={`Organisation ${site.id}`} value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
+    <div className="admin-table__row" role="row">
+      <span className="admin-code" role="cell">{site.id}</span>
+      <input role="cell" aria-label={`Bezeichnung ${site.id}`} value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} />
+      <input role="cell" aria-label={`Stockwerke ${site.id}`} value={form.floors} onChange={(e) => setForm({ ...form, floors: e.target.value })} placeholder="0, 1" />
+      <select role="cell" aria-label={`Organisation ${site.id}`} value={form.tenantId} onChange={(e) => setForm({ ...form, tenantId: e.target.value })}>
         <option value="">— keine —</option>
         {orgs.map((o) => <option key={o.id} value={o.id}>{o.label ?? o.id}</option>)}
       </select>
-      <button type="button" onClick={() => void send('PUT', url, { label, floors: parseFloors(floors), tenantId: tenantId || null })}>Speichern</button>
-      <button type="button" className="btn--danger" onClick={() => void send('DELETE', url)}>Löschen</button>
+      <span className="admin-actions" role="cell">
+        <button type="button" className="admin-btn" disabled={!dirty} onClick={() => void send('PUT', url, { label: form.label, floors: parseFloors(form.floors), tenantId: form.tenantId || null })}>Speichern</button>
+        <button type="button" className="admin-btn admin-btn--icon admin-btn--danger" onClick={() => void remove()} aria-label={`Standort ${site.id} löschen`} title="Löschen">✕</button>
+      </span>
     </div>
   );
 }
@@ -240,15 +299,28 @@ function AddSiteForm({ tenantId, onAdd }: { tenantId: string | null; onAdd: (bod
   const [id, setId] = useState('');
   const [label, setLabel] = useState('');
   const [floors, setFloors] = useState('');
+  const ready = Boolean(id.trim() && label.trim() && floors.trim());
   return (
-    <div style={{ marginTop: 10, borderTop: '1px solid var(--border,#ddd)', paddingTop: 8, display: 'grid', gap: 6, maxWidth: 480 }}>
-      <strong className="muted">Standort hinzufügen</strong>
-      <input value={id} onChange={(e) => setId(e.target.value.toUpperCase())} placeholder="Standort-ID (z.B. ZR01), steht in den Regal-IDs, nicht änderbar" />
-      <input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Bezeichnung" />
-      <input value={floors} onChange={(e) => setFloors(e.target.value)} placeholder="Stockwerke, z.B. 0, 1" />
-      <button type="button" disabled={!id || !label || !floors} onClick={() => void onAdd({ id: id.trim(), label: label.trim(), floors: parseFloors(floors), tenantId }).then((ok) => { if (ok) { setId(''); setLabel(''); setFloors(''); } })}>
-        Hinzufügen
-      </button>
-    </div>
+    <details className="admin-add">
+      <summary>＋ Standort hinzufügen</summary>
+      <div className="admin-form">
+        <label className="admin-field">
+          <span>Standort-ID (steht in den Regal-IDs, nicht änderbar)</span>
+          <input value={id} onChange={(e) => setId(e.target.value.toUpperCase())} placeholder="z.B. ZR01" />
+        </label>
+        <label className="admin-field"><span>Bezeichnung</span><input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="z.B. Lager Altstetten" /></label>
+        <label className="admin-field"><span>Stockwerke (kommagetrennt)</span><input value={floors} onChange={(e) => setFloors(e.target.value)} placeholder="0, 1" /></label>
+        <div className="admin-actions">
+          <button
+            type="button"
+            className="admin-btn"
+            disabled={!ready}
+            onClick={() => void onAdd({ id: id.trim(), label: label.trim(), floors: parseFloors(floors), tenantId }).then((ok) => { if (ok) { setId(''); setLabel(''); setFloors(''); } })}
+          >
+            Hinzufügen
+          </button>
+        </div>
+      </div>
+    </details>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { GoDownload, GoUpload } from 'react-icons/go';
 
 // Master-detail editor for the DB-backed taxonomy (docs/PLANNING_TAXONOMY_EXTERNALIZATION.md Phase 4).
 // Go-small-first: edit labelExternal + active + add rows on the surface; the rest behind "Erweitert".
@@ -45,6 +46,7 @@ export default function TaxonomyAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  const [filter, setFilter] = useState('');
   const [coverage, setCoverage] = useState<Coverage>({ overlayEnabled: false, quality: new Set(), specs: new Set(), assembly: new Set() });
 
   const loadCoverage = useCallback(async () => {
@@ -102,56 +104,83 @@ export default function TaxonomyAdminPage() {
 
   if (loading) return <div className="admin-page"><p className="muted">Lade Taxonomie…</p></div>;
 
+  const needle = filter.trim().toLowerCase();
+  const visibleCategories = needle
+    ? categories.filter((c) => String(c.code).includes(needle)
+      || labelOf(c).toLowerCase().includes(needle)
+      || c.subcategories.some((sub) => String(sub.code).includes(needle) || labelOf(sub).toLowerCase().includes(needle)))
+    : categories;
+  const isError = message.startsWith('Fehler') || message.startsWith('Netzwerk');
+
   return (
     <div className="admin-page">
-      <div className="admin-page__header" style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+      <div className="admin-page__header">
         <h1 className="admin-page__title">Taxonomie</h1>
-        <Link to="/admin">← Administration</Link>
+        <Link className="admin-link admin-link--quiet" to="/admin">← Administration</Link>
       </div>
-      {error && <div className="alert alert-error" role="alert">{error}</div>}
-      {message && <p className="muted" aria-live="polite">{message}</p>}
+      <p className="admin-page__intro muted">
+        Haupt- und Unterkategorien sowie ihre Contracts (Qualität, Spezifikation, Zerlegung).
+        Codes sind fest; deaktivieren statt löschen.
+      </p>
+      {error && <div className="admin-flash admin-flash--error" role="alert">{error}</div>}
+      {message && <div className={`admin-flash${isError ? ' admin-flash--error' : ''}`} aria-live="polite">{message}</div>}
 
-      <div className="row" style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-        {/* Master: category list */}
-        <div className="card" style={{ flex: '0 0 320px' }}>
-          <h3>Hauptkategorien</h3>
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {categories.map((c) => (
+      <div className="admin-split">
+        <div className="card">
+          <div className="admin-section-title">
+            <h3>Hauptkategorien</h3>
+            <span className="admin-list__meta">{categories.length}</span>
+          </div>
+          <input
+            className="admin-filter"
+            type="search"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filtern (Code oder Name)"
+            aria-label="Kategorien filtern"
+          />
+          <ul className="admin-list">
+            {visibleCategories.map((c) => (
               <li key={c.code}>
                 <button
                   type="button"
+                  className={`admin-list__item${c.code === selectedCode ? ' is-selected' : ''}${c.active === false ? ' is-inactive' : ''}`}
                   onClick={() => setSelectedCode(c.code)}
-                  style={{
-                    width: '100%', textAlign: 'left', padding: '6px 8px', border: 'none',
-                    background: c.code === selectedCode ? 'var(--surface-selected, #eef)' : 'transparent',
-                    opacity: c.active === false ? 0.5 : 1, cursor: 'pointer'
-                  }}
+                  aria-current={c.code === selectedCode ? 'true' : undefined}
                 >
-                  <strong>{c.code}</strong> {labelOf(c)}{c.active === false ? ' (inaktiv)' : ''}
-                  <span className="muted"> · {c.subcategories.length}</span>
+                  <span className="admin-code">{c.code}</span>
+                  <span className="admin-list__label" title={labelOf(c)}>{labelOf(c)}</span>
+                  <span className="admin-list__meta">{c.subcategories.length}</span>
                 </button>
               </li>
             ))}
+            {visibleCategories.length === 0 && <li className="admin-empty">Keine Treffer.</li>}
           </ul>
           <AddCategoryForm onAdd={(body) => send('POST', '/api/admin/taxonomy/categories', body)} />
         </div>
 
-        {/* Detail: subcategories of the selected category */}
-        <div className="card" style={{ flex: 1 }}>
+        <div className="card">
           {selected ? (
             <>
-              <h3>{selected.code} · {labelOf(selected)}</h3>
+              <div className="admin-section-title">
+                <h3><span className="admin-code">{selected.code}</span> {labelOf(selected)}</h3>
+                {selected.active === false && <span className="admin-pill admin-pill--muted">inaktiv</span>}
+              </div>
               <CategoryEditor
                 key={selected.code}
                 category={selected}
                 onSave={(patch) => send('PUT', `/api/admin/taxonomy/categories/${selected.code}`, patch)}
               />
-              <h4>Unterkategorien</h4>
-              {selected.subcategories.map((s) => (
+              <div className="admin-section-title">
+                <h4>Unterkategorien</h4>
+                <span className="admin-list__meta">{selected.subcategories.length}</span>
+              </div>
+              {selected.subcategories.length === 0 && <p className="admin-empty">Noch keine Unterkategorien.</p>}
+              {selected.subcategories.map((sub) => (
                 <SubcategoryEditor
-                  key={s.code}
-                  sub={s}
-                  onSave={(patch) => send('PUT', `/api/admin/taxonomy/subcategories/${s.code}`, patch)}
+                  key={sub.code}
+                  sub={sub}
+                  onSave={(patch) => send('PUT', `/api/admin/taxonomy/subcategories/${sub.code}`, patch)}
                   coverage={coverage}
                   onContractsChanged={loadCoverage}
                 />
@@ -162,7 +191,7 @@ export default function TaxonomyAdminPage() {
               />
             </>
           ) : (
-            <p className="muted">Keine Kategorie ausgewählt.</p>
+            <p className="admin-empty">Keine Kategorie ausgewählt.</p>
           )}
         </div>
       </div>
@@ -173,11 +202,21 @@ export default function TaxonomyAdminPage() {
 function CategoryEditor({ category, onSave }: { category: Category; onSave: (patch: Record<string, unknown>) => Promise<boolean> }) {
   const [labelExternal, setLabelExternal] = useState(labelOf(category));
   const [active, setActive] = useState(category.active !== false);
+  useEffect(() => {
+    setLabelExternal(labelOf(category));
+    setActive(category.active !== false);
+  }, [category]);
+  const dirty = labelExternal !== labelOf(category) || active !== (category.active !== false);
   return (
-    <div className="row" style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-      <input value={labelExternal} onChange={(e) => setLabelExternal(e.target.value)} aria-label="Anzeigename" />
-      <label><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> aktiv</label>
-      <button type="button" onClick={() => onSave({ labelExternal, active })}>Speichern</button>
+    <div className="admin-form">
+      <label className="admin-field">
+        <span>Anzeigename</span>
+        <input value={labelExternal} onChange={(e) => setLabelExternal(e.target.value)} />
+      </label>
+      <div className="admin-actions">
+        <label className="admin-check"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> aktiv</label>
+        <button type="button" className="admin-btn" disabled={!dirty} onClick={() => onSave({ labelExternal, active })}>Speichern</button>
+      </div>
     </div>
   );
 }
@@ -188,51 +227,73 @@ function SubcategoryEditor({ sub, onSave, coverage, onContractsChanged }: {
   coverage: Coverage;
   onContractsChanged: () => void;
 }) {
-  const [labelExternal, setLabelExternal] = useState(labelOf(sub));
-  const [active, setActive] = useState(sub.active !== false);
-  const [labelInternal, setLabelInternal] = useState(sub.labelInternal ?? '');
-  const [sortOrder, setSortOrder] = useState(String(sub.sortOrder ?? ''));
-  const [categorizerDescription, setCategorizerDescription] = useState(sub.categorizerDescription ?? '');
-  const [intakeEnabled, setIntakeEnabled] = useState(!!sub.intakeEnabled);
-  const [intakeLabel, setIntakeLabel] = useState(sub.intakeLabel ?? '');
-  const [aliases, setAliases] = useState((sub.aliases ?? []).join(', '));
+  const initial = {
+    labelExternal: labelOf(sub),
+    active: sub.active !== false,
+    labelInternal: sub.labelInternal ?? '',
+    sortOrder: String(sub.sortOrder ?? ''),
+    categorizerDescription: sub.categorizerDescription ?? '',
+    intakeEnabled: !!sub.intakeEnabled,
+    intakeLabel: sub.intakeLabel ?? '',
+    aliases: (sub.aliases ?? []).join(', ')
+  };
+  const [form, setForm] = useState(initial);
+  // Re-sync after a save: the server may normalise values (e.g. derive the internal key), and the
+  // row must reflect that instead of comparing stale input against new data.
+  const initialKey = JSON.stringify(initial);
+  useEffect(() => { setForm(initial); }, [initialKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const set = <K extends keyof typeof initial>(key: K, value: (typeof initial)[K]) => setForm((f) => ({ ...f, [key]: value }));
+  // Compare against the server state so Save only lights up when something actually changed.
+  const dirty = (Object.keys(initial) as (keyof typeof initial)[]).some((k) => form[k] !== initial[k]);
 
   const save = () => onSave({
-    labelExternal, active,
-    labelInternal: labelInternal.trim() || undefined,
-    sortOrder: sortOrder.trim() === '' ? undefined : Number(sortOrder),
-    categorizerDescription: categorizerDescription.trim() ? categorizerDescription.trim() : null,
-    intakeEnabled,
-    intakeLabel: intakeLabel.trim() ? intakeLabel.trim() : null,
-    aliases: aliases.trim() ? aliases.split(',').map((a) => a.trim()).filter(Boolean) : null
+    labelExternal: form.labelExternal,
+    active: form.active,
+    labelInternal: form.labelInternal.trim() || undefined,
+    sortOrder: form.sortOrder.trim() === '' ? undefined : Number(form.sortOrder),
+    categorizerDescription: form.categorizerDescription.trim() ? form.categorizerDescription.trim() : null,
+    intakeEnabled: form.intakeEnabled,
+    intakeLabel: form.intakeLabel.trim() ? form.intakeLabel.trim() : null,
+    aliases: form.aliases.trim() ? form.aliases.split(',').map((a) => a.trim()).filter(Boolean) : null
   });
 
   return (
-    <div style={{ borderTop: '1px solid var(--border, #ddd)', padding: '6px 0', opacity: active ? 1 : 0.5 }}>
-      <div className="row" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <strong style={{ minWidth: 48 }}>{sub.code}</strong>
-        <input value={labelExternal} onChange={(e) => setLabelExternal(e.target.value)} aria-label="Anzeigename" />
-        <label><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> aktiv</label>
-        <button type="button" onClick={save}>Speichern</button>
+    <div className={`admin-row${form.active ? '' : ' is-inactive'}`}>
+      <div className="admin-row__main">
+        <span className="admin-code">{sub.code}</span>
+        <input value={form.labelExternal} onChange={(e) => set('labelExternal', e.target.value)} aria-label={`Anzeigename ${sub.code}`} />
+        <label className="admin-check"><input type="checkbox" checked={form.active} onChange={(e) => set('active', e.target.checked)} /> aktiv</label>
+        <button type="button" className="admin-btn" disabled={!dirty} onClick={save}>Speichern</button>
       </div>
-      <details style={{ marginTop: 4 }}>
-        <summary className="muted">Erweitert</summary>
-        <div style={{ display: 'grid', gap: 6, padding: '6px 0' }}>
-          <label>Interner Schlüssel (Schnittstelle)
-            <input value={labelInternal} onChange={(e) => setLabelInternal(e.target.value)} placeholder="auto" />
+      <ContractControls code={sub.code} coverage={coverage} onChanged={onContractsChanged} />
+      <details className="admin-row__more">
+        <summary>Erweitert</summary>
+        <div className="admin-form">
+          <label className="admin-field">
+            <span>Interner Schlüssel (Schnittstelle)</span>
+            <input value={form.labelInternal} onChange={(e) => set('labelInternal', e.target.value)} placeholder="automatisch" />
           </label>
-          <label>Sortierung <input value={sortOrder} onChange={(e) => setSortOrder(e.target.value)} inputMode="numeric" /></label>
-          <label>Kategorisierer-Hinweis (kurz halten)
-            <textarea value={categorizerDescription} onChange={(e) => setCategorizerDescription(e.target.value)} rows={2} />
+          <label className="admin-field">
+            <span>Sortierung</span>
+            <input value={form.sortOrder} onChange={(e) => set('sortOrder', e.target.value)} inputMode="numeric" />
           </label>
-          <label><input type="checkbox" checked={intakeEnabled} onChange={(e) => setIntakeEnabled(e.target.checked)} /> im Intake-Menü</label>
-          {intakeEnabled && (
-            <label>Intake-Label <input value={intakeLabel} onChange={(e) => setIntakeLabel(e.target.value)} /></label>
+          <label className="admin-field admin-field--wide">
+            <span>Aliasse (kommagetrennt)</span>
+            <input value={form.aliases} onChange={(e) => set('aliases', e.target.value)} />
+          </label>
+          <label className="admin-field admin-field--wide">
+            <span>Kategorisierer-Hinweis (kurz halten)</span>
+            <textarea value={form.categorizerDescription} onChange={(e) => set('categorizerDescription', e.target.value)} rows={2} />
+          </label>
+          <label className="admin-check"><input type="checkbox" checked={form.intakeEnabled} onChange={(e) => set('intakeEnabled', e.target.checked)} /> im Intake-Menü</label>
+          {form.intakeEnabled && (
+            <label className="admin-field">
+              <span>Intake-Label</span>
+              <input value={form.intakeLabel} onChange={(e) => set('intakeLabel', e.target.value)} />
+            </label>
           )}
-          <label>Aliasse (kommagetrennt) <input value={aliases} onChange={(e) => setAliases(e.target.value)} /></label>
         </div>
       </details>
-      <ContractControls code={sub.code} coverage={coverage} onChanged={onContractsChanged} />
     </div>
   );
 }
@@ -275,28 +336,35 @@ function ContractControls({ code, coverage, onChanged }: { code: number; coverag
   };
 
   return (
-    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginTop: 4, fontSize: '0.85em' }}>
-      <span className="muted">Contracts:</span>
+    <div className="admin-contracts">
       {CONTRACT_TYPES.map(({ type, label }) => {
         const present = coverage[type].has(String(code));
         return (
-          <span key={type} style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
-            <span title={present ? 'vorhanden' : 'fällt auf general/keinen zurück'}>{present ? '✓' : '—'} {label}</span>
-            <button type="button" onClick={() => download(type)} disabled={!present} title="Herunterladen">⬇</button>
-            {coverage.overlayEnabled ? (
-              <label title="Hochladen" style={{ cursor: 'pointer' }}>
-                {busy === type ? '…' : '⬆'}
+          <span
+            key={type}
+            className={`admin-contract ${present ? 'is-present' : 'is-missing'}`}
+            title={present ? `${label}: eigener Contract vorhanden` : `${label}: kein eigener Contract (fällt auf den allgemeinen zurück)`}
+          >
+            {present ? '✓' : '–'} {label}
+            {present && (
+              <button type="button" className="admin-icon-btn" onClick={() => download(type)} aria-label={`${label} herunterladen`} title="Herunterladen">
+                <GoDownload aria-hidden="true" />
+              </button>
+            )}
+            {coverage.overlayEnabled && (
+              <label className="admin-icon-btn" title={present ? 'Ersetzen (hochladen)' : 'Hochladen'} aria-label={`${label} hochladen`}>
+                {busy === type ? '…' : <GoUpload aria-hidden="true" />}
                 <input
-                  type="file" accept="application/json,.json" style={{ display: 'none' }}
+                  type="file" accept="application/json,.json" hidden
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(type, f); e.currentTarget.value = ''; }}
                 />
               </label>
-            ) : null}
+            )}
           </span>
         );
       })}
-      {!coverage.overlayEnabled && <span className="muted" title="CONTRACTS_OVERLAY_DIR nicht gesetzt">(Upload deaktiviert)</span>}
-      {msg && <span className="muted">{msg}</span>}
+      {!coverage.overlayEnabled && <span className="muted" title="CONTRACTS_OVERLAY_DIR nicht gesetzt">Upload deaktiviert</span>}
+      {msg && <span className="muted" aria-live="polite">{msg}</span>}
     </div>
   );
 }
@@ -310,12 +378,14 @@ function AddCategoryForm({ onAdd }: { onAdd: (body: Record<string, unknown>) => 
     if (ok) { setCode(''); setLabelExternal(''); }
   };
   return (
-    <div style={{ marginTop: 10, borderTop: '1px solid var(--border,#ddd)', paddingTop: 8, display: 'grid', gap: 6 }}>
-      <strong className="muted">Kategorie hinzufügen</strong>
-      <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code (z.B. 210)" inputMode="numeric" />
-      <input value={labelExternal} onChange={(e) => setLabelExternal(e.target.value)} placeholder="Anzeigename" />
-      <button type="button" onClick={submit}>Hinzufügen</button>
-    </div>
+    <details className="admin-add">
+      <summary>＋ Kategorie hinzufügen</summary>
+      <div className="admin-form">
+        <label className="admin-field"><span>Code</span><input value={code} onChange={(e) => setCode(e.target.value)} placeholder="z.B. 210" inputMode="numeric" /></label>
+        <label className="admin-field"><span>Anzeigename</span><input value={labelExternal} onChange={(e) => setLabelExternal(e.target.value)} /></label>
+        <div className="admin-actions"><button type="button" className="admin-btn" disabled={!code.trim() || !labelExternal.trim()} onClick={submit}>Hinzufügen</button></div>
+      </div>
+    </details>
   );
 }
 
@@ -328,11 +398,13 @@ function AddSubcategoryForm({ parentCode, onAdd }: { parentCode: number; onAdd: 
     if (ok) { setCode(''); setLabelExternal(''); }
   };
   return (
-    <div style={{ marginTop: 10, borderTop: '1px solid var(--border,#ddd)', paddingTop: 8, display: 'grid', gap: 6 }}>
-      <strong className="muted">Unterkategorie hinzufügen (unter {parentCode})</strong>
-      <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Code (z.B. 2101)" inputMode="numeric" />
-      <input value={labelExternal} onChange={(e) => setLabelExternal(e.target.value)} placeholder="Anzeigename" />
-      <button type="button" onClick={submit}>Hinzufügen</button>
-    </div>
+    <details className="admin-add">
+      <summary>＋ Unterkategorie hinzufügen (unter {parentCode})</summary>
+      <div className="admin-form">
+        <label className="admin-field"><span>Code</span><input value={code} onChange={(e) => setCode(e.target.value)} placeholder={`z.B. ${parentCode}01`} inputMode="numeric" /></label>
+        <label className="admin-field"><span>Anzeigename</span><input value={labelExternal} onChange={(e) => setLabelExternal(e.target.value)} /></label>
+        <div className="admin-actions"><button type="button" className="admin-btn" disabled={!code.trim() || !labelExternal.trim()} onClick={submit}>Hinzufügen</button></div>
+      </div>
+    </details>
   );
 }
