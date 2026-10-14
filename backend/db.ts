@@ -492,6 +492,11 @@ ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "Confidence" FLOAT;
 ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "SpecContractVersion" INTEGER;
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Scope" TEXT NOT NULL DEFAULT 'instance';
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Artikel_Nummer" TEXT;
+-- Percentage quality range (fractions 0–1) incl. sub-assemblies; NULL = nothing weighted (models/quality-score.ts)
+ALTER TABLE items ADD COLUMN IF NOT EXISTS "QualityScoreMin" REAL;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS "QualityScoreMax" REAL;
+-- Grade set by hand (instance edit / "mark as spare"): recompute leaves it alone until the next assessment
+ALTER TABLE items ADD COLUMN IF NOT EXISTS "QualityManual" BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
 -- Explicit slot key for assembly relations, so it stops being overloaded onto "Notes"
 -- ("Notes" stays for genuine Zubehör relation notes). All slot writes/reads target "SlotKey".
@@ -916,6 +921,9 @@ SELECT
   i."Datum_erfasst" AS "Datum_erfasst",
   i."Auf_Lager" AS "Auf_Lager",
   CAST(COALESCE(r."Quality", i."Quality") AS INTEGER) AS "Quality",
+  i."QualityScoreMin" AS "QualityScoreMin",
+  i."QualityScoreMax" AS "QualityScoreMax",
+  i."QualityManual" AS "QualityManual",
   i."ShopwareVariantId" AS "ShopwareVariantId",
   i."SerialNumber" AS "SerialNumber",
   i."MacAddress" AS "MacAddress",
@@ -3520,7 +3528,8 @@ export async function getQualityAssessment(id: number): Promise<QualityAssessmen
 }
 
 export async function updateItemQualityAssessment(itemUUID: string, qualityId: number, value: number): Promise<void> {
-  await execute(`UPDATE items SET "QualityId"=$2,"Quality"=$3 WHERE "ItemUUID"=$1`, [itemUUID, qualityId, value]);
+  // A new assessment ends a manual grade override (the grade is derived again from now on).
+  await execute(`UPDATE items SET "QualityId"=$2,"Quality"=$3,"QualityManual"=FALSE WHERE "ItemUUID"=$1`, [itemUUID, qualityId, value]);
 }
 
 export async function getItemQualityResponses(itemUUID: string): Promise<{ responses: Record<string, string>; notes: string | null }> {

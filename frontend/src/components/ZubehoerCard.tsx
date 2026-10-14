@@ -6,6 +6,8 @@ import SparepartSlotPopup from './SparepartSlotPopup';
 import RelocateItemCard from './RelocateItemCard';
 import { usePanelContext } from '../context/PanelContext';
 import type { AssemblyContract, AssemblyPart } from '../../../models/assembly-contract';
+import { isSlotMissingAnswer, SLOT_NOT_APPLICABLE, SLOT_INTEGRATED } from '../../../models/assembly-contract';
+import { formatQualityScoreRange } from '../../../models/quality-score';
 import type { QualityQuestion } from '../../../models/quality-contract';
 import { getUser, ensureUser } from '../lib/user';
 
@@ -17,10 +19,13 @@ interface SparePart {
   Location: string | null;
   Artikelbeschreibung?: string | null;
   Kurzbeschreibung?: string | null;
+  QualityScoreMin?: number | null;
+  QualityScoreMax?: number | null;
 }
 
 // Extended from 'potential'/'empty'/'cataloged'/'removed' — now distinguishes unknown from confirmed-present
-type SlotState = 'unknown' | 'present' | 'empty' | 'cataloged' | 'removed';
+// notApplicable = the model never had this part; integrated = soldered/built in, no separate item.
+type SlotState = 'unknown' | 'present' | 'empty' | 'cataloged' | 'removed' | 'notApplicable' | 'integrated';
 
 function getPartQuestion(part: AssemblyPart): QualityQuestion | undefined {
   return part.question;
@@ -40,9 +45,11 @@ function deriveSlotState(
   const q = getPartQuestion(part);
   if (q) {
     const answer = qualityResponses[q.id];
-    if (answer === 'false' || answer === 'Nicht vorhanden') {
+    if (isSlotMissingAnswer(answer)) {
       return { state: 'empty', sparePart: null };
     }
+    if (answer === SLOT_NOT_APPLICABLE) return { state: 'notApplicable', sparePart: null };
+    if (answer === SLOT_INTEGRATED) return { state: 'integrated', sparePart: null };
     if (answer !== undefined) {
       return { state: 'present', sparePart: null };
     }
@@ -58,7 +65,7 @@ function deriveSpecForSlot(
   const q = getPartQuestion(part);
   if (!q?.specField || !q.specValue) return null;
   const answer = qualityResponses[q.id];
-  if (!answer || answer === 'false' || answer === 'Nicht vorhanden') return null;
+  if (!answer || isSlotMissingAnswer(answer) || answer === SLOT_NOT_APPLICABLE || answer === SLOT_INTEGRATED) return null;
   const value = q.specValue.replace('%v', answer);
   const specs: Record<string, string> = { [q.specField]: value };
   // Also include secondary specQuestion if present and answered
@@ -358,6 +365,8 @@ export default function ZubehoerCard({
                         {state === 'present' && <span title="Vorhanden (noch nicht katalogisiert)" style={{ color: 'var(--color-green, #4caf50)' }}>◎</span>}
                         {state === 'unknown' && <span title="Unbekannt" style={{ color: 'var(--color-muted, #ccc)' }}>⬜</span>}
                         {state === 'empty' && <span title="Nicht vorhanden" style={{ color: 'var(--color-error, #d73a49)' }}>✕</span>}
+                        {state === 'notApplicable' && <span title="Nicht vorgesehen (Modell hat dieses Teil nicht)" style={{ color: 'var(--color-muted, #ccc)' }}>–</span>}
+                        {state === 'integrated' && <span title="Fest verbaut (kein separates Teil)" style={{ color: 'var(--color-muted, #888)' }}>▣</span>}
                       </td>
                       {/* Label + linked item name */}
                       <td style={{ verticalAlign: 'middle' }}>
@@ -372,6 +381,11 @@ export default function ZubehoerCard({
                             >
                               {sparePart.Artikelbeschreibung || sparePart.Kurzbeschreibung || sparePart.Artikel_Nummer || sparePart.ItemUUID}
                             </button>
+                            {sparePart.QualityScoreMin != null && sparePart.QualityScoreMax != null && (
+                              <span className="muted" title="Qualität des Teils (inkl. Unterbaugruppen)">
+                                {' · '}{formatQualityScoreRange({ min: sparePart.QualityScoreMin, max: sparePart.QualityScoreMax })}
+                              </span>
+                            )}
                             {state === 'removed' && sparePart.Location && (
                               <span className="muted"> · {sparePart.Location}</span>
                             )}
@@ -386,7 +400,8 @@ export default function ZubehoerCard({
                         {/* Boolean toggle — always shown so state can always be changed */}
                         {q && q.type === 'boolean' && renderInlineQuestion(q, currentAnswer)}
                         {/* Select widget for non-boolean questions */}
-                        {q && q.type !== 'boolean' && (state === 'unknown' || state === 'present' || state === 'removed') && (
+                        {/* Also on empty/notApplicable/integrated, so a wrong presence answer can be corrected */}
+                        {q && q.type !== 'boolean' && state !== 'cataloged' && (
                           renderInlineQuestion(q, currentAnswer)
                         )}
                         {/* Secondary specQuestion (e.g. drive_type) */}

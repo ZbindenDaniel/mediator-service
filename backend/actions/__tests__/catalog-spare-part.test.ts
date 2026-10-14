@@ -13,6 +13,21 @@ jest.mock('../../db-client', () => ({
   closePool: jest.fn(async () => undefined),
 }));
 
+jest.mock('../../lib/quality-score', () => ({
+  resolveEffectiveSubCategory: jest.fn(async () => 9201),
+  recomputeQualityScoreSafely: jest.fn(async () => undefined),
+}));
+jest.mock('../../contracts/registry', () => ({
+  getAssemblyContract: jest.fn(() => ({
+    version: 1,
+    subCategory: 9201,
+    parts: [
+      { key: 'webcam', label: 'Webcam', targetSubcategory: 2109, weight: 1 },
+      { key: 'ram', label: 'RAM', targetSubcategory: 603, weight: 1, multipleAllowed: true },
+    ],
+  })),
+}));
+
 import action from '../catalog-spare-part';
 import * as dbClient from '../../db-client';
 
@@ -256,6 +271,46 @@ describe('catalog-spare-part action', () => {
       expect(getStatus()).toBe(409);
       expect(getBody().error).toMatch(/entnommen/);
       expect(mockWithTransaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /spare-parts/component (no reference)', () => {
+    const url = '/api/items/P-001/spare-parts/component';
+
+    it('matches the route', () => {
+      expect(action.matches(url, 'POST')).toBe(true);
+    });
+
+    it('creates a C- component in the slot and returns its subcategory', async () => {
+      const ctx = makeCtx({ getItem: jest.fn(async (id: string) => (id === 'P-001' ? parentItem : null)) });
+      const { res, getStatus, getBody } = createMockResponse();
+      await action.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'webcam' }), res, ctx);
+      expect(getStatus()).toBe(201);
+      expect(getBody().itemUUID).toMatch(/^C-/);
+      expect(getBody().subCategory).toBe(2109);
+      const inserts = mockTransactionClient.query.mock.calls.map((c: any[]) => c[0] as string);
+      expect(inserts.some((q) => q.includes('INSERT INTO items') && q.includes('NULL,NULL'))).toBe(true);
+      const rel = mockTransactionClient.query.mock.calls.find((c: any[]) => (c[0] as string).includes('INSERT INTO item_relations'));
+      expect(rel![1]).toEqual(['P-001', getBody().itemUUID, 'webcam']);
+    });
+
+    it('rejects a slot the device contract does not define', async () => {
+      const ctx = makeCtx();
+      const { res, getStatus } = createMockResponse();
+      await action.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'nope' }), res, ctx);
+      expect(getStatus()).toBe(400);
+    });
+
+    it('refuses an occupied single slot with 409, allows a multipleAllowed one', async () => {
+      mockQuery.mockResolvedValue([{ ItemUUID: 'C-existing' }]);
+      const ctx = makeCtx({ getItem: jest.fn(async (id: string) => (id === 'P-001' ? parentItem : null)) });
+      const first = createMockResponse();
+      await action.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'webcam' }), first.res, ctx);
+      expect(first.getStatus()).toBe(409);
+      expect(first.getBody().itemUUID).toBe('C-existing');
+      const second = createMockResponse();
+      await action.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'ram' }), second.res, ctx);
+      expect(second.getStatus()).toBe(201);
     });
   });
 });

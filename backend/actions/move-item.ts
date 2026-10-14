@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { resolveActor } from '../utils/actor';
 import { defineHttpAction } from './index';
-import { generateShopwareCorrelationId, insertQualityAssessment, updateItemQualityAssessment } from '../db';
+import { generateShopwareCorrelationId } from '../db';
+import { recordPartLeftParent } from '../lib/parent-slot';
 import { withTransaction, queryOne } from '../db-client';
 import { guardWrite } from '../utils/write-guard';
 
@@ -48,12 +49,14 @@ const action = defineHttpAction({
       // Check before move: is this item currently cataloged inside an assembly?
       const wasErfasst = item.BoxID === null || item.BoxID === undefined || item.BoxID === '';
       let assemblyParentUuid: string | null = null;
+      let assemblySlotKey: string | null = null;
       if (wasErfasst) {
-        const relation = await queryOne<{ ParentItemUUID: string }>(
-          `SELECT "ParentItemUUID" FROM item_relations WHERE "ChildItemUUID" = $1 AND "RelationType" = 'Zerlegt_aus'`,
+        const relation = await queryOne<{ ParentItemUUID: string; SlotKey: string | null }>(
+          `SELECT "ParentItemUUID", "SlotKey" FROM item_relations WHERE "ChildItemUUID" = $1 AND "RelationType" = 'Zerlegt_aus'`,
           [uuid]
         );
         assemblyParentUuid = relation?.ParentItemUUID ?? null;
+        assemblySlotKey = relation?.SlotKey ?? null;
       }
 
       await withTransaction(async (client) => {
@@ -91,37 +94,34 @@ const action = defineHttpAction({
         }
       });
 
-      // If an erfasst component was relocated out of its assembly, mark the parent incomplete
+      // An erfasst component left its assembly: record the slot as missing on the parent (see lib/parent-slot)
       if (assemblyParentUuid) {
         try {
-          const qaId = await insertQualityAssessment({
-            tag: 'Ersatzteil',
-            value: 1,
-            is_complete: false,
-            has_defects: null,
-            is_functional: false,
-            notes: 'Bauteil entnommen',
-            reviewed_at: now,
-            reviewed_by: actor,
+          const enqueueParentSync = async (parentUuid: string, quality: number | null) => {
+            try {
+              const correlationId = generateShopwareCorrelationId('move-item-parent', parentUuid);
+              await ctx.enqueueShopwareSyncJob({
+                CorrelationId: correlationId,
+                JobType: 'item-upsert',
+                Payload: JSON.stringify({ actor, itemUUID: parentUuid, trigger: 'move-item', quality })
+              });
+            } catch (queueErr) {
+              console.error('[move-item] Failed to enqueue Shopware sync for parent', { assemblyParentUuid, error: queueErr });
+            }
+          };
+          const { markedSpare } = await recordPartLeftParent(assemblyParentUuid, assemblySlotKey, actor, {
+            actor,
+            logEvent: ctx.logEvent,
+            onGradeChange: (id, grade) => enqueueParentSync(id, grade)
           });
-          await updateItemQualityAssessment(assemblyParentUuid, qaId, 1);
           await ctx.logEvent({
             Actor: actor,
             EntityType: 'Item',
             EntityId: assemblyParentUuid,
             Event: 'SparePartRemoved',
-            Meta: JSON.stringify({ childItemUUID: uuid, toBoxId })
+            Meta: JSON.stringify({ childItemUUID: uuid, toBoxId, slotKey: assemblySlotKey, markedParentAsSpare: markedSpare })
           });
-          try {
-            const correlationId = generateShopwareCorrelationId('move-item-parent', assemblyParentUuid);
-            await ctx.enqueueShopwareSyncJob({
-              CorrelationId: correlationId,
-              JobType: 'item-upsert',
-              Payload: JSON.stringify({ actor, itemUUID: assemblyParentUuid, trigger: 'move-item', quality: 1 })
-            });
-          } catch (queueErr) {
-            console.error('[move-item] Failed to enqueue Shopware sync for parent', { assemblyParentUuid, error: queueErr });
-          }
+          if (markedSpare) await enqueueParentSync(assemblyParentUuid, 1);
         } catch (err) {
           console.error('[move-item] Failed to mark assembly parent incomplete', { assemblyParentUuid, error: err });
         }

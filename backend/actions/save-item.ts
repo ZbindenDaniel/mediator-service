@@ -1,4 +1,5 @@
 // TODO(agent): add action tests.
+import { resolveEffectiveSubCategory } from '../lib/quality-score';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { resolveActor } from '../utils/actor';
 import fs from 'fs';
@@ -741,10 +742,20 @@ const action = defineHttpAction({
         }
         const normalisedGrafikname = normaliseMediaReference(itemId, item.Artikel_Nummer, item.Grafikname);
         const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
+        // Only article-less parts need the slot lookup; everything else already carries its category.
+        let effectiveSubCategory: number | null = typeof item.Unterkategorien_A === 'number' ? item.Unterkategorien_A : null;
+        if (effectiveSubCategory === null) {
+          try {
+            effectiveSubCategory = await resolveEffectiveSubCategory(resolvedItemId);
+          } catch (error) {
+            console.error('[save-item] Failed to resolve effective subcategory', { itemId, error });
+          }
+        }
         const sanitizedItem = {
           ...item,
           Einheit: resolveItemEinheitValue(item.Einheit, 'fetchResponse'),
-          Quality: resolveItemQualityValue(item.Quality, 'fetchResponse')
+          Quality: resolveItemQualityValue(item.Quality, 'fetchResponse'),
+          EffectiveSubCategory: effectiveSubCategory
         };
         // TODO(stock-visibility): Verify Auf_Lager instance summary data feeds withdrawal availability.
         let instances: ItemInstanceSummary[] = [];

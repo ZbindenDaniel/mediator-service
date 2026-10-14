@@ -53,6 +53,16 @@ describe('admin-contracts overlay upload', () => {
     expect(fs.existsSync(path.join(overlay, 'specs', '9999.json'))).toBe(false);
   });
 
+  it('rejects an upload that introduces an assembly cycle (cross-file check)', async () => {
+    const res = mockRes();
+    const looping = { version: 1, subCategory: 603, parts: [{ key: 'back', label: 'Laptop', targetSubcategory: 201 }] };
+    // 201 already contains a RAM slot targeting 603, so 603 → 201 closes a loop.
+    await adminContracts.handle(mockReq('PUT', '/api/admin/contracts/assembly/603', JSON.stringify(looping)), res, {} as any);
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toMatch(/assembly cycle/);
+    expect(fs.existsSync(path.join(overlay, 'assembly', '603.json'))).toBe(false);
+  });
+
   it('rejects non-JSON bodies with 400', async () => {
     const res = mockRes();
     await adminContracts.handle(mockReq('PUT', '/api/admin/contracts/quality/9999', 'not json'), res, {} as any);

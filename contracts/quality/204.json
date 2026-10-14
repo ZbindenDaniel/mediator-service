@@ -1,40 +1,65 @@
 {
-  "version": 1,
+  "version": 2,
   "subCategory": 204,
   "questions": [
     {
       "id": "screen_condition",
       "type": "select",
       "question": "Bildschirmzustand?",
-      "values": ["Keine Auffälligkeiten", "Geringe Kratzer", "Deutliche Mängel", "Gesprungenes Glas"],
+      "values": [
+        "Keine Auffälligkeiten",
+        "Geringe Kratzer",
+        "Deutliche Mängel",
+        "Gesprungenes Glas"
+      ],
       "specField": "Bildschirmzustand",
       "specValue": "%v",
-      "qualityImpact": {
-        "Keine Auffälligkeiten": 5,
-        "Geringe Kratzer": 3,
-        "Deutliche Mängel": 2,
-        "Gesprungenes Glas": 1
-      }
+      "knockout": {
+        "below": 0.25,
+        "cap": 0.19
+      },
+      "states": {
+        "Keine Auffälligkeiten": 1.0,
+        "Geringe Kratzer": 0.5,
+        "Deutliche Mängel": 0.25,
+        "Gesprungenes Glas": 0.0
+      },
+      "weight": 4
     },
     {
       "id": "battery_condition",
       "type": "select",
       "question": "Akkuzustand?",
-      "values": ["?", "Gut (>80%)", "Mittel (50–80%)", "Schwach (<50%)", "Defekt"],
+      "values": [
+        "?",
+        "Gut (>80%)",
+        "Mittel (50–80%)",
+        "Schwach (<50%)",
+        "Defekt"
+      ],
       "specField": "Akku",
       "specValue": "%v",
-      "qualityImpact": {
-        "Gut (>80%)": 5,
-        "Mittel (50–80%)": 4,
-        "Schwach (<50%)": 3,
-        "Defekt": 2
-      }
+      "knockout": {
+        "below": 0.5,
+        "cap": 0.39
+      },
+      "states": {
+        "Gut (>80%)": 1.0,
+        "Mittel (50–80%)": 0.75,
+        "Schwach (<50%)": 0.5,
+        "Defekt": 0.25
+      },
+      "weight": 3
     },
     {
       "id": "has_os",
       "type": "boolean",
       "question": "Betriebssystem installiert?",
-      "qualityImpact": { "true": 5, "false": 4 }
+      "states": {
+        "true": 1.0,
+        "false": 0.75
+      },
+      "weight": 1
     },
     {
       "id": "os_installed",
@@ -51,13 +76,20 @@
       ],
       "specField": "Betriebssystem",
       "specValue": "%v",
-      "showIf": { "questionId": "has_os", "value": "true" }
+      "showIf": {
+        "questionId": "has_os",
+        "value": "true"
+      }
     },
     {
       "id": "charging_cable_included",
       "type": "boolean",
       "question": "Ladekabel vorhanden?",
-      "qualityImpact": { "true": 5, "false": 4 }
+      "states": {
+        "true": 1.0,
+        "false": 0.75
+      },
+      "weight": 1
     },
     {
       "id": "cellular",

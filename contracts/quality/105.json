@@ -1,12 +1,17 @@
 {
-  "version": 1,
+  "version": 2,
   "subCategory": 105,
   "questions": [
     {
       "id": "keyboard_layout",
       "type": "select",
       "question": "Tastatur-Layout?",
-      "values": ["CH", "DE", "US", "Anderes"],
+      "values": [
+        "CH",
+        "DE",
+        "US",
+        "Anderes"
+      ],
       "specField": "Tastatur-Layout",
       "specValue": "%v"
     },
@@ -14,7 +19,16 @@
       "id": "ram_gb",
       "type": "select",
       "question": "Wie viel RAM ist verbaut?",
-      "values": ["?", "2","4", "8", "16", "24", "32", "64"],
+      "values": [
+        "?",
+        "2",
+        "4",
+        "8",
+        "16",
+        "24",
+        "32",
+        "64"
+      ],
       "specField": "RAM",
       "specValue": "%v GB"
     },
@@ -22,7 +36,14 @@
       "id": "storage_gb",
       "type": "select",
       "question": "Speicher (SSD)?",
-      "values": ["?", "128", "256", "512", "1000", "2000"],
+      "values": [
+        "?",
+        "128",
+        "256",
+        "512",
+        "1000",
+        "2000"
+      ],
       "specField": "Speicher",
       "specValue": "%v GB"
     },
@@ -30,22 +51,38 @@
       "id": "battery_condition",
       "type": "select",
       "question": "Akkuzustand? (nur MacBook)",
-      "values": ["?", "Gut (>80%)", "Mittel (50–80%)", "Schwach (<50%)", "Defekt", "Nicht zutreffend"],
+      "values": [
+        "?",
+        "Gut (>80%)",
+        "Mittel (50–80%)",
+        "Schwach (<50%)",
+        "Defekt",
+        "Nicht zutreffend"
+      ],
       "specField": "Akku",
       "specValue": "%v",
-      "qualityImpact": {
-        "Gut (>80%)": 5,
-        "Mittel (50–80%)": 4,
-        "Schwach (<50%)": 3,
-        "Defekt": 2,
-        "Nicht zutreffend": 5
-      }
+      "knockout": {
+        "below": 0.5,
+        "cap": 0.39
+      },
+      "states": {
+        "Gut (>80%)": 1.0,
+        "Mittel (50–80%)": 0.75,
+        "Schwach (<50%)": 0.5,
+        "Defekt": 0.25,
+        "Nicht zutreffend": null
+      },
+      "weight": 3
     },
     {
       "id": "charger_included",
       "type": "boolean",
       "question": "Netzteil vorhanden?",
-      "qualityImpact": { "true": 5, "false": 4 }
+      "states": {
+        "true": 1.0,
+        "false": 0.75
+      },
+      "weight": 1
     }
   ]
 }

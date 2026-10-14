@@ -34,6 +34,7 @@ import {
   normalizeAgenticRunStatus
 } from '../../../models';
 import { describeQuality } from '../../../models/quality';
+import { formatQualityScoreRange } from '../../../models/quality-score';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
@@ -589,8 +590,27 @@ export default function ItemDetail({ itemId }: Props) {
       }
     }
 
+    const scoreRange = item.QualityScoreMin != null && item.QualityScoreMax != null
+      ? { min: Number(item.QualityScoreMin), max: Number(item.QualityScoreMax) }
+      : null;
     const qualityBadge = (
-      <QualityBadge compact value={qualitySummary.value} labelPrefix="Qualität" />
+      <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+        <QualityBadge compact value={qualitySummary.value} labelPrefix="Qualität" />
+        {scoreRange && (
+          <span
+            className="muted"
+            title="Anteil der ursprünglichen Qualität: sicher erreicht – bestenfalls (ungeprüfte Teile sind Unsicherheit)"
+          >
+            {formatQualityScoreRange(scoreRange)}
+          </span>
+        )}
+        {scoreRange && qualitySummary.value == null && (
+          <span className="muted">zu wenig bewertet für eine Note</span>
+        )}
+        {item.QualityManual && (
+          <span className="muted" title="Note von Hand gesetzt – die nächste Bewertung berechnet sie neu">manuell</span>
+        )}
+      </span>
     );
     const rows: [string, React.ReactNode][] = [
       // ['Erstellt von', creator],

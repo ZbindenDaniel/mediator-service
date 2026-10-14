@@ -8,6 +8,8 @@ import {
   contractOverlayWritePath
 } from '../contracts/paths';
 import { clearContractCaches, listContractSubcategories } from '../contracts/registry';
+import { validateContractDocument, validateContractSet, loadContractSetFromDisk } from '../contracts/validate';
+import { getItemCategories } from '../lib/taxonomy';
 
 // Runtime contract editing via the file overlay (see docs/PLANNING_TAXONOMY_EXTERNALIZATION.md
 // Phase 4). Download is the existing GET /api/contracts/{type}/<code>; this adds a validated
@@ -30,36 +32,22 @@ async function readBody(req: IncomingMessage): Promise<string> {
   });
 }
 
-// Minimal structural validation — enough to keep a malformed contract out of the pipeline without
-// duplicating the full TS types. Returns an error string or null.
-function validateContract(type: ContractType, doc: unknown): string | null {
-  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return 'Contract must be a JSON object';
-  const c = doc as Record<string, unknown>;
-  if (c.version !== undefined && typeof c.version !== 'number') return '"version" must be a number';
-  if (type === 'quality') {
-    if (!Array.isArray(c.questions)) return '"questions" must be an array';
-    for (const q of c.questions as unknown[]) {
-      if (!q || typeof q !== 'object') return 'each question must be an object';
-      const qq = q as Record<string, unknown>;
-      if (typeof qq.id !== 'string' || !qq.id.trim()) return 'each question needs a non-empty string "id"';
-      if (typeof qq.type !== 'string') return `question "${qq.id}" needs a string "type"`;
-    }
-  } else if (type === 'specs') {
-    if (!Array.isArray(c.fields)) return '"fields" must be an array';
-    for (const f of c.fields as unknown[]) {
-      if (!f || typeof f !== 'object') return 'each field must be an object';
-      const ff = f as Record<string, unknown>;
-      if (typeof ff.key !== 'string' || !ff.key.trim()) return 'each field needs a non-empty string "key"';
-      if (typeof ff.required !== 'boolean') return `field "${ff.key}" needs a boolean "required"`;
-    }
-    if (c.guidance !== undefined && !Array.isArray(c.guidance)) return '"guidance" must be an array of strings';
-  } else if (type === 'assembly') {
-    if (!Array.isArray(c.parts)) return '"parts" must be an array';
-    for (const p of c.parts as unknown[]) {
-      if (!p || typeof p !== 'object') return 'each part must be an object';
-    }
+// Full per-file checks, plus the cross-file rules (targets, cycles, id collisions) for the set as it
+// would be after this upload. Only problems the upload introduces are reported, so an unrelated
+// pre-existing issue elsewhere does not block every edit. Returns an error string or null.
+function validateContract(type: ContractType, code: string, doc: unknown): string | null {
+  const own = validateContractDocument(type, doc, `${type}/${code}.json`);
+  if (own.length) return own.join('; ');
+  let known: Set<number> | undefined;
+  try {
+    known = new Set(getItemCategories().flatMap((c) => c.subcategories.map((s) => s.code)));
+  } catch {
+    known = undefined; // taxonomy not loaded (e.g. tests) — skip the target check rather than fail
   }
-  return null;
+  const before = new Set(validateContractSet({ ...loadContractSetFromDisk(), knownSubcategories: known, checkFileCodes: false }));
+  const after = validateContractSet({ ...loadContractSetFromDisk({ type, code, doc }), knownSubcategories: known, checkFileCodes: false });
+  const introduced = after.filter((e) => !before.has(e));
+  return introduced.length ? introduced.join('; ') : null;
 }
 
 const UPLOAD_ROUTE = /^\/api\/admin\/contracts\/(quality|specs|assembly)\/([A-Za-z0-9_-]+)$/;
@@ -120,7 +108,7 @@ const action = defineHttpAction({
       sendJson(res, 400, { error: 'Request body is not valid JSON' });
       return;
     }
-    const validationError = validateContract(type, doc);
+    const validationError = validateContract(type, code, doc);
     if (validationError) { sendJson(res, 400, { error: validationError }); return; }
 
     try {

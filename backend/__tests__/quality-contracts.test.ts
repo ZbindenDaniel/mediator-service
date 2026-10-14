@@ -127,46 +127,45 @@ describe('assemblyToQualityContract', () => {
   });
 });
 
-describe('deriveQualityFromAnswers', () => {
-  it('returns default value (3) when no answers are provided', () => {
-    const { value } = deriveQualityFromAnswers([generalContract], {});
-    expect(value).toBe(3);
+describe('deriveQualityFromAnswers (unified percentage model)', () => {
+  it('returns default value (3) and no range when nothing is scored', () => {
+    const specOnly: QualityContract = { version: 1, questions: [{ id: 'keyboard_layout', type: 'select', question: '?', values: ['CH'] }] };
+    const result = deriveQualityFromAnswers([specOnly], { keyboard_layout: 'CH' });
+    expect(result.value).toBe(3);
+    expect(result.range).toBeNull();
   });
 
-  it('returns default when answers exist but none have qualityImpact', () => {
-    const { value } = deriveQualityFromAnswers([subCatContract], { keyboard_layout: 'CH' });
-    expect(value).toBe(3);
+  it('is pessimistic: unanswered scored questions pull the lower bound down', () => {
+    const result = deriveQualityFromAnswers([generalContract], {});
+    expect(result.range).toEqual({ min: 0, max: 1 });
+    expect(result.value).toBe(1);
   });
 
-  it('min score wins across all contracts', () => {
-    const answers = {
-      lieferumfang: 'Vollständig',  // impact: 5
-      has_fan: 'false',             // impact: 1 (from disassembly)
+  it('a knock-out answer caps the grade (missing fan → Ersatzteil)', () => {
+    const contract: QualityContract = {
+      version: 1,
+      questions: [
+        { id: 'lieferumfang', type: 'select', question: '?', values: ['Vollständig'], weight: 9, states: { 'Vollständig': 1 } },
+        { id: 'has_fan', type: 'boolean', question: '?', weight: 1, states: { true: 1, false: 0 }, knockout: { below: 0.25, cap: 0.19 } }
+      ]
     };
-    const assemblyQc = assemblyToQualityContract(assemblyContract);
-    const { value } = deriveQualityFromAnswers([generalContract, assemblyQc], answers);
+    const { value, range } = deriveQualityFromAnswers([contract], { lieferumfang: 'Vollständig', has_fan: 'false' });
+    expect(range).toEqual({ min: 0.19, max: 0.19 });
     expect(value).toBe(1);
   });
 
-  it('clamps score to max 5', () => {
-    const answers = { lieferumfang: 'Vollständig' };
-    const { value } = deriveQualityFromAnswers([generalContract], answers);
+  it('weighs instead of taking the worst answer', () => {
+    const answers = { lieferumfang: 'Vollständig', has_os: 'false' }; // legacy impacts 5 and 4 → fractions 1 and 0.75
+    const { value, range } = deriveQualityFromAnswers([generalContract, { ...subCatContract, questions: subCatContract.questions.filter((q) => q.id === 'has_os') }], answers);
+    expect(range).toEqual({ min: 0.875, max: 0.875 });
     expect(value).toBe(5);
   });
 
-  it('skips questions hidden by showIf when gate answer is false', () => {
-    // os_installed has showIf: { questionId: 'has_os', value: 'true' }
-    // but has_os is 'false' → os_installed should be skipped
-    const answers = { has_os: 'false', os_installed: 'Ubuntu' };
-    // os_installed has no qualityImpact, but this tests that it's filtered out
-    const { value } = deriveQualityFromAnswers([subCatContract], answers);
-    expect(value).toBe(4); // only has_os: false → 4
-  });
-
-  it('includes showIf question when gate condition is met', () => {
-    const answers = { has_os: 'true' };
-    const { value } = deriveQualityFromAnswers([subCatContract], answers);
-    expect(value).toBe(5); // has_os: true → 5
+  it('skips questions hidden by showIf', () => {
+    const answers = { has_os: 'true', os_installed: 'Ubuntu' };
+    const onlyOs: QualityContract = { ...subCatContract, questions: subCatContract.questions.filter((q) => q.id === 'has_os' || q.id === 'os_installed') };
+    const { range } = deriveQualityFromAnswers([onlyOs], answers);
+    expect(range).toEqual({ min: 1, max: 1 });
   });
 });
 

@@ -5,6 +5,9 @@ import type { AssemblyContract } from '../../models/assembly-contract';
 import { QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX, QUALITY_LABELS } from '../../models/quality';
 import type { QualityTag } from '../../models/quality';
 import { resolveContractReadPath } from '../contracts/paths';
+import { getQualityContract } from '../contracts/registry';
+import { parseMultiAnswer, computeQualityScore, scoreToRange, gradeFromRange, gradingFrom } from '../../models/quality-score';
+import type { QualityScoreRange } from '../../models/quality-score';
 
 function loadContractFile(filename: string): QualityContract | null {
   try {
@@ -22,8 +25,9 @@ export function loadGeneralContract(): QualityContract {
   return contract;
 }
 
+// Includes the shared Hauptkategorie contract (group-<haupt>.json), see registry.getQualityContract.
 export function loadSubCategoryContract(subCatCode: number): QualityContract | null {
-  return loadContractFile(`${subCatCode}.json`);
+  return getQualityContract(subCatCode);
 }
 
 function clamp(value: number): number {
@@ -41,28 +45,21 @@ function tagForValue(value: number): QualityTag {
   return label as QualityTag;
 }
 
-/** Derives quality value (1–5) from contract answers. Worst (min) impact score wins. */
+/**
+ * Quality of one assessment from its own answers (models/quality-score.ts). `value` is the
+ * pessimistic grade ("at least …") of the lower bound, so an assessment row always has one; whether
+ * the item shows a grade at all (narrow enough range) is decided when the item is recomputed.
+ */
 export function deriveQualityFromAnswers(
   contracts: QualityContract[],
-  answers: Record<string, string>
-): { value: number; tag: QualityTag } {
-  const scores: number[] = [];
-
-  for (const contract of contracts) {
-    for (const question of contract.questions) {
-      if (!isQuestionVisible(question, answers)) continue;
-      if (!question.qualityImpact) continue;
-      const answer = answers[question.id];
-      // An empty/whitespace answer means the operator skipped it ("don't know") — treat it as
-      // unanswered, not as a real value, so a skip never drives the quality score.
-      if (answer === undefined || answer.trim() === '') continue;
-      const impact = question.qualityImpact[answer as keyof typeof question.qualityImpact];
-      if (typeof impact === 'number') scores.push(impact);
-    }
-  }
-
-  const value = scores.length > 0 ? clamp(Math.min(...scores)) : QUALITY_DEFAULT;
-  return { value, tag: tagForValue(value) };
+  answers: Record<string, string>,
+  assembly?: AssemblyContract | null
+): { value: number; tag: QualityTag; range: QualityScoreRange | null } {
+  const range = scoreToRange(computeQualityScore({ contracts, answers, assembly }));
+  if (!range) return { value: QUALITY_DEFAULT, tag: tagForValue(QUALITY_DEFAULT), range: null };
+  const grading = gradingFrom(contracts);
+  const value = clamp(gradeFromRange({ min: range.min, max: range.min }, grading) ?? QUALITY_DEFAULT);
+  return { value, tag: tagForValue(value), range };
 }
 
 /** Builds the derived Spezifikationen entries from contract answers. */
@@ -80,7 +77,14 @@ export function deriveSpecsFromAnswers(
       // A skipped ("don't know") answer must not become a spec — otherwise specValue "%v GB"
       // renders as " GB". An empty/whitespace answer is treated as unanswered.
       if (answer === undefined || answer.trim() === '') continue;
-      const rendered = question.specValue ? question.specValue.replace('%v', answer) : answer;
+      let value = answer;
+      if (question.type === 'multi') {
+        const entries = parseMultiAnswer(answer);
+        // "[]" = checked, nothing found — no spec line ("Fehlende Tasten: " would read as a defect)
+        if (!entries || entries.length === 0) continue;
+        value = entries.join(', ');
+      }
+      const rendered = question.specValue ? question.specValue.replace('%v', value) : value;
       specs[question.specField] = rendered;
     }
   }
@@ -110,14 +114,15 @@ export function buildQualityCheckResponse(
   generalContract: QualityContract,
   subCatContract: QualityContract | null,
   answers: Record<string, string>,
-  assemblyQualityContract?: QualityContract | null
+  assemblyQualityContract?: QualityContract | null,
+  assembly?: AssemblyContract | null
 ): QualityCheckResponse {
   const contracts = [
     generalContract,
     ...(assemblyQualityContract ? [assemblyQualityContract] : []),
     ...(subCatContract ? [subCatContract] : [])
   ];
-  const { value, tag } = deriveQualityFromAnswers(contracts, answers);
+  const { value, tag, range } = deriveQualityFromAnswers(contracts, answers, assembly);
   const derivedSpecs = deriveSpecsFromAnswers(contracts, answers);
 
   return {
@@ -128,5 +133,6 @@ export function buildQualityCheckResponse(
     derivedSpecs,
     qualityValue: value,
     qualityTag: tag,
+    qualityScore: range,
   };
 }

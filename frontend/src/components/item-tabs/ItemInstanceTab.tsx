@@ -152,7 +152,8 @@ export default function ItemInstanceTab({
 
       {canEdit && item.Quality === null && (
         <div className="quality-missing-hint">
-          <span>Qualitätsbewertung fehlt</span>
+          {/* With a range but no grade, the assessment exists but leaves too much unchecked (U4). */}
+          <span>{item.QualityScoreMin != null ? 'Zu wenig bewertet für eine Note' : 'Qualitätsbewertung fehlt'}</span>
           <button type="button" className="btn btn--small" onClick={() => void handleOpenQualityReview()}>
             Jetzt bewerten
           </button>
@@ -219,7 +220,8 @@ export default function ItemInstanceTab({
       {showQualityReview && (
         <QualityReviewModal
           itemId={item.ItemUUID}
-          subCategory={item.Unterkategorien_A}
+          subCategory={item.EffectiveSubCategory ?? item.Unterkategorien_A}
+          itemLabel={item.Artikelbeschreibung ?? item.Kurzbeschreibung ?? undefined}
           onDone={onQualityReviewDone}
           onCancel={onQualityReviewDone}
           initialAnswers={existingAnswers}

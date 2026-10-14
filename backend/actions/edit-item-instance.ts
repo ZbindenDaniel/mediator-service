@@ -84,6 +84,8 @@ const action = defineHttpAction({
       if (quality !== undefined) {
         params.push(quality);
         setClauses.push(`"Quality"=$${params.length}`);
+        // A hand-set grade wins over the derived one until the next assessment (U6); clearing it re-enables derivation.
+        setClauses.push(`"QualityManual"=${quality === null ? 'FALSE' : 'TRUE'}`);
         changed.Quality = quality;
       }
       if (instanceSpecs !== undefined) {

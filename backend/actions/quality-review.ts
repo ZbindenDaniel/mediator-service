@@ -10,6 +10,8 @@ import {
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveActor } from '../utils/actor';
 import { guardWrite } from '../utils/write-guard';
+import { resolveEffectiveSubCategory, recomputeQualityScoreSafely } from '../lib/quality-score';
+import { queryOne } from '../db-client';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -52,7 +54,20 @@ const action = defineHttpAction({
       }
       const answers = data.answers as Record<string, string>;
 
-      const subCategory = typeof data.subCategory === 'number' ? data.subCategory : undefined;
+      // The server decides which contract scores the item; the client value is only a fallback for
+      // items the server cannot place (no reference, no slot), so a stale or wrong client category
+      // cannot score an item — or, via the roll-up, its parents — against the wrong contract.
+      const clientSubCategory = typeof data.subCategory === 'number' ? data.subCategory : undefined;
+      let resolvedSubCategory: number | null = null;
+      try {
+        resolvedSubCategory = await resolveEffectiveSubCategory(itemUUID);
+      } catch (err) {
+        console.error('[quality-review] Failed to resolve effective subcategory', { itemUUID, error: err });
+      }
+      if (resolvedSubCategory !== null && clientSubCategory !== undefined && clientSubCategory !== resolvedSubCategory) {
+        console.warn('[quality-review] Client subCategory differs from resolved one; using resolved', { itemUUID, clientSubCategory, resolvedSubCategory });
+      }
+      const subCategory = resolvedSubCategory ?? clientSubCategory;
       const notes = typeof data.notes === 'string' && data.notes.trim() ? data.notes.trim() : null;
 
       let generalContract;
@@ -66,7 +81,7 @@ const action = defineHttpAction({
       const subCatContract = subCategory !== undefined ? loadSubCategoryContract(subCategory) : null;
       const assemblyContract = subCategory !== undefined ? getAssemblyContract(subCategory) : null;
       const assemblyQualityContract = assemblyContract ? assemblyToQualityContract(assemblyContract) : null;
-      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, answers, assemblyQualityContract);
+      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, answers, assemblyQualityContract, assemblyContract);
 
       const assessment = {
         tag: checkResponse.qualityTag as import('../../models/quality').QualityTag,
@@ -122,6 +137,20 @@ const action = defineHttpAction({
         }
       }
 
+      await recomputeQualityScoreSafely(itemUUID, { actor: reviewed_by, logEvent: ctx.logEvent });
+      let qualityScore: { min: number; max: number } | null = null;
+      try {
+        const row = await queryOne<{ QualityScoreMin: number | null; QualityScoreMax: number | null }>(
+          `SELECT "QualityScoreMin", "QualityScoreMax" FROM items WHERE "ItemUUID" = $1`,
+          [itemUUID]
+        );
+        if (row && row.QualityScoreMin !== null && row.QualityScoreMax !== null) {
+          qualityScore = { min: Number(row.QualityScoreMin), max: Number(row.QualityScoreMax) };
+        }
+      } catch (err) {
+        console.warn('[quality-review] Failed to read quality score', { itemUUID, error: err });
+      }
+
       console.info('[quality-review] Quality assessment created', {
         itemUUID,
         id,
@@ -145,6 +174,7 @@ const action = defineHttpAction({
           ? { subCategoryContractVersion: checkResponse.subCategoryContractVersion }
           : {}),
         ...(subCategory !== undefined ? { subCategory } : {}),
+        qualityScore,
       });
     } catch (err) {
       console.error('[quality-review] Unexpected error', err);

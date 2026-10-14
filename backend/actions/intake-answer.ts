@@ -16,6 +16,7 @@ import { generateItemUUID } from '../lib/itemIds';
 import { syncInDeviceComponents } from '../lib/in-device-components';
 import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse, assemblyToQualityContract } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
+import { recomputeQualityScoreSafely } from '../lib/quality-score';
 import { resolveIntakeQuestions, deriveInstanceSpecsFromScan, normalizeScanComponents } from '../lib/intake-quality-map';
 import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion, IntakeDetectedSpecView } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
@@ -352,7 +353,7 @@ const action = defineHttpAction({
         Object.entries(qualityAnswers).filter(([, v]) => typeof v === 'string' && v.trim() !== '')
       );
       const mergedAnswers = { ...autoAnswers, ...submittedAnswers };
-      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, mergedAnswers, assemblyQualityContract);
+      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, mergedAnswers, assemblyQualityContract, assemblyContract);
 
       const assessment = {
         tag: checkResponse.qualityTag as import('../../models/quality').QualityTag,
@@ -368,6 +369,8 @@ const action = defineHttpAction({
 
       const id = await insertQualityAssessment(assessment);
       await updateItemQualityAssessment(itemRow.ItemUUID, id, checkResponse.qualityValue);
+      // Same derivation as the operator review (U9): range + pessimistic grade, incl. in-device parts.
+      await recomputeQualityScoreSafely(itemRow.ItemUUID, { actor: 'intake-station', logEvent });
 
       await logEvent({
         Actor: 'intake-station',

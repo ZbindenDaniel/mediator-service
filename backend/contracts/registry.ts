@@ -31,8 +31,26 @@ export function getGeneralQualityContract(): QualityContract | null {
   return loadQualityContractByKey('general');
 }
 
+/** Hauptkategorie of a subcategory by the taxonomy's numeric convention (201 → 20, 2101 → 210). */
+export function groupKeyFor(subcategory: number): string {
+  return `group-${Math.floor(subcategory / 10)}`;
+}
+
+/**
+ * The quality contract an item of this subcategory is assessed with: the shared Hauptkategorie
+ * contract (`quality/group-<haupt>.json`, e.g. condition + part number for all laptop parts) followed
+ * by the subcategory's own file. Merged here so every caller (review, intake, score, HTTP) agrees.
+ */
 export function getQualityContract(subcategory: number): QualityContract | null {
-  return loadQualityContractByKey(String(subcategory));
+  const own = loadQualityContractByKey(String(subcategory));
+  const group = loadQualityContractByKey(groupKeyFor(subcategory));
+  if (!group) return own;
+  return {
+    ...(own ?? {}),
+    version: own?.version ?? group.version,
+    subCategory: subcategory,
+    questions: [...group.questions, ...(own?.questions ?? []).filter((q) => !group.questions.some((g) => g.id === q.id))]
+  };
 }
 
 export function getSpecContract(subcategory: number): SpecContract | null {

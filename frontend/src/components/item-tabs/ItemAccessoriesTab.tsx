@@ -35,7 +35,8 @@ export default function ItemAccessoriesTab({
   canEditItem,
   canEditReference
 }: Props) {
-  const subCategory = item.Unterkategorien_A ?? null;
+  // Effective = slot target for article-less parts, so a nested assembly shows its own slots.
+  const subCategory = item.EffectiveSubCategory ?? item.Unterkategorien_A ?? null;
 
   const [assemblyContract, setAssemblyContract] = useState<AssemblyContract | null>(null);
   const [spareParts, setSpareParts] = useState<SparePart[]>([]);
