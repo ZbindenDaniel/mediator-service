@@ -1,7 +1,7 @@
 // Validates the effective contract set (shipped + CONTRACTS_OVERLAY_DIR) against the taxonomy seed
 // (TAXONOMY_SEED_FILE or config/taxonomy.seed.json). Exit code 1 on any problem — usable in CI/deploy.
-import { loadContractSetFromDisk, validateContractSet, unusedContractCodes } from '../backend/contracts/validate';
-import { loadTaxonomy } from '../backend/lib/taxonomy';
+import { loadContractSetFromDisk, validateContractSet, unusedContractCodes } from '../contracts/validate';
+import { loadTaxonomy } from '../lib/taxonomy';
 
 const taxonomy = loadTaxonomy(true);
 const known = new Set<number>(taxonomy.flatMap((c) => c.subcategories.map((s) => s.code)));

@@ -10,9 +10,9 @@
     "start": "node dist/backend/server.js",
     "test": "npm run prebuild && node scripts/run-tests.js",
     "smoke": "ts-node --transpile-only scripts/smoke-server.ts",
-    "contracts:check": "ts-node --transpile-only scripts/check-contracts.ts",
-    "quality:recompute": "ts-node --transpile-only scripts/recompute-quality-scores.ts",
-    "taxonomy:apply": "ts-node --transpile-only scripts/apply-taxonomy.ts",
+    "contracts:check": "ts-node --transpile-only backend/cli/check-contracts.ts",
+    "quality:recompute": "ts-node --transpile-only backend/cli/recompute-quality-scores.ts",
+    "taxonomy:apply": "ts-node --transpile-only backend/cli/apply-taxonomy.ts",
     "migrate": "node scripts/migrate-sqlite-to-postgres.js"
   },
   "dependencies": {

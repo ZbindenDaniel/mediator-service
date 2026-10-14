@@ -160,6 +160,8 @@ After **any** contract edit: `npm run contracts:check` (with the deployment's `C
   **deactivates** everything else (hidden from pickers; items keep their codes; nothing is deleted).
   `--keep-others` leaves the rest active. Applying the other seed again switches back.
 - Restart the mediator afterwards — it caches the taxonomy at startup.
+- Inside a container (no npm/ts-node there): `node dist/backend/cli/apply-taxonomy.js <seed>` — likewise
+  `check-contracts.js` and `recompute-quality-scores.js` (see `config/catalogue/README.md` for staging).
 - `taxonomy:apply` refuses to move an existing subcategory to another main category (codes and parents are
   permanent).
 

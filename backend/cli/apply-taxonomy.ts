@@ -5,9 +5,9 @@
 // Restart the server afterwards: it caches the taxonomy at startup.
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { parseTaxonomySeed } from '../backend/lib/taxonomy';
-import { applyTaxonomy } from '../backend/lib/taxonomy-apply';
-import { closePool } from '../backend/db-client';
+import { parseTaxonomySeed } from '../lib/taxonomy';
+import { applyTaxonomy } from '../lib/taxonomy-apply';
+import { closePool } from '../db-client';
 
 const args = process.argv.slice(2);
 const file = args.find((a) => !a.startsWith('--')) ?? process.env.TAXONOMY_SEED_FILE;
