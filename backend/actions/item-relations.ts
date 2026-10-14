@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { query, queryOne, execute } from '../db-client';
 import { guardWrite } from '../utils/write-guard';
+import { redactItemRows } from '../lib/redaction';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -46,7 +47,7 @@ const action = defineHttpAction({
           SELECT ir."Id", ir."ChildItemUUID" AS "ItemUUID", ir."RelationType", ir."Notes",
                  ir."CreatedAt" AS "RelationCreatedAt", ir."UpdatedAt",
                  i."Artikel_Nummer", r."Artikelbeschreibung", r."Kurzbeschreibung",
-                 i."BoxID", i."Location"
+                 i."BoxID", i."Location", i."TenantId"
           FROM item_relations ir
           JOIN items i ON i."ItemUUID" = ir."ChildItemUUID"
           LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
@@ -58,7 +59,7 @@ const action = defineHttpAction({
           SELECT ir."Id", ir."ParentItemUUID" AS "ItemUUID", ir."RelationType", ir."Notes",
                  ir."CreatedAt" AS "RelationCreatedAt", ir."UpdatedAt",
                  i."Artikel_Nummer", r."Artikelbeschreibung", r."Kurzbeschreibung",
-                 i."BoxID", i."Location"
+                 i."BoxID", i."Location", i."TenantId"
           FROM item_relations ir
           JOIN items i ON i."ItemUUID" = ir."ParentItemUUID"
           LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
@@ -66,7 +67,10 @@ const action = defineHttpAction({
           ORDER BY ir."CreatedAt"
         `, [parentUUID]);
 
-        return sendJson(res, 200, { connectedAccessories: accessories, connectedToDevices: devices });
+        return sendJson(res, 200, {
+          connectedAccessories: redactItemRows(accessories),
+          connectedToDevices: redactItemRows(devices)
+        });
       }
 
       if (method === 'POST' && !childUUID) {

@@ -28,6 +28,9 @@ import { parseLangtext } from '../lib/langtext';
 import { calculateCo2Impact } from '../lib/co2Calculator';
 import { query as dbQuery, withTransaction } from '../db-client';
 import { guardWrite } from '../utils/write-guard';
+import { redactItemRows, redactPeople } from '../lib/redaction';
+import { currentIdentity, isUnrestricted } from '../lib/ownership';
+import { getRowOwner } from '../db';
 
 const MEDIA_PREFIX = '/media/';
 // TODO(item-detail-reference): Confirm reference payload expectations once API consumers update.
@@ -714,6 +717,15 @@ const action = defineHttpAction({
           console.error('[save-item] Failed to load agentic run for item detail', { itemId, error });
           agentic = null;
         }
+        // The reviewer is a person: hidden on another org's catalogue entry (tenancy §2a).
+        if (agentic && !isUnrestricted(currentIdentity())) {
+          try {
+            agentic = redactPeople(agentic, await getRowOwner('ref', agenticArtikelNummer), ['ReviewedBy']);
+          } catch (error) {
+            console.error('[save-item] Failed to resolve reference owner; hiding reviewer', { itemId, error });
+            agentic = { ...agentic, ReviewedBy: null };
+          }
+        }
         const normalisedGrafikname = normaliseMediaReference(itemId, item.Artikel_Nummer, item.Grafikname);
         const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
         const sanitizedItem = {
@@ -905,7 +917,7 @@ const action = defineHttpAction({
             SELECT ir."Id", ir."ChildItemUUID" AS "ItemUUID", ir."RelationType", ir."Notes",
                    ir."CreatedAt" AS "RelationCreatedAt", ir."UpdatedAt",
                    i."Artikel_Nummer", r."Artikelbeschreibung", r."Kurzbeschreibung",
-                   i."BoxID", i."Location"
+                   i."BoxID", i."Location", i."TenantId"
             FROM item_relations ir
             JOIN items i ON i."ItemUUID" = ir."ChildItemUUID"
             LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
@@ -917,7 +929,7 @@ const action = defineHttpAction({
             SELECT ir."Id", ir."ParentItemUUID" AS "ItemUUID", ir."RelationType", ir."Notes",
                    ir."CreatedAt" AS "RelationCreatedAt", ir."UpdatedAt",
                    i."Artikel_Nummer", r."Artikelbeschreibung", r."Kurzbeschreibung",
-                   i."BoxID", i."Location"
+                   i."BoxID", i."Location", i."TenantId"
             FROM item_relations ir
             JOIN items i ON i."ItemUUID" = ir."ParentItemUUID"
             LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
@@ -1019,8 +1031,8 @@ const action = defineHttpAction({
             agenticReviewAutomation,
             media,
             instances,
-            connectedAccessories,
-            connectedToDevices,
+            connectedAccessories: redactItemRows(connectedAccessories as Record<string, any>[]),
+            connectedToDevices: redactItemRows(connectedToDevices as Record<string, any>[]),
             compatibleAccessoryRefs,
             compatibleParentRefs,
             attachments,

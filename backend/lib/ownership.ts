@@ -35,6 +35,15 @@ export function canWrite(identity: RequestIdentity | null | undefined, rowTenant
   return ownerOf(rowTenant) === identity!.tenant;
 }
 
+/**
+ * May this identity see a row's private details: where it is stored (box/shelf/site) and who handled
+ * it (event actors, markers, reviewers)? Everything else stays shared (§2a). Same rule as writes for
+ * now, kept separate because org groups / shared warehouses will likely widen reads first.
+ */
+export function canSeePrivate(identity: RequestIdentity | null | undefined, rowTenant: string | null | undefined): boolean {
+  return canWrite(identity, rowTenant);
+}
+
 /** May this identity create new owned rows (they would be stamped with its tenant)? */
 export function canCreate(identity: RequestIdentity | null | undefined): boolean {
   return isUnrestricted(identity) || Boolean(identity?.tenant);
@@ -55,8 +64,9 @@ export function currentIdentity(): RequestIdentity | null {
 }
 
 /**
- * SQL parameters for an owner-guarded upsert: [unrestricted, requesterTenant, defaultTenant].
- * Used as `... DO UPDATE SET ... WHERE $u OR COALESCE(<table>.<owner col>, $d) = $t`.
+ * SQL parameters for an owner check: [unrestricted, requesterTenant, defaultTenant].
+ * Used as `... WHERE $u OR COALESCE(<table>.<owner col>, $d) = $t` — in the guarded upserts and in
+ * the read filters (foreign boxes, event feeds). A null requester tenant never matches (fail closed).
  */
 export function writeScopeParams(): [boolean, string | null, string | null] {
   const identity = currentIdentity();

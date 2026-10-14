@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { getUserMarks, markItem, unmarkItem, getUserMark, getItemMarks, getAllMarkedItemUUIDs } from '../db';
+import { getUserMarks, markItem, unmarkItem, getUserMark, getItemMarks, getAllMarkedItemUUIDs, getRowOwner } from '../db';
+import { canSeePrivate, isUnrestricted } from '../lib/ownership';
 import { resolveActor } from '../utils/actor';
 import type { RequestIdentity } from '../lib/identity';
 
@@ -36,7 +37,11 @@ const action = defineHttpAction({
     if (method === 'GET' && url.pathname.startsWith('/api/user-marks/item/')) {
       const itemUUID = url.pathname.replace('/api/user-marks/item/', '').trim();
       if (!itemUUID) return sendJson(res, 400, { error: 'itemUUID is required' });
-      const marks = await getItemMarks(itemUUID);
+      let marks = await getItemMarks(itemUUID);
+      // On another org's item only your own mark shows: markers are people, notes may name places.
+      if (!isUnrestricted(ctx?.identity) && !canSeePrivate(ctx?.identity, await getRowOwner('item', itemUUID))) {
+        marks = marks.filter((m) => m.Username === ctx?.identity?.username);
+      }
       return sendJson(res, 200, { marks });
     }
 

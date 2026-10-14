@@ -168,8 +168,12 @@ visible for now.
 **3a ✅ Writes (#976):** policy in `lib/ownership.ts`; DB safety net in the item/catalogue/box upserts
 (`ON CONFLICT … DO UPDATE … WHERE owner = requester`, request context via `AsyncLocalStorage`);
 handler guards (`utils/write-guard.ts`) on every write route; owners inherited on raw inserts
-(spare parts, in-device components, relations, stubs). **3b next:** read redaction (location chain,
-people, item logs, foreign boxes invisible, search/QR/export by box id).
+(spare parts, in-device components, relations, stubs). **3b ✅ Reads (#979):** `lib/redaction.ts` +
+`canSeePrivate`; another org's item location shows the owner name, its boxes/shelves/Fundsachen are
+"not found", item/box logs and feeds show only own events, marks/reviewer hidden, search by box id
+blind to foreign boxes, item export own rows only, full export unrestricted-only. Applied in the
+shared `db.ts` reads + handlers with own SQL. **Next:** two-org test matrix, DL2 total, FE hiding of
+write actions on foreign items.
 - **Logistics:** reads *and* writes filtered by `ctx.tenant` with **no shared
   fallback**, enforced in the `db.ts` logistics functions (not per handler) so it
   can't be bypassed. Destructive ops assert ownership.

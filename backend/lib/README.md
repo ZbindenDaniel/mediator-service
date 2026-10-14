@@ -19,7 +19,8 @@ Domain service utilities — the shared logic layer between action handlers and 
 - `path-guard.ts` — prevents path traversal in file serving
 - `features.ts` — deployment feature flags: parses `FEATURES`/`FEATURES_FILE` (fail-fast on typos), `isFeatureEnabled()` for the action gate and background jobs
 - `identity.ts` — resolves forward-auth headers into `{ username, groups, tenant, role }`
-- `ownership.ts` — tenancy write rules: `owner = TenantId ?? defaultTenant`, `canWrite`/`canCreate`, unrestricted for no-login requests + platform admins + background jobs; request context (`runWithIdentity`) for the DB safety net
+- `ownership.ts` — tenancy rules: `owner = TenantId ?? defaultTenant`, `canWrite`/`canCreate`, unrestricted for no-login requests + platform admins + background jobs; request context (`runWithIdentity`) for the DB safety net; `canSeePrivate` for reads
+- `redaction.ts` — applies the read rule to row shapes: another org's item location → owner name, its boxes/stubs filtered out, person fields cleared; no-op when unrestricted
 - `tenants.ts` — in-memory org directory (orgs + sites) loaded from the DB, refreshed on every admin write; feeds identity resolution and `canUseSite()` for shelf creation
 
 ## Relations
@@ -34,4 +35,5 @@ Reusable domain logic only. HTTP request/response handling belongs in `../action
 - No direct Express `req`/`res` imports — this layer is HTTP-agnostic
 
 ## Decisions
-- **Request context via `AsyncLocalStorage` (`ownership.ts`)** — new pattern, deliberately narrow. Catalogue entries, items and boxes are written from over a dozen paths (save, import, intake, AI results, snapshots), some outside requests. Instead of threading an identity parameter through every persistence function, the dispatcher runs each action inside `runWithIdentity()`, and the three central upserts in `db.ts` read it for their owner guard. Only these owner guards use it; everything else still gets its data through `ctx`. No context = background job = unrestricted (same as before tenancy).
+- **Request context via `AsyncLocalStorage` (`ownership.ts`)** — new pattern, deliberately narrow. Catalogue entries, items and boxes are written from over a dozen paths (save, import, intake, AI results, snapshots), some outside requests. Instead of threading an identity parameter through every persistence function, the dispatcher runs each action inside `runWithIdentity()`, and the three central upserts in `db.ts` read it for their owner guard. Only these owner guards and the read redaction in `db.ts` (3b) use it; everything else still gets its data through `ctx`. No context = background job = unrestricted (same as before tenancy).
+- **Read redaction in the shared `db.ts` reads, not per handler (`redaction.ts`, 3b)** — item/box rows reach the client from ~15 handlers through the same few `db.ts` functions, so redacting there covers them all, including future ones (the plan's "can't be bypassed"). Handlers with their own SQL (search, relations, marks, exports) call the helpers explicitly. Write handlers see redacted rows only for other orgs' items, which the write guards reject anyway. Feeds filter in SQL (not after `LIMIT`) so a page of foreign events doesn't come back empty.

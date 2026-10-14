@@ -173,10 +173,35 @@ Rule: `owner(row) = row.TenantId ?? defaultTenant` (`backend/lib/ownership.ts`).
 - **Joining tenancy later** (e.g. revamp): set `defaultTenant` and all unowned rows belong to that
   org, with no data migration.
 
-## What is NOT enforced yet (Phase 3b: reads)
+## What is enforced (Phase 3b: reads)
 
-- **No redaction yet.** Everyone still sees other orgs' box/shelf, cataloguer and logs. Next step.
+Reads stay **shared**: every org sees every item and catalogue entry, which org holds it and how
+many. Only an item's private details are hidden from other orgs (same owner rule,
+`canSeePrivate` in `ownership.ts`, applied by `backend/lib/redaction.ts`). No login and platform
+admins see everything, as before.
+
+| Data | Another org sees |
+|---|---|
+| Item location (box, shelf, location) | the **owner org's name** instead (`Location`/`ShelfLabel`, `BoxID` empty, `LocationRedacted: true`) |
+| Boxes, shelves, Fundsachen | nothing: "not found" (detail, QR scan, lists, search, overview) |
+| Item log (history tab), box log, activity feeds | nothing: only events about your own items/boxes |
+| Marks on the item | only your own mark |
+| AI review "reviewed by" on a catalogue entry | hidden unless your org contributed the entry |
+| Search by a box id | finds neither the box nor its items |
+| Item export (`/api/export/items`) | only your own items |
+| Full export (`/api/export/data`) | refused (403), platform admins only |
+| Serial/MAC, intake data, photos, attachments | **visible** (grey zone, decided 2026-10-13) |
+
+Where it happens: the shared reads in `db.ts` (`getItem`, `findByMaterial`, `itemsByBox`,
+`listItems*`, `listItemsForExport`, `getBox`, `boxesByLocation`, `listBoxes`, `listRecentBoxes`,
+`listStubs`, event queries) plus the handlers with their own SQL (`search`, item relations in
+`item-relations` + `save-item`, `user-marks`, exports). New read paths that return `BoxID`,
+`Location` or people must go through the same helpers.
+
+## Not enforced yet
+
 - No global stock total yet (DL2).
+- The UI still offers write actions on another org's items (they answer 403).
 
 ## Inspecting state
 

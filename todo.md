@@ -425,13 +425,12 @@
      Phase 1 audit + Phase 4 admin role gating ✅ (#969, browser check pending).
      Deployment feature flags ✅ (#970, browser check pending).
      Org admin page ✅ (#971, browser check pending).
-     Phase 3a writes ✅ (#976). Next: Phase 3b reads** (redaction of location chain /
-     people / item logs, foreign boxes invisible, search/QR/export by box id; see
-     PLANNING_TENANCY Phase 3). Then: revised Phase 3 leftovers
-     (shared reads with server-side redaction of location/cataloguer, owner-only
-     edits incl. catalogue `ContributedByTenant`). Open for Phase 3: exact redacted
-     field list (notes? images? logs?), may org B add instances under org A's
-     reference, contact email per org. Later: role permissions (delete, bulk,
+     Phase 3a writes ✅ (#976). Phase 3b reads ✅ (#979). Next:** two-org test
+     matrix with real logins; FE: hide write actions (relocate, edit, delete) on
+     another org's items instead of letting them 403; DL2 global stock total;
+     per-org export (`/api/export/data` is unrestricted-only for now). Grey zone
+     still visible by decision (serial/MAC, intake data, photos, attachments).
+     Later: role permissions (delete, bulk,
      shelf create) together with defining `super`. Open: intake station
      rows get `defaultTenant` (per-station tenant?); SPA has no graceful
      session-expiry handling; (4) tenant/user

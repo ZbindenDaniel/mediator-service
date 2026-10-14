@@ -8,6 +8,7 @@ import { resolveShopwareImageInputs } from './lib/shopware-media';
 import type { ShopwareImageInput } from './shopware/adminClient';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
 import { writeScopeParams } from './lib/ownership';
+import { redactItemRows, visibleBoxRows, isBoxVisible } from './lib/redaction';
 import type {
   ShopwareSyncQueueEntry,
   ShopwareSyncQueueInsert,
@@ -919,6 +920,7 @@ SELECT
   i."SerialNumber" AS "SerialNumber",
   i."MacAddress" AS "MacAddress",
   i."InstanceSpecs" AS "InstanceSpecs",
+  i."TenantId" AS "TenantId",
   r."Suchbegriff" AS "Suchbegriff",
   r."Grafikname" AS "Grafikname",
   r."ImageNames" AS "ImageNames",
@@ -1203,11 +1205,12 @@ export async function getBox(boxId: string): Promise<Record<string, unknown> | n
   if (!row) {
     console.warn('[db] getBox returned null', { boxId });
   }
-  return row;
+  // Another org's box reads as "not found" (scan, search, deep link alike) — tenancy §2a.
+  return row && isBoxVisible(row) ? row : null;
 }
 
 export async function boxesByLocation(locationId: string): Promise<Record<string, unknown>[]> {
-  return query(`SELECT * FROM boxes WHERE "LocationId" = $1 ORDER BY "BoxID"`, [locationId]);
+  return visibleBoxRows(await query(`SELECT * FROM boxes WHERE "LocationId" = $1 ORDER BY "BoxID"`, [locationId]));
 }
 
 export interface ListBoxesHelper {
@@ -1230,14 +1233,14 @@ const LIST_BOXES_SQL = `
 `;
 
 export const listBoxes: ListBoxesHelper = {
-  all: async () => query(LIST_BOXES_SQL),
+  all: async () => visibleBoxRows(await query(LIST_BOXES_SQL)),
   byType: async (type: string) => {
     const normalized = (type ?? '').toString().trim().toUpperCase();
     if (!normalized || !/^[A-Z0-9]$/.test(normalized)) {
       console.warn('[db:listBoxes] Invalid box type filter', { type });
       return [];
     }
-    return query(
+    return visibleBoxRows(await query(
       `SELECT b.*, shelf."Label" AS "ShelfLabel",
         COUNT(DISTINCT i."ItemUUID")::int AS "ItemCount",
         COALESCE(SUM(COALESCE(i."Auf_Lager", 0) * COALESCE(r."Gewicht_kg", 0)), 0) AS "TotalWeightKg",
@@ -1251,7 +1254,7 @@ export const listBoxes: ListBoxesHelper = {
        GROUP BY b."BoxID", shelf."Label"
        ORDER BY b."BoxID"`,
       [normalized]
-    );
+    ));
   }
 };
 
@@ -1263,7 +1266,7 @@ export async function getItem(uuid: string): Promise<any> {
   const rows = await query(`${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}${ITEM_JOIN_WITH_BOX}WHERE i."ItemUUID" = $1`, [uuid]);
   const row = rows[0] ?? null;
   if (!row) return null;
-  return parseLangtextForRow(row as Record<string, unknown>, 'db:getItem');
+  return redactItemRows([parseLangtextForRow(row as Record<string, unknown>, 'db:getItem')])[0];
 }
 
 export async function getItemReference(artikelNummer: string): Promise<any> {
@@ -1290,7 +1293,7 @@ export async function findByMaterial(artikelNummer: string): Promise<any[]> {
      ORDER BY i."UpdatedAt" DESC`,
     [artikelNummer]
   );
-  return parseLangtextRows(rows as Record<string, unknown>[], 'db:findByMaterial');
+  return redactItemRows(parseLangtextRows(rows as Record<string, unknown>[], 'db:findByMaterial'));
 }
 
 export async function itemsByBox(boxId: string): Promise<any[]> {
@@ -1298,7 +1301,7 @@ export async function itemsByBox(boxId: string): Promise<any[]> {
     `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}${ITEM_JOIN_WITH_BOX}WHERE i."BoxID" = $1 ORDER BY i."ItemUUID"`,
     [boxId]
   );
-  return parseLangtextRows(rows as Record<string, unknown>[], 'db:itemsByBox');
+  return redactItemRows(parseLangtextRows(rows as Record<string, unknown>[], 'db:itemsByBox'));
 }
 
 export async function getAdjacentItemIds(itemUUID: string): Promise<{ previousId: string | null; nextId: string | null }> {
@@ -1322,7 +1325,7 @@ export async function listItems(): Promise<any[]> {
      WHERE COALESCE(i."Auf_Lager", 0) > 0
      ORDER BY i."ItemUUID"`
   );
-  return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItems');
+  return redactItemRows(parseLangtextRows(rows as Record<string, unknown>[], 'db:listItems'));
 }
 
 export async function listItemsWithFilters(filters: {
@@ -1350,7 +1353,9 @@ export async function listItemsWithFilters(filters: {
      ORDER BY i."ItemUUID"`,
     [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatuses, filters.unplacedOnly]
   );
-  return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsWithFilters');
+  const visible = redactItemRows(parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsWithFilters'));
+  // A box filter on another org's box would reveal what is in it — only own items match by box.
+  return filters.boxFilter ? visible.filter((row: any) => !row.LocationRedacted) : visible;
 }
 
 export async function listItemReferencesWithFilters(filters: {
@@ -1447,7 +1452,7 @@ export async function listItemsForExport(filters: Partial<ListItemsForExportFilt
 
   sql += ` ORDER BY COALESCE(NULLIF(i."Artikel_Nummer",''), i."ItemUUID"), i."ItemUUID"`;
   const rows = await query(sql, params);
-  return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsForExport');
+  return redactItemRows(parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsForExport'));
 }
 
 // ---------------------------------------------------------------------------
@@ -1834,8 +1839,9 @@ export async function listEventsForBox(boxId: string): Promise<EventLog[]> {
   return query<EventLog>(
     `SELECT * FROM events WHERE "EntityType"='Box' AND "EntityId"=$1
      AND ${levelFilterExpression()} AND ${topicFilterExpression()}
+     AND ($2 OR COALESCE((SELECT "TenantId" FROM boxes WHERE "BoxID" = $1), $4) = $3)
      ORDER BY "Id" DESC LIMIT 200`,
-    [boxId]
+    [boxId, ...writeScopeParams()]
   );
 }
 
@@ -1847,20 +1853,38 @@ export async function listEventsForItem(itemId: string, artikelNummer?: string |
     `SELECT * FROM events WHERE "EntityType"='Item'
        AND ("EntityId"=$1 OR ($2 <> '' AND "EntityId"=$2))
      AND ${levelFilterExpression()} AND ${topicFilterExpression()}
+     -- Another org's item log stays hidden: actors are people, Meta carries box ids.
+     AND ($3 OR COALESCE((SELECT "TenantId" FROM items WHERE "ItemUUID" = $1), $5) = $4)
      ORDER BY "Id" DESC LIMIT 200`,
-    [itemId, ref]
+    [itemId, ref, ...writeScopeParams()]
   );
 }
 
+// Event feeds (overview, activities page): a logged-in org member sees only events about its own
+// items and boxes — an event's actor is a person and its Meta carries box ids, so redacting fields
+// would still leak. Unknown owner (deleted item, reference-level event) counts as the default org.
+const EVENT_OWNER_JOIN = `LEFT JOIN boxes bx ON e."EntityType"='Box' AND bx."BoxID"=e."EntityId"`;
+
+/** Appends the scope params to `params` and returns the matching WHERE fragment. */
+function eventScopeClause(params: unknown[]): string {
+  const base = params.length;
+  params.push(...writeScopeParams());
+  return `($${base + 1} OR COALESCE(i."TenantId", bx."TenantId", $${base + 3}) = $${base + 2})`;
+}
+
 export async function listRecentEvents(): Promise<any[]> {
+  const params: unknown[] = [];
+  const scope = eventScopeClause(params);
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
      FROM events e
      LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
-     ORDER BY e."Id" DESC LIMIT 3`
+     ${EVENT_OWNER_JOIN}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} AND ${scope}
+     ORDER BY e."Id" DESC LIMIT 3`,
+    params
   );
 }
 
@@ -1868,13 +1892,15 @@ export async function listRecentActivities(limit: number, actor?: string): Promi
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
   const actorClause = actor ? `AND e."Actor" ILIKE $2` : '';
   const params: unknown[] = actor ? [effectiveLimit, `%${actor}%`] : [effectiveLimit];
+  const scope = eventScopeClause(params);
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
      FROM events e
      LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} ${actorClause}
+     ${EVENT_OWNER_JOIN}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} AND ${scope} ${actorClause}
      ORDER BY e."CreatedAt" DESC LIMIT $1`,
     params
   );
@@ -1884,13 +1910,15 @@ export async function listRecentActivitiesByTerm(term: string, limit: number, ac
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
   const actorClause = actor ? `AND e."Actor" ILIKE $3` : '';
   const params: unknown[] = actor ? [term, effectiveLimit, `%${actor}%`] : [term, effectiveLimit];
+  const scope = eventScopeClause(params);
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
      FROM events e
      LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
+     ${EVENT_OWNER_JOIN}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} AND ${scope}
      AND (e."EntityId" LIKE $1 OR COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") LIKE $1 OR i."BoxID" LIKE $1)
      ${actorClause}
      ORDER BY e."CreatedAt" DESC LIMIT $2`,
@@ -1902,13 +1930,15 @@ export async function listRecentActivitiesByBoxId(boxId: string, limit: number, 
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
   const actorClause = actor ? `AND e."Actor" ILIKE $3` : '';
   const params: unknown[] = actor ? [boxId, effectiveLimit, `%${actor}%`] : [boxId, effectiveLimit];
+  const scope = eventScopeClause(params);
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
      FROM events e
      LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
+     ${EVENT_OWNER_JOIN}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} AND ${scope}
      AND (
        e."Meta" @> jsonb_build_object('from', $1::text)
        OR e."Meta" @> jsonb_build_object('to', $1::text)
@@ -2336,7 +2366,10 @@ export async function getRefOwners(artikelNummern: string[]): Promise<Map<string
 
 export async function listRecentBoxes(): Promise<any[]> {
   return query(
-    `SELECT "BoxID","LocationId","Label","UpdatedAt" FROM boxes ORDER BY "UpdatedAt" DESC, "BoxID" DESC LIMIT 5`
+    `SELECT "BoxID","LocationId","Label","UpdatedAt" FROM boxes
+     WHERE $1 OR COALESCE("TenantId", $3) = $2
+     ORDER BY "UpdatedAt" DESC, "BoxID" DESC LIMIT 5`,
+    writeScopeParams()
   );
 }
 
@@ -3556,9 +3589,10 @@ export type BoxStub = {
 };
 
 export const listStubs = {
+  // Fundsachen sit on a shelf: another org's are invisible like its shelves.
   active: async (): Promise<BoxStub[]> =>
-    query<BoxStub>(`SELECT * FROM box_stubs WHERE "IsActive" = 1 ORDER BY "CreatedAt" DESC`),
-  all: async (): Promise<BoxStub[]> => query<BoxStub>(`SELECT * FROM box_stubs ORDER BY "CreatedAt" DESC`)
+    visibleBoxRows(await query<BoxStub>(`SELECT * FROM box_stubs WHERE "IsActive" = 1 ORDER BY "CreatedAt" DESC`)),
+  all: async (): Promise<BoxStub[]> => visibleBoxRows(await query<BoxStub>(`SELECT * FROM box_stubs ORDER BY "CreatedAt" DESC`))
 };
 
 export async function createStub(params: {
