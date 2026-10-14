@@ -4,6 +4,10 @@ Covers: documentation updates, CLAUDE.md/OVERVIEW.md changes, environment config
 
 ---
 
+## 987. ✅ Staging-ready branch: merge main, CLIs in the image, staging steps
+**Why:** To build and stage this state, the branch had to contain current `main` (GitHub main was 14 commits ahead, incl. contract edits that had to be re-migrated to the weighted format) and the catalogue switch had to be possible on a `docker-compose.prod.yaml` host, where the deploy workflow only rolls the image and the image only ships `dist/` (no ts-node, no `config/catalogue/`). The CLIs therefore moved into `backend/cli/` (compiled), and the catalogue files go into the existing persistent `mediator-data` volume + three host `.env` variables — no compose change on the host. Building via a manual "Build & Publish" run on the branch tags the image with the branch name and `sha-…` but not `latest`, so production deploys of `latest` don't pick up the uncalibrated grade bands (plan C1).
+**Deferred:** pushing the branch to GitHub (no credentials in this shell); Gitea `main` is still 14 commits behind GitHub `main`.
+
 ## 986. ✅ Guide: taxonomy & contracts
 **Why:** The taxonomy/contract model grew (groups, weights, states, knock-outs, overlay, seed-vs-DB) and the "taxonomy is still the old one" confusion showed the moving parts aren't obvious. One practical page — picture, calculation with a worked example, file anatomy, recipes, the rules that protect stored data, troubleshooting — instead of spreading it over the plan, READMEs and runbooks, which stay the detailed references.
 **Deferred:** nothing deferred.
