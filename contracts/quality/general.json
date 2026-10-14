@@ -65,14 +65,20 @@
       "values": [
         "Keine",
         "Leicht",
+        "Abgenutzt",
         "Deutlich"
       ],
       "specField": "Kratzer",
       "specValue": "%v",
+      "knockout": {
+        "below": 0.5,
+        "cap": 0.39
+      },
       "states": {
         "Keine": 1.0,
         "Leicht": 0.75,
-        "Deutlich": 0.5
+        "Abgenutzt": 0.5,
+        "Deutlich": 0.25
       },
       "weight": 3
     }

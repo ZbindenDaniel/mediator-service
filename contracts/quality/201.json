@@ -1,35 +1,7 @@
 {
-  "version": 8,
+  "version": 9,
   "subCategory": 201,
   "questions": [
-    {
-      "id": "has_os",
-      "type": "boolean",
-      "question": "Betriebssystem installiert?"
-    },
-    {
-      "id": "os_installed",
-      "type": "text",
-      "question": "Welches Betriebssystem?",
-      "suggestions": [
-        "Ubuntu 24.04 LTS",
-        "Ubuntu 22.04 LTS",
-        "Debian 12 (Bookworm)",
-        "Linux Mint 22",
-        "Linux Mint 21.3",
-        "Fedora 41",
-        "openSUSE Leap 15.6",
-        "Manjaro",
-        "Zorin OS 17",
-        "Pop!_OS 22.04"
-      ],
-      "specField": "Betriebssystem",
-      "specValue": "%v",
-      "showIf": {
-        "questionId": "has_os",
-        "value": "true"
-      }
-    },
     {
       "id": "keyboard_layout",
       "type": "select",
@@ -48,6 +20,7 @@
       "type": "select",
       "question": "Tastatur-Zustand?",
       "values": [
+        "Top",
         "Gut",
         "Abgenutzt",
         "Beschädigt"
@@ -59,8 +32,9 @@
         "cap": 0.39
       },
       "states": {
-        "Gut": 1.0,
-        "Abgenutzt": 0.75,
+        "Top": 0.75,
+        "Gut": 0.75,
+        "Abgenutzt": 0.5,
         "Beschädigt": 0.25
       },
       "weight": 3
@@ -82,6 +56,24 @@
         "Flecken/Pixelfehler": 0.5
       },
       "weight": 4
+    },
+    {
+      "id": "chassis_condition",
+      "type": "select",
+      "question": "Gehäuse-Zustand?",
+      "values": [
+        "Einwandfrei",
+        "Kratzer",
+        "Beschädigt"
+      ],
+      "specField": "Gehäuse-Zustand",
+      "specValue": "%v",
+      "states": {
+        "Einwandfrei": 1.0,
+        "Kratzer": 0.75,
+        "Beschädigt": 0.5
+      },
+      "weight": 3
     },
     {
       "id": "battery_swollen",
@@ -110,16 +102,6 @@
         "false": 0.25
       },
       "weight": 2
-    },
-    {
-      "id": "fan_dusty",
-      "type": "boolean",
-      "question": "Lüfter verstaubt?",
-      "states": {
-        "true": 1.0,
-        "false": 0.75
-      },
-      "weight": 1
     }
   ]
 }

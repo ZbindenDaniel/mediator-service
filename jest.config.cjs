@@ -1,6 +1,12 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  // Frontend imports the shared models via the bare `models` alias (resolved by the esbuild bundle);
+  // without this map any test touching itemListFiltersStorage fails to resolve the module.
+  moduleNameMapper: {
+    '^models$': '<rootDir>/models',
+    '^models/(.*)$': '<rootDir>/models/$1'
+  },
   testMatch: [
     '**/test/**/*.test.ts',
     '**/backend/actions/__tests__/**/*.test.ts',

@@ -161,6 +161,19 @@
   (system-sku-number), which HP/Dell use as a full commercial identifier. When the agentic model-name
   enrichment runs, prefer `sku` as the lookup key over the product name. Separate from 0z5.
 
+0z9. **Search: surface `relaxed: true` in the UI.** Since ui #958 `/api/search` returns weaker matches
+  (below the 50 % token rule) instead of nothing and flags them `relaxed`. The ~8 frontend consumers
+  (`Header`, `RefSearchInput`, `ItemMatchSelection`, `useSimilarItems`, `ArtikelNummerLookupStep`, …) ignore
+  the flag; a small "keine genauen Treffer — ähnliche Ergebnisse" hint would tell the operator why the list
+  looks loose.
+
+0z8. **Intake: verify Phase-2 attachments reach the server.** Operator report (with intake #957): "attachments
+  don't land on the server" for an Intel NUC. Not reproduced backend-side — the upload handler emits a
+  `[media-audit]` line (start/success/error) for every `POST /api/items/SN:…/external-docs/<dir>`, and the
+  device's server log showed none, so the request most likely never arrived (flow stalled at `select_ref`
+  with 0 candidates — fixed in #957 — or a station-side upload failure). Next: re-run an intake on that
+  device and grep the server log for `[media-audit]` + the serial; if absent, debug `phase2.sh` on the image.
+
 0z7. **Add a CI JSON-lint over `contracts/`.** The invalid-JSON bug in `quality/201.json` (intake #914) was
   invisible because both contract loaders swallow parse errors and return `null`. A cheap `node -e JSON.parse`
   (or `jq empty`) sweep over `contracts/**/*.json` in CI would catch the next one at commit time.
@@ -346,6 +359,26 @@
 
 51. **Auto-approve follow-ups.** `AUTO_APPROVE` (default off) + `AUTO_APPROVE_MIN_CONFIDENCE` (default 0.8) added (agentic changelog #892). Follow-ups: per-subcategory confidence threshold instead of one global value; optional auto-reject counterpart; a bulk "promote auto_approved → approved" action (currently uses per-item Abschliessen); and extend the KI-queue state filter to select `auto_approved` (aligns with #12 multiselect agent states).
 
+55. **Instance agentic flow (design in progress — `docs/PLANNING_instance_flow.md`).** A per-`ItemUUID`
+  flow that consumes intake evidence + `InstanceSpecs` and reconciles the device against its reference,
+  emitting an operator-gated **reconciliation object** (never writes `item_refs`; ref changes only via
+  operator-approved `rework`). **Re-validated after the "new pipeline" contract work (plan §17):** the
+  `scope`-field idea is superseded — reference contracts were redefined around **capabilities**, so the
+  revised plan uses a **separate instance-spec contract**; reconcile compares installed-value ↔
+  capability; `INTAKE_TO_SPEC` is orphaned. Builds on shipped snapshots (#918)/search-sources (#916)/
+  grounding (#917). Revised phasing: (0) stabilize/normalize the capability-oriented reference spec
+  contracts; (1′) instance-spec contract + measured-signal binding; (2) instance-scope run history by
+  extending `agentic_run_snapshots`; (3) reconcile step; (4) operator actions; (5) KI-Runs list; (6)
+  automation. Open questions in the planning doc §13/§17.
+
+55b. **Doc-debt: the spec-contract restructure shipped undocumented.** The reference spec contracts were
+  redefined around model capabilities (`102.json` gained `RAM-Slots`/`RAM-Kapazität`/`RAM-Typ`;
+  `201.json` stripped to Prozessor/Display/Anschlüsse) with no changelog Why (commits "new pipeline" /
+  "cleanup and minor contract updates"). They are also **inconsistent** across compute subcategories
+  (201 lacks storage/RAM-capability fields 102 has). Document the intent + normalize the shape; note
+  that `INTAKE_TO_SPEC` (`ram_gb→RAM`/`storage_gb→Speicher`) is now orphaned for subcats whose contract
+  dropped those keys (silent no-op in `buildSpecContext`).
+
 52. **Pre-existing failing tests (not caused by the #889–894 work; documented for cleanup).** `schema-contract-compatibility.test.ts` asserts the supervisor prompt contains `schema-contract.md`, but the current `supervisor.md` was rewritten to a description-quality focus and no longer references it — the test expectation is stale. `test/agentic-direct-dispatch.test.ts` and `test/agentic-startup-resume.test.ts` fail in the local esbuild harness because the scheduled `invokeModel` isn't observed (`toHaveBeenCalledTimes(1)` → 0); verify against CI's Postgres/jest setup. All three fail identically on a clean tree. **Update 2026-10-13:** on a clean tree Jest now reports 6 failing suites / 18 tests (`admin-contracts`, `admin-taxonomy`, `intake-categories`, `csv-ingest-insertdateset`, plus the two agentic ones), and `npm test` (custom harness `scripts/run-tests.js`) aborts on `it.each is not a function` in `forward-agentic-trigger.test.ts`. `tsc --noEmit` fails on a missing `undici` type module. The `admin-contracts`/`admin-taxonomy` failures are environmental: the tests pick up `ADMIN_SECRET` from the local `.env` and get 401.
    - ✅ **Harness `toMatchObject` gap fixed (testing #907):** the custom harness never implemented `toMatchObject` though 16 call sites use it; added it as a recursive subset matcher. Removed one spurious failure ("moves box placement"); local failing count 10→9.
    - **Still failing locally (9):** esbuild harness can't resolve named exports from bundled `../../agentic` (`deleteAgenticRun`/`checkAgenticHealth is not a function`), plus mock/env gaps (`window is not defined`, missing `.env`/media fixtures, `ts-jest` preset not found). Suspected CI-green (jest+Postgres); needs verification against CI rather than product-code changes.
@@ -395,6 +428,10 @@
 31. **Unified shelf view: combined box + loose items via one reusable list model (including Behälter context).** Fragmented shelf views force context switching and duplicate logic. **Goal:** unify rendering through shared list components with explicit aggregation rules.
 
 32. **Add filtered activities view.** Unfiltered activity streams are hard to use for investigation. **Goal:** add focused filters using existing activity data paths.
+
+34. **Round-trip shelf `Color` through box backup export/import.** Shelf colours (storage #960) live in `boxes."Color"` but aren't in `export-items.ts` `boxColumns` / `importer.ts` box field handling / `UPSERT_BOX_SQL`, so a restore into a fresh DB loses them (same-DB re-import keeps them via `COALESCE`).
+
+35. **Revive commented-out item list tests.** `test/item-list-quality.test.ts` and `test/item-list-columns.test.ts` were disabled because jest couldn't resolve the bare `models` alias; the mapper now exists (ui #961), so they only need updating to the current `ItemListComputationOptions` shape.
 
 ---
 

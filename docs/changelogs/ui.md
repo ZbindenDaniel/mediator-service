@@ -20,6 +20,32 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
    - **Why:** The branch owner couldn't find the new "Organisationen verwalten" link and found it only in the HTML: `.admin-page` lacked the 74px offset every other page uses for the `position: fixed` header (`.container`, `.list-container`), so heading + nav rendered underneath it. The two newer admin pages also looked unfinished (inline styles, labels repeated per row, unreadable disabled buttons). Added one shared admin style block in `styles.scss` that reuses the app's tokens (`--head`, `--nav`, `--acc`, `--radius`, monospace) instead of inventing a new look: page offset + coloured left border like other pages, pill nav links (with icons), master-detail split that stacks under 1100px, list rows that truncate (`minmax(0,1fr)` track, otherwise the grid grew to the full text width and overflowed the card), code/pill chips, label-above-input forms, row buttons that opt out of the global wobble/rounded-bottom button look, and a dashed "nothing to save" disabled state. Taxonomy: category filter, code chips + counts, rows re-sync after save so server-normalised values don't leave Save lit, Save enabled only when dirty, contract chips (present/missing) with real download/upload icons (download only when present), add forms in `<details>`. Organisations: site editing as a compact table (column titles once), delete as a small outline ✕ with an app dialog confirmation, first org auto-selected. Verified with headless-Chromium screenshots against the real bundle + compiled CSS and a mock API (taxonomy seed data); fixed overflow and empty-detail issues found there.
    - **Deferred:** No error boundary around admin cards (todo). Global `.alert` classes still have no styles (only the admin pages use the new `.admin-flash`). Mobile layout checked only via the CSS breakpoints, not with phone-sized screenshots.
 
+## 961. ✅ Item list: price filter (with/without price) and price sort
+**Why:** Operators need to find items still missing a price and to scan by value. Cloned the existing `imageFilter` plumbing (`ItemListFilters.priceFilter`, localStorage persistence + validation, active-filter description, header reset, `ItemDetail` neighbour navigation) rather than adding a server-side filter — the list is already filtered/sorted client-side in `filterAndSortItems`. "No price" = `Verkaufspreis` null/empty/0, matching the existing CHF ✓/— column. Price sort puts unpriced rows last in **both** directions (other nullable sorts use −∞) because in ascending order hundreds of 0-priced refs would otherwise bury every real price. While sorting by price the CHF column shows the amount (else ✓) so the order is visible. Jest gained a `moduleNameMapper` for the bare `models` alias the frontend uses — that unresolved import is why the earlier item-list tests were commented out; new `test/item-list-price.test.ts` covers filter + sort.
+**Deferred:** price-range filter (min/max) — not requested. The older commented-out `item-list-quality`/`item-list-columns` tests are still disabled; they may now be revivable with the mapper but use stale option shapes.
+
+## 958. ✅ Search never returns an empty list when weaker matches exist (50 % token rule relaxed on miss)
+**Why:** Operator principle: "always try to deliver results". `/api/search` (items, boxes, refs — and
+through `searchItemReferences` also intake `select_ref`, `useSimilarItems`, `RefSearchInput`, …) required
+**≥ 50 % of the query tokens** to hit a row *in SQL*, so a slightly noisy term ("Intel(R) Client Systems
+intel nuc", a typo, a long product title) produced **zero rows** even when a ref matched 2 of 5 tokens —
+the operator got nothing to pick from. An empty list is strictly worse than a ranked list of weaker
+matches: the result is already sorted by score, so the good ones are on top either way.
+**What:** The SQL threshold is now `token_hits >= 1` for all three queries (refs / items / boxes); the
+50 % rule moved into JS (`applyTokenThreshold`). If any row clears it the result is **identical to before**
+(rows are score-ordered, so the strict subset of the LIMIT window is exactly the old result set). Only when
+nobody clears it are the best 1+-hit rows returned, and the response carries **`relaxed: true`** (also on
+`scope=refs`). `searchItemReferencesDetailed` exposes `{ refs, relaxed, topScore }`; the old
+`searchItemReferences` array wrapper is unchanged for callers. Both `[search]` log lines say
+`(relaxed: below 50% token threshold)` when it kicked in, so a bad ranking is diagnosable.
+**Why (approach):** One query instead of a "retry with a lower threshold" second round-trip — the SQL
+already computed `token_hits` per row and a full-table LIKE scan is the cost either way; the only extra
+work is sorting a few more low-hit rows before the LIMIT. `relaxed` is additive on the JSON so no consumer
+breaks.
+**Deferred:** No UI hint yet ("keine genauen Treffer — ähnliche Ergebnisse") in the ~8 frontend consumers;
+`relaxed` is there for it. The relaxed pool is still capped by the existing LIMIT (25 refs / `limit` items /
+5 boxes), which is fine as it's score-ordered. No change to scoring weights.
+
 ## 927. ✅ Item list: new "KI-Datum" sort (last agentic run), optional column like the other date sorts
 **Why:** Operators could already sort by `Erfasst am`/`Zuletzt synchronisiert`, each revealing a matching optional date column, but there was no way to see or sort by when an item's agentic enrichment last ran. Added `agenticLastRun` to `ItemListSortKey` (`itemListFiltersStorage.ts`) and a comparator in `ItemListPage.tsx` mirroring `lastSynced` (null "never run" sorts to the bottom in desc / top in asc). `ItemList.tsx` shows the "KI-Datum" optional column only when that sort is active, same pattern as the other two date columns. The value comes from `agentic_runs."LastAttemptAt"` — the timestamp of the most recent dispatch attempt, as opposed to `LastModified` which also changes on review actions and would conflate "reviewed" with "ran". Joined as `AgenticLastRunAt` in `listItems`/`listItemsWithFilters`/`listItemReferencesWithFilters` (`backend/db.ts`, same `agentic_runs ar` LEFT JOIN already used for `AgenticStatus`) and added to the `Item` model.
 **Deferred:** Nothing — mirrors the existing `lastSynced` sort/column exactly.

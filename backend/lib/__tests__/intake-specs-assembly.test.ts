@@ -137,6 +137,7 @@ describe('assembly contract as intake questions', () => {
     const { ask } = resolveIntakeQuestions(sub!.questions, scan);
     const ids = ask.map((q) => q.id);
     // None of these are scan-answerable/skippable → all asked.
-    expect(ids).toEqual(expect.arrayContaining(['keyboard_layout', 'keyboard_condition', 'screen_condition', 'battery_swollen', 'hinges_ok', 'fan_dusty']));
+    // fan_dusty was dropped and chassis_condition added in the 201 contract update on main.
+    expect(ids).toEqual(expect.arrayContaining(['keyboard_layout', 'keyboard_condition', 'screen_condition', 'chassis_condition', 'battery_swollen', 'hinges_ok']));
   });
 });

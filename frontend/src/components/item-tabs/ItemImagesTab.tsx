@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import ItemMediaGallery, { type GalleryAsset } from '../ItemMediaGallery';
+import PhotoCaptureModal from '../PhotoCaptureModal';
 import type { Item } from '../../../../models';
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
   mediaFileInputRef: React.RefObject<HTMLInputElement>;
   // Omitted when the catalogue entry belongs to another org (tenancy 3a): the gallery hides its buttons.
   onAdd?: () => void;
+  onCapture?: (dataUrl: string) => void | Promise<void>;
   onRemove?: (asset: GalleryAsset) => void | Promise<void>;
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
@@ -17,9 +19,27 @@ export default function ItemImagesTab({
   mediaAssets,
   mediaFileInputRef,
   onAdd,
+  onCapture,
   onRemove,
   onFileChange
 }: Props) {
+  const [captureOpen, setCaptureOpen] = useState(false);
+  // Same availability check as ItemCreate: no camera API → no button rather than a dead modal.
+  const isCameraAvailable = useMemo(
+    () => typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getUserMedia),
+    []
+  );
+
+  const handleCapture = useCallback(
+    (dataUrl: string) => {
+      if (!onCapture) {
+        return;
+      }
+      void onCapture(dataUrl);
+    },
+    [onCapture]
+  );
+
   return (
     <div className="card">
       <h3>Fotos</h3>
@@ -34,6 +54,13 @@ export default function ItemImagesTab({
           tabIndex={-1}
           style={{ display: 'none' }}
         />
+        {isCameraAvailable && onCapture ? (
+          <div className="item-media-gallery__capture">
+            <button type="button" onClick={() => setCaptureOpen(true)}>
+              Foto aufnehmen
+            </button>
+          </div>
+        ) : null}
         <ItemMediaGallery
           itemId={item.ItemUUID}
           grafikname={item.Grafikname}
@@ -41,6 +68,12 @@ export default function ItemImagesTab({
           className="item-media-gallery--stacked"
           onAdd={onAdd}
           onRemove={onRemove}
+        />
+        <PhotoCaptureModal
+          isOpen={captureOpen}
+          onClose={() => setCaptureOpen(false)}
+          onCapture={handleCapture}
+          title="Foto aufnehmen"
         />
       </section>
     </div>

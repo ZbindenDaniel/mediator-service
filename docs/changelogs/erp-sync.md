@@ -5,6 +5,16 @@ Covers: ERP import/export, CSV ingestion, Langtext formatting, nightly sync sche
 ---
 
 
+## 956. ✅ Shopware sync survives a shop DB reset (stale `ShopwareProductId` no longer breaks item-upsert)
+**Why:** After the Shopware dev DB was recreated without products (WMS is now the source of truth for items), every `item-upsert` job failed permanently with `PATCH /api/product/<id> … FRAMEWORK__WRITE_TYPE_INTEND_ERROR … Use POST method to create new entities`. `upsertProduct` trusted `snapshot.shopwareProductId` (persisted in `item_refs` from an earlier sync) blindly and PATCHed it; the id no longer existed in the shop, and the 400 is classified terminal, so nothing self-healed. Clearing the column by hand would fix it once but break again on the next reset.
+
+Changes:
+- **`backend/shopware/adminClient.ts`:** new `resolveExistingProductId` — when a cached id is present, check it via `POST /api/search-ids/product` (cheap, ids only); if gone, log a warning and fall back to `findProductIdByNumber`, so the product is re-created (or found by number) instead of PATCHed into a 400.
+- **`backend/shopware/syncClient.ts`:** persist the product id whenever the result id differs from the snapshot's cached id (not only on `created`), so a stale mapping is repaired after the first successful job.
+- **`test/shopware-admin-sync.test.ts`:** stale-id → create, valid cached id → no productNumber lookup, and re-persist-on-change coverage.
+
+**Deferred:** `ShopwareVariantId` on `items` is not verified the same way — variant children are already resolved by `productNumber` on every sync, so a stale variant id only affects the mediator-side mapping until the next sync repairs it. Previously failed queue jobs are not auto-requeued; re-run the manual shop sync.
+
 ## 950. ✅ Event-log export/import round-trip no longer corrupts `Meta` into `[object Object]`
 **Why:** Re-importing an events export (e.g. restoring a backup ZIP, changelog #931) failed on every event whose `Meta` was set, with Postgres `22P02 invalid input syntax for type json … Token "object" is invalid … JSON data, line 1: [object…`. Root cause is on the **export** side: `events.Meta` is a `jsonb` column, so `pg` hands it back to `export-data.ts` as a **parsed JS object**, but `toCsvValue` serialized every cell with `String(value)` — which turns an object into the literal string `"[object Object]"`. That garbage string was written to `events.csv` and then, on re-import, `insertEventLogEntry` bound it straight into the `jsonb` `Meta` column, which rejects it. Because `insertEventLogEntry` swallows the error and returns `false`, the whole event row was silently dropped from the restore.
 

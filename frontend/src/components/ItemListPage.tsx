@@ -128,6 +128,7 @@ export interface ItemListComputationOptions {
   normalizedAgenticFilter: AgenticRunStatus[] | null;
   shopPublicationFilter: ItemListFilters['shopPublicationFilter'];
   imageFilter: ItemListFilters['imageFilter'];
+  priceFilter: ItemListFilters['priceFilter'];
   sortKey: ItemListSortKey;
   sortDirection: 'asc' | 'desc';
   qualityThreshold: number;
@@ -211,6 +212,16 @@ function groupHasImages(group: GroupedItemDisplay): boolean {
   return hasImageNames || hasGrafikname;
 }
 
+// Positive price or null; 0/empty/garbage all mean "no price" (ERP exports 0 for unpriced refs).
+function resolveGroupPrice(group: GroupedItemDisplay): number | null {
+  const raw = group.representative?.Verkaufspreis as unknown;
+  if (raw === null || raw === undefined || raw === '') {
+    return null;
+  }
+  const value = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 export function filterAndSortItems(options: ItemListComputationOptions): GroupedItemDisplay[] {
   const {
     items,
@@ -222,6 +233,7 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
     normalizedAgenticFilter,
     shopPublicationFilter,
     imageFilter,
+    priceFilter,
     sortKey,
     sortDirection,
     qualityThreshold,
@@ -281,6 +293,11 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       : imageFilter === 'noImages'
         ? !groupHasImages(group)
         : groupHasImages(group);
+    const matchesPriceFilter = priceFilter === 'all'
+      ? true
+      : priceFilter === 'noPrice'
+        ? resolveGroupPrice(group) === null
+        : resolveGroupPrice(group) !== null;
 
     return matchesSearch
       && matchesSubcategory
@@ -289,7 +306,8 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       && matchesAgenticStatus
       && matchesShopPublication
       && matchesQuality
-      && matchesImageFilter;
+      && matchesImageFilter
+      && matchesPriceFilter;
   });
 
   const sorted = [...searched].sort((a, b) => {
@@ -324,6 +342,18 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
         return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
       }
       return (aQuality - bQuality) * direction;
+    }
+
+    if (sortKey === 'price') {
+      const aPrice = resolveGroupPrice(a);
+      const bPrice = resolveGroupPrice(b);
+      if (aPrice === bPrice) {
+        return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
+      }
+      // Unpriced rows always sink to the bottom: in asc they'd otherwise bury every real price under the 0s.
+      if (aPrice === null) return 1;
+      if (bPrice === null) return -1;
+      return (aPrice - bPrice) * direction;
     }
 
     if (sortKey === 'entryDate') {
@@ -449,6 +479,7 @@ export default function ItemListPage() {
   const [shopPublicationFilter, setShopPublicationFilter] = useState<ItemListFilters['shopPublicationFilter']>(ITEM_LIST_DEFAULT_FILTERS.shopPublicationFilter);
   const [entityFilter, setEntityFilter] = useState<ItemListFilters['entityFilter']>(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
   const [imageFilter, setImageFilter] = useState<ItemListFilters['imageFilter']>(ITEM_LIST_DEFAULT_FILTERS.imageFilter);
+  const [priceFilter, setPriceFilter] = useState<ItemListFilters['priceFilter']>(ITEM_LIST_DEFAULT_FILTERS.priceFilter);
   const [qualityThreshold, setQualityThreshold] = useState(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
   const [qualityFilter, setQualityFilter] = useState<ItemListFilters['qualityFilter']>(ITEM_LIST_DEFAULT_FILTERS.qualityFilter);
   const [myMarksOnly, setMyMarksOnly] = useState(ITEM_LIST_DEFAULT_FILTERS.myMarksOnly);
@@ -489,6 +520,7 @@ export default function ItemListPage() {
       setSortDirection(mergedFilters.sortDirection);
       setEntityFilter(mergedFilters.entityFilter);
       setImageFilter(mergedFilters.imageFilter);
+      setPriceFilter(mergedFilters.priceFilter);
       setQualityThreshold(mergedFilters.qualityThreshold);
       setQualityFilter(mergedFilters.qualityFilter);
       setMyMarksOnly(mergedFilters.myMarksOnly);
@@ -531,6 +563,7 @@ export default function ItemListPage() {
       setSortDirection(ITEM_LIST_DEFAULT_FILTERS.sortDirection);
       setEntityFilter(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
       setImageFilter(ITEM_LIST_DEFAULT_FILTERS.imageFilter);
+      setPriceFilter(ITEM_LIST_DEFAULT_FILTERS.priceFilter);
       setQualityThreshold(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
       setQualityFilter(ITEM_LIST_DEFAULT_FILTERS.qualityFilter);
       setMyMarksOnly(ITEM_LIST_DEFAULT_FILTERS.myMarksOnly);
@@ -555,6 +588,7 @@ export default function ItemListPage() {
     shopPublicationFilter,
     placementFilter,
     imageFilter,
+    priceFilter,
     entityFilter,
     sortKey,
     sortDirection,
@@ -569,6 +603,7 @@ export default function ItemListPage() {
     shopPublicationFilter,
     placementFilter,
     imageFilter,
+    priceFilter,
     entityFilter,
     sortKey,
     sortDirection,
@@ -808,6 +843,7 @@ export default function ItemListPage() {
       normalizedAgenticFilter: features.agentic ? normalizedAgenticFilter : null,
       shopPublicationFilter: features.shopware ? shopPublicationFilter : 'all',
       imageFilter,
+      priceFilter,
       sortKey,
       sortDirection,
       qualityThreshold,
@@ -825,6 +861,7 @@ export default function ItemListPage() {
     normalizedSubcategoryFilter,
     placementFilter,
     imageFilter,
+    priceFilter,
     sortDirection,
     sortKey,
     stockFilter,
@@ -1049,6 +1086,7 @@ export default function ItemListPage() {
                     <option value="quality">Qualität</option>
                     <option value="uuid">UUID</option>
                     <option value="stock">Bestand</option>
+                    <option value="price">Preis</option>
                     <option value="subcategory">Unterkategorie</option>
                   </select>
                 </label>
@@ -1219,6 +1257,21 @@ export default function ItemListPage() {
                     <option value="all">Alle</option>
                     <option value="noImages">Ohne Bilder</option>
                     <option value="hasImages">Mit Bildern</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className="filter-grid__item">
+                <label className="filter-control">
+                  <span>Preis</span>
+                  <select
+                    aria-label="Preisstatus filtern"
+                    onChange={(event) => setPriceFilter(event.target.value as ItemListFilters['priceFilter'])}
+                    value={priceFilter}
+                  >
+                    <option value="all">Alle</option>
+                    <option value="noPrice">Ohne Preis</option>
+                    <option value="hasPrice">Mit Preis</option>
                   </select>
                 </label>
               </div>

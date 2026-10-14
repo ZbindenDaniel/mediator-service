@@ -21,7 +21,8 @@ export type ItemListSortKey =
   | 'stock'
   | 'subcategory'
   | 'agenticStatus'
-  | 'quality';
+  | 'quality'
+  | 'price';
 
 export type ItemListFilters = {
   searchTerm: string;
@@ -32,6 +33,8 @@ export type ItemListFilters = {
   shopPublicationFilter: 'all' | 'inShop' | 'notPublished' | 'noShopArticle';
   placementFilter: 'all' | 'unplaced' | 'placed';
   imageFilter: 'all' | 'noImages' | 'hasImages';
+  // "Without price" = Verkaufspreis empty or 0 (ERP exports 0 for unpriced refs).
+  priceFilter: 'all' | 'noPrice' | 'hasPrice';
   sortKey: ItemListSortKey;
   sortDirection: 'asc' | 'desc';
   entityFilter: 'all' | 'instances' | 'references';
@@ -61,7 +64,8 @@ const SORT_KEYS: ItemListSortKey[] = [
   'stock',
   'subcategory',
   'agenticStatus',
-  'quality'
+  'quality',
+  'price'
 ];
 
 const DEFAULT_FILTERS: ItemListFilters = {
@@ -74,6 +78,7 @@ const DEFAULT_FILTERS: ItemListFilters = {
   // TODO(placement-filter): Revisit placement filter states if shelf-level placement state is introduced.
   placementFilter: 'all',
   imageFilter: 'all',
+  priceFilter: 'all',
   sortKey: 'artikelbeschreibung',
   sortDirection: 'asc',
   entityFilter: 'instances',
@@ -111,6 +116,7 @@ export function hasNonDefaultFilters(
     || filters.shopPublicationFilter !== defaults.shopPublicationFilter
     || filters.placementFilter !== defaults.placementFilter
     || filters.imageFilter !== defaults.imageFilter
+    || filters.priceFilter !== defaults.priceFilter
     || filters.sortKey !== defaults.sortKey
     || filters.sortDirection !== defaults.sortDirection
     || filters.entityFilter !== defaults.entityFilter
@@ -178,6 +184,14 @@ export function getActiveFilterDescriptions(
       hasImages: 'Mit Bildern'
     };
     active.push(`Bilder: ${imageFilterLabels[filters.imageFilter]}`);
+  }
+  if (filters.priceFilter !== defaults.priceFilter) {
+    const priceFilterLabels: Record<ItemListFilters['priceFilter'], string> = {
+      all: 'Alle',
+      noPrice: 'Ohne Preis',
+      hasPrice: 'Mit Preis'
+    };
+    active.push(`Preis: ${priceFilterLabels[filters.priceFilter]}`);
   }
   if (filters.entityFilter !== defaults.entityFilter) {
     const filterLabels: Record<ItemListFilters['entityFilter'], string> = {
@@ -327,6 +341,12 @@ export function loadItemListFilters(
       merged.imageFilter = parsed.imageFilter;
     } else if (parsed.imageFilter !== undefined) {
       logger.warn?.('Ignoring invalid stored image filter', parsed.imageFilter);
+    }
+
+    if (parsed.priceFilter === 'all' || parsed.priceFilter === 'noPrice' || parsed.priceFilter === 'hasPrice') {
+      merged.priceFilter = parsed.priceFilter;
+    } else if (parsed.priceFilter !== undefined) {
+      logger.warn?.('Ignoring invalid stored price filter', parsed.priceFilter);
     }
 
     if (typeof parsed.sortKey === 'string' && SORT_KEYS.includes(parsed.sortKey as ItemListSortKey)) {

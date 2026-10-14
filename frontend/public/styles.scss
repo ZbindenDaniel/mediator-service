@@ -937,6 +937,13 @@ textarea {
     width: 100%;
 }
 
+.item-media-gallery__capture {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0.75rem;
+    width: 100%;
+}
+
 .item-media-gallery--stacked {
     flex-direction: column;
     flex-wrap: nowrap;
@@ -1347,7 +1354,7 @@ div {
     display: flex;
     flex-direction: column;
     gap: 16px;
-    width: min(520px, 100%);
+    min-width: min(520px, 100%);
     max-height: min(90vh, 680px);
     overflow-y: auto;
     background: var(--dialog);
@@ -2956,7 +2963,20 @@ button:focus {
 
 .box-list-row--shelf {
     background-color: var(--surface-2);
-    border-left: 3px solid var(--acc);
+    border-left: 3px solid var(--shelf-color, var(--acc));
+}
+
+.shelf-color-picker {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    input[type="color"] {
+        width: 44px;
+        height: 32px;
+        padding: 2px;
+        cursor: pointer;
+    }
 }
 
 // TODO(filter-bar-layout): Revisit filter bar spacing once filter count grows further.

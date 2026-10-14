@@ -62,13 +62,52 @@ async function findItemByIdentifier(serial: string | null, mac: string | null) {
   return null;
 }
 
+// DMI vendor/model strings carry corporate filler that never appears in a reference
+// ("Intel(R) Client Systems", "Dell Inc.", "ASUSTeK COMPUTER INC.", "Micro-Star International
+// Co., Ltd."). The ref search requires >= 50% of the tokens to hit, so every filler token
+// raises the bar for the real ones — "Intel(R) Client Systems intel nuc" = 5 tokens, needs 3,
+// a ref "Intel NUC …" hits only 2 → 0 candidates. Strip the filler + dedupe before searching.
+const SCAN_FILLER_TOKENS = new Set([
+  'inc', 'corp', 'corporation', 'co', 'ltd', 'limited', 'gmbh', 'ag', 'llc', 'company',
+  'computer', 'computers', 'client', 'systems', 'system', 'international', 'technology',
+  'technologies', 'electronics', 'the',
+]);
+
+export function buildRefSearchTerm(...parts: Array<string | null | undefined>): string {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of parts) {
+    if (!part) continue;
+    for (const raw of part.split(/\s+/)) {
+      // "(R)" / "(TM)" / ®/™ marks glue onto the brand token ("intel(r)") and defeat the LIKE.
+      const tok = raw.replace(/\((r|tm|c)\)|[®™©]/gi, '').replace(/^[,.;:]+|[,.;:]+$/g, '');
+      const key = tok.toLowerCase();
+      if (!key || SCAN_FILLER_TOKENS.has(key) || seen.has(key)) continue;
+      seen.add(key);
+      out.push(tok);
+    }
+  }
+  return out.join(' ');
+}
+
 async function findRefCandidates(vendor: string | null | undefined, model: string | null | undefined): Promise<IntakeRefCandidate[]> {
   if (!vendor && !model) return [];
   // Reuse the single reference matcher that manual item creation uses
   // (`/api/search?scope=refs`) so intake surfaces the same candidates as everywhere
   // else — token-based fuzzy match across Artikelbeschreibung/Suchbegriff/Hersteller/…,
-  const term = [vendor, model].filter(Boolean).join(' ');
-  const refs = await searchItemReferences(term);
+  // Try vendor+model first, then model alone, then vendor alone: the model string is the
+  // discriminating part, and a noisy vendor must never leave the operator with an empty list.
+  const terms = Array.from(new Set(
+    [buildRefSearchTerm(vendor, model), buildRefSearchTerm(model), buildRefSearchTerm(vendor)].filter(Boolean)
+  ));
+  let refs: Array<Record<string, unknown>> = [];
+  let usedTerm: string | null = null;
+  for (const term of terms) {
+    refs = await searchItemReferences(term);
+    usedTerm = term;
+    if (refs.length) break;
+  }
+  console.log('[intake-start] ref candidates', { vendor: vendor ?? null, model: model ?? null, term: usedTerm, tried: terms, count: refs.length });
   const candidates: IntakeRefCandidate[] = refs.map(r => ({
     artikelNummer: String(r.Artikel_Nummer ?? ''),
     hersteller: (r.Hersteller as string | null) ?? null,

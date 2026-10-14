@@ -6,7 +6,7 @@ Tab panels for the item detail view — each file renders one tab in `ItemDetail
 - `ItemAccessoriesTab.tsx` — accessories and Zerlegen (assembly/spare-parts) workflow
 - `ItemAttachmentsTab.tsx` — file attachments and external docs
 - `ItemEventsTab.tsx` — event log for this item
-- `ItemImagesTab.tsx` — photo gallery
+- `ItemImagesTab.tsx` — photo gallery + camera capture (reuses `PhotoCaptureModal`)
 - `ItemInstanceTab.tsx` — instance-level fields (BoxID, condition, notes)
 - `ItemKiTab.tsx` — agentic enrichment status and review UI
 - `ItemMarkierungTab.tsx` — operator bookmarks/marks
