@@ -866,7 +866,7 @@ export default function BoxDetail({ boxId }: Props) {
             {effectiveTab === 'info' && (
               <div className="card">
                 <h2 className="mono">{box.BoxID}</h2>
-                <table className="details">
+                <table className="details details--kv">
                   <tbody>
                     <tr>
                       <th>Standort</th>
@@ -959,7 +959,7 @@ export default function BoxDetail({ boxId }: Props) {
                       </div>
                       {noteFeedback && (
                         <div className="row">
-                          <span className="muted" role={noteFeedback.type === 'error' ? 'alert' : 'status'} style={noteFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}>
+                          <span className="muted" role={noteFeedback.type === 'error' ? 'alert' : 'status'} style={noteFeedback.type === 'error' ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
                             {noteFeedback.message}
                           </span>
                         </div>
@@ -984,7 +984,7 @@ export default function BoxDetail({ boxId }: Props) {
                       </div>
                       {shelfFeedback && (
                         <div className="row">
-                          <span className="muted" role={shelfFeedback.type === 'error' ? 'alert' : 'status'} style={shelfFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}>
+                          <span className="muted" role={shelfFeedback.type === 'error' ? 'alert' : 'status'} style={shelfFeedback.type === 'error' ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
                             {shelfFeedback.message}
                           </span>
                         </div>
@@ -1132,7 +1132,7 @@ export default function BoxDetail({ boxId }: Props) {
                 <h3>Gefundes</h3>
                 <h2>In den Lagern</h2>
                 {stubsLoading && <p className="muted">Wird geladen…</p>}
-                {stubsError && <p className="muted" role="alert" style={{ color: '#b3261e' }}>{stubsError}</p>}
+                {stubsError && <p className="muted" role="alert" style={{ color: 'var(--danger)' }}>{stubsError}</p>}
                 {!stubsLoading && stubs.length === 0 && !stubsError && (
                   <p className="muted">nüüt für dieses Regal.</p>
                 )}
@@ -1177,7 +1177,7 @@ export default function BoxDetail({ boxId }: Props) {
                   </div>
                   {addStubFeedback && (
                     <div className="row">
-                      <span className="muted" role={addStubFeedback.type === 'error' ? 'alert' : 'status'} style={addStubFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}>
+                      <span className="muted" role={addStubFeedback.type === 'error' ? 'alert' : 'status'} style={addStubFeedback.type === 'error' ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
                         {addStubFeedback.message}
                       </span>
                     </div>

@@ -1790,7 +1790,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
   if (creationStep === 'basicInfo') {
     const ocrSection = (
       <div style={{ marginBottom: '1rem' }}>
-        <p style={{ fontSize: '0.85em', color: '#666', margin: '0 0 0.5rem 0' }}>
+        <p style={{ fontSize: '0.85em', color: 'var(--muted)', margin: '0 0 0.5rem 0' }}>
           Gerät fotografieren (optional) – Typenschild scannen für bessere KI-Suche
         </p>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1823,7 +1823,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
               <img
                 src={ocrPhoto}
                 alt="Typenschild Vorschau"
-                style={{ height: 48, objectFit: 'contain', borderRadius: 4, border: '1px solid #ccc' }}
+                style={{ height: 48, objectFit: 'contain', borderRadius: 4, border: '1px solid var(--line)' }}
               />
               <button type="button" onClick={() => setOcrPhoto(null)} aria-label="Foto entfernen">
                 ✕

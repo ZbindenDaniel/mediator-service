@@ -1,9 +1,10 @@
-$overview-color: #8ab4f8;
-$item-color: #50b694;
-$box-color: rgb(221, 60, 114);
-$activity-color: #804db4;
-
-/* ===== Base (mobile-first) ===== */
+/* ===== Colour tokens =====
+   Every colour in this file goes through these tokens; no hex values in rules.
+   Designed in OKLCH (perceptual lightness / chroma / hue), written as hex so older kiosk browsers work.
+   Why low chroma: unmanaged wide-gamut screens (common on Linux) stretch sRGB and oversaturate it;
+   muted colours stay calm when stretched, saturated ones (old khaki, #bce0a3) turned garish.
+   Why lightness carries structure: surfaces, lines and states differ in L, so they survive screens
+   that shift hue. Text sits at ~12:1 instead of 19:1 (near-black on floralwhite read as stark). */
 :root {
     --maxw: 1100px;
     /* desktop container width */
@@ -11,29 +12,106 @@ $activity-color: #804db4;
     /* card/button radius */
     --pad: 10px;
     /* base pad */
-    --fg: #0a0a0a;
-    /* text */
-    --muted: #5f6368;
-    /* muted text */
-    --bg: floralwhite; // #bce0a3
-    /* page bg */
-    --head: #bce0a3;
-    /* header */
-    --card: #3a313429; //  #ff69b429,  #3a313429,
-    /* card bg */
-    --dialog: floralwhite;
-    /* dialog bg */
-    --line: #e6e6e6;
-    /* borders */
-    --acc: #747372;
-    /* accent */
-    --nav: khaki;
+
+    color-scheme: light;
+    // Surfaces: page < raised; surface-2 for subtle fills (inputs, table heads, code)
+    --bg: #f7f3e9;            // oklch(96.5% .014 90) warm paper
+    --surface: #fcfaf4;       // oklch(98.5% .008 90) popovers, raised panels
+    --surface-2: #edeade;     // oklch(93.5% .016 95)
+    --card: rgba(52, 44, 35, 0.08); // translucent so nested cards stay distinguishable
+    --dialog: var(--surface);
+    // Text + lines
+    --fg: #342c23;            // oklch(30% .02 70) warm dark brown, 12.4:1 on --bg
+    --muted: #6b6256;         // oklch(50% .022 75) 5.4:1 on --bg
+    --line: #d9d4c7;          // oklch(87% .018 90)
+    --acc: #807262;           // oklch(56% .03 70) borders of controls, accent
+    --link: #3b6987;
+    // Brand: sage + sand (earthy green-brown)
+    --head: #bfd3a9;          // oklch(84% .06 128) header, buttons
+    --nav: #e5cea1;           // oklch(86% .065 85) nav, hover
     --positive: var(--head);
-    --negative: khaki;
+    --negative: var(--nav);
+    --highlight: #f0dda9;     // oklch(90% .07 90) marks, current row
+    // Overlays (relative to --fg, so they work on any surface)
+    --hover: rgba(52, 44, 35, 0.06);
+    --tint: rgba(52, 44, 35, 0.08);
+    --overlay: rgba(27, 24, 18, 0.5);
+    --shadow: rgba(27, 24, 18, 0.16);
+    --focus: rgba(59, 105, 135, 0.35);
+    --on-strong: #fcfaf4;     // text on filled ok/warn/danger/info/acc
+    --icon-filter: none;      // black SVG <img> icons (can't take currentColor)
+    // Status: text colour + soft background; all ≥4.5:1 on --bg and on their own -bg
+    --ok: #407142;            --ok-bg: #dceed8;
+    --warn: #8d5d1c;          --warn-bg: #f6e6c7;
+    --danger: #a04130;        --danger-bg: #fbe1dc;
+    --info: #3b6987;          --info-bg: #daebf7;
+    // Entity identity colours (pills, section markers). Pills put --fg text on them, so they sit
+    // light here and deep in dark mode (≥4.5:1 against --fg either way).
+    --c-item: #7ab39a;
+    --c-box: #ce8797;
+    --c-box-strong: #bf7284;
+    --c-overview: #92b1d3;
+    --c-activity: #a28ebb;
+
+    // Aliases: names component inline styles already reference with hardcoded fallbacks;
+    // defining them lets those components follow the theme without touching each style={{}}.
+    --color-error: var(--danger);
+    --color-warning: var(--warn);
+    --color-muted: var(--muted);
+    --color-green: var(--ok);
+    --color-orange: var(--warn);
+    --border: var(--line);
+    --border-color: var(--line);
+    --bg-alt: var(--surface-2);
 
     font-family: "Share Tech Mono", monospace !important;
     font-weight: 400;
     font-style: normal;
+}
+
+// Dark: same hues, lightness inverted; brand colours become deep moss / ochre fills.
+@mixin dark-tokens {
+    color-scheme: dark;
+    --bg: #1b1812;            // oklch(21% .012 80)
+    --surface: #25211b;
+    --surface-2: #2c2821;
+    --card: rgba(226, 222, 211, 0.05);
+    --fg: #dbd7cd;            // 12.3:1 on --bg
+    --muted: #aaa497;
+    --line: #413d34;
+    --acc: #82796a;
+    --link: #89b1cd;
+    --head: #53643e;          // oklch(48% .061 128) olive (user pick)
+    // Sage from the suggested #607760 (same hue/chroma), set darker than --head: at #607760's
+    // lightness the nav pills vanished into the header and light text was only 3.4:1.
+    --nav: #394e39;           // oklch(40% .044 145)
+    --highlight: #54461e;
+    --hover: rgba(226, 222, 211, 0.07);
+    --tint: rgba(226, 222, 211, 0.09);
+    --overlay: rgba(0, 0, 0, 0.6);
+    --shadow: rgba(0, 0, 0, 0.45);
+    --focus: rgba(137, 177, 205, 0.45);
+    --on-strong: #1b1812;     // status fills are light in dark mode, so text on them is dark
+    --icon-filter: invert(0.88);
+    --ok: #87ba88;            --ok-bg: #213321;
+    --warn: #d9b06b;          --warn-bg: #3f3017;
+    --danger: #e18a79;        --danger-bg: #422520;
+    --info: #89b1cd;          --info-bg: #20303b;
+    --c-item: #32604d;
+    --c-box: #7a414f;
+    --c-box-strong: #945262;
+    --c-overview: #486079;
+    --c-activity: #5e4b75;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        @include dark-tokens;
+    }
+}
+
+:root[data-theme="dark"] {
+    @include dark-tokens;
 }
 
 @media (min-width: 1200px) {
@@ -41,17 +119,6 @@ $activity-color: #804db4;
         --maxw: 1280px;
     }
 }
-
-// @media (prefers-color-scheme: dark) {
-//     :root {
-//         --fg: #e8eaed;
-//         --muted: #9aa0a6;
-//         --bg: #101114;
-//         --card: #8b8b8b;
-//         --line: #2a2c32;
-//         // --acc: #8ab4f8;
-//     }
-// }
 
 * {
     box-sizing: border-box
@@ -71,13 +138,11 @@ body {
     -webkit-text-size-adjust: 100%;
 }
 
-// a:visited,
-// a:link {
-//   color: seagreen;
-// }
-// a:hover {
-//   color: darkgreen;
-// }
+// Browser-default link blue/purple is unreadable on the dark theme; :where() keeps specificity at
+// zero so every component that sets its own link colour still wins.
+:where(a) {
+    color: var(--link);
+}
 
 .visually-hidden {
     position: absolute;
@@ -124,8 +189,8 @@ body {
     align-items: center;
     gap: 8px;
     padding: 6px 8px;
-    border-bottom: 1px solid var(--line, #d0d0d0);
-    background: var(--bg, #f6f8fa);
+    border-bottom: 1px solid var(--line);
+    background: var(--bg);
     flex-shrink: 0;
     min-height: 36px;
 }
@@ -136,7 +201,7 @@ body {
     gap: 4px;
     padding: 4px 8px;
     background: none;
-    border: 1px solid var(--line, #d0d0d0);
+    border: 1px solid var(--line);
     border-radius: 4px;
     font-size: 0.8rem;
     cursor: pointer;
@@ -145,7 +210,7 @@ body {
     color: inherit;
 
     &:hover {
-        background: var(--hover-bg, #e8eaed);
+        background: var(--hover);
     }
 }
 
@@ -160,7 +225,7 @@ body {
     min-width: 0;
     font-size: 0.8rem;
     font-weight: 500;
-    color: var(--text-secondary, #555);
+    color: var(--muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -235,50 +300,19 @@ body {
     gap: 8px;
 }
 
-/* Button group: all tab actions in a connected row, square corners */
+/* Tab action row: compact pills (the admin pages' style). Replaced the connected organic-corner
+   group: its per-button radii broke whenever the row wrapped or a conditional button dropped out. */
 .tab-actions {
     display: flex;
     flex-wrap: wrap;
+    gap: 6px;
     margin-bottom: 4px;
-}
 
-// .tab-actions .btn,
-// .tab-actions button:not(.btn) {
-//     border-radius: 0;
-//     margin-right: -1px;
-//     font-size: 10px;
-//     /* collapse shared border between adjacent buttons */
-//     position: relative;
-//     z-index: 0;
-//     background: var(--bg-button, #f6f7f9);
-//     padding: 12px 14px;
-//     color: black;
-//     /* prevent transparent bleed-through */
-//     min-height: 48px;
-//     min-width: 48px;
-// }
-
-.tab-actions .btn:first-child,
-.tab-actions button:not(.btn):first-child {
-    border-radius: 50% 0% 50% 50%;
-}
-
-.tab-actions .btn:last-child,
-.tab-actions button:not(.btn):last-child {
-    margin-right: 0;
-    border-radius: 0 50% 50% 50%;
-}
-
-/* single button: fully rounded */
-.tab-actions .btn:only-child,
-.tab-actions button:not(.btn):only-child {
-    border-radius: var(--radius);
-}
-
-.tab-actions .btn:focus,
-.tab-actions button:not(.btn):focus {
-    z-index: 1;
-    /* lift focused button so its ring is not clipped */
+    > button,
+    > .btn {
+        padding: 6px 14px;
+        font-size: 0.9rem;
+    }
 }
 
 /* Badges row in reference tab */
@@ -294,7 +328,7 @@ body {
     background: none;
     border: none;
     padding: 0;
-    color: var(--link, #0366d6);
+    color: var(--link);
     cursor: pointer;
     font: inherit;
     text-decoration: underline;
@@ -304,15 +338,34 @@ body {
     opacity: 0.8;
 }
 
-button {
-    border-radius: 0% 0% 50% 50%;
-    // max-width: 220px;
+// Pill buttons app-wide (same shape as .admin-link); <a class="btn"> looks the same as <button>.
+button,
+a.btn {
+    border-radius: var(--radius);
     align-self: center;
-    background-color: #bce0a3;
+    background-color: var(--head);
+    color: var(--fg);
     border: 1px solid var(--acc);
-    padding: 10px 12px;
+    padding: 8px 16px;
     margin: 0px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    line-height: 1.2;
     cursor: pointer;
+}
+
+a.btn {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+// "Nothing to do" rather than a washed-out active button (from the admin pages).
+button:disabled {
+    background: transparent;
+    border-style: dashed;
+    color: var(--muted);
+    cursor: default;
 }
 
 /* === Detail panel tab bar === */
@@ -323,7 +376,7 @@ button {
     overflow-x: auto;
     gap: 2px;
     padding: 11px 8px 0;
-    border-bottom: 1px solid #bce0a3;
+    border-bottom: 1px solid var(--head);
     flex-shrink: 0;
     /* hide scrollbar visually but keep it functional on touch */
     scrollbar-width: none;
@@ -339,7 +392,7 @@ button {
     padding: 6px 10px;
     font: inherit;
     font-size: 1.4rem;
-    color: var(--muted, #888);
+    color: var(--muted);
     cursor: pointer;
     border-radius: var(--radius) var(--radius) 0 0;
     border-bottom: 2px solid transparent;
@@ -350,12 +403,12 @@ button {
 
     &:hover {
         color: var(--fg);
-        background: var(--head, rgba(0, 0, 0, 0.04));
+        background: var(--head);
     }
 
     &.is-active {
         color: var(--fg);
-        border-bottom-color: var(--head, rgba(0, 0, 0, 0.04));
+        border-bottom-color: var(--head);
         font-weight: 600;
     }
 }
@@ -365,7 +418,7 @@ button {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--color-warning, #f59e0b);
+    background: var(--warn);
     margin-left: 4px;
     vertical-align: middle;
     flex-shrink: 0;
@@ -404,7 +457,7 @@ button {
 .multi-item-summary__item {
     font-size: 0.8rem;
     padding: 2px 0;
-    border-bottom: 1px solid var(--border, #e1e4e8);
+    border-bottom: 1px solid var(--line);
 }
 
 @media (min-width: 901px) {
@@ -556,8 +609,46 @@ textarea {
 
 }
 
-.header .user {
+// Account menu trigger: same pill + --nav fill as the header nav, icon + name + chevron so it
+// reads as a control rather than a label.
+.header-user {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 14rem;
+    padding: 6px 10px 6px 12px;
+    background: var(--nav);
+    border: 1px solid var(--line);
+    color: var(--fg);
     font-weight: bold;
+
+    svg {
+        flex-shrink: 0;
+    }
+
+    &:hover,
+    &[aria-expanded="true"] {
+        border-color: var(--acc);
+        background: var(--surface);
+    }
+}
+
+.header-user__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.header-user__chevron {
+    font-size: 0.8em;
+    color: var(--muted);
+}
+
+@media (max-width: 480px) {
+    .header-user__name {
+        max-width: 7rem;
+    }
 }
 
 .header-nav {
@@ -584,12 +675,12 @@ textarea {
         position: absolute;
         top: calc(100% + 8px);
         left: 0;
-        background: var(--bg, #fff);
-        border: 1px solid var(--line, #ddd);
+        background: var(--bg);
+        border: 1px solid var(--line);
         border-radius: 8px;
         padding: 8px;
         z-index: 200;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        box-shadow: 0 4px 16px var(--shadow);
         max-height: 0;
         overflow: hidden;
         opacity: 0;
@@ -630,14 +721,14 @@ textarea {
     border: 1px solid var(--line);
     border-right: none;
     border-radius: var(--radius) 0 0 var(--radius);
-    background: var(--bg, #fff);
+    background: var(--bg);
     color: var(--fg);
     outline: none;
     transition: width 0.2s;
 
     &:focus {
         width: 100px;
-        border-color: var(--link, #0366d6);
+        border-color: var(--link);
     }
 }
 
@@ -646,7 +737,7 @@ textarea {
     padding: 0 8px;
     border: 1px solid var(--line);
     border-radius: 0 var(--radius) var(--radius) 0;
-    background: var(--bg-button, #f6f7f9);
+    background: var(--surface-2);
     color: var(--fg);
     cursor: pointer;
     display: inline-flex;
@@ -664,10 +755,10 @@ textarea {
     left: 0;
     min-width: 260px;
     max-width: 380px;
-    background: var(--bg, #fff);
+    background: var(--bg);
     border: 1px solid var(--line);
     border-radius: var(--radius);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 4px 12px var(--shadow);
     z-index: 200;
     overflow: hidden;
 }
@@ -675,7 +766,7 @@ textarea {
 .header-search__dropdown-status {
     padding: 8px 12px;
     font-size: 0.82rem;
-    color: var(--fg-muted, #666);
+    color: var(--muted);
 }
 
 .header-search__result {
@@ -699,7 +790,7 @@ textarea {
 
     &:hover,
     &:focus-visible {
-        background: var(--head, #f6f7f9);
+        background: var(--head);
         outline: none;
     }
 }
@@ -710,7 +801,7 @@ textarea {
     border: 1px solid var(--line);
     border-radius: var(--radius);
     font-size: 0.78rem;
-    background: var(--bg-button, #f6f7f9);
+    background: var(--surface-2);
 
     &.mono {
         font-family: monospace;
@@ -724,7 +815,7 @@ textarea {
     text-overflow: ellipsis;
 
     &.muted {
-        color: var(--fg-muted, #666);
+        color: var(--muted);
     }
 }
 
@@ -796,7 +887,7 @@ textarea {
 .header-nav__icon-btn:focus-visible,
 #header-home-button:hover,
 #header-home-button:focus-visible {
-    background: #0000000d;
+    background: var(--hover);
 }
 
 .header-filter-indicator {
@@ -815,18 +906,18 @@ textarea {
 
 .header-filter-indicator:hover,
 .header-filter-indicator:focus-visible {
-    background: #0000000d;
+    background: var(--hover);
 }
 
 .header-filter-indicator--deeplink {
-    background-color: #dd3c72;
-    border-color: #dd3c72;
-    color: #fff;
+    background-color: var(--c-box);
+    border-color: var(--c-box);
+    color: var(--fg);
 }
 
 .header-filter-indicator--deeplink:hover,
 .header-filter-indicator--deeplink:focus-visible {
-    background-color: #c83465;
+    background-color: var(--c-box-strong);
 }
 
 .item-media-section {
@@ -885,14 +976,14 @@ textarea {
     gap: 0.25rem;
     min-height: 96px;
     padding: 0.5rem;
-    background-color: #f4f4f4;
+    background-color: var(--surface-2);
     border-radius: calc(var(--radius) / 2);
     text-align: center;
 }
 
 .item-media-gallery__fallback-filename {
     font-size: 0.75rem;
-    color: var(--text-secondary, #555);
+    color: var(--muted);
     word-break: break-all;
 }
 
@@ -904,7 +995,7 @@ textarea {
     color: inherit;
 
     &:hover {
-        background-color: #e8e8e8;
+        background-color: var(--tint);
     }
 }
 
@@ -944,22 +1035,22 @@ div {
     border-left: solid 3px;
 
     &.overview {
-        border-color: $overview-color;
+        border-color: var(--c-overview);
         min-height: 100vh;
     }
 
     &.box {
-        border-color: $box-color;
+        border-color: var(--c-box);
         min-height: 100vh;
     }
 
     &.item {
-        border-color: $item-color;
+        border-color: var(--c-item);
         min-height: 100vh;
     }
 
     &.activities {
-        background-color: $activity-color;
+        background-color: var(--c-activity);
         min-height: 100vh;
     }
 }
@@ -971,15 +1062,15 @@ div {
     margin-top: 74px;
 
     &.item {
-        border-color: $item-color
+        border-color: var(--c-item)
     }
 
     &.box {
-        border-color: $box-color
+        border-color: var(--c-box)
     }
 
     &.activities {
-        border-color: $activity-color
+        border-color: var(--c-activity)
     }
 }
 
@@ -1078,7 +1169,7 @@ div {
 }
 
 .details tr.is-current-instance {
-    background-color: rgba(240, 230, 140, 0.5);
+    background-color: var(--highlight);
 }
 
 .details .item-detail__langtext {
@@ -1167,7 +1258,7 @@ div {
 
 .qr-scanner .video-frame {
     position: relative;
-    background: #000;
+    background: #000; // camera letterbox: black in both themes
     border-radius: var(--radius);
     overflow: hidden;
     min-height: 220px;
@@ -1190,11 +1281,11 @@ div {
 }
 
 .qr-scanner .video-frame--success {
-    border-color: #0f9d58;
+    border-color: var(--ok);
 }
 
 .qr-scanner .video-frame--error {
-    border-color: #c5221f;
+    border-color: var(--danger);
 }
 
 .qr-flash {
@@ -1208,11 +1299,12 @@ div {
 }
 
 .qr-flash--success {
-    background: rgba(15, 157, 88, 0.35);
+    // Translucent over the camera feed in both themes (the --ok / --danger hues), not an opaque token.
+    background: rgba(64, 113, 66, 0.45);
 }
 
 .qr-flash--error {
-    background: rgba(197, 34, 31, 0.35);
+    background: rgba(160, 65, 48, 0.45);
 }
 
 .qr-flash__icon {
@@ -1246,7 +1338,7 @@ div {
     align-items: center;
     justify-content: center;
     padding: 24px;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--overlay);
     backdrop-filter: blur(2px);
     z-index: 1100;
 }
@@ -1258,11 +1350,11 @@ div {
     width: min(520px, 100%);
     max-height: min(90vh, 680px);
     overflow-y: auto;
-    background: var(--dialog, #ffffff);
+    background: var(--dialog);
     color: var(--fg);
     border-radius: var(--radius);
     padding: 24px;
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 18px 40px var(--shadow);
 }
 
 // TODO(review-dialog-layout): Validate large-screen max-height balance after additional review prompts are introduced.
@@ -1280,7 +1372,7 @@ div {
 .review-dialog__section {
     border: 1px solid var(--line);
     border-radius: calc(var(--radius) / 1.5);
-    background: rgba(255, 255, 255, 0.65);
+    background: var(--surface);
     padding: 10px;
     display: grid;
     gap: 10px;
@@ -1304,7 +1396,7 @@ div {
     border: 1px solid var(--line);
     border-radius: calc(var(--radius) / 2);
     padding: 8px;
-    background: rgba(255, 255, 255, 0.55);
+    background: var(--surface);
 }
 
 .review-dialog__row-label {
@@ -1317,8 +1409,8 @@ div {
 }
 
 .review-dialog__row--question {
-    border-color: #c78d18;
-    background: rgba(199, 141, 24, 0.12);
+    border-color: var(--warn);
+    background: var(--warn-bg);
 }
 
 .review-dialog__chips {
@@ -1334,7 +1426,7 @@ div {
     padding: 6px 10px;
     border: 1px solid var(--line);
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.8);
+    background: var(--surface);
 }
 
 .review-dialog__additional-input {
@@ -1369,21 +1461,21 @@ div {
     border: 1px solid var(--line);
     border-radius: calc(var(--radius) / 2);
     padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.6);
+    background: var(--surface);
 }
 
 .contract-field-row--required {
-    border-color: rgba(var(--accent-rgb, 60, 100, 220), 0.35);
+    border-color: var(--info);
 }
 
 .contract-field-row--empty {
-    background: rgba(255, 200, 60, 0.08);
-    border-color: rgba(200, 150, 30, 0.4);
+    background: var(--warn-bg);
+    border-color: var(--warn);
 }
 
 .contract-field-row--conflict {
-    border-color: rgba(200, 70, 30, 0.5);
-    background: rgba(200, 70, 30, 0.06);
+    border-color: var(--danger);
+    background: var(--danger-bg);
 }
 
 .contract-field-row__label {
@@ -1407,13 +1499,13 @@ div {
 }
 
 .contract-field-row__badge--required {
-    background: rgba(60, 100, 220, 0.15);
-    color: #2050bb;
+    background: var(--info-bg);
+    color: var(--info);
 }
 
 .contract-field-row__badge--conflict {
-    background: rgba(200, 70, 30, 0.18);
-    color: #b03a14;
+    background: var(--danger-bg);
+    color: var(--danger);
 }
 
 .contract-field-row__desc {
@@ -1427,7 +1519,7 @@ div {
     display: flex;
     gap: 16px;
     font-size: 0.8rem;
-    color: #b03a14;
+    color: var(--danger);
 
     em {
         font-style: normal;
@@ -1527,8 +1619,8 @@ div {
     font-size: 0.8rem;
 
     &:hover {
-        color: var(--danger, #c0392b);
-        border-color: var(--danger, #c0392b);
+        color: var(--danger);
+        border-color: var(--danger);
     }
 }
 
@@ -1549,7 +1641,7 @@ div {
 }
 
 .contract-field-row--extra {
-    background: rgba(255, 255, 255, 0.4);
+    background: var(--hover);
 }
 
 .dialog-title {
@@ -1628,7 +1720,7 @@ div {
     max-height: min(70vh, 560px);
     object-fit: contain;
     border-radius: calc(var(--radius) / 1.5);
-    background: #f7f7f7;
+    background: var(--surface-2);
     padding: 8px;
 }
 
@@ -1646,7 +1738,7 @@ div {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--overlay);
     backdrop-filter: blur(3px);
     z-index: 990;
     padding: 24px;
@@ -1661,9 +1753,9 @@ div {
 }
 
 .blocking-overlay__surface .loading-page {
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--surface);
     border-radius: inherit;
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 18px 40px var(--shadow);
     padding: clamp(24px, 4vw, 40px);
 }
 
@@ -1750,29 +1842,29 @@ div {
 }
 
 .qr-scanner .status.success {
-    color: #0f9d58;
+    color: var(--ok);
 }
 
 .qr-scanner .status.error {
-    color: #c5221f;
+    color: var(--danger);
 }
 
 .qr-scanner .error {
-    color: #c5221f;
+    color: var(--danger);
 }
 
 .qr-scanner .search-target-hint {
-    color: var(--text-muted, #888);
+    color: var(--muted);
     font-size: 0.85em;
     margin-bottom: 4px;
 }
 
 .qr-scanner .status.search-mismatch {
-    color: #e8a000;
+    color: var(--warn);
 }
 
 .qr-scanner details.raw {
-    background: #f4f4f4;
+    background: var(--surface-2);
     border-radius: var(--radius);
     padding: 8px;
     font-family: monospace;
@@ -1843,7 +1935,7 @@ input[type="checkbox"] {
     height: 10px;
     border-radius: 50%;
     border: 1px solid var(--acc);
-    background: khaki;
+    background: var(--nav);
     position: relative;
     left: 25px;
     transition: background-color .2s ease, border-color .2s ease;
@@ -1858,8 +1950,8 @@ input[type="checkbox"] {
     height: 10px;
     // left: 1px;
     border-radius: 50%;
-    background: #fffaf0;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    background: var(--surface);
+    box-shadow: 0 1px 2px var(--shadow);
     // transition: transform .3s ease;
     animation: binary-switch-unchecked 0.4s ease-in-out forwards;
 }
@@ -1989,7 +2081,7 @@ input[type="checkbox"] {
     height: 10px;
     border-radius: 50%;
     display: inline-block;
-    border: 1px solid rgba(0, 0, 0, 0.12);
+    border: 1px solid var(--tint);
 }
 
 button a {
@@ -1997,15 +2089,36 @@ button a {
     color: inherit
 }
 
-button:hover {
+// :where() keeps this at button:hover specificity so component hover colours still win.
+button:hover:where(:not(:disabled)),
+a.btn:hover {
     background: var(--nav);
-    color: black;
+    color: var(--fg);
+}
+
+/* Wobble policy — the one place that decides what wobbles.
+   Wobble means "this triggers an action": action pills, .btn links, admin links, clickable cards,
+   plus the detail tab headers (kept by request: the wiggle is part of their feel).
+   Still: disabled buttons, other selection controls (list rows, toggles, suggestions — they change
+   what you see, not what happens), icon/close buttons and text-link buttons. */
+button:hover:where(:not(:disabled)),
+a.btn:hover,
+.admin-link:hover,
+.linkcard:hover .card {
     animation: whobble .5s ease-out forwards;
+}
+
+button:is(.admin-list__item, .hilfe-sidebar__item, .header-search__result,
+    .suggestion-option, .quality-review-step__toggle, .pill, .mark-btn, .agentic-status-card__toggle,
+    .link-btn, .icon-btn, .icon-button, .admin-icon-btn, .admin-btn--icon, .qr-scan-button,
+    .header-nav__icon-btn, .header-nav__hamburger, .panel-detail-header__back,
+    [class*="__close"], [class*="__remove"]):hover {
+    animation: none;
 }
 
 .btn-primary {
     background: var(--acc);
-    color: #fff;
+    color: var(--on-strong);
     border-color: var(--acc)
 }
 
@@ -2016,7 +2129,7 @@ button:hover {
 /* BEM modifier variants used in ActionPanel */
 .btn--primary {
     background: var(--acc);
-    color: #fff;
+    color: var(--on-strong);
     border-color: var(--acc);
 }
 
@@ -2025,9 +2138,9 @@ button:hover {
 }
 
 .btn--danger {
-    background: #dc3545;
-    color: #fff;
-    border-color: #dc3545;
+    background: var(--danger);
+    color: var(--on-strong);
+    border-color: var(--danger);
 }
 
 .btn--danger:hover {
@@ -2044,7 +2157,7 @@ button:hover {
 }
 
 .print-label-status__error {
-    color: var(--danger, #c0392b);
+    color: var(--danger);
 }
 
 .print-label-pdf-link.btn {
@@ -2056,7 +2169,7 @@ input:focus,
 textarea:focus,
 select:focus,
 button:focus {
-    outline: 3px solid rgba(26, 115, 232, .25)
+    outline: 3px solid var(--focus)
 }
 
 /* Little helpers */
@@ -2161,8 +2274,7 @@ button:focus {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: #fff;
-    animation: none !important;
+    background: var(--surface);
 }
 
 // When the QR button sits inside the header nav it inherits nav icon styling
@@ -2178,6 +2290,7 @@ button:focus {
     width: 18px;
     height: 18px;
     display: block;
+    filter: var(--icon-filter);
 }
 
 .top-row {
@@ -2317,7 +2430,6 @@ button:focus {
 .suggestion-option.active {
     border-color: var(--acc);
     box-shadow: 0 0 0 1px var(--acc);
-    animation: whobble .5s ease-out forwards;
 }
 
 .box-search {
@@ -2352,11 +2464,11 @@ button:focus {
     min-width: 44px;
     border-radius: var(--radius);
     border: 1px solid var(--line);
-    background: #f6f7f9;
+    background: var(--surface-2);
 }
 
 .box-search__create:hover {
-    background: #eef1f5;
+    background: var(--tint);
 }
 
 .box-search__suggestions {
@@ -2454,7 +2566,7 @@ button:focus {
     padding: var(--pad) 14px;
     border-radius: var(--radius);
     border: 1px solid var(--line);
-    background: #f6f7f9;
+    background: var(--surface-2);
     color: inherit;
     font-weight: 600;
     transition: background 0.15s ease, transform 0.15s ease;
@@ -2474,7 +2586,7 @@ button:focus {
 .bulk-item-action-bar__button--primary {
     background: var(--acc);
     border-color: var(--acc);
-    color: #fff;
+    color: var(--on-strong);
 }
 
 .bulk-item-action-bar__button--primary:hover {
@@ -2482,9 +2594,9 @@ button:focus {
 }
 
 .bulk-item-action-bar__button--danger {
-    background: #c5221f;
-    border-color: #c5221f;
-    color: #fff;
+    background: var(--danger);
+    border-color: var(--danger);
+    color: var(--on-strong);
 }
 
 .bulk-item-action-bar__button--danger:hover {
@@ -2497,7 +2609,7 @@ button:focus {
 }
 
 .bulk-item-action-bar__button--ghost:hover {
-    background: #eef1f5;
+    background: var(--tint);
     border-color: var(--line);
 }
 
@@ -2538,7 +2650,7 @@ button:focus {
 }
 
 .ki-action-form__option:hover {
-    background: #eef1f5;
+    background: var(--tint);
 }
 
 .ki-action-form__option--selected {
@@ -2558,7 +2670,7 @@ button:focus {
 
 .ki-action-form__count {
     font-size: 0.82em;
-    color: #888;
+    color: var(--muted);
 }
 
 .row-3 {
@@ -2571,15 +2683,15 @@ button:focus {
     display: inline-block;
     padding: 3px 10px;
     border-radius: 999px;
-    border: 1px solid var(--line, #d0d0d0);
-    background: var(--bg, #f6f8fa);
+    border: 1px solid var(--line);
+    background: var(--bg);
     font-size: 0.8rem;
     cursor: pointer;
 
     &.is-active {
-        background: var(--fg, #24292f);
-        color: var(--bg-inv, #fff);
-        border-color: var(--fg, #24292f);
+        background: var(--fg);
+        color: var(--bg);
+        border-color: var(--fg);
     }
 }
 
@@ -2593,11 +2705,11 @@ button:focus {
 
 .btn--ghost {
     background: none;
-    border: 1px solid var(--line, #d0d0d0);
-    color: var(--text-secondary, #555);
+    border: 1px solid var(--line);
+    color: var(--muted);
 
     &:hover {
-        background: var(--hover-bg, #e8eaed);
+        background: var(--hover);
     }
 }
 
@@ -2607,11 +2719,11 @@ button:focus {
     border-radius: 999px;
 
     &.Item {
-        background: $item-color
+        background: var(--c-item)
     }
 
     &.Box {
-        background: $box-color
+        background: var(--c-box)
     }
 
     &.status {
@@ -2621,19 +2733,19 @@ button:focus {
     }
 
     &.status-success {
-        background: #c8f7c5;
+        background: var(--ok-bg);
     }
 
     &.status-pending {
-        background: #fce8b2;
+        background: var(--warn-bg);
     }
 
     &.status-error {
-        background: #f6c7c7;
+        background: var(--danger-bg);
     }
 
     &.status-info {
-        background: #dbeafe;
+        background: var(--info-bg);
     }
 }
 
@@ -2641,8 +2753,8 @@ button:focus {
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    border: 2px solid rgba(0, 0, 0, 0.15);
-    border-top-color: rgba(0, 0, 0, 0.6);
+    border: 2px solid var(--tint);
+    border-top-color: var(--muted);
     animation: status-spinner-rotate 0.8s linear infinite;
 }
 
@@ -2664,7 +2776,6 @@ button:focus {
 
 .linkcard:hover .card {
     border-color: var(--acc);
-    animation: whobble .5s ease-out forwards;
     cursor: pointer;
 }
 
@@ -2723,7 +2834,7 @@ button:focus {
 }
 
 .nav a:hover {
-    background: #f2f4f7
+    background: var(--hover)
 }
 
 /* Item list */
@@ -2809,12 +2920,12 @@ button:focus {
 
 .item-row--out-of-stock {
     opacity: 0.6;
-    border-left: 3px solid var(--muted, #94a3b8);
+    border-left: 3px solid var(--muted);
 }
 
 .item-list-row--selected {
-    background: var(--accent-muted, rgba(59, 130, 246, 0.08));
-    border-left: 3px solid var(--head, #3b82f6);
+    background: var(--hover);
+    border-left: 3px solid var(--head);
 }
 
 /* Box list */
@@ -2844,8 +2955,8 @@ button:focus {
 }
 
 .box-list-row--shelf {
-    background-color: var(--surface-alt, #f8fafc);
-    border-left: 3px solid var(--accent, #3b82f6);
+    background-color: var(--surface-2);
+    border-left: 3px solid var(--acc);
 }
 
 // TODO(filter-bar-layout): Revisit filter bar spacing once filter count grows further.
@@ -2871,7 +2982,7 @@ button:focus {
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 12px;
-    background: rgba(0, 0, 0, 0.02);
+    background: var(--hover);
     flex: 1 1 360px;
     min-width: 280px;
 }
@@ -2959,7 +3070,7 @@ button:focus {
     padding: 6px 8px;
     border-radius: 6px;
     border: 1px solid var(--line);
-    background: var(--bg, #fff);
+    background: var(--bg);
     min-height: 36px;
     display: flex;
     align-items: center;
@@ -2988,8 +3099,8 @@ button:focus {
     padding: 8px;
     border: 1px solid var(--line);
     border-radius: 6px;
-    background: var(--bg, #fff);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    background: var(--bg);
+    box-shadow: 0 6px 18px var(--shadow);
     max-height: 280px;
     overflow-y: auto;
 }
@@ -3007,7 +3118,7 @@ button:focus {
     padding: 4px 6px;
     border-radius: 6px;
     border: 1px solid var(--line);
-    background: var(--bg-button, #f6f7f9);
+    background: var(--surface-2);
     cursor: pointer;
     font-size: 0.85em;
 }
@@ -3074,7 +3185,7 @@ button:focus {
     position: absolute;
     inset: 12%;
     border-radius: 50%;
-    border: 2px dashed rgba(0, 0, 0, 0.08);
+    border: 2px dashed var(--tint);
 }
 
 .loading-page__message {
@@ -3095,7 +3206,7 @@ button:focus {
     font-weight: 700;
     font-size: clamp(1.8rem, 3vw, 2.5rem);
     opacity: 0;
-    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.16));
+    filter: drop-shadow(0 4px 12px var(--shadow));
 }
 
 .loading-page__flyer--1 {
@@ -3126,7 +3237,7 @@ button:focus {
 .loading-page__flyer--2,
 .loading-page__flyer--3,
 .loading-page__flyer--4 {
-    animation-duration: var(--flyer-speed, 7.5s);
+    animation-duration: var(--flyer-speed);
     animation-timing-function: linear;
     animation-iteration-count: infinite;
 }
@@ -3474,6 +3585,136 @@ button:focus {
     color: var(--muted);
 }
 
+/* Key/value field lists (DetailRows, box info). Fields are told apart by alignment, type and a
+   faint zebra instead of whitespace: one label column so values form a single scan line, small
+   muted labels vs normal-size values, alternate rows tinted. Replaces stacked label-over-value
+   rows with 220px min-widths, which spent most of the panel on gaps.
+   Doubled class: the later max-width:800px .details rules would otherwise turn rows back into blocks. */
+.details.details--kv {
+    display: block;
+    width: 100%;
+    border-collapse: collapse;
+
+    tbody {
+        display: grid;
+        // minmax(0, …): long values wrap instead of widening the panel
+        grid-template-columns: minmax(6.5rem, max-content) minmax(0, 1fr);
+    }
+
+    tr {
+        display: contents;
+    }
+
+    th,
+    td {
+        padding: 3px 8px;
+        min-width: 0;
+        word-break: break-word;
+    }
+
+    th {
+        font-size: 0.8rem;
+        font-weight: 400;
+        color: var(--muted);
+        text-align: left;
+        max-width: 11rem;
+        padding-top: 5px; // smaller label text: nudge onto the value's baseline
+        border-radius: 8px 0 0 8px;
+    }
+
+    td {
+        font-size: 0.95rem;
+        border-radius: 0 8px 8px 0;
+    }
+
+    tr:nth-child(even) > * {
+        background: var(--hover);
+    }
+
+    td.is-placeholder {
+        color: var(--muted);
+    }
+}
+
+.details-kv__toggle {
+    margin: 4px 8px 0;
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+// Small round icon button (trash, close) — no pill padding, no wobble (see Wobble policy).
+.icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border-radius: 50%;
+    background: transparent;
+    border-color: transparent;
+    color: var(--muted);
+    font-size: 1rem;
+
+    &:hover {
+        background: var(--hover);
+        color: var(--fg);
+    }
+}
+
+.attachment-list__delete:hover {
+    background: var(--danger-bg);
+    color: var(--danger);
+}
+
+.attachment-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.attachment-list__row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 4px 3px 8px;
+    border-radius: 8px;
+
+    &:nth-child(even) {
+        background: var(--hover);
+    }
+
+    &--nested {
+        padding-left: 20px;
+    }
+}
+
+.attachment-list__main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+
+    a {
+        overflow-wrap: anywhere;
+    }
+}
+
+.attachment-list__meta {
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.attachment-list__group {
+    margin-top: 8px;
+    padding: 0 8px;
+    font-size: 0.82rem;
+    color: var(--muted);
+}
+
 .agentic-status-card__heading {
     display: flex;
     justify-content: center;
@@ -3525,8 +3766,8 @@ button:focus {
 }
 
 .agentic-search-sources__remove:hover:not(:disabled) {
-    color: var(--danger, #c0392b);
-    background: var(--surface-hover, rgba(192, 57, 43, 0.1));
+    color: var(--danger);
+    background: var(--surface-hover);
 }
 
 .agentic-search-sources__remove:disabled {
@@ -3564,7 +3805,7 @@ button:focus {
     border-radius: 4px;
 
     &.is-selected {
-        background: var(--surface-2, rgba(127, 127, 127, 0.12));
+        background: var(--surface-2);
     }
 }
 
@@ -3644,7 +3885,7 @@ button:focus {
     display: inline-flex;
     justify-content: center;
     align-items: center;
-    border: 1px solid rgba(37, 36, 36);
+    border: 1px solid var(--acc);
     border-radius: 50%;
     width: 25px;
     height: 25px;
@@ -3668,34 +3909,34 @@ button:focus {
     gap: 0;
     border-radius: 6px;
     overflow: hidden;
-    border: 1px solid var(--line, #d0d0d0);
+    border: 1px solid var(--line);
     width: fit-content;
 }
 
 .quality-review-step__toggle {
     padding: 0.3rem 1rem;
-    background: var(--bg, #fff);
+    background: var(--bg);
     border: none;
     cursor: pointer;
     font-size: 0.9rem;
-    color: var(--fg, #222);
+    color: var(--fg);
     transition: background 0.15s, color 0.15s;
 
     &:not(:last-child) {
-        border-right: 1px solid var(--line, #d0d0d0);
+        border-right: 1px solid var(--line);
     }
 
     &:hover {
-        background: #f0f0f0;
+        background: var(--hover);
     }
 
     &--active {
-        background: var(--accent, #3b82f6);
-        color: #fff;
+        background: var(--acc);
+        color: var(--on-strong);
         font-weight: 600;
 
         &:hover {
-            background: #2563eb;
+            background: var(--acc);
         }
     }
 }
@@ -3705,8 +3946,8 @@ button:focus {
     align-items: center;
     gap: 0.5rem;
     padding: 0.4rem 0.75rem;
-    background: #fef3c7;
-    color: #92400e;
+    background: var(--warn-bg);
+    color: var(--warn);
     border-radius: 4px;
     font-size: 0.875rem;
 }
@@ -3745,7 +3986,7 @@ button:focus {
     gap: 4px;
     margin-top: 6px;
     font-size: 12px;
-    color: #444;
+    color: var(--muted);
 }
 
 .quality-slider__labels span {
@@ -3759,7 +4000,7 @@ button:focus {
     z-index: 100;
     display: flex;
     flex-direction: column;
-    background: var(--bg, #fff);
+    background: var(--bg);
     color: var(--fg);
     overflow: hidden;
 }
@@ -3769,7 +4010,7 @@ button:focus {
     align-items: center;
     justify-content: space-between;
     padding: 12px 16px;
-    border-bottom: 1px solid var(--border, #e0e0e0);
+    border-bottom: 1px solid var(--line);
     flex-shrink: 0;
 }
 
@@ -3794,9 +4035,9 @@ button:focus {
 .placement-scan__warning {
     margin: 8px 16px;
     padding: 12px;
-    border-radius: var(--radius, 8px);
-    background: var(--warning-bg, #fff3cd);
-    border: 1px solid var(--warning, #ffc107);
+    border-radius: var(--radius);
+    background: var(--warn-bg);
+    border: 1px solid var(--warn);
     flex-shrink: 0;
 }
 
@@ -3812,8 +4053,8 @@ button:focus {
 .placement-scan__status {
     margin: 8px 16px;
     padding: 12px;
-    border-radius: var(--radius, 8px);
-    background: var(--surface2, #f5f5f5);
+    border-radius: var(--radius);
+    background: var(--surface-2);
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -3827,8 +4068,8 @@ button:focus {
 .placement-scan__reconcile {
     margin: 8px 16px;
     padding: 12px;
-    border-radius: var(--radius, 8px);
-    background: var(--warning-bg, #fff3cd);
+    border-radius: var(--radius);
+    background: var(--warn-bg);
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -3861,8 +4102,8 @@ button:focus {
     justify-content: space-between;
     gap: 8px;
     padding: 8px;
-    border-radius: var(--radius, 8px);
-    background: var(--surface, #fff);
+    border-radius: var(--radius);
+    background: var(--surface);
     flex-wrap: wrap;
 }
 
@@ -3872,13 +4113,13 @@ button:focus {
 }
 
 .placement-scan__reconcile-done {
-    color: var(--success, #2e7d32);
+    color: var(--ok);
     font-size: 0.9rem;
 }
 
 /* Hilfe page */
 .list-container.hilfe {
-    border-color: $overview-color;
+    border-color: var(--c-overview);
 }
 
 .hilfe-layout {
@@ -3905,13 +4146,13 @@ button:focus {
     font-size: 14px;
 
     &:hover {
-        background: var(--surface2, #f0f0f0);
+        background: var(--surface-2);
     }
 
     &--active {
-        background: $overview-color;
-        color: #fff;
-        border-color: $overview-color;
+        background: var(--c-overview);
+        color: var(--on-strong);
+        border-color: var(--c-overview);
     }
 }
 
@@ -3954,7 +4195,7 @@ button:focus {
 
     code {
         font-family: monospace;
-        background: var(--surface2, #f5f5f5);
+        background: var(--surface-2);
         padding: 1px 4px;
         border-radius: 3px;
         font-size: 0.9em;
@@ -3978,12 +4219,12 @@ button:focus {
 
     &--done span {
         text-decoration: line-through;
-        color: var(--muted, #888);
+        color: var(--muted);
     }
 }
 
 .hilfe-code {
-    background: var(--surface2, #f5f5f5);
+    background: var(--surface-2);
     border: 1px solid var(--line);
     border-radius: var(--radius);
     padding: 10px 14px;
@@ -3995,7 +4236,7 @@ button:focus {
 
 .hilfe-username-setup {
     background: var(--card);
-    border: 2px solid $overview-color;
+    border: 2px solid var(--c-overview);
     border-radius: var(--radius);
     padding: 16px 20px;
     margin-bottom: 16px;
@@ -4116,9 +4357,9 @@ button:focus {
     font-size: 0.9rem;
 
     &--error {
-        background: #f8d7da;
-        border-color: #dc3545;
-        color: #842029;
+        background: var(--danger-bg);
+        border-color: var(--danger);
+        color: var(--danger);
     }
 }
 
@@ -4180,8 +4421,7 @@ button:focus {
     font: inherit;
 
     &:hover {
-        background: rgba(0, 0, 0, 0.05);
-        animation: none;
+        background: var(--hover);
     }
 
     &.is-selected {
@@ -4221,7 +4461,7 @@ button:focus {
     min-width: 3ch;
     padding: 1px 8px;
     border-radius: 10px;
-    background: rgba(0, 0, 0, 0.07);
+    background: var(--tint);
     font-size: 0.85rem;
     text-align: center;
 }
@@ -4234,7 +4474,7 @@ button:focus {
     background: var(--nav);
 
     &--muted {
-        background: rgba(0, 0, 0, 0.07);
+        background: var(--tint);
         color: var(--muted);
     }
 }
@@ -4292,7 +4532,7 @@ button:focus {
     gap: 8px;
 }
 
-// Compact buttons inside rows: keep the app's shape but smaller, and no wobble.
+// Compact buttons inside rows: same pill, smaller.
 .admin-btn {
     padding: 6px 14px;
     font-size: 0.9rem;
@@ -4300,23 +4540,15 @@ button:focus {
 
     font-family: inherit;
 
-    // Clearly "nothing to save" rather than a washed-out active button.
-    &:disabled {
-        background: transparent;
-        border-style: dashed;
-        color: var(--muted);
-        cursor: default;
-        animation: none;
-    }
 
     &--danger:not(:disabled) {
         background: transparent;
-        border-color: #dc3545;
-        color: #dc3545;
+        border-color: var(--danger);
+        color: var(--danger);
 
         &:hover {
-            background: #dc3545;
-            color: #fff;
+            background: var(--danger);
+            color: var(--on-strong);
         }
     }
 
@@ -4451,7 +4683,7 @@ button:focus {
     padding: 0;
     border: 1px solid var(--acc);
     border-radius: 50%;
-    background: floralwhite;
+    background: var(--surface);
     color: var(--fg);
     font-size: 0.85rem;
     cursor: pointer;
@@ -4459,7 +4691,6 @@ button:focus {
 
     &:hover {
         background: var(--nav);
-        animation: none;
     }
 }
 
@@ -4509,7 +4740,7 @@ button:focus {
 }
 
 .admin-gate__error {
-    color: var(--danger, #c0392b);
+    color: var(--danger);
     font-size: 0.85rem;
     margin: 8px 0 0;
 }
@@ -4614,7 +4845,7 @@ button:focus {
     }
 
     &--active {
-        color: #f59e0b;
+        color: var(--warn);
     }
 }
 
@@ -4693,7 +4924,7 @@ body.simple-mode {
 // Highlight matched search words inside the "Ähnliche Artikel prüfen" results
 // so operators can spot which parts of a candidate match their input.
 .suggestion-highlight {
-    background: #ffe38a;
+    background: var(--highlight);
     color: inherit;
     border-radius: 2px;
     padding: 0 1px;

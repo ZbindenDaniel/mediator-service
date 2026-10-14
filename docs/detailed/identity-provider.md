@@ -196,7 +196,7 @@ anyone can claim to be anyone with a single curl command.
   docker exec mediator curl -s -H "Authorization: Bearer $ADMIN_SECRET" localhost:8080/api/admin/config
   ```
 - **Who did what:** when logged in, the app records the login name for every action (event log,
-  prints, reviews, stubs, marks). Names typed into the browser are ignored. Double-click the name
+  prints, reviews, stubs, marks). Names typed into the browser are ignored. Click the name
   in the top-right corner to see your account, organisation and role, and to log out.
 - **Without Authentik** (Basic Auth): unchanged. The name is typed in, and the admin page asks for
   the password.

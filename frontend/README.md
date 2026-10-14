@@ -24,12 +24,17 @@ React single-page application — item and box management UI, quality review, ag
 Presentation layer only. Data fetching through `data/` API clients. No business logic (validation, calculations, etc.) — those belong in backend or models.
 
 ## Rules
+- Colours only through the tokens at the top of `public/styles.scss` (light + dark); no hex in rules or inline styles. Fixed exceptions: camera frame, scan flash, `QualityBadge`/`StatsCard` scales
+- Wobble on hover is decided in one place (the "Wobble policy" block in `styles.scss`): action pills and detail tab headers wobble; other selection controls, icon/close buttons, text links and disabled buttons don't
+- Key/value field lists go through `DetailRows` (aligned label column, zebra, empty fields folded) — not a hand-rolled `<table className="details">` loop
 - New API calls go in `data/` — not inline in components
 - Global state goes in `context/` — not prop-drilled through component trees
 - Components in `components/` are named by what they render, not what action triggers them
 
 ## Decisions
 - **React SPA (no SSR)**: the app is operator-facing on a LAN; SEO irrelevant; full SPA gives simpler deployment alongside the Express backend
+- **Muted OKLCH palette, written as hex**: screens disagree on colour (unmanaged wide-gamut panels oversaturate sRGB); low-chroma colours stay calm when stretched and lightness carries structure. Hex output keeps older kiosk browsers working. Dark mode follows the device unless the user picks Hell/Dunkel (`lib/theme.ts`, `data-theme` on `<html>`)
+- **Pill buttons everywhere** (from the admin pages); the organic-corner tab-action group was dropped because its per-button radii broke on wrap and conditional buttons
 - **No component framework (no MUI/Shadcn)**: custom CSS for precise control over label-printing and mobile-first layout without fighting framework defaults
 
 ## See also

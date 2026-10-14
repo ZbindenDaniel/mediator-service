@@ -8,6 +8,7 @@ import PrintLabelButton from '../PrintLabelButton';
 import QrScanButton from '../QrScanButton';
 import { dialogService } from '../dialog';
 import { normalizeDetailValue } from '../../lib/itemDetailFormatting';
+import DetailRows from '../DetailRows';
 import type { Item } from '../../../../models';
 
 export interface InstanceRow {
@@ -161,42 +162,14 @@ export default function ItemInstanceTab({
       <div className="card">
         <h3>dieser Artikel</h3>
         {instanceDetailRows.length > 0 ? (
-          <table className="details">
-            <tbody>
-              {instanceDetailRows.map(([k, v], idx) => {
-                const cell = normalizeDetailValue(v);
-                return (
-                  <tr key={`${k}-${idx}`} className="responsive-row">
-                    <th className="responsive-th">{k}</th>
-                    <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                      {cell.content}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DetailRows rows={instanceDetailRows} />
         ) : (
           <p className="muted">Keine Instanzdaten vorhanden.</p>
         )}
         {instanceSpecRows.length > 0 && (
           <>
             <h4 style={{ marginTop: '1rem', marginBottom: '0.25rem' }}>Spezifikationen</h4>
-            <table className="details">
-              <tbody>
-                {instanceSpecRows.map(([k, v], idx) => {
-                  const cell = normalizeDetailValue(v);
-                  return (
-                    <tr key={`spec-${k}-${idx}`} className="responsive-row">
-                      <th className="responsive-th">{k}</th>
-                      <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                        {cell.content}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <DetailRows rows={instanceSpecRows} keyPrefix="spec-" />
           </>
         )}
         {isOutOfStock && <p className="muted">Instanz nicht mehr eingelagert.</p>}

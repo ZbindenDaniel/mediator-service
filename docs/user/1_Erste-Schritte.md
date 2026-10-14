@@ -2,7 +2,7 @@
 
 Willkommen! Diese Seite erklärt die wichtigsten Abläufe im System — vom ersten Artikel bis zur Einlagerung.
 
-Beim ersten Aufruf wirst du nach deinem **Benutzernamen** gefragt. Damit kann man besser nachvollziehen, wer was macht. Du kannst ihn jederzeit ändern — einfach auf deinen Namen oben rechts im Header **doppelklicken**.
+Beim ersten Aufruf wirst du nach deinem **Benutzernamen** gefragt. Damit kann man besser nachvollziehen, wer was macht. Du kannst ihn jederzeit ändern — einfach oben rechts im Header auf deinen Namen **klicken**. Dort findest du auch den einfachen Modus, das Farbschema (Hell/Dunkel) und, wenn du angemeldet bist, „Abmelden“.
 
 ---
 

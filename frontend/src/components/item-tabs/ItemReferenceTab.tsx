@@ -1,8 +1,8 @@
 import React from 'react';
 import ShopBadge from '../ShopBadge';
 import ZubehoerBadge from '../ZubehoerBadge';
-import { normalizeDetailValue } from '../../lib/itemDetailFormatting';
 import type { Item } from '../../../../models';
+import DetailRows from '../DetailRows';
 import { useFeature } from '../../context/FeaturesContext';
 
 interface Props {
@@ -51,21 +51,7 @@ export default function ItemReferenceTab({
       </div>
       <h3>Referenz</h3>
       {referenceDetailRows.length > 0 ? (
-        <table className="details">
-          <tbody>
-            {referenceDetailRows.map(([k, v], idx) => {
-              const cell = normalizeDetailValue(v);
-              return (
-                <tr key={`${k}-${idx}`} className="responsive-row">
-                  <th className="responsive-th">{k}</th>
-                  <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                    {cell.content}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <DetailRows rows={referenceDetailRows} />
       ) : (
         <p className="muted">Keine Referenzdaten vorhanden.</p>
       )}

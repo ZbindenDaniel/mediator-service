@@ -5,7 +5,7 @@ import { getSimpleMode, setSimpleMode } from '../lib/simpleMode';
 import UserSettingsDialog from './UserSettingsDialog';
 import { useIdentity } from '../context/IdentityContext';
 import { Feature } from '../context/FeaturesContext';
-import { GoArchive, GoListUnordered, GoPlus, GoLog, GoSearch, GoGift, GoHash, GoTools, GoQuestion } from 'react-icons/go';
+import { GoArchive, GoListUnordered, GoPlus, GoLog, GoSearch, GoGift, GoHash, GoTools, GoQuestion, GoPerson, GoChevronDown } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 import type { Item } from '../../../models';
@@ -143,7 +143,7 @@ export default function Header() {
     }
   }, [navigate, setEntity]);
 
-  const handleUserDoubleClick = useCallback(() => {
+  const handleUserClick = useCallback(() => {
     setSettingsOpen(true);
   }, []);
 
@@ -276,14 +276,20 @@ export default function Header() {
         </nav>
       </div>
       <div className="right">
-        <div
-          className="user"
-          onDoubleClick={handleUserDoubleClick}
-          title={identity.authenticated ? 'Doppelklicken für Benutzereinstellungen' : 'Doppelklicken zum Bearbeiten des Benutzernamens'}
-          aria-label={identity.authenticated ? 'Angemeldeter Benutzer, doppelklicken für Einstellungen' : 'Benutzername, doppelklicken zum Bearbeiten'}
+        {/* A real button on single click: the double-click <div> was invisible as a control and
+            unreachable by keyboard, but it's the only way to settings, theme and logout. */}
+        <button
+          type="button"
+          className="header-user"
+          onClick={handleUserClick}
+          aria-haspopup="dialog"
+          aria-expanded={settingsOpen}
+          title="Benutzereinstellungen"
         >
-          {user}
-        </div>
+          <GoPerson aria-hidden="true" />
+          <span className="header-user__name">{user || 'Benutzer'}</span>
+          <GoChevronDown aria-hidden="true" className="header-user__chevron" />
+        </button>
       </div>
       {settingsOpen && (
         <UserSettingsDialog
