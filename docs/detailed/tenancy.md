@@ -201,7 +201,9 @@ Where it happens: the shared reads in `db.ts` (`getItem`, `findByMaterial`, `ite
 ## Not enforced yet
 
 - No global stock total yet (DL2).
-- The UI still offers write actions on another org's items (they answer 403).
+- The item detail hides actions on another org's items (`permissions` in the response, #981), and
+  its org location opens an org card (`GET /api/orgs/:id`: name + contact email). The item-list bulk
+  bar and the KI tab still offer actions (they answer 403).
 
 ## Inspecting state
 

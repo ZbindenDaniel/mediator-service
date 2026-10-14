@@ -4,6 +4,7 @@ import { GoBookmark, GoBookmarkFill } from 'react-icons/go';
 import { AGENTIC_RUN_STATUS_NOT_STARTED } from '../../../models';
 import type { Item } from '../../../models';
 import LocationTag from './LocationTag';
+import { openOrgInfo } from '../lib/orgInfo';
 import { usePanelContext } from '../context/PanelContext';
 import { useUserMarks } from '../context/UserMarksContext';
 import QualityBadge from './QualityBadge';
@@ -365,7 +366,16 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                   )}
                 </td>
                 <td className="col-location">
-                  {parentItemUUID ? (
+                  {representative?.LocationRedacted ? (
+                    // Another org's item: the "location" is its owner's name, not a shelf to open.
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={(e) => { e.stopPropagation(); void openOrgInfo(representative.TenantId, shelfId); }}
+                    >
+                      <LocationTag item={locationItem} itemId={representativeItemId} />
+                    </button>
+                  ) : parentItemUUID ? (
                     <button
                       type="button"
                       className="link-btn"

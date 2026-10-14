@@ -426,8 +426,8 @@
      Deployment feature flags ✅ (#970, browser check pending).
      Org admin page ✅ (#971, browser check pending).
      Phase 3a writes ✅ (#976). Phase 3b reads ✅ (#979). Next:** two-org test
-     matrix with real logins; FE: hide write actions (relocate, edit, delete) on
-     another org's items instead of letting them 403; DL2 global stock total;
+     matrix with real logins; item detail actions hidden for foreign items ✅ (#981),
+     still open: bulk bar + KI tab on foreign items, create buttons for no-org users; DL2 global stock total;
      per-org export (`/api/export/data` is unrestricted-only for now). Grey zone
      still visible by decision (serial/MAC, intake data, photos, attachments).
      Later: role permissions (delete, bulk,

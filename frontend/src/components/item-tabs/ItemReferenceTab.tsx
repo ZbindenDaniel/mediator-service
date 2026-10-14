@@ -10,8 +10,9 @@ interface Props {
   referenceDetailRows: [string, React.ReactNode][];
   connectedToDevices: any[];
   compatibleParentRefs: any[];
-  onEdit: () => void;
-  onShopStatus: () => void;
+  // Omitted when the requester may not change this catalogue entry (another org's, tenancy 3a).
+  onEdit?: () => void;
+  onShopStatus?: () => void;
 }
 
 export default function ItemReferenceTab({
@@ -26,8 +27,8 @@ export default function ItemReferenceTab({
   return (
     <>
       <div className="tab-actions">
-        <button type="button" className="btn" onClick={onEdit}>Bearbeiten</button>
-        {shopwareEnabled && <button type="button" className="btn" onClick={onShopStatus}>Shopartikel</button>}
+        {onEdit && <button type="button" className="btn" onClick={onEdit}>Bearbeiten</button>}
+        {shopwareEnabled && onShopStatus && <button type="button" className="btn" onClick={onShopStatus}>Shopartikel</button>}
       </div>
       <div className="card">
       <div className="item-reference-tab__badges">

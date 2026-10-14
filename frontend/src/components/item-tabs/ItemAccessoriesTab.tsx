@@ -21,6 +21,8 @@ interface Props {
   compatibleAccessoryRefs: any[];
   compatibleParentRefs: any[];
   onRelationChanged: () => void;
+  canEditItem?: boolean;
+  canEditReference?: boolean;
 }
 
 export default function ItemAccessoriesTab({
@@ -29,7 +31,9 @@ export default function ItemAccessoriesTab({
   connectedToDevices,
   compatibleAccessoryRefs,
   compatibleParentRefs,
-  onRelationChanged
+  onRelationChanged,
+  canEditItem,
+  canEditReference
 }: Props) {
   const subCategory = item.Unterkategorien_A ?? null;
 
@@ -74,6 +78,8 @@ export default function ItemAccessoriesTab({
       qualityResponses={qualityResponses}
       onSparepartChanged={fetchSpareParts}
       onQualityResponseChanged={setQualityResponses}
+      canEditItem={canEditItem}
+      canEditReference={canEditReference}
     />
   );
 }

@@ -13,6 +13,8 @@ interface AttachmentsCardProps extends AttachmentIdentifiers {
   itemUUID: string;
   attachments: any[];
   onChanged: (next: any[]) => void;
+  // Another org's item (tenancy 3a): files stay visible (grey zone), upload/delete would 403.
+  readOnly?: boolean;
 }
 
 type ExternalFileRow = { fileName: string; url: string; deletable: boolean };
@@ -114,7 +116,8 @@ export default function AttachmentsCard({
   artikelNummer,
   serialNumber,
   macAddress,
-  ean
+  ean,
+  readOnly = false
 }: AttachmentsCardProps) {
   const [uploading, setUploading] = React.useState(false);
   const [pendingFile, setPendingFile] = React.useState<File | null>(null);
@@ -269,14 +272,16 @@ export default function AttachmentsCard({
                       <td className="muted">{formatBytes(att.FileSize)}</td>
                       <td className="muted">{att.CreatedAt ? att.CreatedAt.slice(0, 10) : ''}</td>
                       <td>
-                        <button
-                          type="button"
-                          className="sml-btn btn"
-                          onClick={() => handleInstanceDelete(att.Id)}
-                          title="Anhang löschen"
-                        >
-                          ✕
-                        </button>
+                        {!readOnly && (
+                          <button
+                            type="button"
+                            className="sml-btn btn"
+                            onClick={() => handleInstanceDelete(att.Id)}
+                            title="Anhang löschen"
+                          >
+                            ✕
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -305,7 +310,7 @@ export default function AttachmentsCard({
                     </td>
                     <td className="muted" colSpan={4} />
                     <td>
-                      {row.deletable && (
+                      {row.deletable && !readOnly && (
                         <button
                           type="button"
                           className="sml-btn btn"
@@ -322,7 +327,7 @@ export default function AttachmentsCard({
             </tbody>
           </table>
         )}
-        <div style={{ marginTop: '8px' }}>
+        {!readOnly && <div style={{ marginTop: '8px' }}>
           <input
             ref={fileRef}
             type="file"
@@ -334,7 +339,7 @@ export default function AttachmentsCard({
           <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
             {uploading ? 'Lädt hoch…' : '+ Datei anhängen'}
           </button>
-        </div>
+        </div>}
       </div>
     </>
   );

@@ -29,7 +29,7 @@ import { calculateCo2Impact } from '../lib/co2Calculator';
 import { query as dbQuery, withTransaction } from '../db-client';
 import { guardWrite } from '../utils/write-guard';
 import { redactItemRows, redactPeople } from '../lib/redaction';
-import { currentIdentity, isUnrestricted } from '../lib/ownership';
+import { canWrite, currentIdentity, isUnrestricted } from '../lib/ownership';
 import { getRowOwner } from '../db';
 
 const MEDIA_PREFIX = '/media/';
@@ -603,6 +603,18 @@ function normalizeSearchTerm(
   }
 }
 
+// What the requester may change, so the UI can hide actions that would answer 403 (tenancy 3a rules).
+async function resolveItemPermissions(
+  itemTenant: string | null | undefined,
+  artikelNummer: string | null | undefined
+): Promise<{ canEditItem: boolean; canEditReference: boolean }> {
+  const identity = currentIdentity();
+  if (isUnrestricted(identity)) return { canEditItem: true, canEditReference: true };
+  const nr = (artikelNummer ?? '').trim();
+  const refOwner = nr ? await getRowOwner('ref', nr) : null;
+  return { canEditItem: canWrite(identity, itemTenant), canEditReference: canWrite(identity, refOwner) };
+}
+
 const action = defineHttpAction({
   key: 'save-item',
   label: 'Save item',
@@ -675,7 +687,8 @@ const action = defineHttpAction({
               agentic: null,
               agenticReviewAutomation: null,
               media: collectMediaAssets(itemId, fallbackReference.Grafikname, fallbackReference.Artikel_Nummer),
-              instances: []
+              instances: [],
+              permissions: await resolveItemPermissions(null, fallbackReference.Artikel_Nummer)
             });
           }
         }
@@ -792,6 +805,8 @@ const action = defineHttpAction({
                   Auf_Lager: instance.Auf_Lager ?? undefined,
                   Location: instance.Location ?? null,
                   BoxID: instance.BoxID ?? null,
+                  TenantId: instance.TenantId ?? null,
+                  LocationRedacted: instance.LocationRedacted === true,
                   UpdatedAt: instance.UpdatedAt ? String(instance.UpdatedAt) : null,
                   Datum_erfasst: instance.Datum_erfasst ? String(instance.Datum_erfasst) : null
                 });
@@ -1016,7 +1031,9 @@ const action = defineHttpAction({
           attachments: unknown[];
           externalDocs: ExternalDocSummary[] | null;
           co2Impact: ItemDetailResponse['co2Impact'];
+          permissions: ItemDetailResponse['permissions'];
         };
+        const permissions = await resolveItemPermissions(item.TenantId, item.Artikel_Nummer);
         try {
           const responseItem =
             normalisedGrafikname && normalisedGrafikname !== sanitizedItem.Grafikname
@@ -1037,7 +1054,8 @@ const action = defineHttpAction({
             compatibleParentRefs,
             attachments,
             externalDocs,
-            co2Impact
+            co2Impact,
+            permissions
           };
         } catch (error) {
           console.error('[save-item] Failed to construct item detail response payload', {

@@ -31,6 +31,8 @@ interface Props {
   relocateCardRef: React.RefObject<HTMLDivElement>;
   showEditInstance: boolean;
   showQualityReview: boolean;
+  // False on another org's item (tenancy 3a): its actions would only answer 403, so they are hidden.
+  canEdit?: boolean;
   onAddItem: () => Promise<void>;
   onRemoveItem: () => Promise<void>;
   onRelocate: () => void;
@@ -54,6 +56,7 @@ export default function ItemInstanceTab({
   relocateCardRef,
   showEditInstance,
   showQualityReview,
+  canEdit = true,
   onAddItem,
   onRemoveItem,
   onRelocate,
@@ -98,7 +101,7 @@ export default function ItemInstanceTab({
 
   return (
     <>
-      <div className="tab-actions">
+      {canEdit && <div className="tab-actions">
         <PrintLabelButton itemId={item.ItemUUID} inline />
         <button type="button" className="btn" onClick={onEditInstance}>Bearbeiten</button>
         <button type="button" className="btn" onClick={() => void handleOpenQualityReview()}>Neu bewerten</button>
@@ -144,9 +147,9 @@ export default function ItemInstanceTab({
             Hinzufügen
           </button>
         )}
-      </div>
+      </div>}
 
-      {item.Quality === null && (
+      {canEdit && item.Quality === null && (
         <div className="quality-missing-hint">
           <span>Qualitätsbewertung fehlt</span>
           <button type="button" className="btn btn--small" onClick={() => void handleOpenQualityReview()}>

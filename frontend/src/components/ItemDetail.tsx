@@ -16,7 +16,8 @@ import type {
   AgenticRun,
   ItemDetailResponse,
   ItemInstanceSummary,
-  ItemDetailReviewAutomationSignal
+  ItemDetailReviewAutomationSignal,
+  ItemPermissions
 } from '../../../models';
 import type { AgenticSnapshotFields } from '../../../models';
 import type { Co2ImpactLabel } from '../../../models/co2';
@@ -119,6 +120,7 @@ import {
   resolveQuantityEinheit,
 } from '../lib/itemDetailFormatting';
 import { useFeatures } from '../context/FeaturesContext';
+import { openOrgInfo } from '../lib/orgInfo';
 import { ITEM_TAB_FEATURES, resolveTab } from '../lib/tabFeatures';
 import { fetchSpecContract } from '../lib/contractsApi';
 
@@ -177,6 +179,8 @@ export default function ItemDetail({ itemId }: Props) {
   const [co2Impact, setCo2Impact] = useState<{ label: Co2ImpactLabel; score?: number } | null>(null);
   const features = useFeatures();
   const statisticsEnabled = features.statistics;
+  // Missing (older backend) = everything allowed, as before tenancy.
+  const [permissions, setPermissions] = useState<ItemPermissions>({ canEditItem: true, canEditReference: true });
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [neighborIds, setNeighborIds] = useState<{ previousId: string | null; nextId: string | null }>({
@@ -595,7 +599,16 @@ export default function ItemDetail({ itemId }: Props) {
       ['Artikelnummer', item.Artikel_Nummer ?? null],
       [
         'Behälter',
-        item.BoxID ? (
+        item.LocationRedacted ? (
+          // Another org's item: its box is hidden, the owner org is shown instead (tenancy 3b).
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => { void openOrgInfo(item.TenantId, item.Location); }}
+          >
+            {item.Location ?? 'Andere Organisation'}
+          </button>
+        ) : item.BoxID ? (
           <button
             type="button"
             className="link-btn"
@@ -609,9 +622,11 @@ export default function ItemDetail({ itemId }: Props) {
       ['MAC-Adresse', item.MacAddress ?? null],
       ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
       ['Kategorie', resolveUnterkategorieLabel(item.Unterkategorien_A)],
-      ['Qualität', qualityBadge],
-      ['Ki Status', agenticStatusDisplay(agentic).label]
+      ['Qualität', qualityBadge]
     ];
+    if (features.agentic) {
+      rows.push(['Ki Status', agenticStatusDisplay(agentic).label]);
+    }
 
     const quantityEinheit = resolveQuantityEinheit(item.Einheit, item.ItemUUID);
     if (quantityEinheit === ItemEinheit.Menge) {
@@ -653,7 +668,7 @@ export default function ItemDetail({ itemId }: Props) {
     }
 
     return rows;
-  }, [agentic, co2Impact, events, item, langtextRows, qualitySummary.value, resolveUnterkategorieLabel, statisticsEnabled]);
+  }, [agentic, co2Impact, events, features.agentic, item, langtextRows, qualitySummary.value, resolveUnterkategorieLabel, statisticsEnabled]);
 
   const { referenceDetailRows, instanceDetailRows } = useMemo(() => {
     const referenceRows: [string, React.ReactNode][] = [];
@@ -771,7 +786,15 @@ export default function ItemDetail({ itemId }: Props) {
         return {
           id: instance.ItemUUID,
           qualityValue,
-          boxId: rawBoxId ? (
+          boxId: instance.LocationRedacted ? (
+            <button
+              type="button"
+              className="link-btn"
+              onClick={(e) => { e.stopPropagation(); void openOrgInfo(instance.TenantId, instance.Location); }}
+            >
+              {instance.Location ?? 'Andere Organisation'}
+            </button>
+          ) : rawBoxId ? (
             <button
               type="button"
               className="link-btn"
@@ -1012,6 +1035,8 @@ export default function ItemDetail({ itemId }: Props) {
             Auf_Lager: normalizedStock,
             Location: (entry as ItemInstanceSummary)?.Location ?? null,
             BoxID: (entry as ItemInstanceSummary)?.BoxID ?? null,
+            TenantId: (entry as ItemInstanceSummary)?.TenantId ?? null,
+            LocationRedacted: (entry as ItemInstanceSummary)?.LocationRedacted === true,
             UpdatedAt: (entry as ItemInstanceSummary)?.UpdatedAt ?? null,
             Datum_erfasst: (entry as ItemInstanceSummary)?.Datum_erfasst ?? null
           });
@@ -1056,6 +1081,10 @@ export default function ItemDetail({ itemId }: Props) {
           : [];
         setMediaAssets(media);
         setInstances(normalizeInstanceList(data.instances));
+        setPermissions({
+          canEditItem: data.permissions?.canEditItem !== false,
+          canEditReference: data.permissions?.canEditReference !== false
+        });
         setConnectedAccessories(Array.isArray((data as any).connectedAccessories) ? (data as any).connectedAccessories : []);
         setConnectedToDevices(Array.isArray((data as any).connectedToDevices) ? (data as any).connectedToDevices : []);
         setCompatibleAccessoryRefs(Array.isArray((data as any).compatibleAccessoryRefs) ? (data as any).compatibleAccessoryRefs : []);
@@ -2625,8 +2654,8 @@ export default function ItemDetail({ itemId }: Props) {
             referenceDetailRows={referenceDetailRows}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
-            onEdit={() => void handleEdit()}
-            onShopStatus={() => void handleShopStatus()}
+            onEdit={permissions.canEditReference ? () => void handleEdit() : undefined}
+            onShopStatus={permissions.canEditReference ? () => void handleShopStatus() : undefined}
           />
         );
         break;
@@ -2664,6 +2693,7 @@ export default function ItemDetail({ itemId }: Props) {
             relocateCardRef={relocateCardRef}
             showEditInstance={showEditInstance}
             showQualityReview={showQualityReview}
+            canEdit={permissions.canEditItem}
             onAddItem={handleAddItem}
             onRemoveItem={handleRemoveItem}
             onRelocate={() => setShowRelocate(true)}
@@ -2682,8 +2712,8 @@ export default function ItemDetail({ itemId }: Props) {
             item={item}
             mediaAssets={mediaAssets}
             mediaFileInputRef={mediaFileInputRef}
-            onAdd={handleMediaAdd}
-            onRemove={handleMediaRemove}
+            onAdd={permissions.canEditReference ? handleMediaAdd : undefined}
+            onRemove={permissions.canEditReference ? handleMediaRemove : undefined}
             onFileChange={handleMediaFileChange}
           />
         );
@@ -2698,6 +2728,7 @@ export default function ItemDetail({ itemId }: Props) {
             serialNumber={item.SerialNumber ?? null}
             macAddress={item.MacAddress ?? null}
             ean={item.EAN ?? null}
+            readOnly={!permissions.canEditItem}
           />
         );
         break;
@@ -2710,6 +2741,8 @@ export default function ItemDetail({ itemId }: Props) {
             compatibleAccessoryRefs={compatibleAccessoryRefs}
             compatibleParentRefs={compatibleParentRefs}
             onRelationChanged={() => void handleRelationChanged()}
+            canEditItem={permissions.canEditItem}
+            canEditReference={permissions.canEditReference}
           />
         );
         break;
@@ -2726,8 +2759,8 @@ export default function ItemDetail({ itemId }: Props) {
             referenceDetailRows={referenceDetailRows}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
-            onEdit={() => void handleEdit()}
-            onShopStatus={() => void handleShopStatus()}
+            onEdit={permissions.canEditReference ? () => void handleEdit() : undefined}
+            onShopStatus={permissions.canEditReference ? () => void handleShopStatus() : undefined}
           />
         );
     }

@@ -87,6 +87,10 @@ interface ZubehoerCardProps {
   qualityResponses?: Record<string, string>;
   onSparepartChanged?: () => void;
   onQualityResponseChanged?: (responses: Record<string, string>) => void;
+  // Tenancy 3a: false on another org's item / catalogue entry — the matching actions are hidden
+  // (they would answer 403); what is linked stays visible.
+  canEditItem?: boolean;
+  canEditReference?: boolean;
 }
 
 export default function ZubehoerCard({
@@ -104,7 +108,9 @@ export default function ZubehoerCard({
   spareParts = [],
   qualityResponses = {},
   onSparepartChanged,
-  onQualityResponseChanged
+  onQualityResponseChanged,
+  canEditItem = true,
+  canEditReference = true
 }: ZubehoerCardProps) {
   const { setEntity } = usePanelContext();
   const assemblyContract = assemblyContractProp ?? null;
@@ -290,13 +296,13 @@ export default function ZubehoerCard({
         <span style={{ display: 'inline-flex', marginLeft: '8px', borderRadius: '4px', overflow: 'hidden', border: '1px solid var(--line, #ddd)' }}>
           <button
             type="button"
-            disabled={pending}
+            disabled={pending || !canEditItem}
             style={{ padding: '2px 10px', fontSize: '0.82em', border: 'none', cursor: 'pointer', background: isYes ? 'var(--head, #bce0a3)' : 'var(--bg, #fff)', fontWeight: isYes ? 600 : undefined }}
             onClick={() => isYes ? handleClearAnswer(q.id) : handleSlotAnswer(q.id, 'true')}
           >Ja</button>
           <button
             type="button"
-            disabled={pending}
+            disabled={pending || !canEditItem}
             style={{ padding: '2px 10px', fontSize: '0.82em', border: 'none', borderLeft: '1px solid var(--line, #ddd)', cursor: 'pointer', background: isNo ? 'var(--color-orange, #f0a030)' : 'var(--bg, #fff)', fontWeight: isNo ? 600 : undefined }}
             onClick={() => isNo ? handleClearAnswer(q.id) : handleSlotAnswer(q.id, 'false')}
           >Nein</button>
@@ -307,7 +313,7 @@ export default function ZubehoerCard({
       return (
         <select
           value={currentAnswer ?? ''}
-          disabled={pending}
+          disabled={pending || !canEditItem}
           onChange={(e) => { if (e.target.value) handleSlotAnswer(q.id, e.target.value); }}
           style={{ marginLeft: '8px', fontSize: '0.82em', padding: '2px 4px', maxWidth: '140px' }}
         >
@@ -341,7 +347,7 @@ export default function ZubehoerCard({
                 ) ?? null;
 
                 // noLink parts (e.g. storage) only show spec answers, no item linking
-                const canErfassen = !part.noLink && (state === 'unknown' || state === 'present' || state === 'empty' || state === 'removed');
+                const canErfassen = canEditItem && !part.noLink && (state === 'unknown' || state === 'present' || state === 'empty' || state === 'removed');
 
                 return (
                   <React.Fragment key={part.key}>
@@ -417,7 +423,7 @@ export default function ZubehoerCard({
                           </div>
                         )}
                         {/* Entnehmen + Lösen for cataloged */}
-                        {state === 'cataloged' && (
+                        {state === 'cataloged' && canEditItem && (
                           <>
                             <button
                               type="button"
@@ -449,7 +455,7 @@ export default function ZubehoerCard({
                           </>
                         )}
                         {/* For multipleAllowed, allow adding another after one is cataloged */}
-                        {part.multipleAllowed && state === 'cataloged' && !openPopupSlot && (
+                        {canEditItem && part.multipleAllowed && state === 'cataloged' && !openPopupSlot && (
                           <button
                             type="button"
                             className="btn"
@@ -487,7 +493,7 @@ export default function ZubehoerCard({
                   </td>
                   <td className="muted">{acc.RelationType}</td>
                   <td>
-                    <button type="button" className="btn" onClick={() => handleUnlink(acc.ItemUUID)}>Lösen</button>
+                    {canEditItem && <button type="button" className="btn" onClick={() => handleUnlink(acc.ItemUUID)}>Lösen</button>}
                   </td>
                 </tr>
               ))}
@@ -539,7 +545,7 @@ export default function ZubehoerCard({
                           </button>
                         </td>
                         <td className="muted">{ref.availableCount ?? 0} auf Lager</td>
-                        {artikelNummer && (
+                        {artikelNummer && canEditReference && (
                           <td>
                             <button type="button" className="btn" onClick={() => handleRemoveCompatRef(ref.Artikel_Nummer)} title="Kompatibilität entfernen">✕</button>
                           </td>
@@ -549,7 +555,7 @@ export default function ZubehoerCard({
                   </tbody>
                 </table>
               )}
-              {artikelNummer && (
+              {artikelNummer && canEditReference && (
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '8px' }}>
                   <RefSearchInput placeholder="Artikeltyp als Zubehör hinzufügen…" disabled={refPending} onSelected={handleAddCompatRef} />
                   {refError && <span className="muted" style={{ color: 'var(--color-error, #d73a49)', alignSelf: 'center' }}>{refError}</span>}
@@ -572,7 +578,7 @@ export default function ZubehoerCard({
                           </button>
                         </td>
                         <td className="muted">{ref.RelationType}</td>
-                        {artikelNummer && (
+                        {artikelNummer && canEditReference && (
                           <td>
                             <button type="button" className="sbtn" onClick={() => handleRemoveParentRef(ref.Artikel_Nummer)} title="Zugehörigkeit entfernen">✕</button>
                           </td>
@@ -582,7 +588,7 @@ export default function ZubehoerCard({
                   </tbody>
                 </table>
               )}
-              {artikelNummer && (
+              {artikelNummer && canEditReference && (
                 <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '8px' }}>
                   <RefSearchInput placeholder="Gerät hinzufügen, zu dem dieses Zubehör gehört…" disabled={refPending} onSelected={handleAddParentRef} />
                 </div>
@@ -590,6 +596,7 @@ export default function ZubehoerCard({
             </>
           )}
 
+          {canEditItem && <>
           <h3>{connectedAccessories.length > 0 ? 'Weiteres Zubehör verknüpfen' : 'Zubehör verknüpfen'}</h3>
           <form onSubmit={handleLink} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
             <input
@@ -605,6 +612,7 @@ export default function ZubehoerCard({
             </button>
           </form>
           {linkError && <p className="muted" style={{ color: 'var(--color-error, #d73a49)', marginTop: '4px' }}>{linkError}</p>}
+          </>}
 
         </div>
       </details>

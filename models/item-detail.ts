@@ -46,6 +46,8 @@ export interface ItemInstanceSummary {
   Auf_Lager?: number | null;
   Location?: string | null;
   BoxID?: string | null;
+  TenantId?: string | null;
+  LocationRedacted?: boolean;
   UpdatedAt: string | null;
   Datum_erfasst: string | null;
 }
@@ -61,4 +63,13 @@ export interface ItemDetailResponse {
   instances: ItemInstanceSummary[];
   externalDocs?: ExternalDocSummary[] | null;
   co2Impact?: Co2ImpactResult | null;
+  // What the requester may change (tenancy 3a rules), so the UI hides actions that would 403.
+  permissions?: ItemPermissions;
+}
+
+export interface ItemPermissions {
+  // The instance: relocate, edit, remove, review, attachments, accessory links.
+  canEditItem: boolean;
+  // The catalogue entry: description, images, specs.
+  canEditReference: boolean;
 }

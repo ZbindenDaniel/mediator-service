@@ -72,6 +72,9 @@ export interface ItemInstance {
   // Owning tenant for private-logistics isolation (docs/PLANNING_TENANCY.md Phase 2). Nullable:
   // legacy rows and single-tenant deployments leave it null; stamped on create from ctx.tenant.
   TenantId?: string | null;
+  // Set by the server when another org owns the item: Location/ShelfLabel hold the owner org's name,
+  // BoxID is empty (tenancy Phase 3b).
+  LocationRedacted?: boolean;
 }
 
 // TODO(langtext-contract): Remove legacy string fallback from ItemRef.Langtext once all callers consume structured payloads.

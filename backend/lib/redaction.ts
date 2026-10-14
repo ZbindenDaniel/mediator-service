@@ -24,8 +24,10 @@ type Row = Record<string, any>;
  */
 export function redactItemRow<T extends Row>(row: T, identity: RequestIdentity | null = currentIdentity()): T {
   if (!row || canSeePrivate(identity, row.TenantId)) return row;
-  const ownerName = tenantDisplayName(ownerOf(row.TenantId));
-  return { ...row, BoxID: null, Location: ownerName, ShelfLabel: ownerName, LocationRedacted: true };
+  const owner = ownerOf(row.TenantId);
+  const ownerName = tenantDisplayName(owner);
+  // TenantId carries the resolved owner (legacy rows: the default org) so the UI can open its org card.
+  return { ...row, BoxID: null, Location: ownerName, ShelfLabel: ownerName, TenantId: owner, LocationRedacted: true };
 }
 
 export function redactItemRows<T extends Row>(rows: T[], identity: RequestIdentity | null = currentIdentity()): T[] {
