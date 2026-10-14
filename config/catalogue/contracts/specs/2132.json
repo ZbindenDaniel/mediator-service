@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "subCategory": 2132,
+  "fields": [
+    {
+      "key": "Kapazität",
+      "required": true,
+      "description": "Wh, e.g. 57 Wh"
+    },
+    {
+      "key": "Spannung",
+      "required": false,
+      "description": "e.g. 11.4 V"
+    },
+    {
+      "key": "Zellen",
+      "required": false,
+      "description": "e.g. 3-cell"
+    },
+    {
+      "key": "Akkutyp",
+      "required": false,
+      "description": "intern / extern (wechselbar)"
+    },
+    {
+      "key": "FRU",
+      "required": false,
+      "description": "Manufacturer part number (FRU / P/N / Spare part no.), e.g. 01YR564"
+    },
+    {
+      "key": "Kompatible Modelle",
+      "required": false,
+      "description": "Device models this part fits, comma-separated, e.g. ThinkPad T480, T480s"
+    }
+  ]
+}

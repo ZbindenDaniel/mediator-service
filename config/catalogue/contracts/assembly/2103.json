@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "subCategory": 2103,
+  "parts": [
+    {
+      "key": "cover_ram",
+      "label": "RAM-Klappe",
+      "targetSubcategory": 2125,
+      "weight": 1,
+      "question": {
+        "id": "part_cover_ram",
+        "type": "select",
+        "question": "RAM-Klappe?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "cover_drive",
+      "label": "Festplatten-Klappe",
+      "targetSubcategory": 2125,
+      "weight": 1,
+      "question": {
+        "id": "part_cover_drive",
+        "type": "select",
+        "question": "Festplatten-Klappe?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "cover_service",
+      "label": "Service-Abdeckung",
+      "targetSubcategory": 2125,
+      "weight": 1,
+      "question": {
+        "id": "part_cover_service",
+        "type": "select",
+        "question": "Service-Abdeckung?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    }
+  ]
+}

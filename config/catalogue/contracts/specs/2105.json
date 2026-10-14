@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "subCategory": 2105,
+  "fields": [
+    {
+      "key": "Diagonale",
+      "required": true,
+      "description": "Screen size in inches, e.g. 15.6\""
+    },
+    {
+      "key": "Auflösung",
+      "required": true,
+      "description": "e.g. 1920×1080"
+    },
+    {
+      "key": "Panel-Typ",
+      "required": false,
+      "description": "IPS, TN, VA, OLED"
+    },
+    {
+      "key": "Anschluss",
+      "required": false,
+      "description": "eDP 30-pin, eDP 40-pin, LVDS 40-pin …"
+    },
+    {
+      "key": "Oberfläche",
+      "required": false,
+      "description": "matt / glänzend"
+    },
+    {
+      "key": "Bildwiederholrate",
+      "required": false,
+      "description": "e.g. 60 Hz, 144 Hz"
+    },
+    {
+      "key": "Touchscreen",
+      "required": false,
+      "description": "ja / nein"
+    },
+    {
+      "key": "Hintergrundbeleuchtung",
+      "required": false,
+      "description": "LED / CCFL (CCFL needs an inverter)"
+    },
+    {
+      "key": "FRU",
+      "required": false,
+      "description": "Manufacturer part number (FRU / P/N / Spare part no.), e.g. 01YR564"
+    },
+    {
+      "key": "Kompatible Modelle",
+      "required": false,
+      "description": "Device models this part fits, comma-separated, e.g. ThinkPad T480, T480s"
+    }
+  ],
+  "guidance": [
+    "Identify panels by the label on the back (model like N140HCA-EAB); the connector (eDP 30/40-pin) decides compatibility more than the laptop model."
+  ]
+}

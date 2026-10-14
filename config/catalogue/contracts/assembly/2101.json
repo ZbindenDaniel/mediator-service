@@ -1,0 +1,197 @@
+{
+  "version": 1,
+  "subCategory": 2101,
+  "parts": [
+    {
+      "key": "panel",
+      "label": "Displaypanel",
+      "targetSubcategory": 2105,
+      "weight": 8,
+      "question": {
+        "id": "part_panel",
+        "type": "select",
+        "question": "Displaypanel?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "knockout": {
+        "below": 0.25,
+        "cap": 0.19
+      }
+    },
+    {
+      "key": "a_cover",
+      "label": "Display-Cover (A-Cover)",
+      "targetSubcategory": 2106,
+      "weight": 2,
+      "question": {
+        "id": "part_a_cover",
+        "type": "select",
+        "question": "Display-Cover?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "b_cover",
+      "label": "Display-Rahmen (B-Cover)",
+      "targetSubcategory": 2107,
+      "weight": 1,
+      "question": {
+        "id": "part_b_cover",
+        "type": "select",
+        "question": "Display-Rahmen?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "hinge_left",
+      "label": "Scharnier links",
+      "targetSubcategory": 2108,
+      "weight": 2,
+      "question": {
+        "id": "part_hinge_left",
+        "type": "select",
+        "question": "Scharnier links?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "hinge_right",
+      "label": "Scharnier rechts",
+      "targetSubcategory": 2108,
+      "weight": 2,
+      "question": {
+        "id": "part_hinge_right",
+        "type": "select",
+        "question": "Scharnier rechts?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "webcam",
+      "label": "Webcam",
+      "targetSubcategory": 2109,
+      "weight": 1,
+      "question": {
+        "id": "part_webcam",
+        "type": "select",
+        "question": "Webcam?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "microphone",
+      "label": "Mikrofon",
+      "targetSubcategory": 2124,
+      "weight": 1,
+      "question": {
+        "id": "part_microphone",
+        "type": "select",
+        "question": "Mikrofon?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "antenna_left",
+      "label": "WLAN-Antenne links",
+      "targetSubcategory": 2110,
+      "weight": 1,
+      "question": {
+        "id": "part_antenna_left",
+        "type": "select",
+        "question": "WLAN-Antenne links?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "antenna_right",
+      "label": "WLAN-Antenne rechts",
+      "targetSubcategory": 2110,
+      "weight": 1,
+      "question": {
+        "id": "part_antenna_right",
+        "type": "select",
+        "question": "WLAN-Antenne rechts?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "display_cable",
+      "label": "Displaykabel",
+      "targetSubcategory": 2126,
+      "weight": 2,
+      "question": {
+        "id": "part_display_cable",
+        "type": "select",
+        "question": "Displaykabel?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "inverter",
+      "label": "Inverterboard (nur ältere Laptops)",
+      "targetSubcategory": 2111,
+      "weight": 1,
+      "question": {
+        "id": "part_inverter",
+        "type": "select",
+        "question": "Inverterboard?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    }
+  ]
+}

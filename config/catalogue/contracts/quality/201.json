@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "subCategory": 201,
+  "questions": [
+    {
+      "id": "boots",
+      "type": "select",
+      "question": "Startet das Gerät?",
+      "values": [
+        "Ja",
+        "Nein",
+        "Ungetestet"
+      ],
+      "states": {
+        "Ja": 1,
+        "Nein": 0
+      },
+      "weight": 4,
+      "specField": "Funktionstest",
+      "specValue": "%v"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "scale": {
+    "Neuwertig": 1.0,
+    "Einwandfrei": 1.0,
+    "Sehr gut": 0.9,
+    "Gut": 0.7,
+    "Leichte Mängel": 0.55,
+    "Ok": 0.5,
+    "Gebraucht": 0.45,
+    "Deutliche Mängel": 0.3,
+    "Stark beschädigt": 0.15,
+    "Kaputt": 0.0,
+    "Defekt": 0.0,
+    "Nicht zutreffend": null
+  },
+  "grading": {
+    "bands": [
+      {
+        "min": 0.8,
+        "value": 5
+      },
+      {
+        "min": 0.6,
+        "value": 4
+      },
+      {
+        "min": 0.4,
+        "value": 3
+      },
+      {
+        "min": 0.2,
+        "value": 2
+      },
+      {
+        "min": 0,
+        "value": 1
+      }
+    ],
+    "maxUncertainty": 0.25
+  },
+  "questions": []
+}
