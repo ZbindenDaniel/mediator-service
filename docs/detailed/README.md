@@ -34,6 +34,7 @@ Use this directory as the single navigation root for deep-dive operational and i
 | [`agentic-search-events.md`](./agentic-search-events.md) | Agentic search event inspection and analysis |
 | [`item-detail-layout.md`](./item-detail-layout.md) | Item detail UX hierarchy, persona-based design |
 | [`spare-parts-catalog.md`](./spare-parts-catalog.md) | Spare parts: assembly contracts, quality integration, Zerlegen UI |
+| [`taxonomy-and-contracts.md`](./taxonomy-and-contracts.md) | Practical guide: categories + quality/spec/assembly contracts, how quality % and grade are calculated, recipes, rules, troubleshooting |
 | [`Shopware integration.md`](./Shopware%20integration.md) | Shopware product discovery, sync queue architecture |
 | [`glossary.md`](./glossary.md) | Canonical terminology: Item/ItemRef/ItemInstance, Box/Shelf/Location |
 | [`traceability-matrix.md`](./traceability-matrix.md) | Doc-to-code mapping: domain → backend actions → frontend components |

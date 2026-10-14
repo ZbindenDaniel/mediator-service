@@ -61,6 +61,13 @@ input is the normalized generic `components[]` list (with the `disks[]` shorthan
 placeholders (`Default string`, `To be filled by O.E.M.`, single-char fillers, …) are
 rejected as identity/report keys, for both machine and component serials.
 
+### Creation by hand → `POST /api/items/:parent/spare-parts/component` (#984)
+The manual counterpart for the nested quality assessment: `{ slotKey, actor }` creates a reference-less
+`C-` component in that slot (no serial needed — identity and reports come later). The slot must exist
+on the parent's (effective) assembly contract; an occupied single slot returns 409 with the existing
+`itemUUID`; `multipleAllowed` slots accept more. The UI calls it lazily — only when the part's own
+assessment is saved — so opening and abandoning a part creates nothing.
+
 ### Graduation → extracted item (`backend/lib/graduate-component.ts`)
 Folded into `remove-from-device`. When the item still needs graduation (`needsGraduation`:
 no Artikelnummer yet):
@@ -72,6 +79,9 @@ no Artikelnummer yet):
    `user_item_marks` cascades via its FK's `ON UPDATE CASCADE`. **Reports are serial-keyed →
    untouched.** A partial swap would strand relations/events, so it must be all-or-nothing.
 4. Write the `item_ref_relations` `'Ersatzteil'` provenance link (parent ref → component ref).
+- **Subcategory guard (#984):** the component was assessed with its slot's `targetSubcategory`.
+  A chosen ref of another subcategory returns 409 (`slotSubCategory`/`refSubCategory`) unless
+  `confirmSubCategoryChange: true`; a `newRef` without `Unterkategorien_A` gets the slot's.
 - **Write-once guard:** re-setting an already-set identity throws `WriteOnceIdentityError`
   → HTTP 409.
 - A component that already has a reference (legacy catalog-spare-part instance) is relocated
@@ -88,11 +98,12 @@ existing handlers already key on:
 
 ## Parent → Ersatzteil is contract-driven
 
-Extraction and "the parent becomes a spare-part donor" are **decoupled**. `remove-from-device`
-marks the parent `Ersatzteil` (quality=1 + Shopware enqueue) only when
-`markParentAsSpare` is set — parting a device out for spares marks it; pulling a drive from a
-device that will still be resold whole does not. The default (`markParentAsSpare` absent ⇒
-true) preserves the historical parting-out behavior; callers pass the contract-driven value.
+Extraction and "the parent becomes a spare-part donor" are **decoupled** (#982,
+`backend/lib/parent-slot.ts`): removing a part records its slot as missing on the parent (answers
+carried over) and the quality calculation decides. The parent is additionally marked as donor
+(manual grade 1 + Shopware enqueue) when the slot is **unweighted** (refurbishment contracts —
+the historical behaviour); weighted catalogue slots leave it to the score. `markParentAsSpare`
+in the request overrides either way.
 
 ## Data-model changes (`backend/db.ts` migrations)
 - `item_relations.SlotKey` — explicit slot key, so it stops being overloaded onto `Notes`.

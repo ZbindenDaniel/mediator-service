@@ -6,6 +6,8 @@ Domain service utilities — the shared logic layer between action handlers and 
 ## Contents
 - `media.ts` / `media-request.ts` / `media-audit.ts` / `media-health.ts` — item photo and file storage operations; resolves local vs WebDAV paths
 - `quality-contracts.ts` — loads quality/spec/assembly JSON contracts from `../../contracts/` (assembly loading also in `backend/contracts/registry.ts`)
+- `parent-slot.ts` — a part left its device: carry the parent's answers over with the slot set to missing, mark as spare donor per contract, recompute
+- `quality-score.ts` — percentage quality range + derived 1–5 grade (respects `QualityManual`, U5): effective subcategory (ref, else parent slot target), compute from latest assessment + in-device parts, store on `items."QualityScoreMin/Max"`, walk up `Zerlegt_aus`; `recomputeAllQualityScores` for `npm run quality:recompute`
 - `langtext.ts` — Langtext (product description) formatting and serialization
 - `labelHtml.ts` / `labelTemplateLoader.ts` — label HTML generation and template resolution
 - `co2Calculator.ts` — CO₂ recovery potential scoring

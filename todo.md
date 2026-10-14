@@ -48,10 +48,10 @@
   intake auto-creates in-device components, but there is no explicit operator entry point in
   Zerlegen to add an unidentified (reference-less) component by hand. See
   [`docs/detailed/component-lifecycle.md`](docs/detailed/component-lifecycle.md).
-- **Components: contract signal for parent→Ersatzteil.** `remove-from-device` honors
-  `markParentAsSpare` but nothing yet supplies it from a contract/Auftrag — decide whether it is
-  a parent field or an operator toggle at Zerlegung and wire it. The API never auto-marks without
-  the flag.
+- ✅ **Components: contract signal for parent→Ersatzteil (#982).** Now contract-driven: removing a part from an
+  unweighted slot marks the parent as spare donor (manual grade 1), a weighted slot leaves it to the score;
+  `markParentAsSpare` in the request still overrides. (The old note "never auto-marks without the flag" was
+  wrong — the flag defaulted to true, and `move-item` marked unconditionally.)
 - **Components: sever `Zerlegt_aus` link on sale/stock-removal.** The provenance link is kept
   after graduation; severing it when the extracted item is sold + stock-removed is deferred.
 - **Components: verify intake image can read per-drive serials.** The serial (with `wwn`/`model`
@@ -280,8 +280,14 @@
 
 ## Priority 2 — Feature Improvements
 
+**Style update (975) — follow-ups:**
+- Check the new palette on the screens that looked bad (intake station, warehouse monitors); if wide-gamut screens still look loud, add a `@media (color-gamut: p3)` block lowering chroma further.
+- ✅ ~~Field density in item tabs~~ — `DetailRows` (977). Still old layout: ZubehoerCard tables, stock table, `AgenticSnapshotsPanel` diff (`.responsive-row` rules can go once that moves over).
+- `LoadingPage` rainbow emoji colours are still saturated hardcoded hex (left as-is: playful loader).
+- Inline `style={{}}` colours in `PrinterQueuesCard`, `ZubehoerCard`, `SparepartSlotPopup` etc. follow the theme via alias tokens (`--color-error`, `--border`, …); move them into classes when those files are touched.
+
 **Per-user item marking (step 779) — deferred items:**
-- CSS polish for `.mark-btn` added; amber accent color is hardcoded (`#f59e0b`) — wire to a CSS variable once a warning/accent token is established.
+- ✅ ~~`.mark-btn` amber hardcoded~~ — now `var(--warn)` (colour tokens, OVERVIEW 975).
 - Bulk mark action in `BulkItemActionBar` not yet added.
 - Note text not shown as tooltip on the star icon in the list — keep as tab-only for now.
 
@@ -398,10 +404,12 @@
    Feature-disposition plan + gap list in
    [`docs/PLANNING_NEW_USE_CASE.md`](docs/PLANNING_NEW_USE_CASE.md). Use case =
    thorough spare-part cataloging (catalogue every reusable part); disassembly/
-   component lifecycle is the centerpiece to strengthen. **Laptop parts model + quality roll-up planned (#973):**
-   [`docs/PLANNING_PARTS_CATALOGUE.md`](docs/PLANNING_PARTS_CATALOGUE.md) — 5 phases; start with
-   Phase 1 (validator, effective subcategory, `QUALITY_DEFAULT` split, quality COALESCE order).
-   Domain input pending (floors, taxonomy tree, "Fest verbaut") — plan §10. Two greenfield
+   component lifecycle is the centerpiece to strengthen. **Laptop parts catalogue (#973 plan, #980 Phases 1–3 ✅):**
+   [`docs/PLANNING_PARTS_CATALOGUE.md`](docs/PLANNING_PARTS_CATALOGUE.md) — percentage quality range,
+   `multi` type, validator, effective subcategory built; **one quality system for all deployments (#982)**;
+   catalogue taxonomy + part tree + specs drafted in `config/catalogue/`; **nested assessment built (#984)** —
+   browser walkthrough pending. **Before the live refurbishment system: calibrate grade bands (plan C1).**
+   Two greenfield
    workstreams gate it:
    - **G‑T1 Multi-tenancy (largest lift).** No `tenant`/`mandant`/`org_id`
      concept exists anywhere. **Phased plan ready:**
@@ -527,15 +535,22 @@
 ## Open Questions
 
 ### Still Open
+- **Empty fields hidden by default (#977):** `DetailRows` folds empty fields behind a toggle. During cataloguing, seeing what's missing may matter more; should the toggle state be remembered, or default to "show" on some screens?
+- **Tab-action order (#975):** should the primary action (e.g. Bearbeiten) always come first in `.tab-actions`? Currently Etikett leads in the instance tab. Up for discussion.
 - **Admin cards don't validate API responses (#974 finding):** e.g. `SystemStatusCard` renders `/api/media/health` without checking `res.ok`/shape; an unexpected body (`imageProbe` missing) throws during render and, without an error boundary, blanks the whole page. Add response checks + an error boundary around admin cards.
-- **Contracts README overstates validation (#973):** `contracts/README.md` says contracts are validated against their TS shapes at startup; they are only JSON-parsed (admin upload checks top-level shape only). Fix = Phase 1 of `docs/PLANNING_PARTS_CATALOGUE.md`.
-- **Quality review trusts client `subCategory` (#973):** `quality-review.ts` scores with whatever subcategory the client sends; article-less in-device components have no subcategory at all (it lives only on `item_refs`). Fix planned in parts-catalogue Phase 1.
-- **Item views prefer article quality over instance quality (#973):** `COALESCE(r."Quality", i."Quality")` in `db.ts` item select — investigate why before flipping (needed for per-instance roll-up).
+- **⚠ Calibrate refurbishment grade bands before deploying #982 to the live system (plan C1):** with weighted averaging, a typical used laptop (old grade 4) now scores 88 % → 5, a worn one (old 3) 75 % → 4; knock-outs keep 1/2 cases unchanged. Adjust `grading.bands` (and knock-out caps to match) or weights in `contracts/quality/general.json`, then `npm run quality:recompute`.
+- **Switch the test stack to the catalogue config (#985):** `docker compose -f docker-compose.yml -f docker-compose.catalogue.yml up -d --build`, then `npm run taxonomy:apply -- config/catalogue/taxonomy.seed.json` and restart the mediator (see `config/catalogue/README.md`).
+- **Walk the nested assessment through in a browser (#984):** on a disposable DB with the `config/catalogue/` overlay — Laptop → Displayassembly → Webcam, save/discard/reload mid-tree. Only component-tested so far.
+- **Low-score nudge after a quality review keys on the pessimistic own grade (#984):** with many unanswered questions it shows "Qualität 1/5 — Einzelteile katalogisieren?" for items that are merely unassessed; base it on the derived item grade (or drop it in the catalogue deployment).
+- **No UI path graduates components (#984 finding):** "Entnehmen" goes through `move-item`, so article-less parts land in boxes without a reference; only the `remove-from-device` API sets identity. Decide whether the Zerlegen "Entnehmen" should offer identity (pick/create ref) for `C-` parts.
+- **Item lists don't show the % range yet (#982/#983):** the instance tab does (#983); lists/badges still show only the grade. Show the range small next to it and sort by the lower bound (plan Q9).
+- **Item views prefer article quality over instance quality (#973):** `COALESCE(r."Quality", i."Quality")` in `db.ts` item select. Matters again since #982 derives instance grades — an article-level grade hides them. Investigate why the article wins before flipping.
+- **Admin tests depend on the local `.env` (#980 finding):** `admin-contracts`/`admin-taxonomy` tests return 401 whenever `.env` sets `ADMIN_SECRET` (dotenv loads it into Jest). Run with `ADMIN_SECRET=` or isolate the env in those tests.
 - **Feature-flag gaps (#970):** image upload in create/edit forms isn't covered by `item-images`; box notes stay editable in the box edit form with `box-notes` off; old `SHOPWARE_SYNC_ENABLED`/`ERP_SYNC_ENABLED` not folded into the manifest. Fine for the POC; decide if the catalogue deployment needs them.
 - **Platform-admin model:** `PLANNING_NEW_USE_CASE.md` §12.3 says platform admins are the `super` users of a designated admin tenant; the implementation (`identity.ts`) uses a separate `platformAdminGroup` (`mediator-admin`). Settle when defining `super` powers.
 
 - **Revive flag-based review metrics (deferred).** The review wizard makes one explicit approve/reject decision and, on reject, feeds a concrete before→after correction diff + notes into the next run (chosen over deriving flags — a diff is richer and unambiguous). Consequence: `bad_format` / `wrong_physical_dimensions` / `information_present` are sent at non-blocking defaults, so `AgenticReviewMetricsRows` (`% Schlecht formatiert / Falsche Dimensionen / Info unvollständig`) now reads all-positive. If those dashboards are still wanted, derive the flags **purely for metrics** (e.g. text edited ⇒ bad_format, dimension edited ⇒ wrong_physical_dimensions, required spec blanked ⇒ information_present=false), decoupled from the re-run path. Not needed for extraction quality.
-- For the **laptop parts catalogue** (#973, plan §10): per-part quality floor table (colleagues); confirm taxonomy 210 tree; "Fest verbaut" roll-up semantics; should a manual `Quality` override survive a roll-up recompute?
+- For the **laptop parts catalogue** (plan §10, updated #983): calibrate grade bands (C1, later); "Fest verbaut" counted or excluded; Displayassembly sold whole?; rework the drafted weights, taxonomy and part specs in `config/catalogue/`.
 - For **spare parts `drive_type`**, should this question move to the disassembly contract storage slot (needs `qualityQuestion[]` array support on parts) or stay in quality/201.json as a follow-up spec question? Currently stays in quality/201.json (TBD).
 - For **spare parts bidirectional suggestions**, when a device's quality check says "PS missing", should the system surface matching PS units in inventory for the operator? Deferred to phase 2 — needs structured spec matching.
 - For **shelf totals**, should weight/item count include nested boxes only, loose items only, or both?

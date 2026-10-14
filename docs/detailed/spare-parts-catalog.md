@@ -20,7 +20,15 @@
   answers contribute to the quality score and InstanceSpecs — in both the operator quality
   review **and** the intake quality step.
 - Zerlegen section inside the existing Accessories tab (no new tab).
-- Four slot states: Potential, Empty, Cataloged, Removed.
+- Slot states: Unknown, Present, Empty, Cataloged, Removed, plus NotApplicable ("Nicht vorgesehen") and Integrated
+  ("Fest verbaut") for canonical presence selects (#980).
+- **Nested assessment (#984):** in "Qualität bewerten", weighted slots show their part's status and
+  "Bewerten →"; the part's own assessment opens on top (breadcrumb Laptop › Displayassembly › Webcam),
+  the part is created on save, unsaved answers survive in localStorage.
+- Removing a part (Entnehmen / remove-from-device) records its slot as missing on the parent with the parent's
+  answers carried over; unweighted slots additionally set the parent to grade 1 (manual), as before (#982).
+- Percentage quality range per item incl. in-device parts (weighted slots/questions, unchecked = uncertainty),
+  recomputed up the `Zerlegt_aus` chain — see [PLANNING_PARTS_CATALOGUE.md](../PLANNING_PARTS_CATALOGUE.md) §5.
 - API endpoints for cataloging, extracting, and un-cataloging parts.
 - **Deferred-identity components** ([component-lifecycle.md](component-lifecycle.md)): intake
   auto-creates one reference-less in-device component per scanned disk; `remove-from-device`
@@ -132,6 +140,11 @@ Returns all `Zerlegt_aus`-linked children of the parent device, with `slotKey`, 
 ### `POST /api/items/:parentUuid/spare-parts`
 Catalogs a new spare part (with a reference). Body: `{ artikelNummer, actor, slotKey? }`.
 Creates an `items` row (BoxID=null) and an `item_relations` row (Zerlegt_aus), plus an `item_ref_relations` Ersatzteil link if the parent has an `Artikel_Nummer`. Returns `{ itemUUID }`.
+
+### `POST /api/items/:parentUuid/spare-parts/component`
+Catalogs a part into a slot **without a reference** (in-device `C-` component) — used by the nested
+quality assessment. Body: `{ slotKey, actor }`. Returns `{ itemUUID, subCategory }` (201); 400 for a slot
+the device contract doesn't define; 409 with the existing `itemUUID` when a single slot is occupied.
 
 ### `DELETE /api/items/:uuid/spare-part-link`
 Removes the spare part link and deletes the item instance. Only allowed when `BoxID = null` (part not yet extracted). Returns 409 if already extracted.

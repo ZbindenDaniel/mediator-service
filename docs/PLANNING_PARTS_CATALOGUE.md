@@ -1,6 +1,8 @@
-# Planning: Laptop Parts Catalogue (nested assemblies + quality roll-up)
+# Planning: Laptop Parts Catalogue (nested assemblies + percentage quality)
 
-**Status:** Plan reviewed against the code, **no code yet** (2026-10-13).
+**Status:** Phases 1–4 built (#980, #982, #984). Catalogue taxonomy, contracts and specs **drafted** in
+[`config/catalogue/`](../config/catalogue/README.md) for rework on the test environment. Before the live refurbishment
+system gets this: calibrate the grade bands (C1).
 **Parent plan:** [PLANNING_NEW_USE_CASE.md](PLANNING_NEW_USE_CASE.md) §7–8 (spare-part cataloguing deployment).
 **Related:** [spare-parts-catalog.md](detailed/spare-parts-catalog.md) · [component-lifecycle.md](detailed/component-lifecycle.md) ·
 [PLANNING_TAXONOMY_EXTERNALIZATION.md](PLANNING_TAXONOMY_EXTERNALIZATION.md) · [contracts/](../contracts/README.md)
@@ -9,17 +11,15 @@
 > - **Every part type is a subcategory.** Its attributes live in that subcategory's own quality/spec contracts.
 > - **Every "consists of" is an assembly contract** on that subcategory. The Zerlegen tab already loads it by the
 >   item's own subcategory, so nesting falls out for free.
-> - **A part's condition rolls up into its parent's quality**, bounded by a per-slot `qualityFloor`, so a broken
->   webcam lowers a laptop without making it a parts donor.
-> - **The operator can drill into sub-assemblies during the quality review** and come back to the parent.
+> - **Quality is a percentage range** ("60–85 %") — **for every deployment** (#982). Each scored question and each
+>   weighted slot adds its weight to the total; answers are named states ("Gut" 70 %, "Kaputt" 0 %). What has been
+>   checked is certain, what hasn't is uncertainty. A part's range rolls up into its parent. Knock-outs cap the whole
+>   item on safety/function defects. The 1–5 grade is **derived**: pessimistic from the lower bound, and only when the
+>   range is narrow.
+> - **The operator can drill into sub-assemblies during the quality review** and come back to the parent (Phase 4).
 >
-> The plan uses the existing contract formats plus five small, additive extensions (§4). It is behaviour-neutral
-> for the refurbishment deployment.
->
-> **Reviewing the plan against the code turned up three blockers.** They are resolved in the design (§8):
-> 1. Article-less components have no subcategory.
-> 2. `QUALITY_DEFAULT = 3` would cap every parent.
-> 3. Item lists prefer the article's quality over the instance's.
+> Consumers of the 1–5 grade (badges, filters, Shopware, ERP, AI priority, labels) are unchanged — they read the
+> derived grade.
 
 ---
 
@@ -33,6 +33,8 @@
 | D4 | A broken or missing sub-part **does lower the parent's quality** | user |
 | D5 | The quality review lets the operator **jump into sub-assemblies** and back | user |
 | D6 | Taxonomy proposal (§3) | proposed, **needs confirmation** |
+| D9 | **One quality system** (2026-10-14): weight per component, distinct named states → fractions; refurbishment uses it too. U1 finer default scale, U2 knock-outs, U3 five bands, U4 pessimistic (lower bound) + no grade on wide ranges, U5 imported grades stay until the first assessment, U6 manual override flag, U7 rescore stored answers, U8 retire the `is_functional` shortcut, U9 intake identical | user |
+| D8 | **Quality is a percentage range** with uncertainty: weights per component; checked parts are certain, unchecked parts are uncertainty (2026-10-14). Replaces the earlier `qualityFloor` / min-based roll-up idea | user |
 | D7 | Everything deployment-specific lives in the catalogue deployment's `CONTRACTS_OVERLAY_DIR` + `TAXONOMY_SEED_FILE` | proposed (existing mechanisms) |
 
 ---
@@ -55,11 +57,16 @@ What follows from these rules:
 
 ---
 
-## 3. Taxonomy (proposal, D6)
+## 3. Taxonomy (D6) — drafted in `config/catalogue/taxonomy.seed.json`
 
 The new Hauptkategorie **210 "Laptop-Ersatzteile"** gets subcategories `2101…2199`. This keeps the numeric convention
 (parent in tens; sub = parent·10 + n, the same as 100 → 1001…). The existing `202 Laptop-Ersatzteile` is set `active: false`
 in the catalogue deployment. Generic components keep their existing codes.
+
+**Revised 2026-10-14 (#985):** the catalogue taxonomy contains **only** Hauptkategorie 20 "Laptop" (201) and 210
+"Laptop-Komponenten". The generic codes first reused for Mainboard/CPU/RAM/drive/WLAN/battery (601/602/603/901/710/206)
+moved into 210 as 2127–2132, so no other main category is needed and `group-210` covers every part. Microphone (2124) was
+added. Apply to an existing DB with `npm run taxonomy:apply` (§4.6).
 
 ```
 201  Laptop                              [assembly]
@@ -79,22 +86,22 @@ in the catalogue deployment. Generic components keep their existing codes.
 │   └─ 2114 Einschaltknopf
 ├─ 2103 Gehäuse-Boden (D-Cover)         [assembly]   ← missing rubber feet: quality question
 │   └─ 2125 Abdeckung / Serviceklappe   slots named by function (RAM-, HDD-, Service-)
-├─ 601  Mainboard
+├─ 2127 Mainboard
 ├─ 2115 Daughterboard                   [assembly] → 2126 slot: Flachbandkabel   (slots 1–3)
 ├─ 2116 Strombuchse (DC-Jack)
-├─ 602  Prozessor                 (often "Fest verbaut" = soldered BGA)
+├─ 2128 Prozessor                 (often "Fest verbaut" = soldered BGA)
 ├─ 2117 Kühlkörper
 ├─ 2118 Lüfter                    slots: 1, 2 (or CPU/GPU)
-├─ 603  Arbeitsspeicher           multipleAllowed (often "Fest verbaut")
+├─ 2129 Arbeitsspeicher           multipleAllowed (often "Fest verbaut")
 ├─ 2119 Festplattenhalterung (Caddy)    slots: 1, 2
 ├─ 2126 Interne Kabel             slots: Festplattenkabel 1, 2
-├─ 901  Festplatte/SSD            slots: 2.5" 1, 2.5" 2, M.2 1, M.2 2 (Formfaktor/Interface = spec)
+├─ 2130 Festplatte/SSD            slots: 2.5" 1, 2.5" 2, M.2 1, M.2 2 (Formfaktor/Interface = spec)
 ├─ 2120 Optisches Laufwerk              [assembly] → 2126 slot: Laufwerkskabel
 ├─ 2121 Lautsprecher              slots: links, rechts
-├─ 710  WLAN-Karte                (antenna cables belong to 2110, not here)
+├─ 2131 WLAN-Karte                (antenna cables belong to 2110, not here)
 ├─ 2122 Bluetooth-Modul           (usually on the WLAN card → "Nicht vorgesehen")
 ├─ 2123 CMOS-Batterie
-└─ 206  Laptop-Akku
+└─ 2132 Laptop-Akku
 ```
 
 The rationale for each choice:
@@ -116,182 +123,225 @@ taxonomy editor (Phase 4 of taxonomy externalization) for an existing DB.
 
 ---
 
-## 4. Contract extensions (all additive, optional)
+## 4. Contract extensions (all additive, optional) — ✅ built in #980 except 4.4
 
-### 4.1 Slot presence values (canonical)
-Slot questions in the catalogue overlay use one select with fixed values. The strings become **shared constants in
-`models/assembly-contract.ts`**, used by the frontend slot-state code and the backend roll-up. Today the frontend
-hardcodes `'false' | 'Nicht vorhanden'` ([ZubehoerCard.tsx:43,61](../frontend/src/components/ZubehoerCard.tsx)).
+### 4.1 Slot presence values (canonical) ✅
+Shared constants in [models/assembly-contract.ts](../models/assembly-contract.ts) (`SLOT_PRESENT`, `SLOT_MISSING`,
+`SLOT_NOT_APPLICABLE`, `SLOT_INTEGRATED`). They are used by the Zerlegen slot state and by the score on both sides.
 
-| Value | Slot state | Roll-up (§5) |
+| Value | Slot state | Score (§5) |
 |---|---|---|
-| `Vorhanden` | `present` (→ `cataloged`/`removed` once an item exists) | child quality if assessed, else none |
-| `Nicht vorhanden` (also boolean `false`) | `empty` | `floor` |
-| `Nicht vorgesehen` | **new** `notApplicable`: greyed out, no Hinzufügen | none |
-| `Fest verbaut` | **new** `integrated`: no separate item, condition asked on parent | none (see Q3) |
+| `Vorhanden` | `present` (→ `cataloged`/`removed` once an item exists) | child range if an item is linked, else uncertain |
+| `Nicht vorhanden` (also boolean `false`) | `empty` | 0 (certain) |
+| `Nicht vorgesehen` | `notApplicable`: "–", no Erfassen | excluded (weight not counted) |
+| `Fest verbaut` | `integrated`: "▣", no Erfassen | excluded; the condition is asked on the parent (Q3) |
 
-### 4.2 `qualityFloor` on `AssemblyPart`
-```ts
-/** Lowest quality (1–5) a problem with this part can pull the parent down to. Absent = no roll-up (legacy behaviour). */
-qualityFloor?: number;
+The presence select is now shown in every state except `cataloged`, so a wrong answer can be corrected. This used
+to apply to booleans only.
+
+### 4.2 Scoring fields: `weight`, `states`, `knockout` ✅ (#980, extended #982)
+```jsonc
+// question
+{ "id": "keyboard_condition", "type": "select", "values": ["Gut", "Abgenutzt", "Beschädigt", "Ungetestet"],
+  "weight": 3,                                    // importance; defaults to 1 when the question is scored
+  "states": { "Abgenutzt": 0.75, "Beschädigt": 0.25 },   // per-question override; "Gut" comes from the scale
+  "knockout": { "below": 0.5, "cap": 0.39 } }      // certainly below 50 % → whole item at most 39 % (Upcycling)
+// slot
+{ "key": "mainboard", "targetSubcategory": 2127, "weight": 10, "knockout": { "below": 0.25, "cap": 0.19 }, … }
+// general.json
+{ "scale": { "Neuwertig": 1, "Sehr gut": 0.9, "Gut": 0.7, "Leichte Mängel": 0.55, "Ok": 0.5, "Gebraucht": 0.45,
+             "Deutliche Mängel": 0.3, "Stark beschädigt": 0.15, "Kaputt": 0, "Defekt": 0, "Nicht zutreffend": null },
+  "grading": { "bands": [{ "min": 0.8, "value": 5 }, …, { "min": 0, "value": 1 }], "maxUncertainty": 0.25 } }
 ```
-- Display: `1`, Mainboard: `1`, Akku: `2`, Tastatur: `2`, Webcam: `3`, Abdeckung: `4`, … These are domain input (Q1).
-- **Validator rule:** a slot with `qualityFloor` must not also carry `qualityImpact` on its `question`, because that would count twice.
-  Legacy slots (refurbishment 201) keep `qualityImpact` and have no floor, so their behaviour is unchanged.
+- A question is **scored** when it has `weight`, `states` or legacy `qualityImpact`; spec questions ("RAM?") are not.
+- Answer → fraction: question `states`, else the contract `scale`, else legacy `qualityImpact` as (v−1)/4. `null` =
+  excluded ("Nicht zutreffend"); no value anywhere ("Ungetestet", "?") = uncertainty.
+- **Knock-out:** applies only when the component is *certainly* below `below` (an unanswered question adds
+  uncertainty, it does not cap — otherwise every skipped safety question would make the item ungradable).
+- Unweighted slots: their presence question is scored like any question (refurbishment booleans `has_fan` …);
+  weighted slots are scored through the slot (presence + child range).
+- The validator rejects a scored select/boolean whose answers all lack a value (typo guard).
 
-### 4.3 `multi` question type (D2)
+### 4.3 `multi` question type ✅
 ```json
 { "id": "missing_keys", "type": "multi", "question": "Fehlende Tasten?",
   "suggestions": ["Esc","F1","…","Ä","Ö","Ü","Enter","Leertaste",","],
   "specField": "Fehlende Tasten", "specValue": "%v",
-  "qualityImpact": { "1": 4, "3": 3 } }
+  "weight": 2, "qualityImpact": { "1": 4, "3": 3 } }
 ```
-- `suggestions` gives an **open** chip input (type or pick); `values` instead gives a **closed** checkbox list.
-- **Stored as a JSON array string** (`'["F5",",","Ä"]'`) because `answers` is `Record<string,string>`. Commas can't be
-  the separator because the comma is itself a key. An empty list counts as unanswered.
-- `specValue` `%v` renders the list joined with `", "`.
-- `qualityImpact` keys are **count thresholds**: the highest key ≤ number of entries applies. So 1–2 missing keys
-  give 4, and 3 or more give 3.
-- `showIf` *targeting* a multi question is not supported in v1 (equality makes no sense); the validator rejects it.
-- Intake ignores the type (intake is off in this deployment). The intake question filter must skip unknown types
-  rather than crash.
+- **Input:** `suggestions` gives an **open** chip input (type + Enter, datalist); `values` gives a **closed** checkbox list.
+  Both offer a "Keine" button.
+- **Storage:** a JSON array string. **`"[]"` = checked, nothing found** (full score); absent = not checked
+  (uncertainty). This differs from the first draft, where an empty list counted as unanswered: "none missing" must be
+  recordable.
+- **`qualityImpact`:** keys are count thresholds (highest key ≤ count applies; below the lowest key = 5).
+- **Spec output:** `%v` = entries joined with ", "; `"[]"` produces no spec line.
+- **Restrictions:** `showIf` cannot target a multi question (validator), and intake skips multi questions entirely.
+- **Styling:** the chip/checkbox layout is inline in `QualityReviewStep.tsx` for now; move it to SCSS later.
 
-### 4.4 Shared contract per Hauptkategorie
-Without this, about 25 part subcategories would each repeat the same two questions: `part_condition` (OK / beeinträchtigt / defekt /
-ungetestet → 5/3/1/–) and `part_fru` (text → spec `FRU`).
-- **New lookup chain:** `general` → `group-<hauptCode>` → `<subCode>`, e.g. `quality/group-210.json`, and the same for specs.
-- **Why the `group-` prefix:** main-category and subcategory codes share one numeric space (e.g. 110 vs a future 10th
-  sub of 10). The admin upload route already accepts `[A-Za-z0-9_-]+`.
-- **Reused parts outside 210:** 601/602/603/901/710/206 sit outside 210 and do not get `group-210`. Either give them
-  their own `quality/<code>.json` with the two questions, or allow `"extends": "group-210"` in a contract. We pick the
-  former for v1 (6 files, explicit). Revisit if it grows.
+### 4.4 Shared contract per Hauptkategorie ✅ (#982)
+`registry.getQualityContract(sub)` merges `quality/group-<floor(sub/10)>.json` before the subcategory's own file
+(201 → group-20, 2101 → group-210 — the taxonomy's numeric convention, so no DB lookup and no import cycle). Every
+caller (review, intake, score, `GET /api/contracts/quality/<code>`) sees the merged contract. Since #985 every
+catalogue part is inside 210, so group-210 covers all of them. Spec contracts are not grouped (not needed so far).
 
-### 4.5 Contract validation (tooling)
-[contracts/README.md](../contracts/README.md) claims contracts are validated against their TS shapes at startup. **They are not.**
-The registry only parses JSON, and the admin upload ([admin-contracts.ts:35](../backend/actions/admin-contracts.ts)) checks only
-the top-level shape. With ~30 interlinked files that is the biggest maintenance risk. Add one validator
-(`backend/contracts/validate.ts`) used by a Jest test over shipped + overlay dirs, by a CLI (`npm run contracts:check`)
-and by the admin upload. It checks:
-- slot `key` unique per file, and question ids unique across the merged set (general + group + sub + assembly);
-- `targetSubcategory` exists in the taxonomy;
-- **no cycles** in the assembly graph (a subcategory transitively containing itself);
-- floor/impact exclusivity (§4.2);
-- `showIf` targets an existing, non-multi question;
-- presence-select slots use exactly the canonical values (§4.1).
+### 4.5 Contract validation ✅
+[backend/contracts/validate.ts](../backend/contracts/validate.ts) is used by:
+- the Jest suite, which validates the shipped set against the shipped taxonomy seed;
+- `npm run contracts:check` (shipped + `CONTRACTS_OVERLAY_DIR`, against `TAXONOMY_SEED_FILE`; exit 1 on problems);
+- the admin upload, which reports only problems the upload *introduces* and doesn't require the file's own code to
+  exist yet, so a category can be created after its contract.
+
+What it checks:
+- **Per file:** question types, select values, impact keys ⊂ values, impacts 1–5, positive weights, multi rules,
+  part keys/labels/targets, weighted-slot rules.
+- **Across files:** question ids unique across general + assembly + sub, `showIf` targets exist and aren't multi,
+  slot targets exist in the taxonomy, **no assembly cycles**.
+
+**On the first run it found three real bugs in the shipped refurbishment contracts (fixed in #980):**
+- `quality/102.json` `has_os` had `qualityImpact {true: 0, false: 0}`. The 1–5 calculation takes the minimum and
+  clamps to 1, so **every desktop whose OS question was answered was rated "Ersatzteil"**. The impact is removed now,
+  as the question was clearly meant to have none.
+- `ram_gb` / `storage_gb` / `drive_type` existed in both `quality/102.json` and `assembly/102.json`, with different
+  value lists, so the form showed them twice. The quality copies are removed and "24" is merged into the assembly RAM
+  values, following the rule that the assembly contract owns component questions.
+- `assembly/102.json` GPU slot targeted non-existent subcategory 604; it now targets 701 Graphikkarte.
+
+### 4.6 Taxonomy apply + deployment config (#985)
+- `npm run taxonomy:apply -- <seed>` (`backend/lib/taxonomy-apply.ts`): upserts the seed into an existing DB and
+  deactivates everything else (soft — items keep their codes); refuses reparenting. Startup only seeds an empty DB.
+- `docker-compose.catalogue.yml`: sets `TAXONOMY_SEED_FILE`, `CONTRACTS_OVERLAY_DIR` (bind-mounted
+  `config/catalogue/contracts`) and `FEATURES_FILE` for the catalogue stack.
+- `contracts:check` lists contracts for subcategories outside the taxonomy as unused instead of failing
+  (`skipUnknownCodes`), so the shipped refurbishment files don't block a catalogue deployment.
 
 ---
 
-## 5. Quality roll-up (D4)
+## 5. Quality (D4, D8, D9) — ✅ #980 + unified in #982
 
-### 5.1 Algorithm
+### 5.1 Calculation ([models/quality-score.ts](../models/quality-score.ts) — one function for server, intake, preview)
 ```
-effective(item) = min( ownScores(item) ∪ { slotScore(s) for each slot s of item's assembly contract } )
-                  → QUALITY_DEFAULT only if that set is empty
-
-slotScore(s) =
-  slot has no qualityFloor                      → none
-  child(ren) linked & in device & has a score   → max(min(childEffective…), floor)
-  child linked & REMOVED (BoxID set)            → floor        (the part is gone from this device)
-  answer "Nicht vorhanden" / false              → floor
-  "Nicht vorgesehen" / "Fest verbaut" / unknown → none
-  child linked, not yet assessed                → none, item flagged "Bewertung unvollständig"
+total    = Σ weight of every scored question and weighted slot
+certain  = Σ weight × fraction   over what has been checked
+possible = certain + Σ weight    over what has not been checked
+range    = certain/total … possible/total, then both bounds ≤ the lowest applying knock-out cap
+grade    = band(range.min)  if range.max − range.min ≤ maxUncertainty, else none ("?")
 ```
-- **Recursion:** `childEffective` already includes the child's own sub-parts. Example: a broken webcam (1) in a
-  Displayassembly (webcam floor 3) gives an assembly of 3; the laptop's display floor is 1, so the laptop is `max(3,1)` = 3.
-- **multipleAllowed:** the slot score is the worst of its instances.
+Worked example (user): webcam 3 (3/3), hinges 4 (3/4), keyboard 5 (unchecked), mainboard 8 (6/8) → 20/12/17 → **60–85 %**
+(a test case). Slots: linked parts in the device → `w × [child min, child max]` (multipleAllowed: average); removed to
+a box or "Nicht vorhanden" → 0; "Nicht vorgesehen"/"Fest verbaut" → excluded; otherwise uncertain.
 
-### 5.2 Blocker found in review: `QUALITY_DEFAULT`
-`deriveQualityFromAnswers` returns `QUALITY_DEFAULT = 3` ([models/quality.ts:47](../models/quality.ts)) when no answer
-carries an impact. If that 3 were rolled up, **every unscored child would cap its parent at 3 ("Ok")**.
-- **Fix:** split the function so it returns the raw score list (or `null` when unscored). The default is applied **only** at
-  the top, when the combined set is empty.
-- An unscored child is treated as "not assessed", not as 3.
+### 5.2 Storage and grade
+- `items."QualityScoreMin/Max"` (REAL 0–1) — the range incl. parts.
+- `items."Quality"` (1–5) — **derived** by the recompute for items that have an assessment and no manual override;
+  `NULL` (badge "?") when the range is too wide. Items without an assessment keep their imported grade (U5).
+- **Shown in the instance tab** (#983): grade badge + range ("72–85 %") + "zu wenig bewertet für eine Note" when the
+  range is too wide + "manuell" for a hand-set grade.
+- `items."QualityManual"` (#982) — set by the instance edit (`PATCH …/instance` with `Quality`) and by "mark as
+  spare"; the recompute then leaves `Quality` alone; the next assessment (`updateItemQualityAssessment`) clears it (U6).
+- `quality_assessments.value` — the assessment's own pessimistic grade (band of the lower bound, 3 if nothing is
+  scored); always set, as the column is NOT NULL and it is history.
+- `COALESCE(r."Quality", i."Quality")` in item views (R4) — still open; matters now that instance grades are derived.
 
-### 5.3 Storage
-- **Own vs effective.** `quality_assessments.value` stays the item's **own** result, exactly what the operator answered.
-  `items.Quality` becomes the **effective** value (today `updateItemQualityAssessment` writes the own value,
-  [db.ts:3434](../backend/db.ts)).
-- **No new column.** The own value is reachable via `items.QualityId`. The breakdown (which slot drove the value) is
-  computed on read for the UI, e.g. "Eigene Bewertung 5 · Gesamt 3 (Webcam defekt)".
-- **Blocker found in review: article quality wins over instance quality.** Item queries select
-  `COALESCE(r."Quality", i."Quality")` ([db.ts:916](../backend/db.ts)), so wherever an article has a quality, the rolled-up
-  instance value is hidden. It must become `COALESCE(i."Quality", r."Quality")` at least for instance views. **First
-  check why the article was given precedence**, e.g. ERP/Shopware export or grouping, before flipping it globally.
-- **Manual override.** `PATCH /api/items/:id/instance` can set `Quality` directly ([#911]). A recompute would silently
-  overwrite that. v1 rule: a manual value is overwritten by the next recompute and an event records it. Revisit only
-  if operators complain (Q4).
+### 5.3 Recompute triggers ([backend/lib/quality-score.ts](../backend/lib/quality-score.ts))
+Quality review, intake (U9), part catalogued (both routes), link deleted, part removed (`remove-from-device` and
+`move-item`), `npm run quality:recompute` (after weight/scale/band changes; also rescoring stored answers, U7). Runs
+after the triggering write, walks `Zerlegt_aus` parents, stops at tenant boundaries, logs `QualityScoreChanged`
+(range + grade), calls `onGradeChange` (move-item/removal enqueue the Shopware sync as before).
 
-### 5.4 When to recompute (upward propagation)
-Recompute the item, then walk `Zerlegt_aus` parents to the root, **in the same transaction** as the triggering write:
+### 5.4 A part leaves its device (U8, [backend/lib/parent-slot.ts](../backend/lib/parent-slot.ts))
+Before: `move-item` (the UI's "Entnehmen") **always**, and `remove-from-device` by default, wrote a bare
+"Ersatzteil, value 1" assessment on the parent — discarding all its answers. Now: the parent's last answers are carried
+over with that slot set to missing (`false` / "Nicht vorhanden"), and the calculation decides. Marking the device as
+spare donor (manual grade 1) is **contract-driven**: unweighted slot (refurbishment contracts) → yes, as before;
+weighted slot (catalogue) → no, the score handles it; `markParentAsSpare` in the request overrides. The unused
+`deriveQualityTagFromCondition` (`is_functional`/`has_defects` shortcut) is removed.
 
-| Trigger | Handler |
-|---|---|
-| quality assessment saved | `quality-review.ts` |
-| part catalogued into a slot | `catalog-spare-part.ts` (both routes) |
-| part removed to a box | `remove-from-device.ts` (after graduation, using the effective UUID) |
-| part link deleted | `catalog-spare-part.ts` `DELETE …/spare-part-link` |
-| contract floors edited | admin "recompute all" (script/endpoint); the floors are config, not per-item |
+### 5.5 Effective subcategory (R1/R2) ✅ #980
+`resolveEffectiveSubCategory(item)` = reference's `Unterkategorien_A`, else the `targetSubcategory` of the slot the
+item sits in (recursively). Used server-side by the quality review (client value only as fallback) and returned on the
+item detail as `EffectiveSubCategory` (accessories tab, quality modal).
 
-- **Idempotent and order-independent:** recompute always re-reads the current child values. Depth is tiny (≤ 4), so cost is negligible.
-- **Event log:** when `items.Quality` changes, log `Qualität 5→3 (Unterbaugruppe: Webcam)` on the parent. This feeds the
-  traceability requirement.
-- **Tenancy:** parent and child belong to the same tenant in practice. Assert it and skip cross-tenant writes, so a
-  recompute can never write into another org (owner-only edits).
+### 5.6 Migration of the shipped contracts (U7, #982)
+Every `qualityImpact` became `states` with the same relative values ((v−1)/4) plus a **draft** weight; answers that
+used to force grade 1 or 2 became knock-outs capped at that band (swollen battery, missing fan/display/mainboard/CPU,
+failed print test, cracked glass → 1; broken hinge, defect battery, missing toner → 2). Stored answers rescore with
+`npm run quality:recompute`.
+
+**Effect on refurbishment grades** (same answers, laptop 201):
+
+| Device | Old ("worst answer wins") | New |
+|---|---|---|
+| mint | 5 | 100 % → 5 |
+| typical used (scratches light, keyboard worn, screen scratched, battery 50–80 %) | 4 | 88 % → **5** |
+| worn | 3 | 75 % → **4** |
+| broken hinge | 2 | 39 % → 2 |
+| swollen battery | 1 | 19 % → 1 |
+
+Averaging lifts ordinary devices one band; knock-outs keep the severe ones where they were. → **C1**: calibrate bands
+(e.g. 5 ≥ 0.95, 4 ≥ 0.8, 3 ≥ 0.6 …, with knock-out caps moved to match) or weights before this reaches the live
+refurbishment system. Bands live in `general.json`, so each deployment can have its own.
 
 ---
 
-## 6. Nested assessment UX (D5)
+## 6. Nested assessment UX (D5) — ✅ built in #984
 
 ```
-Laptop ThinkPad T480  ›  Displayassembly  ›  Webcam          ← breadcrumb, each crumb clickable
+ThinkPad T480  ›  Displayassembly  ›  Webcam            ← breadcrumb (only when nested), crumbs go back up
 ─────────────────────────────────────────────────────────
-[questions for the current level: general + group + sub + slot presence]
-
-Unterbaugruppen
-  Displayassembly   ● bewertet · 3            [Bewerten →]
-  Handauflage       ○ offen                   [Bewerten →]
-  Lüfter 2          Nicht vorgesehen
+Qualitätsbewertung: Webcam
+[general + group + subcategory questions]
+Komponenten
+  Webcam?  [Vorhanden ▾]
+  ↳ bewertet · 70–90 %   [Ändern →]          ← per weighted slot: offen / bewertet · range / entnommen
 ─────────────────────────────────────────────────────────
-Live: Gesamt 3 · eigene Antworten 5           [← zurück]  [Speichern]
+Vorschau: [Gut] 70–90 %          [Verwerfen & zurück]  [Speichern & zurück]
 ```
-- **"Bewerten →"** appears on a slot whose target subcategory has a quality *or* assembly contract and whose answer
-  is `Vorhanden`. It opens that child's assessment.
-- **Child creation is lazy.** Clicking only opens a client-side draft. The in-device component (no article number,
-  `C-` UUID, BoxID NULL, [component-lifecycle.md](detailed/component-lifecycle.md)) is **created when the child is
-  saved**. Abandoned drafts therefore leave no orphan items.
-- **Draft stack.** The parent's unsaved answers live in a frontend draft stack mirrored to `localStorage`, keyed by item
-  UUID, so a reload or a phone lock keeps them. Each level saves independently. "Zurück" saves the child (or asks),
-  then the parent's live preview recomputes with the new child value.
-- **Live preview.** The frontend needs the roll-up too, so `computeEffectiveQuality` lives in **shared `models/`**
-  code used by both sides (same pattern as the contract types).
-- **Drill-down, not accordions:** the trees are 3+ levels deep and each level is a real item with its own history.
-  It also stays usable on a phone.
+- **Where:** `QualityReviewModal` is the navigator (stack of levels), `QualityReviewStep` renders one level. Every
+  level stays mounted (hidden when not on top), so unsaved parent answers survive the trip down.
+- **"Bewerten →"** on weighted slots whose presence is not missing/excluded; an unanswered slot is set to
+  "Vorhanden" (opening a part implies it is there). `multipleAllowed` slots list each in-device instance plus
+  "+ weiteres bewerten →". Removed parts show "entnommen" (they are assessed as normal items now).
+- **Lazy creation:** opening a part that does not exist yet only opens a draft; "Speichern & zurück" first creates
+  the part — and any not-yet-created ancestors — via `POST …/spare-parts/component`, then saves its assessment.
+  "Verwerfen & zurück" creates nothing and clears that draft.
+- **Drafts:** each level's unsaved answers are mirrored to `localStorage` (`quality-draft:<itemId>` or
+  `quality-draft:<parent>><slot>` for parts not created yet) once edited; reopening restores them with a
+  "Entwurf wiederhergestellt · verwerfen" note. A save clears the level's draft. Going up via the breadcrumb keeps
+  deeper drafts.
+- **Back on the parent:** its parts' stored ranges reload (`partsRefreshKey`), so the live preview includes the new
+  child range.
+- **Graduation guard (R5):** `remove-from-device` refuses a ref whose subcategory differs from the slot's target
+  (409, `confirmSubCategoryChange: true` overrides) and gives a `newRef` the slot's subcategory by default. The UI
+  never graduates today ("Entnehmen" = `move-item`), so this guards the API path.
+- **Also fixed:** the quality modal never sent `notes` to the server; it does now.
+
+## 7. Effect on the refurbishment deployment (#982 — no longer neutral, by decision D9)
+
+- Grades are derived by the unified calculation → ordinary devices grade one band higher until calibrated (C1).
+- "Entnehmen" no longer wipes the parent's answers; the parent still becomes grade 1 (manual) as before.
+- A skipped scored question now widens the range; too many skips → no grade ("?") instead of the old default 3.
+- The three desktop contract bug fixes from #980 (OS answer forced grade 1, duplicate RAM/storage rows, GPU → 604).
 
 ---
 
-## 7. Behaviour neutrality for the refurbishment deployment
+## 8. Review findings: status
 
-All extensions are optional: no `qualityFloor` means no roll-up, no `multi` questions, no `group-*` files, the existing
-presence values still work, and the shipped `contracts/` stay unchanged. **The two exceptions** are the
-`QUALITY_DEFAULT` refactor and the `COALESCE` order. They touch shared code paths and are covered by tests in Phase 1.
-
----
-
-## 8. Review findings (2026-10-13): what didn't hold and how the plan handles it
-
-| # | Finding (verified in code) | Severity | Resolution |
-|---|---|---|---|
-| R1 | **Article-less components have no subcategory.** It lives only on `item_refs."Unterkategorien_A"`; `items` has none. An in-device component (no `Artikel_Nummer`) therefore resolves no quality/spec/assembly contract, so the drill-down and nesting break exactly where they are needed. | **Blocker** | **Effective subcategory** = `ref.Unterkategorien_A ?? parentContract.slot(SlotKey).targetSubcategory`, resolved server-side via `item_relations."SlotKey"`. Expose it on the item API (`EffectiveSubCategory`); frontend uses it instead of `Unterkategorien_A`. |
-| R2 | **The quality review takes `subCategory` from the client** ([quality-review.ts:53](../backend/actions/quality-review.ts)), so the client decides which contract scores the item. | High (correctness, and with roll-up writing other items, integrity) | Server resolves the effective subcategory itself (R1) and ignores or validates the client value. |
-| R3 | `QUALITY_DEFAULT = 3` would cap every parent with unscored children. | **Blocker** | §5.2 |
-| R4 | Item views show article quality over instance quality (`COALESCE(r, i)`). | **Blocker** for visibility | §5.3: investigate first, then flip for instance views. |
-| R5 | **Graduation can change the subcategory.** At Zerlegung the operator picks or creates a ref; if its subcategory ≠ the slot's `targetSubcategory`, the item silently switches contracts and its stored answers stop matching. | Medium | Prefill new refs with `targetSubcategory`; on an existing ref with a different subcategory, show a warning and require confirmation. |
-| R6 | Contract validation is nearly absent (README overstates it). | High (maintenance) | §4.5, done in Phase 1, before any big contract set lands. |
-| R7 | **"Removed = missing" changes the meaning of laptop quality.** In this use case, fully disassembled laptops end at 1. | Accepted | Intended: the laptop *is* a donor shell then. Its own assessment row keeps the pre-disassembly answers for history. |
-| R8 | **Slot keys become load-bearing** (SlotKey → effective subcategory). Renaming a key in a contract orphans components. | Medium | Rule in contracts README: slot keys are immutable like spec keys; the validator diffs against the previous file on admin upload and refuses removed keys that are still referenced. |
-| R9 | **Two quality questions describe the same thing.** The refurb `quality/201.json` asks `screen_condition`, `keyboard_condition`, `hinges_ok`, `battery_swollen`, `fan_dusty`, which overlap the child parts. | Medium | The catalogue overlay's `quality/201.json` drops them (they move to 2105/2104/2108/206/2118). The refurb file is untouched. |
-| R10 | **Manual `Quality` edits get overwritten** by recompute. | Low | §5.3, event-logged; Q4. |
-| R11 | **Some answers need special handling in the roll-up:** the "Fest verbaut" keyboard needs its missing keys on the C-Cover, and soldered RAM/CPU have no item. | Covered | `showIf` on the slot answer (`part_keyboard` = `Fest verbaut`) works today because the assembly's synthetic quality contract is merged with the sub contract. |
+| # | Finding (verified in code) | Status |
+|---|---|---|
+| R1 | Article-less components have no subcategory, so no contracts load for them | ✅ fixed: effective subcategory (§5.4) |
+| R2 | Quality review trusts the client `subCategory` | ✅ fixed: server-resolved, client is fallback only |
+| R3 | `QUALITY_DEFAULT = 3` would cap parents in a min-based roll-up | ⚪ moot: the percentage has no default; nothing weighted = NULL |
+| R4 | Item views show article quality over instance quality | **open again**: instance grades are now derived (#982), so an article-level `Quality` hides them — investigate, then flip for instance views |
+| R5 | Graduation can change the subcategory (ref ≠ slot target) | ✅ #984: 409 unless confirmed; new refs default to the slot's subcategory |
+| R6 | Contract validation was nearly absent | ✅ fixed (§4.5), and it found three real bugs |
+| R7 | "Removed = missing" sends disassembled laptops towards 0 % | accepted: intended |
+| R8 | Slot keys are load-bearing (SlotKey → effective subcategory) | open: README rule added; an upload diff that refuses removing referenced keys is not built |
+| R9 | Catalogue 201 must drop the device-level condition questions that now live on parts | open: Phase 5 content |
+| R10 | Manual `Quality` edits overwritten by a recompute | ⚪ moot: the recompute never touches `Quality` |
+| R11 | "Fest verbaut" keyboard: missing keys asked on the C-Cover via `showIf` on the slot answer | ✅ supported (validator test covers it) |
+| R12 | `markParentAsSpare` wrote a fresh parent assessment *without answers*. **Correction:** the flag defaults to `true`, and `move-item` (the UI path) did the same unconditionally — so every "Entnehmen" wiped the parent's answers | ✅ fixed #982 (§5.4): answers carried over, spare marking contract-driven |
+| R13 | **New:** the admin-contracts / admin-taxonomy tests fail locally whenever `.env` sets `ADMIN_SECRET` (dotenv loads it into Jest) | open: test isolation; run with `ADMIN_SECRET=` until fixed |
 
 Checked and **holds**:
 - nesting via the item's own assembly contract;
@@ -305,50 +355,29 @@ Checked and **holds**:
 
 ## 9. Phases
 
-Each phase ships independently, with tests, and is documented per CLAUDE.md.
-
-**Phase 1: Foundations (backend, neutral)**
-1. Contract validator + test + CLI (§4.5, R6).
-2. Effective subcategory resolver + server-side contract resolution in quality review (R1, R2).
-3. `deriveQualityFromAnswers` split, default applied only at the top (R3).
-4. Investigate + fix the `COALESCE` quality order (R4).
-5. Canonical presence values + the `notApplicable`/`integrated` slot states (§4.1).
-
-*Done when:* the full Jest suite shows no new failures, and refurb contracts validate clean.
-
-**Phase 2: Roll-up (backend + shared)**
-1. `qualityFloor` on `AssemblyPart`; shared `computeEffectiveQuality` in `models/`.
-2. Upward recompute in the 4 handlers + an admin "recompute all"; event entries; tenancy assert.
-3. Own vs effective on the item API, with a breakdown.
-
-*Done when:* tree tests pass for the webcam/display example, removal, unassessed children and multipleAllowed.
-
-**Phase 3: `multi` question type**
-1. Type + validator + spec rendering + count-threshold impact + quality review renderer (chips / checkboxes).
-
-**Phase 4: Nested assessment UI**
-1. Breadcrumb drill-down, lazy child creation, draft stack with `localStorage`, live preview, open/assessed markers.
-2. Graduation subcategory guard (R5).
-
-**Phase 5: Catalogue content (overlay + taxonomy)**
-1. Taxonomy 210 seed; `202` inactive.
-2. `group-210.json` (quality + specs); per-part quality/spec files; assembly files for 201, 2101, 2102, 2103, 2115, 2120.
-3. Catalogue `quality/201.json` without the overlapping questions (R9).
-4. Floors from the colleagues' table (Q1).
-
-*Done when:* `contracts:check` is clean, and a laptop has been fully catalogued in a browser session down to the webcam.
-
-Phases 1–3 do not depend on the open questions; start there.
+| Phase | Content | Status |
+|---|---|---|
+| 1 Foundations | validator + CLI; effective subcategory; canonical presence values + slot states | ✅ #980 |
+| 2 Percentage score | shared calculation; score columns; upward recompute; `quality:recompute`; range in UI | ✅ #980 |
+| 2b One quality system | states/scale/knock-outs/grading; derived 1–5 grade; manual flag; group contracts; part-leaves-parent; intake; shipped contracts migrated | ✅ #982 |
+| 3 `multi` type | type, validator, scoring, specs, chip/checkbox input, intake skip | ✅ #980 |
+| 4 Nested assessment UI | breadcrumb drill-down, reference-less catalogue route + lazy creation, drafts, assessed/open markers, graduation subcategory guard (R5) | ✅ #984 (component-tested; browser walkthrough pending) |
+| 5 Catalogue content | taxonomy 210, part tree, weights, per-part contracts | **draft** ✅ #982 in `config/catalogue/` (validated in Jest); rework on the test environment |
 
 ---
 
 ## 10. Open questions
 
-| # | Question | For |
-|---|---|---|
-| Q1 | **Floor per part:** "Teil → schlimmstenfalls Note X" table (display, mainboard, battery, keyboard, hinges, webcam, covers, feet …) | colleagues |
-| Q2 | Confirm the taxonomy tree (§3): one cable subcategory? M.2 as a 901 slot rather than its own subcategory? missing parts (mic, digitizer, card reader)? | colleagues |
-| Q3 | "Fest verbaut": no roll-up impact (the condition is asked on the parent), or should a soldered part count as part of the parent's condition questions? | colleagues |
-| Q4 | Should a manual `Quality` override survive a recompute (lock flag), or is "recompute wins + event" enough? | Daniel |
-| Q5 | Should `part_condition` "ungetestet" count as unscored (current plan) or as a mild penalty? | colleagues |
-| Q6 | Complete Displayassembly as one FRU: is it ever sold whole, or always split? This affects whether 2101 needs its own FRU/spec fields. | colleagues |
+| # | Question | For | Status |
+|---|---|---|---|
+| C1 | **Calibrate grade bands / weights** so refurbishment grades match expectations (§5.6 table) — blocker before the live refurbishment system | team | open |
+| C2 | Large trees stay ungraded until most parts are assessed | team | ✅ intended (2026-10-14): without assessed parts there is nothing to tell |
+| C3 | Overall condition on assemblies, or parts only? | team | ✅ every item, assemblies included, is scored the same way: its own assessment + its components (draft unchanged) |
+| Q1 | Weight per part | team | **drafted** (`config/catalogue/`) |
+| Q2 | Taxonomy tree (cables as one subcategory, M.2 as a 901 slot, microphone added) | team | **drafted** |
+| Q3 | "Fest verbaut" (soldered CPU/RAM): excluded from the score (current) or counted? | team | open — the draft lets the C-Cover ask keyboard details when the keyboard is built in |
+| Q6 | Displayassembly sold as one part? | team | open (draft gives it condition + FRU via group-210) |
+| Q7 | Shared contract per Hauptkategorie | Daniel | ✅ built (`group-<code>`) |
+| Q8 | Derive the 1–5 grade from the percentage | Daniel | ✅ yes (U3/U4) |
+| Q9 | How lists show the range | Daniel | ✅ grade from the lower bound, % range small next to it, sort by lower bound — **instance tab done (#983)**, lists not yet |
+| C4 | Spec contracts for parts | team | **drafted** (`config/catalogue/contracts/specs/`, 32 files) |
