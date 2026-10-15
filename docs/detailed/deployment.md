@@ -9,9 +9,10 @@ laptop: docker build → docker push ──▶ gitea.revamp-it.ch (registry) ─
 
 - **Registry:** `gitea.revamp-it.ch`, image `gitea.revamp-it.ch/revamp-it/mediator-service:<version>`
   (visible under the org → Packages).
-- **Host:** a directory (e.g. `/opt/mediator`) holding `docker-compose.prod.yaml`,
-  `docker-compose.prod.authentik.yaml` and `.env`. Only the `mediator` image comes from the registry;
-  `postgres`, `redis`, `authentik` come from Docker Hub/ghcr, `cups` is built on the host.
+- **Host:** a directory (e.g. `/opt/mediator`) holding `docker-compose.prod.yaml`, the overrides you
+  use (`.prod.authentik.yaml`, `.prod.printing.yaml`) and `.env`. Only the `mediator` image comes from
+  the registry; `postgres`, `redis`, `authentik` come from Docker Hub/ghcr, `cups` (printing only) is
+  built on the host.
 
 ## 1. One-time setup
 
@@ -25,7 +26,8 @@ docker login gitea.revamp-it.ch -u <gitea-user>      # password = the token
 repo** into the deploy directory — don't keep hand-edited copies with other names:
 ```bash
 scp docker-compose.prod.yaml docker-compose.prod.authentik.yaml host:/opt/mediator/
-scp -r cups host:/opt/mediator/                       # cups is built on the host
+# only with label printers (CUPS is built on the host):
+scp -r docker-compose.prod.printing.yaml cups host:/opt/mediator/
 ```
 
 **Host `.env`** — besides the app config, the deploy needs:
@@ -35,6 +37,7 @@ MEDIATOR_IMAGE=gitea.revamp-it.ch/revamp-it/mediator-service:4.1   # the version
 MEDIATOR_DOMAIN=erfassung.example.ch      # only with Authentik; default erfassung.<VM_IP>.nip.io
 AUTHENTIK_DOMAIN=auth.example.ch          # only with Authentik; default auth.<VM_IP>.nip.io
 AUTHENTIK_ENABLED=true                    # only with Authentik (+ AUTHENTIK_SECRET_KEY, AUTHENTIK_PG_PASSWORD)
+PRINTING_ENABLED=false                    # only without printers: the deploy workflow then leaves out CUPS
 ```
 Without `MEDIATOR_IMAGE` the compose file falls back to the old `ghcr.io/…:3.0` image.
 
@@ -54,6 +57,7 @@ cd /opt/mediator
 sed -i "s|^MEDIATOR_IMAGE=.*|MEDIATOR_IMAGE=gitea.revamp-it.ch/revamp-it/mediator-service:4.2|" .env
 
 F="-f docker-compose.prod.yaml -f docker-compose.prod.authentik.yaml"   # drop the 2nd file without Authentik
+F="$F -f docker-compose.prod.printing.yaml"                              # only with label printers (CUPS)
 docker compose $F pull --ignore-buildable     # fetch first: a failed pull leaves the running stack alone
 docker compose $F up -d                        # recreates only what changed
 docker compose $F ps                           # all healthy?
@@ -61,6 +65,8 @@ docker compose $F logs -f --tail=100 mediator
 ```
 - Use `up -d`, not `up --build` in the foreground: `--build` only rebuilds `cups`, and foreground mode
   stops the stack when the terminal closes. Rebuild cups explicitly when it changed: `docker compose $F up -d --build cups`.
+- On a printing host, always pass the printing file: without it a recreated `mediator` loses its CUPS
+  socket and printer settings.
 - DB migrations run on mediator startup — watch the log for errors before calling it done.
 
 **Rollback:** set `MEDIATOR_IMAGE` back to the previous version and run `up -d` again. (Schema changes
