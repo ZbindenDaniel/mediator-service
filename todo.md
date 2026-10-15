@@ -572,6 +572,7 @@
 ## Open Questions
 
 ### Still Open
+- **Production host gets an expired 2023 cert for `gitea.revamp-it.ch` (#988):** the public server's cert is valid, so the host resolves/routes to another endpoint (split DNS, `/etc/hosts`, NAT loopback). Check with the commands in `docs/detailed/deployment.md` §4 and fix DNS or the internal cert. Also: the CI workflows (`docker-publish.yaml`, `deploy.yaml`) and the `docker-compose.prod.yaml` default image still target the internal Gitea / ghcr, not `gitea.revamp-it.ch/revamp-it`.
 - **Empty fields hidden by default (#977):** `DetailRows` folds empty fields behind a toggle. During cataloguing, seeing what's missing may matter more; should the toggle state be remembered, or default to "show" on some screens?
 - **Tab-action order (#975):** should the primary action (e.g. Bearbeiten) always come first in `.tab-actions`? Currently Etikett leads in the instance tab. Up for discussion.
 - **Admin cards don't validate API responses (#974 finding):** e.g. `SystemStatusCard` renders `/api/media/health` without checking `res.ok`/shape; an unexpected body (`imageProbe` missing) throws during render and, without an error boundary, blanks the whole page. Add response checks + an error boundary around admin cards.

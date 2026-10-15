@@ -57,6 +57,7 @@ jobs:
           # Ship the current prod compose so the ${MEDIATOR_IMAGE} override is present on the host.
           scp $SSH_OPTS docker-compose.prod.yaml "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/docker-compose.prod.yaml"
           scp $SSH_OPTS docker-compose.prod.authentik.yaml "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/docker-compose.prod.authentik.yaml"
+          scp $SSH_OPTS docker-compose.prod.printing.yaml "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/docker-compose.prod.printing.yaml"
 
           # Unquoted heredoc: values expand on the runner and travel over the encrypted
           # SSH channel, so the registry token is never placed in the host's process args.
@@ -69,6 +70,10 @@ jobs:
           # Escaped \$: evaluated on the host. Once the host opts into Authentik, every deploy must
           # keep the override, or the recreated container would lose its forward-auth labels.
           COMPOSE_FILES="-f docker-compose.prod.yaml"
+          # CUPS is opt-out: hosts without printers set PRINTING_ENABLED=false (no ./cups needed there).
+          if ! grep -qiE '^PRINTING_ENABLED="?(0|false|no)"?[[:space:]]*$' .env; then
+            COMPOSE_FILES="\$COMPOSE_FILES -f docker-compose.prod.printing.yaml"
+          fi
           if grep -qiE '^AUTHENTIK_ENABLED="?(1|true|yes)"?[[:space:]]*$' .env; then
             COMPOSE_FILES="\$COMPOSE_FILES -f docker-compose.prod.authentik.yaml"
           fi

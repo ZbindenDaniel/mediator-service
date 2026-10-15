@@ -168,6 +168,8 @@ sudo ufw allow 443
 
 ## registry
 
+> **Step-by-step release/deploy guide (current registry `gitea.revamp-it.ch`):** [`docs/detailed/deployment.md`](detailed/deployment.md).
+
 - If the personal access token expires, regenerate it and login again to the registry: echo THE_NEW_PAT | sudo docker login ghcr.io -u ZbindenDaniel --password-stdin
 
 ## CI/CD — automated image builds
