@@ -33,20 +33,22 @@ switches back (and deactivates 210).
 The compose override bind-mounts `config/catalogue/contracts` as the writable overlay, so contract edits made in
 Admin land in the repo — handy on the test environment. For a real deployment mount a persistent non-repo copy.
 
-**Staging / production host** (stack from `docker-compose.prod.yaml`, rolled by the deploy workflow — the image
-does not contain `config/catalogue/`, so the files go into the persistent `mediator-data` volume once):
+**Staging / production host** (stack from `docker-compose.prod.yaml`): the image does not contain
+`config/catalogue/`, so the files live in host folders next to the compose files and
+`docker-compose.prod.catalogue.yaml` mounts them and sets `TAXONOMY_SEED_FILE`/`FEATURES_FILE`/`CONTRACTS_OVERLAY_DIR`
+(don't set those in `.env`):
 ```bash
-# on the host, with this folder + config/features.catalogue.example.json copied next to docker-compose.prod.yaml
-docker compose -f docker-compose.prod.yaml cp catalogue mediator:/var/lib/mediator/catalogue
-docker compose -f docker-compose.prod.yaml cp features.catalogue.example.json mediator:/var/lib/mediator/catalogue/features.json
-# host .env (read via env_file):
-#   TAXONOMY_SEED_FILE=/var/lib/mediator/catalogue/taxonomy.seed.json
-#   CONTRACTS_OVERLAY_DIR=/var/lib/mediator/catalogue/contracts
-#   FEATURES_FILE=/var/lib/mediator/catalogue/features.json
-docker compose -f docker-compose.prod.yaml up -d mediator          # picks up the .env
+# laptop → host deploy dir (dir must be writable for you, e.g. group www-data + g+w)
+scp -r config/catalogue docker-compose.prod.catalogue.yaml host:<deploy-dir>/
+scp config/features.catalogue.example.json host:<deploy-dir>/catalogue/features.json
+# host
+mkdir -p contracts-overlay && [ -z "$(ls -A contracts-overlay)" ] && cp -r catalogue/contracts/. contracts-overlay/
+sudo chown -R www-data:www-data catalogue contracts-overlay && sudo chmod -R g+w contracts-overlay   # uid 33 = app user
+F="-f docker-compose.prod.yaml -f docker-compose.prod.catalogue.yaml"   # + the authentik override if used
+docker compose $F up -d
 # only if the database already has a taxonomy (a fresh DB is seeded on first start):
-docker compose -f docker-compose.prod.yaml exec mediator node dist/backend/cli/apply-taxonomy.js /var/lib/mediator/catalogue/taxonomy.seed.json
-docker compose -f docker-compose.prod.yaml restart mediator
+docker compose $F exec mediator node dist/backend/cli/apply-taxonomy.js /srv/catalogue/taxonomy.seed.json
+docker compose $F restart mediator
 ```
 The same CLIs run in any container: `node dist/backend/cli/check-contracts.js`, `node dist/backend/cli/recompute-quality-scores.js`.
 

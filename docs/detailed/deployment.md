@@ -41,6 +41,18 @@ PRINTING_ENABLED=false                    # only without printers: the deploy wo
 ```
 Without `MEDIATOR_IMAGE` the compose file falls back to the old `ghcr.io/…:3.0` image.
 
+**Paths in `.env` are paths inside the container**, not on the host. The container only sees its
+volumes: `/var/lib/mediator` (persistent `mediator-data`, writable), `/app/dist/backend/media` and the
+WebDAV mount. Don't copy a `.env` from a non-Docker install (e.g. `/opt/<something>/data/inbox`) or from
+the dev override (`/srv/catalogue/…` exists only with `docker-compose.catalogue.yml`):
+```bash
+INBOX_DIR=/var/lib/mediator/inbox
+ARCHIVE_DIR=/var/lib/mediator/archive
+```
+**Catalogue deployment:** don't set `TAXONOMY_SEED_FILE`/`FEATURES_FILE`/`CONTRACTS_OVERLAY_DIR` in `.env`. Put
+`catalogue/` + `contracts-overlay/` next to the compose files and add `-f docker-compose.prod.catalogue.yaml`,
+which mounts them and sets the paths (steps in `config/catalogue/README.md`).
+
 ## 2. Release (laptop)
 
 ```bash
@@ -81,4 +93,7 @@ are additive, but check the changelog of the version you are leaving.)
 | `Image … Interrupted` for redis/authentik | Not an error of their own — compose stops the other pulls when one fails. | Fix the failing image (usually the mediator line). |
 | `No such image: …` after a failed pull | Same — follow-up of the failed pull. | Same. |
 | `The "MEDIATOR_DOMAIN" variable is not set. Defaulting to a blank string` | The compose file on the host is not the repo's (the repo's has defaults), e.g. a hand-made `docker-compose.authentik.yaml`. | Copy `docker-compose.prod.authentik.yaml` from the repo and set `MEDIATOR_DOMAIN` in `.env`. |
+| `Failed to load category taxonomy seed — aborting startup … ENOENT … taxonomy.seed.json` | `TAXONOMY_SEED_FILE` points at a path that doesn't exist **in the container** — usually the folder isn't mounted. Fatal: the app stops. | Use `docker-compose.prod.catalogue.yaml` (§1) and check the mount: `docker inspect mediator --format '{{range .Mounts}}{{.Source}} -> {{.Destination}}{{println}}{{end}}'`. Or remove the variable for the shipped taxonomy. |
+| `EACCES: permission denied, mkdir '/opt/…/data/inbox'` / `ALT_DOC_DIRS_FILE … could not be read` | Host paths in `.env`; the container runs as uid 33 and only `/var/lib/mediator` is writable. | `INBOX_DIR`/`ARCHIVE_DIR` under `/var/lib/mediator`; remove `ALT_DOC_DIRS_FILE` or point it at a file inside a mounted volume. |
+| `EVENT_LOG_LEVELS contains unknown values` / `EVENT_LOG_TOPICS …` | Values that don't exist (e.g. `Warning`, `general`). Harmless, ignored. | Levels: `Debug,Information,Important,Error`. Or remove both to log everything. |
 | App still shows the old version | `MEDIATOR_IMAGE` not set/changed, so the `ghcr.io/…:3.0` default ran. | `docker compose $F config \| grep image:` shows what will run. |
