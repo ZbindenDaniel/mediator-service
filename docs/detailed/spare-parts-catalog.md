@@ -32,7 +32,7 @@
 - API endpoints for cataloging, extracting, and un-cataloging parts.
 - **Deferred-identity components** ([component-lifecycle.md](component-lifecycle.md)): intake
   auto-creates one reference-less in-device component per scanned disk; `remove-from-device`
-  doubles as graduation (set identity write-once + re-mint UUID).
+  doubles as graduation (set identity write-once; the part ID stays).
 
 **Deferred (phase 2):**
 - Bidirectional suggestions ("PS missing → show matching PS items in inventory").
@@ -130,7 +130,7 @@ New item instances created by `catalog-spare-part` have:
 - `Artikel_Nummer` from the operator's article selection
 
 Intake-created in-device components differ: **no `Artikel_Nummer`** (deferred identity) and a
-temporary `C-` UUID until graduation — see [component-lifecycle.md](component-lifecycle.md).
+part ID `C-<root Artikelnummer>-<subcategory>-<####>` that never changes — see [component-lifecycle.md](component-lifecycle.md).
 
 ## API
 
@@ -152,8 +152,8 @@ Removes the spare part link and deletes the item instance. Only allowed when `Bo
 ### `POST /api/items/:uuid/remove-from-device`
 Physically extracts the spare part to a storage box. Body: `{ toBoxId, actor, markParentAsSpare?, artikelNummer?, newRef? }`.
 - If the item is a **reference-less in-device component** (deferred identity), this is its
-  **graduation**: it sets the identity write-once (`artikelNummer` or `newRef`) and re-mints the
-  `C-` UUID to `I-<Artikelnummer>-####` atomically (see [component-lifecycle.md](component-lifecycle.md)); a re-set attempt returns 409.
+  **graduation**: it sets the identity write-once (`artikelNummer` or `newRef`); the part keeps its
+  `C-` ID (see [component-lifecycle.md](component-lifecycle.md)); a re-set attempt returns 409.
 - Relocates the item to the box (`BoxID` + `Location`) and writes the `Ersatzteil` provenance link.
 - Marks the **parent** device `Ersatzteil` (quality=1 + Shopware enqueue) **only when
   `markParentAsSpare`** — contract-gated, decoupled from extraction; default true preserves the
@@ -191,7 +191,7 @@ The Zerlegen section only renders when an assembly contract exists for the item'
 |---|---|---|
 | `SparePartCataloged` | Parent device UUID | POST spare-parts succeeds |
 | `ComponentDetected` | Parent device UUID | intake materializes a disk component |
-| `ComponentGraduated` | Component (new) UUID | remove-from-device graduates a reference-less component |
+| `ComponentGraduated` | Component UUID (unchanged) | remove-from-device graduates a reference-less component |
 | `RemovedFromDevice` | Spare part UUID | POST remove-from-device succeeds |
 | `SparePartRemoved` | Parent device UUID | POST remove-from-device succeeds |
 

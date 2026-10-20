@@ -125,11 +125,8 @@ const action = defineHttpAction({
       const normalizedLocation = rawLocationId || rawLocation || null;
       const now = new Date().toISOString();
 
-      // Effective UUID after this call — changes if the component graduates (C- → I-).
-      let effectiveUuid = uuid;
-
       if (needsGraduation(item)) {
-        // 1a. Set identity (write-once) and extract in one atomic swap.
+        // 1a. Set identity (write-once) and extract in one transaction; the ItemUUID stays.
         const resolved = await resolveGraduationRef(ctx, data, await resolveEffectiveSubCategory(uuid));
         if ('error' in resolved) {
           const { status, ...body } = resolved;
@@ -137,19 +134,10 @@ const action = defineHttpAction({
         }
         const artikelNummer = resolved.artikelNummer;
 
-        // Mint the new I- UUID, guarding against collision (matches catalog-spare-part).
-        let newUUID: string | null = null;
-        for (let i = 0; i < 5; i++) {
-          const candidate = await ctx.generateItemUUID(artikelNummer);
-          if (!(await ctx.getItem(candidate))) { newUUID = candidate; break; }
-        }
-        if (!newUUID) return sendJson(res, 500, { error: 'Failed to generate item UUID' });
-
         try {
           await withTransaction(async (client) => {
             const { parentArtikelNummer } = await graduateComponentInTx(client, {
-              oldUUID: uuid,
-              newUUID: newUUID!,
+              itemUUID: uuid,
               artikelNummer,
               boxId: toBoxId,
               location: normalizedLocation,
@@ -171,14 +159,13 @@ const action = defineHttpAction({
           }
           throw err;
         }
-        effectiveUuid = newUUID;
 
         await ctx.logEvent({
           Actor: actor,
           EntityType: 'Item',
-          EntityId: effectiveUuid,
+          EntityId: uuid,
           Event: 'ComponentGraduated',
-          Meta: JSON.stringify({ parentUuid, artikelNummer, previousUuid: uuid, toBoxId }),
+          Meta: JSON.stringify({ parentUuid, artikelNummer, toBoxId }),
         });
       } else {
         // 1b. Legacy path: component already has a reference — just relocate it.
@@ -207,7 +194,7 @@ const action = defineHttpAction({
       await ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
-        EntityId: effectiveUuid,
+        EntityId: uuid,
         Event: 'RemovedFromDevice',
         Meta: JSON.stringify({ parentUuid, toBoxId, location: normalizedLocation })
       });
@@ -216,7 +203,7 @@ const action = defineHttpAction({
         EntityType: 'Item',
         EntityId: parentUuid,
         Event: 'SparePartRemoved',
-        Meta: JSON.stringify({ childItemUUID: effectiveUuid, toBoxId, qualityAssessmentId, markedParentAsSpare: markedSpare })
+        Meta: JSON.stringify({ childItemUUID: uuid, toBoxId, qualityAssessmentId, markedParentAsSpare: markedSpare })
       });
 
       // Enqueue Shopware sync for parent device quality change — only if we changed it.
@@ -233,8 +220,8 @@ const action = defineHttpAction({
         }
       }
 
-      console.info('[remove-from-device] Spare part relocated', { uuid: effectiveUuid, parentUuid, toBoxId, actor, graduated: effectiveUuid !== uuid });
-      return sendJson(res, 200, { ok: true, itemUUID: effectiveUuid, toBoxId, locationId: normalizedLocation });
+      console.info('[remove-from-device] Spare part relocated', { uuid, parentUuid, toBoxId, actor, graduated: needsGraduation(item) });
+      return sendJson(res, 200, { ok: true, itemUUID: uuid, toBoxId, locationId: normalizedLocation });
     } catch (err) {
       console.error('[remove-from-device] Unexpected error', err);
       return sendJson(res, 500, { error: (err as Error).message });

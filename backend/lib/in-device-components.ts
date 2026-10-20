@@ -11,13 +11,14 @@
 
 import type { PoolClient } from 'pg';
 import { withTransaction } from '../db-client';
-import { generateComponentUUID } from './itemIds';
+import { mintPartItemUUID, partIdQueryOneFor, resolveSlotSubCategory } from './part-ids';
 import { isUsableSerial } from './component-serial';
 import type { IntakeComponent } from '../../models/intake';
 
 export interface SyncComponentsDeps {
   now?: () => Date;
-  genUUID?: () => string;
+  /** Test seam; defaults to the shared part-ID minting on the transaction's client. */
+  mintUUID?: (client: PoolClient, parentUUID: string, slotKey: string) => Promise<string>;
   logEvent?: (e: {
     Actor: string;
     EntityType: string;
@@ -32,9 +33,11 @@ export interface SyncComponentsResult {
   skipped: Array<{ reason: 'no-serial' | 'exists'; slotKey: string; serial: string | null }>;
 }
 
-async function componentUUIDFree(client: PoolClient, uuid: string): Promise<boolean> {
-  const r = await client.query('SELECT 1 FROM items WHERE "ItemUUID" = $1 LIMIT 1', [uuid]);
-  return r.rowCount === 0;
+async function mintComponentUUID(client: PoolClient, parentUUID: string, slotKey: string): Promise<string> {
+  // Scan slot keys are device names (nvme0n1, sda) and rarely match an assembly slot; then the ID
+  // carries the "unknown subcategory" segment rather than guessing one.
+  const subCategory = slotKey ? await resolveSlotSubCategory(parentUUID, slotKey) : null;
+  return mintPartItemUUID(parentUUID, subCategory, partIdQueryOneFor(client));
 }
 
 /**
@@ -53,7 +56,7 @@ export async function syncInDeviceComponents(
   if (!Array.isArray(components) || components.length === 0) return result;
 
   const now = deps.now ?? (() => new Date());
-  const genUUID = deps.genUUID ?? generateComponentUUID;
+  const mintUUID = deps.mintUUID ?? mintComponentUUID;
 
   await withTransaction(async (client) => {
     for (const comp of components) {
@@ -78,13 +81,7 @@ export async function syncInDeviceComponents(
         continue;
       }
 
-      // Mint a temporary component UUID, guarding against the (unlikely) collision.
-      let uuid = '';
-      for (let i = 0; i < 5; i++) {
-        const candidate = genUUID();
-        if (await componentUUIDFree(client, candidate)) { uuid = candidate; break; }
-      }
-      if (!uuid) throw new Error('failed to mint a unique component UUID');
+      const uuid = await mintUUID(client, parentUUID, slotKey);
 
       const ts = now().toISOString();
       const specs: Record<string, string> = {};

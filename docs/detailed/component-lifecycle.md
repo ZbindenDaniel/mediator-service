@@ -25,11 +25,14 @@ Artikelnummer** until it is actually extracted.
    `Artikel_Nummer` while inside its parent. Identity is set **once**, at Zerlegung
    (NULL → value), and is **never changed** afterward. There is no "change reference"
    operation — correcting a mis-set reference is out of scope.
-3. **Temporary UUID, re-minted at graduation.** In-device components carry a `C-` UUID (no
-   Artikelnummer to embed yet). At graduation the item is re-keyed to a normal
-   `I-<Artikelnummer>-####` UUID, so a graduated component is indistinguishable from an
-   ordinary item. Cheap because it happens before history accrues, and reports are
-   serial-keyed so they are untouched.
+3. **Stable part ID, named after its origin.** In-device components get
+   `C-<root device Artikelnummer>-<subcategory>-<####>` (e.g. `C-104523-2132-0003`), numbered per
+   (root article, subcategory); `0` stands for a slot without a target subcategory (intake disks
+   keyed by device name). The ID is minted once (`backend/lib/part-ids.ts`, shared by intake and
+   the catalogue route) and **never changes** — graduation only sets the Artikelnummer — so
+   relations, events, attachments and printed labels stay valid. Which device a part sits in comes
+   from the `Zerlegt_aus` relation, not the ID. A part created *with* an article (catalog-spare-part
+   with a ref) gets the normal `I-<Artikelnummer>-####`.
 
 ## Two states
 
@@ -72,13 +75,10 @@ assessment is saved — so opening and abandoning a part creates nothing.
 Folded into `remove-from-device`. When the item still needs graduation (`needsGraduation`:
 no Artikelnummer yet):
 1. Resolve the target reference — pick an existing Artikelnummer or create a new ref.
-2. Mint the `I-<Artikelnummer>-####` UUID (collision-guarded).
-3. `graduateComponentInTx` runs the whole swap in **one transaction**: re-key the `items` PK +
-   set identity/box/location, then re-point every other UUID-keyed row —
-   `item_relations` (both directions), `events`, `item_attachments`, `label_queue`.
-   `user_item_marks` cascades via its FK's `ON UPDATE CASCADE`. **Reports are serial-keyed →
-   untouched.** A partial swap would strand relations/events, so it must be all-or-nothing.
-4. Write the `item_ref_relations` `'Ersatzteil'` provenance link (parent ref → component ref).
+2. `graduateComponentInTx` sets identity/box/location on the **same row** in one transaction
+   with the provenance link; the ItemUUID stays (until 2026-10 it was re-minted to `I-…` and every
+   UUID-keyed table re-pointed — removed with the stable part IDs).
+3. Write the `item_ref_relations` `'Ersatzteil'` provenance link (parent ref → component ref).
 - **Subcategory guard (#984):** the component was assessed with its slot's `targetSubcategory`.
   A chosen ref of another subcategory returns 409 (`slotSubCategory`/`refSubCategory`) unless
   `confirmSubCategoryChange: true`; a `newRef` without `Unterkategorien_A` gets the slot's.
@@ -107,11 +107,11 @@ in the request overrides either way.
 
 ## Data-model changes (`backend/db.ts` migrations)
 - `item_relations.SlotKey` — explicit slot key, so it stops being overloaded onto `Notes`.
-- `user_item_marks` FK gains `ON UPDATE CASCADE` — the only UUID FK, needed for the graduation
-  PK swap.
-- Temporary `C-` UUID scheme (`backend/lib/itemIds.ts`): `generateComponentUUID` /
-  `isComponentUUID`; `parseSequentialItemUUID` degrades to null on it, so no Artikelnummer is
-  ever mis-derived for a reference-less component.
+- `user_item_marks` FK gains `ON UPDATE CASCADE` — added for the former graduation PK swap; kept,
+  harmless now that IDs never change.
+- Part ID scheme (`backend/lib/itemIds.ts` `partItemUUIDStem`/`nextPartItemUUID`, minted in
+  `backend/lib/part-ids.ts`); `parseSequentialItemUUID` degrades to null on it, so no
+  Artikelnummer is ever mis-derived from a part ID. Older random `C-…` IDs (test data) stay valid.
 
 ## Deferred (not built)
 - **Re-link / change reference** on a graduated item — out of scope by construction.

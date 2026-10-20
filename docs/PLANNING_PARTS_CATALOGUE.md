@@ -55,7 +55,7 @@ What follows from these rules:
 - **Group headers are real parts.** A Displayassembly is catalogued as an item; it is not just a heading.
 - **Zerlegen already nests.** [ItemAccessoriesTab.tsx:34-42](../frontend/src/components/item-tabs/ItemAccessoriesTab.tsx) loads
   `assembly/<item's subcategory>.json`, so a catalogued Displayassembly shows its own slots. Grandchildren survive
-  graduation: `graduateComponentInTx` re-keys `ParentItemUUID` as well ([graduate-component.ts:71-72](../backend/lib/graduate-component.ts)).
+  graduation: the part ID never changes (#991), so their `ParentItemUUID` stays valid.
 
 ---
 
@@ -365,7 +365,7 @@ Checked and **holds**:
 | 3 `multi` type | type, validator, scoring, specs, chip/checkbox input, intake skip | ✅ #980 |
 | 4 Nested assessment UI | breadcrumb drill-down, reference-less catalogue route + lazy creation, drafts, assessed/open markers, graduation subcategory guard (R5) | ✅ #984 (component-tested; browser walkthrough pending) |
 | 5 Catalogue content | taxonomy 210, part tree, weights, per-part contracts | **draft** ✅ #982 in `config/catalogue/` (validated in Jest); rework on the test environment |
-| 6 Device-first + Einzelteile | stable part IDs, `askOnCreate`/`steps`/`refinedBy`, slot scoring change, answer merge, article specs at creation, Einzelteile page, Zubehör split | **planned** (§11) |
+| 6 Device-first + Einzelteile | stable part IDs (✅ #991), `askOnCreate`/`steps`/`refinedBy`, slot scoring change, answer merge, article specs at creation, Einzelteile page, Zubehör split | **planned** (§11) |
 
 ---
 
@@ -594,11 +594,13 @@ POST with a ref, `…/new-ref`), Entnehmen, Lösen, multi-slot "+ weiteres". Che
   would read "2132" and restart the device counter at 0001 → collision).
 - **Removed:** random `generateComponentUUID`; `isComponentUUID` (no callers outside tests).
 - **Existing random `C-` items** (test environment only): left as they are — nothing parses them.
-- **To check while building** (all treat an unparseable ID as "no match" on static reading):
-  `resolveCanonicalItemUUID` (falls back for an article whose only instances are `C-`), `isCanonicalInstance` in
-  item grouping, the agentic invoker's `loadItemTarget` (parses the itemId and would treat `C-…` as an Artikelnummer →
-  look up `items` by ItemUUID first instead), ERP export (the `ItemUUID` column will carry `C-` IDs for graduated
-  parts) and CSV re-import (must update in place, not regenerate).
+- **Checked (6a):** agentic runs are keyed by Artikelnummer, never by ItemUUID, so the invoker never sees a part ID
+  (no fix needed). `resolveCanonicalItemUUID` falls back for an article whose only instances are `C-`, and
+  `isCanonicalInstance` treats a part as non-canonical — both by design. Still to watch: the ERP export's `ItemUUID`
+  column carries `C-` IDs for graduated parts, and a CSV re-import must update those in place.
+- **Intake disks:** scan slot keys are device names (`nvme0n1`, `sda`), not assembly slot keys, so their ID gets the
+  `0` subcategory segment (`C-104523-0-0001`) and they have no effective subcategory — a scan-to-slot mapping is a
+  follow-up (todo).
 
 ### 11.8 What disappears (debt check)
 
@@ -618,7 +620,7 @@ migration.
 
 | Step | Content | Tests |
 |---|---|---|
-| 6a | Part IDs: generator, root resolution, graduation without re-key, invoker lookup fix | Jest: format, counter, nesting, graduation keeps ID |
+| 6a ✅ | Part IDs: generator, root resolution, graduation without re-key (#991) | Jest: format, counter, nesting, graduation keeps ID |
 | 6b | Contract fields + validator; shared question selector; scoring (11.4) | Jest: validator, score cases incl. refurbishment unchanged |
 | 6c | Answer merge PATCH + carry-over in `POST …/quality-review` | route tests: chip then full save keeps both |
 | 6d | Creation: `askOnCreate`, article specs block | jsdom: block editable/read-only, warning |

@@ -293,10 +293,8 @@ describe('remove-from-device action', () => {
     }
 
     function makeGradCtx(overrides: Record<string, any> = {}) {
-      // getItem returns the component for its own id, null for freshly minted candidates.
       return makeCtx({
         getItem: jest.fn(async (id: string) => (id === 'C-comp1' ? component : null)),
-        generateItemUUID: jest.fn(async () => 'I-000042-0001'),
         getMaxArtikelNummer: jest.fn(async () => '000041'),
         ...overrides,
       });
@@ -309,7 +307,7 @@ describe('remove-from-device action', () => {
       mockWithTransaction.mockImplementation(async (fn: any) => fn({}));
     });
 
-    it('sets identity, re-keys to the I- UUID, and returns the new id', async () => {
+    it('sets identity and keeps the component\'s ItemUUID', async () => {
       const ctx = makeGradCtx();
       const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', {
         actor: 'alice',
@@ -321,10 +319,11 @@ describe('remove-from-device action', () => {
       await action.handle(req, res, ctx);
 
       expect(getStatus()).toBe(200);
-      expect(getBody().itemUUID).toBe('I-000042-0001');
+      expect(getBody().itemUUID).toBe('C-comp1');
       const gradEvent = ctx.logEvent.mock.calls.find((c: any[]) => c[0].Event === 'ComponentGraduated');
       expect(gradEvent).toBeDefined();
-      expect(JSON.parse(gradEvent[0].Meta).previousUuid).toBe('C-comp1');
+      expect(gradEvent[0].EntityId).toBe('C-comp1');
+      expect(JSON.parse(gradEvent[0].Meta).artikelNummer).toBe('000042');
     });
 
     it('rejects graduation without an artikelNummer or newRef', async () => {

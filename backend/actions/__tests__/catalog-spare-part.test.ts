@@ -32,6 +32,7 @@ import action from '../catalog-spare-part';
 import * as dbClient from '../../db-client';
 
 const mockQuery = dbClient.query as jest.Mock;
+const mockQueryOne = dbClient.queryOne as jest.Mock;
 const mockWithTransaction = dbClient.withTransaction as jest.Mock;
 
 function createMockResponse() {
@@ -277,21 +278,39 @@ describe('catalog-spare-part action', () => {
   describe('POST /spare-parts/component (no reference)', () => {
     const url = '/api/items/P-001/spare-parts/component';
 
+    beforeEach(() => {
+      // Part-ID minting: the root device walk-up finds the laptop's Artikelnummer, no part exists yet.
+      mockQueryOne.mockImplementation(async (sql: string) => (sql.includes('WITH RECURSIVE') ? { Artikel_Nummer: '104523' } : null));
+    });
+    afterEach(() => {
+      mockQueryOne.mockReset();
+      mockQueryOne.mockResolvedValue(null);
+    });
+
     it('matches the route', () => {
       expect(action.matches(url, 'POST')).toBe(true);
     });
 
-    it('creates a C- component in the slot and returns its subcategory', async () => {
+    it('creates a part named after the root device and slot subcategory', async () => {
       const ctx = makeCtx({ getItem: jest.fn(async (id: string) => (id === 'P-001' ? parentItem : null)) });
       const { res, getStatus, getBody } = createMockResponse();
       await action.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'webcam' }), res, ctx);
       expect(getStatus()).toBe(201);
-      expect(getBody().itemUUID).toMatch(/^C-/);
+      expect(getBody().itemUUID).toBe('C-104523-2109-0001');
       expect(getBody().subCategory).toBe(2109);
       const inserts = mockTransactionClient.query.mock.calls.map((c: any[]) => c[0] as string);
       expect(inserts.some((q) => q.includes('INSERT INTO items') && q.includes('NULL,NULL'))).toBe(true);
       const rel = mockTransactionClient.query.mock.calls.find((c: any[]) => (c[0] as string).includes('INSERT INTO item_relations'));
       expect(rel![1]).toEqual(['P-001', getBody().itemUUID, 'webcam']);
+    });
+
+    it('refuses with 400 when the root device has no Artikelnummer', async () => {
+      mockQueryOne.mockResolvedValue(null);
+      const ctx = makeCtx({ getItem: jest.fn(async (id: string) => (id === 'P-001' ? parentItem : null)) });
+      const { res, getStatus } = createMockResponse();
+      await action.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'webcam' }), res, ctx);
+      expect(getStatus()).toBe(400);
+      expect(mockWithTransaction).not.toHaveBeenCalled();
     });
 
     it('rejects a slot the device contract does not define', async () => {

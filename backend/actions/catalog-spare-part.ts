@@ -6,7 +6,7 @@ import { guardWrite } from '../utils/write-guard';
 import { resolveTenant } from '../utils/tenant';
 import { recomputeQualityScoreSafely, resolveEffectiveSubCategory } from '../lib/quality-score';
 import { getAssemblyContract } from '../contracts/registry';
-import { generateComponentUUID } from '../lib/itemIds';
+import { mintPartItemUUID, PartIdError } from '../lib/part-ids';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -33,7 +33,7 @@ const action = defineHttpAction({
     const urlPath = (req.url || '').split('?')[0];
 
     // ── POST /api/items/:parentUuid/spare-parts/component ─────────────────────
-    // Catalogue a part into a slot WITHOUT a reference yet (in-device component, C- UUID), so it
+    // Catalogue a part into a slot WITHOUT a reference yet (in-device component, C- part ID), so it
     // can be assessed during the parent's quality review; identity is set later, at Zerlegung.
     // Intake already creates such components from scans — this is the manual counterpart.
     if (method === 'POST' && SPARE_PARTS_COMPONENT_ROUTE.test(urlPath)) {
@@ -69,12 +69,13 @@ const action = defineHttpAction({
         return sendJson(res, 409, { error: 'Steckplatz ist bereits belegt', itemUUID: occupied[0].ItemUUID });
       }
 
-      let newItemUUID: string | null = null;
-      for (let i = 0; i < 5; i++) {
-        const candidate = generateComponentUUID();
-        if (!(await ctx.getItem(candidate))) { newItemUUID = candidate; break; }
+      let newItemUUID: string;
+      try {
+        newItemUUID = await mintPartItemUUID(parentUuid, part.targetSubcategory);
+      } catch (err) {
+        if (err instanceof PartIdError) return sendJson(res, 400, { error: err.message });
+        throw err;
       }
-      if (!newItemUUID) return sendJson(res, 500, { error: 'Failed to generate component UUID' });
 
       const deviceLabel = (parentItem.Bezeichnung || parentItem.Artikelbeschreibung || parentItem.Artikel_Nummer || parentUuid) as string;
       const now = new Date().toISOString();
