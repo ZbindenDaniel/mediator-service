@@ -14,3 +14,17 @@ services:
     environment:
       # Reject data requests that arrive without a forward-auth identity (defence in depth).
       AUTH_REQUIRED: "true"
+
+  # Blueprints configure Authentik on every start (provider, app, outpost, groups, test users),
+  # so a recreated stack needs no clicks. Both containers mount them, as Authentik's own compose does.
+  authentik-server:
+    environment: &authentik-blueprint-env
+      MEDIATOR_EXTERNAL_URL: https://${PUBLIC_HOSTNAME:-localhost}
+      AUTHENTIK_EXTERNAL_URL: http://${PUBLIC_HOSTNAME:-localhost}:${AUTHENTIK_PORT:-9000}/
+      AUTHENTIK_DEV_PASSWORD: ${AUTHENTIK_DEV_PASSWORD:-${AUTHENTIK_BOOTSTRAP_PASSWORD:-}}
+    volumes:
+      - ./config/authentik/blueprints:/blueprints/custom/mediator:ro
+  authentik-worker:
+    environment: *authentik-blueprint-env
+    volumes:
+      - ./config/authentik/blueprints:/blueprints/custom/mediator:ro

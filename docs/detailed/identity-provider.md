@@ -110,8 +110,17 @@ run first: it's the same setup with the same clicks, minus DNS and certificates.
    `docker compose -f docker-compose.yml -f docker-compose.authentik.yml up -d --build`
    ✔ `docker compose ps` shows everything healthy. Authentik takes 1–2 minutes, and nginx waits
    for it.
-3. **Log in to Authentik** at `http://localhost:9000/if/admin/` as `akadmin`, using the bootstrap
-   password.
+3. **Already done for you (blueprints).** `docker-compose.authentik.yml` mounts
+   [`config/authentik/blueprints/`](../../config/authentik/blueprints/) into Authentik, which applies it on
+   every start: the groups (`mediator-admin`, `tenant-revamp`, `tenant-revamp-admin`), the Proxy Provider and
+   `mediator` application, the embedded outpost's `authentik_host`, and two test logins — **`dev-admin`**
+   (platform admin) and **`dev-worker`** (ordinary worker), password `AUTHENTIK_DEV_PASSWORD`, else
+   `AUTHENTIK_BOOTSTRAP_PASSWORD`. Hosts follow `PUBLIC_HOSTNAME`/`AUTHENTIK_PORT`.
+   ✔ *Admin → System → Blueprints* lists "Mediator - forward-auth application" and "Mediator - local test
+   users" as **successful**. Then skip to step 7. Steps 4–6 below are what the blueprint does, kept for a
+   setup without it (e.g. a server, where `dev-users.yaml` must never be mounted).
+
+   To log in to Authentik itself: `http://localhost:9000/if/admin/` as `akadmin`, bootstrap password.
 4. **Tell the outpost where the login page is.** Go to *Applications → Outposts → authentik
    Embedded Outpost → edit*, and under *Advanced settings* set
    `authentik_host: http://localhost:9000/`.
