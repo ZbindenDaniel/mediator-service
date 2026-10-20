@@ -2,7 +2,8 @@
 
 **Status:** Phases 1–4 built (#980, #982, #984). Catalogue taxonomy, contracts and specs **drafted** in
 [`config/catalogue/`](../config/catalogue/README.md) for rework on the test environment. Before the live refurbishment
-system gets this: calibrate the grade bands (C1).
+system gets this: calibrate the grade bands (C1). **Phase 6 planned (§11, 2026-10-20):** device-first creation,
+Einzelteile page grouped by work steps, stable readable part IDs — replaces the drill-down modal and the Zerlegen card.
 **Parent plan:** [PLANNING_NEW_USE_CASE.md](PLANNING_NEW_USE_CASE.md) §7–8 (spare-part cataloguing deployment).
 **Related:** [spare-parts-catalog.md](detailed/spare-parts-catalog.md) · [component-lifecycle.md](detailed/component-lifecycle.md) ·
 [PLANNING_TAXONOMY_EXTERNALIZATION.md](PLANNING_TAXONOMY_EXTERNALIZATION.md) · [contracts/](../contracts/README.md)
@@ -17,6 +18,7 @@ system gets this: calibrate the grade bands (C1).
 >   item on safety/function defects. The 1–5 grade is **derived**: pessimistic from the lower bound, and only when the
 >   range is narrow.
 > - **The operator can drill into sub-assemblies during the quality review** and come back to the parent (Phase 4).
+  *Phase 6 (§11) replaces this with an Einzelteile page; creation only checks the whole device.*
 >
 > Consumers of the 1–5 grade (badges, filters, Shopware, ERP, AI priority, labels) are unchanged — they read the
 > derived grade.
@@ -284,7 +286,7 @@ refurbishment system. Bands live in `general.json`, so each deployment can have 
 
 ---
 
-## 6. Nested assessment UX (D5) — ✅ built in #984
+## 6. Nested assessment UX (D5) — ✅ built in #984 · to be replaced by §11 (Phase 6)
 
 ```
 ThinkPad T480  ›  Displayassembly  ›  Webcam            ← breadcrumb (only when nested), crumbs go back up
@@ -363,6 +365,7 @@ Checked and **holds**:
 | 3 `multi` type | type, validator, scoring, specs, chip/checkbox input, intake skip | ✅ #980 |
 | 4 Nested assessment UI | breadcrumb drill-down, reference-less catalogue route + lazy creation, drafts, assessed/open markers, graduation subcategory guard (R5) | ✅ #984 (component-tested; browser walkthrough pending) |
 | 5 Catalogue content | taxonomy 210, part tree, weights, per-part contracts | **draft** ✅ #982 in `config/catalogue/` (validated in Jest); rework on the test environment |
+| 6 Device-first + Einzelteile | stable part IDs, `askOnCreate`/`steps`/`refinedBy`, slot scoring change, answer merge, article specs at creation, Einzelteile page, Zubehör split | **planned** (§11) |
 
 ---
 
@@ -371,7 +374,7 @@ Checked and **holds**:
 | # | Question | For | Status |
 |---|---|---|---|
 | C1 | **Calibrate grade bands / weights** so refurbishment grades match expectations (§5.6 table) — blocker before the live refurbishment system | team | open |
-| C2 | Large trees stay ungraded until most parts are assessed | team | ✅ intended (2026-10-14): without assessed parts there is nothing to tell |
+| C2 | Large trees stay ungraded until most parts are assessed | team | **superseded (2026-10-20, §11.4):** unassessed slots no longer count, so a device keeps its creation grade and parts only refine it |
 | C3 | Overall condition on assemblies, or parts only? | team | ✅ every item, assemblies included, is scored the same way: its own assessment + its components (draft unchanged) |
 | Q1 | Weight per part | team | **drafted** (`config/catalogue/`) |
 | Q2 | Taxonomy tree (cables as one subcategory, M.2 as a 901 slot, microphone added) | team | **drafted** |
@@ -381,3 +384,256 @@ Checked and **holds**:
 | Q8 | Derive the 1–5 grade from the percentage | Daniel | ✅ yes (U3/U4) |
 | Q9 | How lists show the range | Daniel | ✅ grade from the lower bound, % range small next to it, sort by lower bound — **instance tab done (#983)**, lists not yet |
 | C4 | Spec contracts for parts | team | **drafted** (`config/catalogue/contracts/specs/`, 32 files) |
+
+---
+
+## 11. Phase 6 — device-first creation + Einzelteile page (planned 2026-10-20, not built)
+
+**Why:** first test round. The flow is "a lot of clicking and somewhat confusing": a part shows up in two places with
+different words (the quality modal's "Komponenten" block with its drill-down stack, and the Zerlegen card in the
+Zubehör tab), you only ever see one level of the tree, and part IDs (`C-<random>`) are unreadable and change at
+graduation. At creation, a laptop is **not** taken apart — the operator judges the whole device, as in refurbishment.
+Taking it apart is a separate, optional pass that only adds detail.
+
+### 11.1 Decisions (Daniel, 2026-10-20)
+
+| # | Decision |
+|---|---|
+| E1 | **Creation = device check**, asked like refurbishment (display, keyboard, chassis, battery, RAM, storage …). Assembly slots are not asked at creation unless a contract says so |
+| E2 | **S1 — parts refine the device answers.** A device question names the slots it covers; once they are assessed, the parts' ranges replace it in the score |
+| E3 | **Creation fills the article (ItemRef) specs** from the spec contract. Missing required fields: **warning only**. Instance data is not edited at creation (beyond what quality answers already write today) |
+| E4 | **Einzelteile page** on the left panel replaces the drill-down modal and the Zerlegen card, **in both deployments**. Instance-tab button "Neu bewerten" → "Einzelteile" |
+| E5 | Einzelteile is grouped by **work steps** (G2), defined in the assembly contract |
+| E6 | Zubehör tab: **accessory links stay editable**; the components part becomes a read-only summary linking to Einzelteile |
+| E7 | **Part ID `C-<root Artikelnummer>-<subcategory>-<####>`**, minted once, **never renamed** |
+| E8 | **The Artikelnummer is not derived** from parent + subcategory; graduation only sets it (write-once) |
+| E9 | **`askOnCreate` is a list on the assembly contract**; missing = all slots (refurbishment unchanged) |
+| E10 | Presence answers given on the Einzelteile page **merge into the latest assessment**; a new history row only on "Speichern" |
+| E11 | **Default presence per slot** (`"default": "Nicht vorgesehen"`), e.g. rare second-drive slots — the walkthrough only touches what is unusual |
+| E12 | **RAM and storage are asked with the device** (what is fitted matters more than cataloguing each stick); creating a RAM/SSD part later stays possible |
+| E13 | **Left and right panel never overwrite each other**: disjoint answer sets, server-side merge, both reload after every save (§11.6 "Panel sync") |
+
+Rejected, with reasons (so they are not re-proposed):
+- **Derived Artikelnummer** (parent + subcategory, with or without dash). New Artikelnummern are `max + 1` over all
+  refs (`getMaxArtikelNummer`, `CAST(... AS INTEGER)`): one 10-digit number moves every future article to that range,
+  a nested one (14 digits) overflows INTEGER and breaks article creation for everyone, a dash breaks the cast and is
+  refused by `generateItemUUID`. Generic parts (RAM, SSD, WLAN) would get one article per laptop model, and in
+  refurbishment those would become ERP/Shopware articles.
+- **Graduation as "delete + create an `I-` item".** That has to move the same rows the current re-key moves (relations
+  on both sides, events, `QualityId`, attachments, printed labels) — it *is* the re-key under another name. A stable
+  ID removes the problem instead.
+- **Groups as real sub-assemblies (G3)**: creates items that do not exist physically and changes scoring.
+- **Interactive SVG now**: one drawing per assembly level, kept in step with the contracts. Possible later as a
+  picture per work step, keyed by slot keys (which are already load-bearing, R8).
+
+### 11.2 The model after Phase 6
+
+| Pass | Question | UI | Stored in |
+|---|---|---|---|
+| **Zustand** (creation, and later re-checks) | How good is *this item* as a whole? | creation step; right panel on the root node | the item's assessment (its own questions) |
+| **Aufbau** (optional) | What is it made of, what is there? | Einzelteile, left panel | the parent's assessment (slot answers) |
+| **Zustand of a part** | How good is *this part*? | right panel on a part node | the part's own assessment |
+
+Rule of thumb for contract authors: **the device asks what can only be judged on the whole device or without
+opening it; parts ask about their own physical condition.** Where both describe the same thing (display), the device
+question carries `refinedBy`.
+
+### 11.3 Contract fields (all optional; absence = today's behaviour)
+
+```jsonc
+// assembly/<code>.json
+{
+  "askOnCreate": ["battery"],              // slot keys asked at creation; missing = all slots, [] = none
+  "steps": [                               // array order = work order; missing = one group "Weitere Teile"
+    { "key": "bottom", "label": "Akku & Bodenabdeckung" },
+    { "key": "storage", "label": "Speicher & Funk" }
+  ],
+  "parts": [
+    { "key": "battery", "step": "bottom", ... },          // part without step → "Weitere Teile"
+    { "key": "drive_25_2", "default": "Nicht vorgesehen", ... }   // shown pre-set; not stored until changed
+  ]
+}
+// quality/<code>.json (device question)
+{ "id": "screen_condition", ..., "refinedBy": ["display_assembly"] }
+```
+
+Validator (`contracts:check`) adds: `askOnCreate`/`refinedBy` reference existing slot keys of the **same
+subcategory's** assembly contract (direct children only — a nested part is already inside its parent's range);
+`step` references a declared step; step keys unique; a question with `refinedBy` has a `weight`; `default` is one of
+the slot question's values and **not a "missing" value** (an unconfirmed "Nicht vorhanden" would silently cost score).
+
+**Slot `default` (E11)** is display-only: the row shows it pre-set and it counts as answered for step progress, but it
+is not written to the assessment until the operator changes or confirms it. Scoring needs nothing — an unanswered slot
+and a "Nicht vorgesehen" slot are both excluded (§11.4) — and a later contract change of the default applies
+everywhere instead of being frozen into old assessments.
+
+**One question selector for both creation paths.** Today the frontend (`getAllQuestions`,
+`frontend/src/lib/qualityContracts.ts`) and intake (`resolveIntakeQuestions`, `backend/lib/intake-quality-map.ts`)
+each assemble the question list. The `askOnCreate` filter goes into one shared function in `models/` used by both, so
+the create form and the intake station cannot drift apart.
+
+### 11.4 Scoring changes ([models/quality-score.ts](../models/quality-score.ts), one function for server, intake, preview)
+
+1. **A slot counts only when it has been looked at:** a linked part with a range → `w × child range`; "Nicht
+   vorhanden" / removed to a box → 0 (certain); "Nicht vorgesehen" / "Fest verbaut" → excluded; **present but not
+   assessed, or unanswered → excluded** (was: uncertain). Otherwise starting the walkthrough would *widen* the range —
+   ticking 30 slots "✓" on a laptop graded at creation would turn its grade into "?". **Replaces C2.**
+   Unanswered *questions* stay uncertain, as before (D8 unchanged for questions).
+2. **S1 (`refinedBy`):** example — "Gehäuse-Zustand" lists `palmrest` + `bottom_case`. Only the palmrest assessed →
+   the device question still counts (the bottom case has not been looked at). Both assessed → it drops out, the two
+   parts now speak for the chassis. Rule: a device question drops out of the total once **every** slot it lists is assessed (part with
+   a range) or missing/removed. If a covered slot is "Fest verbaut" or "Nicht vorgesehen", the device question stays
+   (the condition is still judged on the device, Q3). The part's own slot weight then stands for that area — so the
+   relative weight of an area can change on refinement (device question 4 → display slot 10); calibrating that is part
+   of C1.
+3. Knock-outs unchanged (a part's knock-out applies once it is assessed).
+
+**Effect on refurbishment: none** — its slots carry no weights, its questions no `refinedBy`. Covered by the existing
+refurbishment score tests plus new ones for (1)–(2).
+
+### 11.5 Creation flow
+
+- **Questions:** general + group + subcategory + the slots in `askOnCreate` (missing = all → refurbishment unchanged).
+- **Catalogue content:** `config/catalogue/contracts/quality/201.json` takes over the refurbishment device questions
+  (keyboard layout/condition, display, chassis, battery swollen, hinges) and adds **RAM and storage as unweighted
+  questions with `specField`** (capacities, as refurbishment asks them) plus battery health as a weighted question.
+  They are device questions, not slot answers, because the catalogue splits storage over four slots (`drive_25_*`,
+  `m2_*`) and a capacity cannot be assigned to one of them before opening the device — and knowing what is fitted
+  matters more than cataloguing each stick (E12). The `ram`/`m2_*` slots stay, so a stick can still become a part
+  later; no `refinedBy` on RAM/storage (capacity is a spec, not a condition). `assembly/201.json` gets
+  `"askOnCreate": []`. `refinedBy` drafted for display, keyboard (palmrest), chassis (palmrest + bottom_case),
+  battery. *The team reviews these mappings and weights* (C1).
+- **Article specs block** (E3), shown once the subcategory is known: the fields of `specs/<sub>.json`, required ones
+  marked, saved into the article's Langtext. New article → editable, prefilled from the intake scan where a field
+  matches; **existing article → read-only** with a link to edit the article (a change would hit every unit). Blank
+  fields keep today's empty-key placeholders (`import-item.ts` `applySpecContract`), so the AI still sees the gaps.
+  Missing required fields → warning, never a block. **Reuse** the article form's Langtext editor
+  (`frontend/src/components/forms/itemFormShared.tsx`), no second spec editor.
+- Unchanged: quality answers with `specField` still write `InstanceSpecs` (refurbishment RAM/storage behaviour).
+
+### 11.6 Einzelteile page
+
+**Entry:** instance tab button **"Einzelteile"** when the item's (effective) subcategory has an assembly contract;
+otherwise the button stays **"Neu bewerten"** and opens the existing modal **reduced to a single level** (the level
+stack goes away). Route `/items/:itemId/einzelteile` renders in `panel-main` (replacing the list; "← Liste" returns).
+
+**Left — Aufbau:**
+```
+ThinkPad T480 · I-104523-0001                    Gut · 72–80 %
+● Gerät — Zustand bei Erfassung                  bewertet
+▼ 1 Akku & Bodenabdeckung                        2/3
+    Akku            [✓][✕][n.v.][fest]           bewertet · 80–90 %
+    D-Cover         [✓][✕][n.v.][fest]           offen
+    CMOS-Batterie   [ ][ ][   ][    ]            ?
+▶ 2 Speicher & Funk                              0/7
+▶ 4 Display abnehmen                             0/1
+    └ Displayassembly → its own steps, indented
+▶ Weitere Teile
+```
+- **Presence control:** chips when the slot question uses the canonical presence values (§4.1); otherwise the slot's
+  own select (refurbishment RAM/storage capacities, battery health) — refurbishment slots keep their meaning.
+- Chips are **read-only while a part item sits in the slot** (state comes from the item: `cataloged`/`removed`), so
+  "✕ fehlt" can never contradict an existing item. To undo, use "Lösen" on the part.
+- `multipleAllowed`: one row per in-device instance + "+ weiteres".
+- A step counts as done when every slot in it has a presence answer; the next step opens.
+- Nested assemblies: a part with its own assembly contract expands **under its row** with its own steps.
+
+**Right — the selected node** (new panel entity, URL-addressable `?entity=part&node=<rootId>/<slot>/<slot>` so a
+reload keeps the place; an existing part may also be addressed by its ItemUUID):
+- Header: label, ID (or "noch nicht erfasst"), range.
+- The node's **own** questions only (general + group + subcategory — no "Komponenten" block), via `QualityReviewStep`.
+- **"Speichern & nächster offener →"** creates the part lazily (and any not-yet-created ancestors, as #984 does), saves
+  the assessment, reloads the left side.
+- Actions: **Entnehmen** (into a box; optionally link an article: search an existing ref or create a new one —
+  refurbishment parity, = `remove-from-device`), **Lösen**, **Artikel verknüpfen/ändern** (folds in todo 0n),
+  "Artikel-Details öffnen" for existing parts.
+- Root node "Gerät" = the device's own Zustand form (re-check after creation happens here).
+- Unsaved answers per node keep the `qualityDraft` localStorage mirror (keyed per node) — switching nodes must not
+  lose work.
+- **Mobile:** step list = list view, node = detail view (as list ↔ detail today).
+
+**Storage (E10):**
+- New `PATCH /api/items/:id/quality-review/answers` `{ answers: { part_battery: "Vorhanden" } }` merges slot answers
+  into the item's latest assessment (creates a first one if none), then recomputes. No history row per chip click.
+- **The full save must not wipe the slot answers.** `POST …/quality-review` replaces the answer set; the right panel
+  no longer sends slot questions. So the server carries over the previous answers for the slot-question ids of the
+  current assembly contract when they are not in the request (the same carry-over as "Entnehmen", §5.4). Without
+  this, saving the device's Zustand would erase the whole Aufbau.
+
+**Panel sync (E13).** The two panels write **disjoint** answer sets of the same item: the left only slot answers
+(PATCH), the right only the node's own questions (POST). Server-side:
+- the PATCH accepts **only** slot-question ids of the item's assembly contract (400 otherwise);
+- the POST ignores slot ids in the body and carries over the stored slot answers **read at save time on the server**,
+  so a chip clicked after the right form was opened is not lost (no stale client copy is ever written back).
+Client-side: one shared revision for the page — every save on either side bumps it, both sides reload (the right
+panel keeps its unsaved draft through the reload; the draft mirror already does that). A not-yet-created part that is
+open on the right and then marked ✕/n.v. on the left closes on the right (its draft stays). Two people on the same
+device at once: last write wins per answer set — accepted, not solved here.
+
+**Zubehör tab (E6):** split `ZubehoerCard` (≈700 lines). Linked accessories (charger …), "Zubehör von" and compatible
+articles stay editable in the tab. The slot part moves to Einzelteile; the tab shows "12 Teile erfasst · 3 entnommen
+→ Einzelteile öffnen".
+
+**Parity before retiring the Zerlegen card** (no phase with both): refurbishment's add-with-article (`spare-parts`
+POST with a ref, `…/new-ref`), Entnehmen, Lösen, multi-slot "+ weiteres". Checklist in the PR.
+
+### 11.7 Part IDs (E7, E8)
+
+- **Format:** `C-<root Artikelnummer>-<subcategory>-<####>`, e.g. `C-104523-2132-0003`. Root = walk `Zerlegt_aus`
+  to the top device (a webcam inside the Displayassembly gets the laptop's number). Counter per (root article,
+  subcategory) across all devices: two T480 batteries are `…-2132-0001`, `…-2132-0002`; which device a part sits in
+  comes from the relation, not the ID. Root without Artikelnummer → 400 (devices always have one).
+- **Minted once from what is known at creation:** created *with* an article (refurbishment add-with-ref) → the normal
+  `I-<Artikelnummer>-####`, as today; created *without* → `C-…`. **No ID ever changes afterwards.**
+- **Graduation** = set `Artikel_Nummer` (write-once guard stays) + relocate. The re-key in
+  `graduate-component.ts` (relations both sides, events, one transaction) is deleted. So: `C-104523-2132-0003`
+  stays `C-104523-2132-0003` with `Artikel_Nummer = 019456` — not `I-019456-0003`.
+- **Generator:** a small dedicated function using `getMaxItemId` with pattern `C-104523-2132-%`. Not
+  `generateItemUUID`: it refuses dashes in the identifier on purpose, and loosening that would weaken the normal IDs.
+  The `C-` prefix keeps parts out of the `I-104523-%` counter (with an `I-` prefix the 4 characters after the dash
+  would read "2132" and restart the device counter at 0001 → collision).
+- **Removed:** random `generateComponentUUID`; `isComponentUUID` (no callers outside tests).
+- **Existing random `C-` items** (test environment only): left as they are — nothing parses them.
+- **To check while building** (all treat an unparseable ID as "no match" on static reading):
+  `resolveCanonicalItemUUID` (falls back for an article whose only instances are `C-`), `isCanonicalInstance` in
+  item grouping, the agentic invoker's `loadItemTarget` (parses the itemId and would treat `C-…` as an Artikelnummer →
+  look up `items` by ItemUUID first instead), ERP export (the `ItemUUID` column will carry `C-` IDs for graduated
+  parts) and CSV re-import (must update in place, not regenerate).
+
+### 11.8 What disappears (debt check)
+
+| Removed | Replaced by |
+|---|---|
+| Level stack + per-slot drafts in `QualityReviewModal` | Einzelteile (modal stays single-level for non-assemblies) |
+| "Komponenten" block in `QualityReviewStep` | left panel |
+| Slot half of `ZubehoerCard`, probably `SparepartSlotPopup` | Einzelteile rows + right panel |
+| Re-key in `graduate-component.ts` | stable IDs |
+| `generateComponentUUID` (random), `isComponentUUID` | dedicated sequential generator |
+| Two question assemblers | one shared selector in `models/` |
+
+New: three optional contract fields + validator rules, one PATCH route, one panel entity, one page. No database
+migration.
+
+### 11.9 Order of work
+
+| Step | Content | Tests |
+|---|---|---|
+| 6a | Part IDs: generator, root resolution, graduation without re-key, invoker lookup fix | Jest: format, counter, nesting, graduation keeps ID |
+| 6b | Contract fields + validator; shared question selector; scoring (11.4) | Jest: validator, score cases incl. refurbishment unchanged |
+| 6c | Answer merge PATCH + carry-over in `POST …/quality-review` | route tests: chip then full save keeps both |
+| 6d | Creation: `askOnCreate`, article specs block | jsdom: block editable/read-only, warning |
+| 6e | Einzelteile page + panel entity; Zubehör split; parity; retire Zerlegen card + level stack | jsdom + **browser walkthrough** on a disposable DB |
+| 6f | Catalogue content drafts: 201 device questions, `refinedBy`, steps for 201/2101 | `contracts:check` |
+| — | Docs: this plan, `component-lifecycle.md`, `spare-parts-catalog.md`, `taxonomy-and-contracts.md`, user help | — |
+
+**Workload (estimate, 2026-10-20):** ~8–10 working sessions; 6e is about half of it. Delivered in three mergeable
+chunks so test feedback can still shape the page: **A** = 6a–6c (backend, invisible to users, refurbishment grades
+unchanged), **B** = 6d (creation — testers feel it at once), **C** = 6e–6f (Einzelteile + content).
+
+### 11.10 Open (for the team, does not block building)
+
+| # | Question |
+|---|---|
+| F1 | Work steps for 201 and 2101 (draft from 6f to rework) |
+| F2 | `refinedBy` mapping and the device-question weights next to the slot weights (part of C1) |
+| F3 | Picture per work step (SVG/photo keyed by slot keys) — later, once the steps are stable |
