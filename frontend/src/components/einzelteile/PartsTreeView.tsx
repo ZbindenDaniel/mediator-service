@@ -136,13 +136,13 @@ function SlotRow({ node, slot, ctx }: { node: PartsTreeNode; slot: PartsTreeSlot
           {item && <span className="ptree__id">{item.itemUUID}</span>}
         </button>
         <span className="ptree__controls">
-          {part.question && (
-            // Presence follows the part item once there is one (in the device or removed).
+          {part.question && !(hasItem && isPresenceQuestion(part)) && (
+            // Once a part item sits in the slot its presence is the item itself — no chips to contradict it.
             <AnswerControl
               question={part.question}
-              value={hasItem && isPresenceQuestion(part) ? (part.question.type === 'boolean' ? 'true' : 'Vorhanden') : value}
-              isDefault={!hasItem && isDefault}
-              disabled={!ctx.canEdit || saving || (hasItem && isPresenceQuestion(part))}
+              value={value}
+              isDefault={isDefault}
+              disabled={!ctx.canEdit || saving}
               onChange={(v) => void save(part.question!.id, v)}
             />
           )}

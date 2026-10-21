@@ -12,6 +12,7 @@ import {
   allRequiredAnswered,
   isQuestionVisible,
 } from '../lib/qualityContracts';
+import { useFeature } from '../context/FeaturesContext';
 import QualityBadge from './QualityBadge';
 import { parseMultiAnswer, computeQualityScore, scoreToRange, formatQualityScoreRange, gradeFromRange, gradingFrom } from '../../../models/quality-score';
 import type { QualityScoreChild } from '../../../models/quality-score';
@@ -271,6 +272,7 @@ export default function QualityReviewStep({
     assemblyRaw: null,
   });
   const [spareParts, setSpareParts] = useState<SparePartRow[]>([]);
+  const agenticEnabled = useFeature('agentic');
 
   useEffect(() => {
     if (!itemId) return;
@@ -445,11 +447,14 @@ export default function QualityReviewStep({
 
         {subCatQuestions.length > 0 && (
           <>
-            <div className="row">
-              <p className="muted" style={{ margin: 0 }}>
-                <strong>{subCat!.subCategory && `Kategorie ${subCat!.subCategory}`}</strong>
-              </p>
-            </div>
+            {/* A bare category code says nothing where the caller already names the item (heading null). */}
+            {heading !== null && (
+              <div className="row">
+                <p className="muted" style={{ margin: 0 }}>
+                  <strong>{subCat!.subCategory && `Kategorie ${subCat!.subCategory}`}</strong>
+                </p>
+              </div>
+            )}
             {subCatQuestions.map((q) =>
               isQuestionVisible(q, answers) ? (
                 <QuestionRow
@@ -482,9 +487,11 @@ export default function QualityReviewStep({
                 {formatQualityScoreRange(scoreRange)}
               </span>
             )}
-            <span className="muted quality-review-step__priority">
-              KI-Priorität: {AI_PRIORITY_LABELS[aiPriority]}
-            </span>
+            {agenticEnabled && (
+              <span className="muted quality-review-step__priority">
+                KI-Priorität: {AI_PRIORITY_LABELS[aiPriority]}
+              </span>
+            )}
           </div>
         )}
 

@@ -4,6 +4,10 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 999. ✅ Einzelteile page: styles now reach the browser
+**Why:** Daniel reported the layout as "horrible" twice and the detail panel as gone. Screenshots with the image's headless Chromium showed the page completely unstyled: the rules had been written into `frontend/public/styles.css`, which is generated from `styles.scss` by `scripts/prebuild.js`, gitignored and overwritten on every build — so neither round of styling ever shipped, and without the grid the detail panel sat far below the tree. Rules moved to `styles.scss` and the trap noted in the frontend README. Then fixed what the screenshots showed: global `button:disabled` (dashed border) and pill radius leaking into tree names and chips, the selected device row not highlighted, presence chips shown (disabled) for slots that already hold a part — dropped, the part is the presence — phone width with deep indents and names broken per letter, and the form's "Kategorie N" header and "KI-Priorität" (AI off) hidden on this page.
+**Deferred:** visual review by the testers; dark mode not screenshotted.
+
 ## 978. ✅ Header username as a visible, single-click account button
 **Why:** The name in the header was a bold `<div>` that opened Benutzereinstellungen only on double-click: nothing marked it as clickable, it wasn't keyboard-reachable, and it's now the only way to the theme switch, simple mode and logout, so it shouldn't be a hidden feature. Now a `<button className="header-user">` with person icon, name (truncated) and chevron, in the header nav's pill style (`--nav` fill); hover/open state lifts to `--surface` with an `--acc` border; `aria-haspopup="dialog"` + `aria-expanded`. Falls back to "Benutzer" when no name is set. Double-click removed (single click only). User guide (`docs/user/1_Erste-Schritte.md`) and `docs/detailed/identity-provider.md` updated. Checked with headless screenshots, light and dark.
 **Deferred:** a real dropdown menu (account info + logout inline, without the dialog) — the dialog covers it for now.
