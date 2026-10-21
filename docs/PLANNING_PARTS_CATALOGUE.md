@@ -563,8 +563,10 @@ reload keeps the place; an existing part may also be addressed by its ItemUUID):
 **Panel sync (E13).** The two panels write **disjoint** answer sets of the same item: the left only slot answers
 (PATCH), the right only the node's own questions (POST). Server-side:
 - the PATCH accepts **only** slot-question ids of the item's assembly contract (400 otherwise);
-- the POST ignores slot ids in the body and carries over the stored slot answers **read at save time on the server**,
-  so a chip clicked after the right form was opened is not lost (no stale client copy is ever written back).
+- the POST keeps every stored slot answer the body does not send, **read at save time on the server**, so a chip
+  clicked after the right form was opened is not lost (the right panel never sends slot ids, so no stale copy is
+  written back). A slot answer the body *does* send still wins — the create form (`askOnCreate` slots) and, until
+  6e, the refurbishment modal send them. ✅ built in #994.
 Client-side: one shared revision for the page — every save on either side bumps it, both sides reload (the right
 panel keeps its unsaved draft through the reload; the draft mirror already does that). A not-yet-created part that is
 open on the right and then marked ✕/n.v. on the left closes on the right (its draft stays). Two people on the same
@@ -622,7 +624,7 @@ migration.
 |---|---|---|
 | 6a ✅ | Part IDs: generator, root resolution, graduation without re-key (#991) | Jest: format, counter, nesting, graduation keeps ID |
 | 6b ✅ | Contract fields + validator; shared question selector; scoring (11.4) (#993) | Jest: validator, score cases incl. refurbishment unchanged |
-| 6c | Answer merge PATCH + carry-over in `POST …/quality-review` | route tests: chip then full save keeps both |
+| 6c ✅ | Answer merge PATCH + carry-over in `POST …/quality-review` (#994) | route tests: chip then full save keeps both |
 | 6d | Creation: `askOnCreate`, article specs block | jsdom: block editable/read-only, warning |
 | 6e | Einzelteile page + panel entity; Zubehör split; parity; retire Zerlegen card + level stack | jsdom + **browser walkthrough** on a disposable DB |
 | 6f | Catalogue content drafts: 201 device questions, `refinedBy`, steps for 201/2101 | `contracts:check` |

@@ -1,7 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { assemblyToQualityContract } from '../../models/assembly-contract';
+import type { AssemblyContract } from '../../models/assembly-contract';
 import { defineHttpAction } from './index';
-import { insertQualityAssessment, updateItemQualityAssessment, updateItemInstanceSpecs, getItemQualityResponses } from '../db';
+import { insertQualityAssessment, updateItemQualityAssessment, updateItemInstanceSpecs, getItemQualityResponses, updateQualityAssessmentAnswers } from '../db';
 import {
   loadGeneralContract,
   loadSubCategoryContract,
@@ -18,15 +19,47 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+const REVIEW_ROUTE = /^\/api\/items\/([^/]+)\/quality-review$/;
+const ANSWERS_ROUTE = /^\/api\/items\/([^/]+)\/quality-review\/answers$/;
+
+// The two writers of an item's answers never overwrite each other (plan E13): the Einzelteile page
+// sets slot answers (PATCH …/answers), the assessment form the item's own questions (POST). A POST
+// that does not send a slot answer keeps the stored one — read here, at save time, so a presence
+// chip clicked while the form was open is not lost to the form's stale copy.
+function slotQuestionIds(assembly: AssemblyContract | null): Set<string> {
+  return new Set(assembly ? assemblyToQualityContract(assembly).questions.map((q) => q.id) : []);
+}
+
+async function readBody(req: IncomingMessage): Promise<Record<string, unknown> | null> {
+  let raw = '';
+  for await (const chunk of req) raw += chunk;
+  try {
+    const parsed = JSON.parse(raw || '{}') as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
+function scoreAnswers(subCategory: number | undefined, assemblyContract: AssemblyContract | null, answers: Record<string, string>) {
+  const generalContract = loadGeneralContract();
+  const subCatContract = subCategory !== undefined ? loadSubCategoryContract(subCategory) : null;
+  const assemblyQualityContract = assemblyContract ? assemblyToQualityContract(assemblyContract) : null;
+  return buildQualityCheckResponse(generalContract, subCatContract, answers, assemblyQualityContract, assemblyContract);
+}
+
 const action = defineHttpAction({
   key: 'quality-review',
   label: 'Quality Review',
   appliesTo: () => false,
   matches: (path, method) =>
-    /^\/api\/items\/[^/]+\/quality-review$/.test(path) && (method === 'POST' || method === 'GET'),
+    (REVIEW_ROUTE.test(path) && (method === 'POST' || method === 'GET')) ||
+    (ANSWERS_ROUTE.test(path) && method === 'PATCH'),
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
-      const match = req.url?.match(/^\/api\/items\/([^/]+)\/quality-review$/);
+      const urlPath = (req.url || '').split('?')[0];
+      if (ANSWERS_ROUTE.test(urlPath)) return await handleAnswersPatch(req, res, ctx, decodeURIComponent(urlPath.match(ANSWERS_ROUTE)![1]));
+      const match = urlPath.match(REVIEW_ROUTE);
       const itemUUID = match ? decodeURIComponent(match[1]) : '';
       if (!itemUUID) return sendJson(res, 400, { error: 'invalid item id' });
       if (req.method !== 'GET' && !(await guardWrite(ctx, res, 'item', itemUUID))) return;
@@ -39,12 +72,8 @@ const action = defineHttpAction({
         return sendJson(res, 200, result);
       }
 
-      let raw = '';
-      for await (const chunk of req) raw += chunk;
-      let data: Record<string, unknown> = {};
-      try { data = JSON.parse(raw || '{}'); } catch {
-        return sendJson(res, 400, { error: 'invalid JSON body' });
-      }
+      const data = await readBody(req);
+      if (!data) return sendJson(res, 400, { error: 'invalid JSON body' });
 
       const reviewed_by = resolveActor(ctx, typeof data.reviewed_by === 'string' ? data.reviewed_by : '');
       if (!reviewed_by) return sendJson(res, 400, { error: 'reviewed_by is required' });
@@ -52,7 +81,7 @@ const action = defineHttpAction({
       if (typeof data.answers !== 'object' || data.answers === null || Array.isArray(data.answers)) {
         return sendJson(res, 400, { error: 'answers object is required' });
       }
-      const answers = data.answers as Record<string, string>;
+      const submitted = data.answers as Record<string, string>;
 
       // The server decides which contract scores the item; the client value is only a fallback for
       // items the server cannot place (no reference, no slot), so a stale or wrong client category
@@ -70,18 +99,20 @@ const action = defineHttpAction({
       const subCategory = resolvedSubCategory ?? clientSubCategory;
       const notes = typeof data.notes === 'string' && data.notes.trim() ? data.notes.trim() : null;
 
-      let generalContract;
+      const assemblyContract = subCategory !== undefined ? getAssemblyContract(subCategory) : null;
+      const stored = (await getItemQualityResponses(itemUUID)).responses;
+      const answers: Record<string, string> = { ...submitted };
+      for (const id of slotQuestionIds(assemblyContract)) {
+        if (!(id in answers) && id in stored) answers[id] = stored[id];
+      }
+
+      let checkResponse;
       try {
-        generalContract = loadGeneralContract();
+        checkResponse = scoreAnswers(subCategory, assemblyContract, answers);
       } catch (err) {
         console.error('[quality-review] Failed to load general contract', err);
         return sendJson(res, 500, { error: 'Failed to load quality contract' });
       }
-
-      const subCatContract = subCategory !== undefined ? loadSubCategoryContract(subCategory) : null;
-      const assemblyContract = subCategory !== undefined ? getAssemblyContract(subCategory) : null;
-      const assemblyQualityContract = assemblyContract ? assemblyToQualityContract(assemblyContract) : null;
-      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, answers, assemblyQualityContract, assemblyContract);
 
       const assessment = {
         tag: checkResponse.qualityTag as import('../../models/quality').QualityTag,
@@ -183,5 +214,76 @@ const action = defineHttpAction({
   },
   view: () => '<div class="card"><p class="muted">Quality review API</p></div>'
 });
+
+/**
+ * PATCH /api/items/:id/quality-review/answers — `{ answers: { part_battery: "Vorhanden" } }` merges
+ * slot answers into the item's latest assessment (in place: no history row per click; a first
+ * assessment is created when there is none). Only slot questions of the item's assembly are
+ * accepted; an empty value clears that answer.
+ */
+async function handleAnswersPatch(req: IncomingMessage, res: ServerResponse, ctx: any, itemUUID: string): Promise<void> {
+  if (!itemUUID) return sendJson(res, 400, { error: 'invalid item id' });
+  if (!(await guardWrite(ctx, res, 'item', itemUUID))) return;
+  const item = await ctx.getItem(itemUUID);
+  if (!item) return sendJson(res, 404, { error: 'item not found' });
+
+  const data = await readBody(req);
+  if (!data) return sendJson(res, 400, { error: 'invalid JSON body' });
+  const actor = resolveActor(ctx, typeof data.reviewed_by === 'string' ? data.reviewed_by : '');
+  if (!actor) return sendJson(res, 400, { error: 'reviewed_by is required' });
+  const patch = data.answers;
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch) || Object.keys(patch).length === 0) {
+    return sendJson(res, 400, { error: 'answers object is required' });
+  }
+
+  const resolved = await resolveEffectiveSubCategory(itemUUID);
+  const subCategory = resolved ?? undefined;
+  const assemblyContract = subCategory !== undefined ? getAssemblyContract(subCategory) : null;
+  const allowed = slotQuestionIds(assemblyContract);
+  const foreign = Object.keys(patch).filter((id) => !allowed.has(id));
+  if (foreign.length > 0) return sendJson(res, 400, { error: `not slot questions of this item: ${foreign.join(', ')}` });
+  const badValue = Object.entries(patch).find(([, v]) => v !== null && typeof v !== 'string');
+  if (badValue) return sendJson(res, 400, { error: `answer "${badValue[0]}" must be a string` });
+
+  const answers = { ...(await getItemQualityResponses(itemUUID)).responses };
+  for (const [id, value] of Object.entries(patch as Record<string, string | null>)) {
+    if (value === null || value.trim() === '') delete answers[id];
+    else answers[id] = value;
+  }
+  const checkResponse = scoreAnswers(subCategory, assemblyContract, answers);
+  const tag = checkResponse.qualityTag as import('../../models/quality').QualityTag;
+
+  const link = await queryOne<{ QualityId: number | null }>(`SELECT "QualityId" FROM items WHERE "ItemUUID" = $1`, [itemUUID]);
+  const qualityId = link?.QualityId == null ? null : Number(link.QualityId);
+  let id: number;
+  if (qualityId !== null && Number.isFinite(qualityId)) {
+    id = qualityId;
+    await updateQualityAssessmentAnswers(id, tag, checkResponse.qualityValue, checkResponse);
+  } else {
+    id = await insertQualityAssessment({
+      tag,
+      value: checkResponse.qualityValue,
+      is_complete: null,
+      has_defects: null,
+      is_functional: null,
+      notes: null,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: actor,
+      checkResponse,
+    });
+    await updateItemQualityAssessment(itemUUID, id, checkResponse.qualityValue);
+  }
+
+  if (Object.keys(checkResponse.derivedSpecs).length > 0) {
+    try {
+      await updateItemInstanceSpecs(itemUUID, checkResponse.derivedSpecs);
+    } catch (err) {
+      console.warn('[quality-review] Failed to store derived specs into InstanceSpecs', { itemUUID, error: err });
+    }
+  }
+  await recomputeQualityScoreSafely(itemUUID, { actor, logEvent: ctx.logEvent });
+  console.info('[quality-review] Slot answers merged', { itemUUID, id, keys: Object.keys(patch), actor });
+  sendJson(res, 200, { id, answers: checkResponse.answers });
+}
 
 export default action;

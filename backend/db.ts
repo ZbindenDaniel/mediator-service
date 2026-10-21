@@ -3510,6 +3510,25 @@ export async function insertQualityAssessment(assessment: QualityAssessmentInser
   return Number(row.id);
 }
 
+/**
+ * Rewrites an assessment's answers (and what is derived from them) in place — for presence answers
+ * set on the Einzelteile page, which must not add a history row per click. Reviewer/date stay those
+ * of the assessment.
+ */
+export async function updateQualityAssessmentAnswers(id: number, tag: string, value: number, checkResponse: QualityCheckResponse): Promise<void> {
+  await execute(
+    `UPDATE quality_assessments SET "tag"=$2,"value"=$3,"responses"=$4,"contract_version"=$5,"derived_specs"=$6 WHERE id=$1`,
+    [
+      id,
+      tag,
+      value,
+      JSON.stringify(checkResponse.answers),
+      JSON.stringify({ general: checkResponse.generalContractVersion, ...(checkResponse.subCategoryContractVersion !== undefined ? { subCat: checkResponse.subCategoryContractVersion } : {}) }),
+      Object.keys(checkResponse.derivedSpecs).length > 0 ? JSON.stringify(checkResponse.derivedSpecs) : null
+    ]
+  );
+}
+
 export async function getQualityAssessment(id: number): Promise<QualityAssessment | null> {
   const row = await queryOne<Record<string, unknown>>(
     `SELECT id,tag,value,is_complete,has_defects,is_functional,notes,reviewed_at,reviewed_by FROM quality_assessments WHERE id=$1`,
