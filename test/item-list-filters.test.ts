@@ -96,3 +96,16 @@ describe('item list server query', () => {
     expect(query.has('sortKey')).toBe(false);
   });
 });
+
+describe('item list lastModified sort', () => {
+  const dated = [
+    { ItemUUID: 'I-old', Artikel_Nummer: '10', UpdatedAt: '2024-01-01T00:00:00.000Z' },
+    { ItemUUID: 'I-new', Artikel_Nummer: '11', UpdatedAt: '2025-06-01T00:00:00.000Z' },
+    { ItemUUID: 'I-mid', Artikel_Nummer: '12', UpdatedAt: '2024-09-01T00:00:00.000Z' }
+  ] as unknown as Item[];
+
+  test('sorts by the latest change, newest first in desc', () => {
+    expect(ids(buildOptions({ items: dated, sortKey: 'lastModified', sortDirection: 'desc' }))).toEqual(['I-new', 'I-mid', 'I-old']);
+    expect(ids(buildOptions({ items: dated, sortKey: 'lastModified', sortDirection: 'asc' }))).toEqual(['I-old', 'I-mid', 'I-new']);
+  });
+});

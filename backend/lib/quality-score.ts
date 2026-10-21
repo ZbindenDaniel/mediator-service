@@ -1,8 +1,9 @@
 import { query as defaultQuery, queryOne as defaultQueryOne, execute as defaultExecute } from '../db-client';
 import { assemblyToQualityContract } from '../../models/assembly-contract';
 import { getAssemblyContract } from '../contracts/registry';
-import { loadGeneralContract, loadSubCategoryContract } from './quality-contracts';
-import { computeQualityScore, scoreToRange, formatQualityScoreRange, gradeFromRange, gradingFrom } from '../../models/quality-score';
+import { loadGeneralContract, loadSubCategoryContract, lockedSpecsFromAnswers } from './quality-contracts';
+import { parseLangtext, stringifyLangtext } from './langtext';
+import { computeQualityScore, scoreToRange, formatQualityScoreRange, gradeFromRange, gradingFrom, refinedQuestionIds } from '../../models/quality-score';
 import type { QualityScoreChild, QualityScoreRange } from '../../models/quality-score';
 import type { QualityGrading } from '../../models/quality-contract';
 import type { QualityContract } from '../../models/quality-contract';
@@ -96,7 +97,14 @@ export async function loadScoreChildren(itemUUID: string, db: QualityScoreDb = d
   });
 }
 
-async function evaluateItem(itemUUID: string, db: QualityScoreDb): Promise<{ range: QualityScoreRange | null; grading: QualityGrading } | null> {
+interface Evaluation {
+  range: QualityScoreRange | null;
+  grading: QualityGrading;
+  /** InstanceSpecs lines written by now-locked device questions (see dropLockedSpecs). */
+  lockedSpecs: Record<string, string>;
+}
+
+async function evaluateItem(itemUUID: string, db: QualityScoreDb): Promise<Evaluation | null> {
   const item = await db.queryOne<{ QualityId: unknown }>(`SELECT "QualityId" FROM items WHERE "ItemUUID" = $1`, [itemUUID]);
   if (!item) return null;
   const subCategory = await resolveEffectiveSubCategory(itemUUID, db);
@@ -113,7 +121,34 @@ async function evaluateItem(itemUUID: string, db: QualityScoreDb): Promise<{ ran
 
   const answers = await loadAnswers(item.QualityId, db);
   const children = assembly ? await loadScoreChildren(itemUUID, db) : [];
-  return { range: scoreToRange(computeQualityScore({ contracts, answers, assembly, children })), grading: gradingFrom(contracts) };
+  const locked = assembly ? refinedQuestionIds({ contracts, answers, assembly, children }) : new Set<string>();
+  return {
+    range: scoreToRange(computeQualityScore({ contracts, answers, assembly, children })),
+    grading: gradingFrom(contracts),
+    lockedSpecs: lockedSpecsFromAnswers(contracts, answers, locked)
+  };
+}
+
+/**
+ * Removes the lines locked device questions wrote from the item's InstanceSpecs. Done in the roll-up,
+ * not only on the device's own save, because a question locks when its *parts* get assessed. Only a
+ * line still holding the rendered answer goes — one edited by hand since then is kept.
+ */
+async function dropLockedSpecs(itemUUID: string, lockedSpecs: Record<string, string>, db: QualityScoreDb): Promise<void> {
+  if (Object.keys(lockedSpecs).length === 0) return;
+  const row = await db.queryOne<{ InstanceSpecs: string | null }>(`SELECT "InstanceSpecs" FROM items WHERE "ItemUUID" = $1`, [itemUUID]);
+  const specs = parseLangtext(row?.InstanceSpecs ?? null);
+  if (!specs || typeof specs === 'string') return;
+  const next: Record<string, unknown> = { ...specs };
+  let removed = false;
+  for (const [key, value] of Object.entries(lockedSpecs)) {
+    if (next[key] === value) {
+      delete next[key];
+      removed = true;
+    }
+  }
+  if (!removed) return;
+  await db.execute(`UPDATE items SET "InstanceSpecs" = $2 WHERE "ItemUUID" = $1`, [itemUUID, Object.keys(next).length > 0 ? stringifyLangtext(next) : null]);
 }
 
 export interface RecomputeOptions {
@@ -132,16 +167,17 @@ interface StoredQuality {
 }
 
 /**
- * Writes range + grade when they changed. The 1–5 grade follows the range only for items that have
+ * Writes range + grade when they changed (and drops locked questions' specs). The 1–5 grade follows the range only for items that have
  * an assessment (an imported grade stays the truth until the first one) and no manual override.
  */
 async function storeEvaluation(
   itemUUID: string,
   row: StoredQuality,
-  evaluation: { range: QualityScoreRange | null; grading: QualityGrading },
+  evaluation: Evaluation,
   db: QualityScoreDb
 ): Promise<{ rangeChanged: boolean; gradeChanged: boolean; grade: number | null }> {
   const { range, grading } = evaluation;
+  await dropLockedSpecs(itemUUID, evaluation.lockedSpecs, db);
   const rangeChanged = !sameRange(range, row.QualityScoreMin, row.QualityScoreMax);
   const currentGrade = toNumberOrNull(row.Quality);
   const derivesGrade = toNumberOrNull(row.QualityId) !== null && row.QualityManual !== true && range !== null;

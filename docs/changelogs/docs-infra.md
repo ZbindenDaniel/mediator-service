@@ -4,6 +4,10 @@ Covers: documentation updates, CLAUDE.md/OVERVIEW.md changes, environment config
 
 ---
 
+## 1009. ✅ Todo and changelog cleanup: 59 finished entries archived, duplicate #1000/#1001 renumbered, stale open questions dropped
+**Why:** `todo.md` had grown to 630 lines, mostly ✅ entries, which hid the open work. They moved to `docs/archive/todo-done.md` (kept for their incident notes; the changelogs stay the primary record). Finished bullets that still carry open follow-ups stay in `todo.md`. The two ui entries that reused #1000/#1001 are now #1002/#1003; testing #1000 and item-lifecycle #1001 kept their numbers because other docs cite them. Dropped open questions: admin tests vs. local `.env` (fixed in #1000) and "no UI path graduates components" (fixed in #1001).
+**Deferred:** the archive is grouped by the old section only, not re-sorted or deduplicated (a few entries such as 0z1 were duplicated in `todo.md` and stay that way).
+
 ## 995. ✅ Docker base image: Debian 11 (bullseye) → 12 (bookworm)
 **Why:** `docker compose build` failed in the runtime stage: `apt-get install` got 404s for every package from `bullseye-security` (curl, cups-client, mesa …). Debian 11 LTS ended on 2026-08-31 and the security pool is being removed while the index still lists those versions, so a retry does not help and the production build (gitea workflow) is affected the same way. Both stages move together (`node:20-bookworm` builds, `node:20-bookworm-slim` runs) so native modules are compiled against the same libc they run on; Node stays 20. Checked in the built image: Chromium 155, CUPS client, Node 20.20, the three CLIs in `dist/backend/cli/`.
 **Deferred:** the separate CUPS image (`cups/`) was not rebuilt or checked; the printing path was not exercised end-to-end.

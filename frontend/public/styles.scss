@@ -3040,14 +3040,62 @@ button:focus {
     }
 }
 
+// Item list: label above the field so inputs get the full cell width instead of sharing it with the label.
+.filter-bar--stacked {
+    .sort-control,
+    .sort-direction-control,
+    .filter-control {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    > .filter-grid,
+    .filter-more > .filter-grid {
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: 12px 16px;
+    }
+}
+
+// "Spalten" + count, directly above the table.
+.item-list-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
 .column-picker {
     width: auto;
 
     .filter-multiselect__panel {
-        left: auto;
-        right: 0;
+        right: auto;
         min-width: 200px;
     }
+}
+
+// Sortable column header: a button that looks like the header text (global button styles reset).
+.item-list .col-sort-btn {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    min-height: 0;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+
+    &:hover,
+    &--active {
+        color: var(--link);
+    }
+}
+
+.item-list .col-price {
+    width: auto;
+    min-width: 5rem;
+    text-align: right;
+    white-space: nowrap;
 }
 
 .filter-bar-row .row {

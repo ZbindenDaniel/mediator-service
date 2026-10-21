@@ -136,10 +136,14 @@ export default function SystemStatusCard({ authToken, onAuthFailure }: Props) {
           <p className="muted" style={{ margin: '0 0 4px' }}>Konfiguration:</p>
           <ul style={{ margin: 0, paddingLeft: '16px', fontSize: '13px' }}>
             <li>Medienspeicher: <strong>{config.mediaStorageMode}</strong></li>
-            <li>ERP-Sync: <strong>{config.erpSyncEnabled ? 'aktiv' : 'inaktiv'}</strong></li>
-            <li>ERP konfiguriert: <strong>{config.erpImportConfigured ? 'ja' : 'nein'}</strong></li>
-            <li>ERP Medien: <strong>{config.erpImportIncludeMedia ? 'aktiv' : 'inaktiv'}</strong></li>
-            <li>Shopware: <strong>{config.shopwareSyncEnabled ? 'aktiv' : 'inaktiv'}</strong></li>
+            {features['erp-sync'] && (
+              <>
+                <li>ERP-Sync: <strong>{config.erpSyncEnabled ? 'aktiv' : 'inaktiv'}</strong></li>
+                <li>ERP konfiguriert: <strong>{config.erpImportConfigured ? 'ja' : 'nein'}</strong></li>
+                <li>ERP Medien: <strong>{config.erpImportIncludeMedia ? 'aktiv' : 'inaktiv'}</strong></li>
+              </>
+            )}
+            {features.shopware && <li>Shopware: <strong>{config.shopwareSyncEnabled ? 'aktiv' : 'inaktiv'}</strong></li>}
           </ul>
         </div>
       )}

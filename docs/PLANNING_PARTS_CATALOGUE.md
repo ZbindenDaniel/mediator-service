@@ -284,6 +284,10 @@ Averaging lifts ordinary devices one band; knock-outs keep the severe ones where
 (e.g. 5 ≥ 0.95, 4 ≥ 0.8, 3 ≥ 0.6 …, with knock-out caps moved to match) or weights before this reaches the live
 refurbishment system. Bands live in `general.json`, so each deployment can have its own.
 
+**First cut (#1004):** 5 ≥ 0.95, 4 ≥ 0.85, 3 ≥ 0.6, 2 ≥ 0.4, grade-2 caps 0.39 → 0.59 — mint 97.5 % → 5,
+typical 86.7 % → 4, worn 77.5 % → 3, knock-outs unchanged; 84 % of all non-knock-out laptop answer combinations keep
+their old grade, none drops. Testers fine-tune.
+
 ---
 
 ## 6. Nested assessment UX (D5) — ✅ built in #984 · to be replaced by §11 (Phase 6)
@@ -373,7 +377,7 @@ Checked and **holds**:
 
 | # | Question | For | Status |
 |---|---|---|---|
-| C1 | **Calibrate grade bands / weights** so refurbishment grades match expectations (§5.6 table) — blocker before the live refurbishment system | team | open |
+| C1 | **Calibrate grade bands / weights** so refurbishment grades match expectations (§5.6 table) — blocker before the live refurbishment system | team | first cut #1004 (5 ≥ 0.95, 4 ≥ 0.85, 3 ≥ 0.6, 2 ≥ 0.4; grade-2 caps 0.59); testers fine-tune |
 | C2 | Large trees stay ungraded until most parts are assessed | team | **superseded (2026-10-20, §11.4):** unassessed slots no longer count, so a device keeps its creation grade and parts only refine it |
 | C3 | Overall condition on assemblies, or parts only? | team | ✅ every item, assemblies included, is scored the same way: its own assessment + its components (draft unchanged) |
 | Q1 | Weight per part | team | **drafted** (`config/catalogue/`) |

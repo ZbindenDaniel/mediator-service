@@ -4,6 +4,10 @@ Covers: AI enrichment pipeline, search, extraction, categorization, pricing, sup
 
 ---
 
+## 1008. ✅ Startup resume only re-invokes stale `running` runs
+**Why:** since the claim model (#913) an invocation proceeds only for claimed (`running`) runs, so the resume branch for stale `queued` runs did nothing except spend a concurrency slot. The dispatcher's claim already picks queued runs up. The stale-run query now selects `running` only, and the slot bookkeeping is gone (running runs already hold their slot).
+**Deferred:** the resume still runs in a fire-and-forget block at module load, before `initDb`. That's harmless (a fresh DB has no runs to resume), so it was not moved.
+
 ## 928. ✅ Planning: instance agentic flow (intake data → instance specs + reference reconciliation)
 **Why:** Intake produces rich per-instance data (`items.IntakeScan`, `items.InstanceSpecs`, quality
 condition answers, serial-keyed Phase-2 files) that the reference-keyed pipeline almost entirely

@@ -23,6 +23,7 @@ jest.mock('../../lib/quality-contracts', () => ({
   buildQualityCheckResponse: jest.fn((_g: any, _s: any, answers: Record<string, string>) => ({
     answers, derivedSpecs: {}, qualityValue: 4, qualityTag: 'Gut', generalContractVersion: 1,
   })),
+  lockedSpecsFromAnswers: jest.fn(() => ({})),
 }));
 jest.mock('../../contracts/registry', () => ({
   getAssemblyContract: jest.fn(() => ({

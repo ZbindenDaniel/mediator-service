@@ -1,4 +1,4 @@
-// Tests run in UTC like the container: date parsing of zone-less ERP timestamps is local-time based.
+// Tests run in UTC like the container, so any remaining local-time date handling matches production.
 process.env.TZ = 'UTC';
 
 module.exports = {

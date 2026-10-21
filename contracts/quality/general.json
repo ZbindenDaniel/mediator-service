@@ -17,19 +17,19 @@
   "grading": {
     "bands": [
       {
-        "min": 0.8,
+        "min": 0.95,
         "value": 5
       },
       {
-        "min": 0.6,
+        "min": 0.85,
         "value": 4
       },
       {
-        "min": 0.4,
+        "min": 0.6,
         "value": 3
       },
       {
-        "min": 0.2,
+        "min": 0.4,
         "value": 2
       },
       {
@@ -72,7 +72,7 @@
       "specValue": "%v",
       "knockout": {
         "below": 0.5,
-        "cap": 0.39
+        "cap": 0.59
       },
       "states": {
         "Keine": 1.0,

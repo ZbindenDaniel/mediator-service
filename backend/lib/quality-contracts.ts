@@ -96,6 +96,25 @@ export function deriveSpecsFromAnswers(
   return specs;
 }
 
+/**
+ * Specs that locked device questions (refinedQuestionIds) wrote while they were still open. Once the
+ * parts speak for themselves these lines would contradict them, so callers drop them. A spec field
+ * that an open question still renders is left alone.
+ */
+export function lockedSpecsFromAnswers(
+  contracts: QualityContract[],
+  answers: Record<string, string>,
+  locked: Set<string>
+): Record<string, string> {
+  if (locked.size === 0) return {};
+  const pick = (keep: (id: string) => boolean) =>
+    deriveSpecsFromAnswers(contracts.map((c) => ({ ...c, questions: c.questions.filter((q) => keep(q.id)) })), answers);
+  const open = pick((id) => !locked.has(id));
+  const specs = pick((id) => locked.has(id));
+  for (const key of Object.keys(open)) delete specs[key];
+  return specs;
+}
+
 /** Converts assembly contract part questions into a synthetic QualityContract for scoring/spec derivation. */
 export function buildQualityCheckResponse(
   generalContract: QualityContract,

@@ -7,6 +7,7 @@ import {
   loadGeneralContract,
   loadSubCategoryContract,
   buildQualityCheckResponse,
+  lockedSpecsFromAnswers,
 } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveActor } from '../utils/actor';
@@ -117,9 +118,11 @@ const action = defineHttpAction({
         if (!(id in answers) && id in stored) answers[id] = stored[id];
       }
       // Device questions whose parts are all assessed are locked (S1): keep the stored answer.
+      let locked = new Set<string>();
       if (assemblyContract) {
         const children = await loadScoreChildren(itemUUID);
-        for (const id of refinedQuestionIds({ contracts: scoringContracts(subCategory, assemblyContract), answers, assembly: assemblyContract, children })) {
+        locked = refinedQuestionIds({ contracts: scoringContracts(subCategory, assemblyContract), answers, assembly: assemblyContract, children });
+        for (const id of locked) {
           if (id in stored) answers[id] = stored[id];
           else delete answers[id];
         }
@@ -178,6 +181,10 @@ const action = defineHttpAction({
         console.error('[quality-review] Failed to log QualityAssessed event', { itemUUID, error: logErr });
       }
 
+      // A locked question's answer is kept for history, but its spec line would contradict the parts.
+      for (const key of Object.keys(lockedSpecsFromAnswers(scoringContracts(subCategory, assemblyContract), answers, locked))) {
+        delete checkResponse.derivedSpecs[key];
+      }
       if (Object.keys(checkResponse.derivedSpecs).length > 0) {
         try {
           await updateItemInstanceSpecs(itemUUID, checkResponse.derivedSpecs);

@@ -5,6 +5,7 @@ import type { FeatureSet } from '../../context/FeaturesContext';
 import { FEATURE_KEYS } from '../../../../models/features';
 import { ITEM_TAB_FEATURES, BOX_TAB_FEATURES, resolveTab } from '../../lib/tabFeatures';
 import ShopBadge from '../ShopBadge';
+import BulkItemActionBar from '../BulkItemActionBar';
 
 const allOn = Object.fromEntries(FEATURE_KEYS.map((k) => [k, true])) as FeatureSet;
 const with_ = (overrides: Partial<FeatureSet>): FeatureSet => ({ ...allOn, ...overrides });
@@ -37,5 +38,14 @@ describe('Feature gating in components', () => {
   it('self-gated widgets disappear with their feature', () => {
     expect(render(allOn, <ShopBadge compact shopartikel={1} publishedStatus="yes" />)).toContain('shop-badge');
     expect(render(with_({ shopware: false }), <ShopBadge compact shopartikel={1} publishedStatus="yes" />)).toBe('');
+  });
+
+  it('bulk bar hides Kivi Sync and Shop Sync with their features', () => {
+    const bar = <BulkItemActionBar selectedIds={['I-1']} onClearSelection={() => undefined} />;
+    expect(render(allOn, bar)).toContain('Kivi Sync');
+    const off = render(with_({ 'erp-sync': false, shopware: false }), bar);
+    expect(off).not.toContain('Kivi Sync');
+    expect(off).not.toContain('Shop Sync');
+    expect(off).not.toContain('Shopstatus');
   });
 });

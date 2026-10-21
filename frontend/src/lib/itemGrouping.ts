@@ -452,3 +452,29 @@ export function groupItemsForDisplay(items: Item[], options: GroupItemsOptions =
 
   return Array.from(grouped.values());
 }
+
+/** Group price for list display and sorting; 0/empty count as "no price". */
+export function resolveGroupPrice(group: GroupedItemDisplay): number | null {
+  const raw = group.representative?.Verkaufspreis as unknown;
+  if (raw === null || raw === undefined || raw === '') {
+    return null;
+  }
+  const value = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/** Latest UpdatedAt of any instance in the group (a change to one instance is a change to the row). */
+export function resolveGroupUpdatedAt(group: GroupedItemDisplay): string | null {
+  let latest: string | null = null;
+  let latestTime = Number.NEGATIVE_INFINITY;
+  for (const item of group.items) {
+    // Typed as Date in the model, but the JSON payload delivers ISO strings.
+    const raw: unknown = item.UpdatedAt;
+    const time = raw instanceof Date ? raw.getTime() : typeof raw === 'string' ? Date.parse(raw) : Number.NaN;
+    if (!Number.isNaN(time) && time > latestTime) {
+      latestTime = time;
+      latest = new Date(time).toISOString();
+    }
+  }
+  return latest;
+}

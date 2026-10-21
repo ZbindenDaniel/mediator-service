@@ -41,7 +41,7 @@
       "specValue": "%v",
       "knockout": {
         "below": 0.5,
-        "cap": 0.39
+        "cap": 0.59
       },
       "states": {
         "Gut (>80%)": 1.0,

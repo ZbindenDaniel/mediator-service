@@ -24,7 +24,7 @@ import {
   loadItemListFilters,
   persistItemListFilters
 } from '../lib/itemListFiltersStorage';
-import { groupItemsForDisplay, GroupedItemDisplay } from '../lib/itemGrouping';
+import { groupItemsForDisplay, GroupedItemDisplay, resolveGroupPrice, resolveGroupUpdatedAt } from '../lib/itemGrouping';
 import {
   ITEM_LIST_COLUMN_OPTIONS,
   ItemListColumnKey,
@@ -239,15 +239,6 @@ function groupHasImages(group: GroupedItemDisplay): boolean {
 }
 
 // Positive price or null; 0/empty/garbage all mean "no price" (ERP exports 0 for unpriced refs).
-function resolveGroupPrice(group: GroupedItemDisplay): number | null {
-  const raw = group.representative?.Verkaufspreis as unknown;
-  if (raw === null || raw === undefined || raw === '') {
-    return null;
-  }
-  const value = typeof raw === 'number' ? raw : Number(raw);
-  return Number.isFinite(value) && value > 0 ? value : null;
-}
-
 export function filterAndSortItems(options: ItemListComputationOptions): GroupedItemDisplay[] {
   const {
     items,
@@ -409,6 +400,17 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       return (aValue - bValue) * direction;
     }
 
+    if (sortKey === 'lastModified') {
+      const aTime = Date.parse(resolveGroupUpdatedAt(a) ?? '');
+      const bTime = Date.parse(resolveGroupUpdatedAt(b) ?? '');
+      const aValue = Number.isNaN(aTime) ? Number.NEGATIVE_INFINITY : aTime;
+      const bValue = Number.isNaN(bTime) ? Number.NEGATIVE_INFINITY : bTime;
+      if (aValue === bValue) {
+        return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
+      }
+      return (aValue - bValue) * direction;
+    }
+
     if (sortKey === 'lastSynced') {
       const syncedTimestampFor = (group: GroupedItemDisplay) => {
         const val = group.representative?.LastSyncedAt;
@@ -479,7 +481,7 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
 
 export default function ItemListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { setEntity, setMultiSelection, clearSelection, clearMultiSelection } = usePanelContext();
+  const { setEntity, setMultiSelection, clearSelection, clearMultiSelection, entityType, entityId } = usePanelContext();
   const setBulkSelection = useSetBulkSelection();
   const features = useFeatures();
   const [items, setItems] = useState<Item[]>([]);
@@ -982,18 +984,37 @@ export default function ItemListPage() {
     clearSelection();
   }, [clearSelection]);
 
-  const handleItemSelect = useCallback((id: string) => {
+  // Neighbours for ItemDetail as ids=prev,current,next (it skips its own /api/items fetch then). ItemDetail
+  // applies the sequence only when it contains the shown item, so — unlike the former prev/next params —
+  // it never hands stale neighbours to an item opened via arrow keys or from elsewhere; refreshed here
+  // for every selection, whatever made it.
+  const writeNeighborIds = useCallback((id: string) => {
     const index = filtered.findIndex((g) => g.summary.representativeItemId === id);
-    const prevId = index > 0 ? (filtered[index - 1].summary.representativeItemId ?? null) : null;
-    const nextId = index >= 0 && index < filtered.length - 1 ? (filtered[index + 1].summary.representativeItemId ?? null) : null;
+    if (index < 0) return;
+    const sequence = [
+      index > 0 ? filtered[index - 1].summary.representativeItemId : null,
+      id,
+      filtered[index + 1]?.summary.representativeItemId ?? null
+    ].filter(Boolean).join(',');
+    if (searchParams.get('ids') === sequence && !searchParams.has('prev') && !searchParams.has('next')) return;
     setSearchParams((p) => {
       const n = new URLSearchParams(p);
-      if (prevId) { n.set('prev', prevId); } else { n.delete('prev'); }
-      if (nextId) { n.set('next', nextId); } else { n.delete('next'); }
+      n.set('ids', sequence);
+      n.delete('prev');
+      n.delete('next');
       return n;
     }, { replace: true });
+  }, [filtered, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (entityType === 'item' && entityId) writeNeighborIds(entityId);
+  }, [entityType, entityId, writeNeighborIds]);
+
+  const handleItemSelect = useCallback((id: string) => {
+    // Written together with the selection (same render) so ItemDetail's first effect already sees it.
+    writeNeighborIds(id);
     setEntity('item', id);
-  }, [setEntity, setSearchParams, filtered]);
+  }, [setEntity, writeNeighborIds]);
 
   const selectedItems = useMemo(() => {
     const selectedLookup = new Set(selectedIds);
@@ -1078,6 +1099,18 @@ export default function ItemListPage() {
     () => ITEM_LIST_COLUMN_OPTIONS.filter((option) => !option.feature || features[option.feature]),
     [features]
   );
+  // Header click: same column flips the direction; a new column starts with the newest/highest
+  // first for dates and numbers, A→Z for text.
+  const handleHeaderSort = useCallback((key: ItemListSortKey) => {
+    if (key === sortKey) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    const descFirst: ItemListSortKey[] = ['price', 'stock', 'quality', 'lastModified', 'entryDate', 'lastSynced', 'agenticLastRun'];
+    setSortKey(key);
+    setSortDirection(descFirst.includes(key) ? 'desc' : 'asc');
+  }, [sortKey]);
+
   const handleColumnToggle = useCallback((key: ItemListColumnKey, visible: boolean) => {
     setVisibleColumns((prev) => {
       const next = new Set(prev);
@@ -1100,22 +1133,6 @@ export default function ItemListPage() {
     <div className="list-container item">
       <div className="list-header">
         <h2>Alle Artikel</h2>
-        <span className="muted" data-testid="item-list-count">{filtered.length} Einträge</span>
-        <details className="filter-multiselect column-picker">
-          <summary aria-label="Spalten auswählen">Spalten</summary>
-          <div className="filter-multiselect__panel" role="group" aria-label="Sichtbare Spalten">
-            {columnOptions.map((option) => (
-              <label key={option.key} className="filter-multiselect__option">
-                <input
-                  type="checkbox"
-                  checked={visibleColumns.has(option.key)}
-                  onChange={(event) => handleColumnToggle(option.key, event.target.checked)}
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </div>
-        </details>
         {hasActiveFilters && (
           <button
             type="button"
@@ -1129,7 +1146,7 @@ export default function ItemListPage() {
           </button>
         )}
       </div>
-      <div className="filter-bar">
+      <div className="filter-bar filter-bar--stacked">
         <div className="filter-panel filter-grid">
           <div className="filter-grid__item">
             <label className="sort-control sort-control--box">
@@ -1207,6 +1224,7 @@ export default function ItemListPage() {
                 <option value="artikelnummer">Artikelnummer</option>
                 <option value="box">Behälter</option>
                 <option value="entryDate">Erfasst am</option>
+                <option value="lastModified">Zuletzt geändert</option>
                 {features['erp-sync'] && <option value="lastSynced">Zuletzt synchronisiert</option>}
                 {features.agentic && <option value="agenticLastRun">KI-Datum</option>}
                 {features.agentic && <option value="agenticStatus">Ki-Status</option>}
@@ -1378,6 +1396,24 @@ export default function ItemListPage() {
         <p className="muted" data-testid="item-list-refresh-status">Aktualisiere Liste…</p>
       ) : null}
       {/* BulkItemActionBar moved to ActionPanel (right panel) when multi-selection is active */}
+      <div className="item-list-toolbar">
+        <details className="filter-multiselect column-picker">
+          <summary aria-label="Spalten auswählen">Spalten</summary>
+          <div className="filter-multiselect__panel" role="group" aria-label="Sichtbare Spalten">
+            {columnOptions.map((option) => (
+              <label key={option.key} className="filter-multiselect__option">
+                <input
+                  type="checkbox"
+                  checked={visibleColumns.has(option.key)}
+                  onChange={(event) => handleColumnToggle(option.key, event.target.checked)}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </details>
+        <span className="muted" data-testid="item-list-count">{filtered.length} Einträge</span>
+      </div>
       <ItemList
         allVisibleSelected={allVisibleSelected}
         items={filtered}
@@ -1387,6 +1423,8 @@ export default function ItemListPage() {
         selectedItemIds={selectedIds}
         someVisibleSelected={someVisibleSelected}
         sortKey={sortKey}
+        sortDirection={sortDirection}
+        onSort={handleHeaderSort}
         visibleColumns={visibleColumns}
       />
     </div>

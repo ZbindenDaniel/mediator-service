@@ -11,7 +11,8 @@ export type ItemListColumnKey =
   | 'quality'
   | 'shop'
   | 'zubehoer'
-  | 'subcategory';
+  | 'subcategory'
+  | 'lastModified';
 
 export interface ItemListColumnOption {
   key: ItemListColumnKey;
@@ -23,7 +24,7 @@ export interface ItemListColumnOption {
 
 // Order here is the order in the table.
 export const ITEM_LIST_COLUMN_OPTIONS: ItemListColumnOption[] = [
-  { key: 'price', label: 'Preis (CHF)', defaultVisible: false },
+  { key: 'price', label: 'Preis (CHF)', defaultVisible: true },
   { key: 'image', label: 'Bild', defaultVisible: false },
   { key: 'box', label: 'Behälter', defaultVisible: true },
   { key: 'location', label: 'Lagerort', defaultVisible: true },
@@ -32,7 +33,8 @@ export const ITEM_LIST_COLUMN_OPTIONS: ItemListColumnOption[] = [
   { key: 'quality', label: 'Qualität', defaultVisible: true },
   { key: 'shop', label: 'Shop', defaultVisible: true, feature: 'shopware' },
   { key: 'zubehoer', label: 'Zubehör', defaultVisible: false },
-  { key: 'subcategory', label: 'Unterkategorie', defaultVisible: false }
+  { key: 'subcategory', label: 'Unterkategorie', defaultVisible: false },
+  { key: 'lastModified', label: 'Zuletzt geändert', defaultVisible: true }
 ];
 
 export const ITEM_LIST_COLUMNS_STORAGE_KEY = 'mediator-item-list-columns';

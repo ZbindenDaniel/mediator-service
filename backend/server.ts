@@ -666,8 +666,9 @@ if (SHOPWARE_SYNC_ENABLED && isFeatureEnabled('shopware')) {
 
 // ERP_NIGHTLY_SYNC_ENABLED is the env-level default; the runtime toggle lives in system_settings
 // so it persists across restarts and can be flipped from the admin page without redeploying.
-// Seed only on first startup (existing !== null means the operator has already set it).
-void (async () => {
+// Seed only on first startup (existing !== null means the operator has already set it). Called after
+// initDb: on a fresh DB system_settings does not exist yet, and a failed seed left the sync off.
+async function seedNightlyErpSyncSetting(): Promise<void> {
   try {
     const existing = await getSystemSetting('erp_nightly_sync_enabled');
     if (existing === null) {
@@ -676,7 +677,7 @@ void (async () => {
   } catch (err) {
     console.error('[nightly-erp-sync] Failed to seed system setting', err);
   }
-})();
+}
 
 let lastErpNightlySyncDate: string | null = null;
 setInterval(() => {
@@ -1179,6 +1180,7 @@ if (process.env.NODE_ENV !== 'test') {
   initDb()
     .then(async () => {
       console.info('[server] Database schema initialized.');
+      await seedNightlyErpSyncSetting();
       // Seed the taxonomy tables on first boot, then make the DB the authoritative source.
       const taxonomy = await initTaxonomy(console);
       console.info(`[server] Taxonomy ready (${taxonomy.length} categories).`);

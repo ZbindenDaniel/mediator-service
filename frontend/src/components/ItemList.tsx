@@ -11,7 +11,7 @@ import QualityBadge from './QualityBadge';
 import ShopBadge from './ShopBadge';
 import ZubehoerBadge from './ZubehoerBadge';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
-import type { GroupedItemDisplay } from '../lib/itemGrouping';
+import { resolveGroupPrice, resolveGroupUpdatedAt, type GroupedItemDisplay } from '../lib/itemGrouping';
 import type { ItemListSortKey } from '../lib/itemListFiltersStorage';
 import { logError, logger } from '../utils/logger';
 import { useFeatures } from '../context/FeaturesContext';
@@ -43,23 +43,30 @@ interface Props {
   someVisibleSelected: boolean;
   onSelect?: (id: string) => void;
   sortKey?: ItemListSortKey;
+  sortDirection?: 'asc' | 'desc';
+  onSort?: (key: ItemListSortKey) => void;
   visibleColumns?: Set<ItemListColumnKey>;
 }
 
 // Header + cell class per optional column. "optional-column" = hidden below 960px (styles.scss);
 // Behälter/Lagerort deliberately stay visible on phones.
-const COLUMN_LAYOUT: Record<ItemListColumnKey, { className: string; header: string; ariaLabel?: string }> = {
-  price: { className: 'col-price optional-column', header: 'CHF', ariaLabel: 'Preis gesetzt' },
+// sortKey = the list sort a header click applies (columns without one aren't sortable).
+type ColumnLayout = { className: string; header: string; ariaLabel?: string; sortKey?: ItemListSortKey };
+const COLUMN_LAYOUT: Record<ItemListColumnKey, ColumnLayout> = {
+  price: { className: 'col-price optional-column', header: 'CHF', ariaLabel: 'Preis', sortKey: 'price' },
   image: { className: 'col-image optional-column', header: 'Bild', ariaLabel: 'Bild vorhanden' },
-  box: { className: 'col-box', header: 'Behälter' },
+  box: { className: 'col-box', header: 'Behälter', sortKey: 'box' },
   location: { className: 'col-location', header: 'Lagerort' },
-  agentic: { className: 'col-agentic optional-column', header: 'Ki' },
-  stock: { className: 'col-stock optional-column', header: 'Anzahl' },
-  quality: { className: 'col-quality optional-column', header: 'Qualität' },
+  agentic: { className: 'col-agentic optional-column', header: 'Ki', sortKey: 'agenticStatus' },
+  stock: { className: 'col-stock optional-column', header: 'Anzahl', sortKey: 'stock' },
+  quality: { className: 'col-quality optional-column', header: 'Qualität', sortKey: 'quality' },
   shop: { className: 'col-shop optional-column', header: 'Shop' },
   zubehoer: { className: 'col-zubehoer optional-column', header: 'Zub.' },
-  subcategory: { className: 'col-subcategory optional-column', header: 'Unterkategorie' }
+  subcategory: { className: 'col-subcategory optional-column', header: 'Unterkategorie', sortKey: 'subcategory' },
+  lastModified: { className: 'col-date optional-column', header: 'Geändert', ariaLabel: 'Zuletzt geändert', sortKey: 'lastModified' }
 };
+const NUMBER_COLUMN: ColumnLayout = { className: 'col-number', header: 'A-Nr', sortKey: 'artikelnummer' };
+const DESC_COLUMN: ColumnLayout = { className: 'col-desc', header: 'Artikel', sortKey: 'artikelbeschreibung' };
 
 type ItemLocationSource = Pick<Item, 'ItemUUID' | 'BoxID' | 'Location' | 'ShelfLabel'>;
 
@@ -118,6 +125,8 @@ export default function ItemList({
   someVisibleSelected,
   onSelect,
   sortKey,
+  sortDirection,
+  onSort,
   visibleColumns
 }: Props) {
   const features = useFeatures();
@@ -128,6 +137,29 @@ export default function ItemList({
       .filter((option) => wanted.has(option.key) && (!option.feature || features[option.feature]))
       .map((option) => option.key);
   }, [visibleColumns, features]);
+  const renderHeader = (layout: ColumnLayout, key: string) => {
+    const active = Boolean(layout.sortKey) && layout.sortKey === sortKey;
+    return (
+      <th
+        key={key}
+        className={layout.className}
+        aria-label={layout.ariaLabel}
+        aria-sort={active ? (sortDirection === 'desc' ? 'descending' : 'ascending') : undefined}
+      >
+        {layout.sortKey && onSort ? (
+          <button
+            type="button"
+            className={`col-sort-btn${active ? ' col-sort-btn--active' : ''}`}
+            onClick={() => onSort(layout.sortKey as ItemListSortKey)}
+            title={`Nach ${layout.ariaLabel ?? layout.header} sortieren`}
+          >
+            {layout.header}
+            {active && <span aria-hidden="true">{sortDirection === 'desc' ? ' ▼' : ' ▲'}</span>}
+          </button>
+        ) : layout.header}
+      </th>
+    );
+  };
   const subcategoryLabels = useMemo(() => {
     const labels = new Map<string, string>();
     categories.forEach((category) => category.subcategories.forEach((sub) => {
@@ -189,13 +221,9 @@ export default function ItemList({
               />
             </th>
             <th className="col-mark" aria-label="Markierung" />
-            <th className="col-number">A-Nr</th>
-            <th className="col-desc">Artikel</th>
-            {shownColumns.map((key) => (
-              <th key={key} className={COLUMN_LAYOUT[key].className} aria-label={COLUMN_LAYOUT[key].ariaLabel}>
-                {COLUMN_LAYOUT[key].header}
-              </th>
-            ))}
+            {renderHeader(NUMBER_COLUMN, 'number')}
+            {renderHeader(DESC_COLUMN, 'desc')}
+            {shownColumns.map((key) => renderHeader(COLUMN_LAYOUT[key], key))}
             {(sortKey === 'entryDate' || sortKey === 'lastSynced' || sortKey === 'agenticLastRun') && (
               <th className="col-date optional-column">
                 {sortKey === 'lastSynced' ? 'Synchronisiert' : sortKey === 'agenticLastRun' ? 'KI-Datum' : 'Erfasst am'}
@@ -314,9 +342,7 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
             const zubehoerMode = (representative as any)?.ZubehoerMode ?? null;
             const parentItemUUID = (representative as any)?.ParentItemUUID ?? null;
 
-            const price = typeof representative?.Verkaufspreis === 'number' && representative.Verkaufspreis > 0
-              ? representative.Verkaufspreis
-              : null;
+            const price = resolveGroupPrice(group);
             const locationTag = <LocationTag item={locationItem} itemId={representativeItemId} />;
             // Another org's item: the "location" is its owner's name, not a shelf to open.
             const openLocation = representative?.LocationRedacted
@@ -327,8 +353,7 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                   ? () => setEntity('box', shelfId)
                   : null;
             const cells: Record<ItemListColumnKey, React.ReactNode> = {
-              // Show the amount only when sorting by price — otherwise the ✓ keeps the column narrow.
-              price: price !== null ? (sortKey === 'price' ? price.toFixed(2) : '✓') : '—',
+              price: price !== null ? price.toFixed(2) : '—',
               image: (representative?.ImageNames || representative?.Grafikname) ? '✓' : '—',
               box: boxId ? (
                 <button type="button" className="link-btn" onClick={(e) => { e.stopPropagation(); setEntity('box', boxId); }}>
@@ -347,7 +372,8 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
               zubehoer: <ZubehoerBadge compact mode={zubehoerMode} />,
               subcategory: subcategoryValue
                 ? (subcategoryLabels.get(subcategoryValue.padStart(4, '0')) ?? subcategoryValue)
-                : '—'
+                : '—',
+              lastModified: formatDate(resolveGroupUpdatedAt(group))
             };
 
             return (
