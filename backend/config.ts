@@ -4,47 +4,51 @@ import path from 'path';
 const ENV_FILE_PATH = path.resolve(process.cwd(), '.env');
 
 let envLoaded = false;
+// Tests must not depend on the developer's .env (e.g. a local ADMIN_SECRET turned admin tests into 401s).
+const RUNNING_UNDER_JEST = typeof process.env.JEST_WORKER_ID === 'string';
 
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const dotenv: typeof import('dotenv') = require('dotenv');
-  const result = dotenv.config();
-  if (result.error) {
-    console.warn('[config] .env file could not be loaded via dotenv:', result.error.message);
-  } else if (result.parsed) {
-    envLoaded = true;
-    console.info('[config] Environment variables loaded from .env via dotenv');
-  }
-} catch (error) {
-  const moduleNotFound = (error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND';
-  if (!moduleNotFound) {
-    console.error('[config] Failed to initialize environment configuration via dotenv', error);
-  }
-  if (!envLoaded) {
-    try {
-      if (fs.existsSync(ENV_FILE_PATH)) {
-        const fileContents = fs.readFileSync(ENV_FILE_PATH, 'utf8');
-        for (const rawLine of fileContents.split(/\r?\n/)) {
-          const line = rawLine.trim();
-          if (!line || line.startsWith('#')) {
-            continue;
+if (!RUNNING_UNDER_JEST) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const dotenv: typeof import('dotenv') = require('dotenv');
+    const result = dotenv.config();
+    if (result.error) {
+      console.warn('[config] .env file could not be loaded via dotenv:', result.error.message);
+    } else if (result.parsed) {
+      envLoaded = true;
+      console.info('[config] Environment variables loaded from .env via dotenv');
+    }
+  } catch (error) {
+    const moduleNotFound = (error as NodeJS.ErrnoException).code === 'MODULE_NOT_FOUND';
+    if (!moduleNotFound) {
+      console.error('[config] Failed to initialize environment configuration via dotenv', error);
+    }
+    if (!envLoaded) {
+      try {
+        if (fs.existsSync(ENV_FILE_PATH)) {
+          const fileContents = fs.readFileSync(ENV_FILE_PATH, 'utf8');
+          for (const rawLine of fileContents.split(/\r?\n/)) {
+            const line = rawLine.trim();
+            if (!line || line.startsWith('#')) {
+              continue;
+            }
+            const equalsIndex = line.indexOf('=');
+            if (equalsIndex === -1) {
+              continue;
+            }
+            const key = line.slice(0, equalsIndex).trim();
+            if (!key || Object.prototype.hasOwnProperty.call(process.env, key)) {
+              continue;
+            }
+            const value = line.slice(equalsIndex + 1).trim().replace(/^['"]|['"]$/g, '');
+            process.env[key] = value;
           }
-          const equalsIndex = line.indexOf('=');
-          if (equalsIndex === -1) {
-            continue;
-          }
-          const key = line.slice(0, equalsIndex).trim();
-          if (!key || Object.prototype.hasOwnProperty.call(process.env, key)) {
-            continue;
-          }
-          const value = line.slice(equalsIndex + 1).trim().replace(/^['"]|['"]$/g, '');
-          process.env[key] = value;
+          envLoaded = true;
+          console.info('[config] Environment variables loaded from .env via fallback parser');
         }
-        envLoaded = true;
-        console.info('[config] Environment variables loaded from .env via fallback parser');
+      } catch (fsError) {
+        console.error('[config] Fallback .env parsing failed', fsError);
       }
-    } catch (fsError) {
-      console.error('[config] Fallback .env parsing failed', fsError);
     }
   }
 }

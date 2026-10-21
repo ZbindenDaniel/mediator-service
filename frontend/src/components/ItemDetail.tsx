@@ -59,7 +59,7 @@ import {
 } from '../lib/itemListFiltersStorage';
 import { logger, logError } from '../utils/logger';
 import { mapReviewAnswersToInput, buildAgenticReviewSubmissionPayload, type AgenticReviewInput } from '../lib/agenticReviewMapping';
-import { filterAndSortItems } from './ItemListPage';
+import { buildSubcategoryNameLookup, filterAndSortItems } from './ItemListPage';
 
 // TODO(agentic-start-flow): Consolidate agentic start and restart handling into a shared helper once UI confirms the UX.
 // TODO(suchbegriff-override): Revisit Suchbegriff override logging once UI formalizes edit intent.
@@ -211,7 +211,7 @@ export default function ItemDetail({ itemId }: Props) {
     setEntity('box', boxId);
   }, [setEntity]);
 
-  const { lookups: categoryLookups } = useTaxonomy();
+  const { lookups: categoryLookups, categories } = useTaxonomy();
 
   const qualitySummary = useMemo(() => describeQuality(item?.Quality ?? null), [item?.Quality]);
 
@@ -325,7 +325,9 @@ export default function ItemDetail({ itemId }: Props) {
           sortKey: effectiveFilters.sortKey,
           sortDirection: effectiveFilters.sortDirection,
           qualityThreshold: effectiveFilters.qualityThreshold,
-          qualityFilter: 'all'
+          qualityFilter: 'all',
+          // Same name matching as the list, so prev/next follows what the list shows.
+          subcategoryNames: buildSubcategoryNameLookup(categories)
         });
 
         const currentIndex = filtered.findIndex((entry) => entry.summary.representativeItemId === itemId);

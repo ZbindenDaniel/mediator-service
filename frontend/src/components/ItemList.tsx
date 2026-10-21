@@ -15,6 +15,12 @@ import type { GroupedItemDisplay } from '../lib/itemGrouping';
 import type { ItemListSortKey } from '../lib/itemListFiltersStorage';
 import { logError, logger } from '../utils/logger';
 import { useFeatures } from '../context/FeaturesContext';
+import { useTaxonomy } from '../context/TaxonomyContext';
+import {
+  defaultItemListColumns,
+  ITEM_LIST_COLUMN_OPTIONS,
+  type ItemListColumnKey
+} from '../lib/itemListColumns';
 
 // TODO(agent): Confirm item list location tags remain legible without the color metadata.
 // TODO: Replace plain table layout with a virtualized list for better performance on large datasets.
@@ -37,7 +43,23 @@ interface Props {
   someVisibleSelected: boolean;
   onSelect?: (id: string) => void;
   sortKey?: ItemListSortKey;
+  visibleColumns?: Set<ItemListColumnKey>;
 }
+
+// Header + cell class per optional column. "optional-column" = hidden below 960px (styles.scss);
+// Behälter/Lagerort deliberately stay visible on phones.
+const COLUMN_LAYOUT: Record<ItemListColumnKey, { className: string; header: string; ariaLabel?: string }> = {
+  price: { className: 'col-price optional-column', header: 'CHF', ariaLabel: 'Preis gesetzt' },
+  image: { className: 'col-image optional-column', header: 'Bild', ariaLabel: 'Bild vorhanden' },
+  box: { className: 'col-box', header: 'Behälter' },
+  location: { className: 'col-location', header: 'Lagerort' },
+  agentic: { className: 'col-agentic optional-column', header: 'Ki' },
+  stock: { className: 'col-stock optional-column', header: 'Anzahl' },
+  quality: { className: 'col-quality optional-column', header: 'Qualität' },
+  shop: { className: 'col-shop optional-column', header: 'Shop' },
+  zubehoer: { className: 'col-zubehoer optional-column', header: 'Zub.' },
+  subcategory: { className: 'col-subcategory optional-column', header: 'Unterkategorie' }
+};
 
 type ItemLocationSource = Pick<Item, 'ItemUUID' | 'BoxID' | 'Location' | 'ShelfLabel'>;
 
@@ -95,9 +117,24 @@ export default function ItemList({
   allVisibleSelected,
   someVisibleSelected,
   onSelect,
-  sortKey
+  sortKey,
+  visibleColumns
 }: Props) {
   const features = useFeatures();
+  const { categories } = useTaxonomy();
+  const shownColumns = useMemo(() => {
+    const wanted = visibleColumns ?? defaultItemListColumns();
+    return ITEM_LIST_COLUMN_OPTIONS
+      .filter((option) => wanted.has(option.key) && (!option.feature || features[option.feature]))
+      .map((option) => option.key);
+  }, [visibleColumns, features]);
+  const subcategoryLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    categories.forEach((category) => category.subcategories.forEach((sub) => {
+      labels.set(String(sub.code).padStart(4, '0'), sub.label);
+    }));
+    return labels;
+  }, [categories]);
   const safeItems = items ?? [];
   const selectAllRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
@@ -153,17 +190,12 @@ export default function ItemList({
             </th>
             <th className="col-mark" aria-label="Markierung" />
             <th className="col-number">A-Nr</th>
-            <th className="col-price optional-column" aria-label="Preis gesetzt">CHF</th>
-            <th className="col-image optional-column" aria-label="Bild vorhanden">Bild</th>
             <th className="col-desc">Artikel</th>
-            <th className="col-box">Behälter</th>
-            <th className="col-location">Lagerort</th>
-            {features.agentic && <th className="col-agentic optional-column">Ki</th>}
-            <th className="col-stock optional-column">Anzahl</th>
-            <th className="col-quality optional-column">Qualität</th>
-            {features.shopware && <th className="col-shop optional-column">Shop</th>}
-            <th className="col-zubehoer optional-column">Zub.</th>
-            <th className="col-subcategory optional-column">Unterkategorie A</th>
+            {shownColumns.map((key) => (
+              <th key={key} className={COLUMN_LAYOUT[key].className} aria-label={COLUMN_LAYOUT[key].ariaLabel}>
+                {COLUMN_LAYOUT[key].header}
+              </th>
+            ))}
             {(sortKey === 'entryDate' || sortKey === 'lastSynced' || sortKey === 'agenticLastRun') && (
               <th className="col-date optional-column">
                 {sortKey === 'lastSynced' ? 'Synchronisiert' : sortKey === 'agenticLastRun' ? 'KI-Datum' : 'Erfasst am'}
@@ -282,6 +314,42 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
             const zubehoerMode = (representative as any)?.ZubehoerMode ?? null;
             const parentItemUUID = (representative as any)?.ParentItemUUID ?? null;
 
+            const price = typeof representative?.Verkaufspreis === 'number' && representative.Verkaufspreis > 0
+              ? representative.Verkaufspreis
+              : null;
+            const locationTag = <LocationTag item={locationItem} itemId={representativeItemId} />;
+            // Another org's item: the "location" is its owner's name, not a shelf to open.
+            const openLocation = representative?.LocationRedacted
+              ? () => { void openOrgInfo(representative.TenantId, shelfId); }
+              : parentItemUUID
+                ? () => setEntity('item', parentItemUUID)
+                : shelfId
+                  ? () => setEntity('box', shelfId)
+                  : null;
+            const cells: Record<ItemListColumnKey, React.ReactNode> = {
+              // Show the amount only when sorting by price — otherwise the ✓ keeps the column narrow.
+              price: price !== null ? (sortKey === 'price' ? price.toFixed(2) : '✓') : '—',
+              image: (representative?.ImageNames || representative?.Grafikname) ? '✓' : '—',
+              box: boxId ? (
+                <button type="button" className="link-btn" onClick={(e) => { e.stopPropagation(); setEntity('box', boxId); }}>
+                  {boxId}
+                </button>
+              ) : <span>—</span>,
+              location: openLocation ? (
+                <button type="button" className="link-btn" onClick={(e) => { e.stopPropagation(); openLocation(); }}>
+                  {locationTag}
+                </button>
+              ) : locationTag,
+              agentic: agenticLabel,
+              stock: countValue,
+              quality: <QualityBadge compact value={qualityValue} />,
+              shop: <ShopBadge compact shopartikel={shopartikelValue} publishedStatus={publishedStatusValue} />,
+              zubehoer: <ZubehoerBadge compact mode={zubehoerMode} />,
+              subcategory: subcategoryValue
+                ? (subcategoryLabels.get(subcategoryValue.padStart(4, '0')) ?? subcategoryValue)
+                : '—'
+            };
+
             return (
               <tr
                 key={group.key}
@@ -349,71 +417,10 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                   )}
                 </td>
                 <td className="col-number">{group.summary.Artikel_Nummer?.trim() || representative?.Artikel_Nummer?.trim() || '—'}</td>
-                <td className="col-price optional-column">
-                  {(typeof representative?.Verkaufspreis === 'number' && representative.Verkaufspreis > 0)
-                    // Show the amount only when sorting by price — otherwise the ✓ keeps the column narrow.
-                    ? (sortKey === 'price' ? representative.Verkaufspreis.toFixed(2) : '✓')
-                    : '—'}
-                </td>
-                <td className="col-image optional-column">{(representative?.ImageNames || representative?.Grafikname) ? '✓' : '—'}</td>
                 <td className="col-desc">{representative?.Artikelbeschreibung ?? '—'}</td>
-                <td className="col-box">
-                  {boxId ? (
-                    <button
-                      type="button"
-                      className="link-btn"
-                      onClick={(e) => { e.stopPropagation(); setEntity('box', boxId); }}
-                    >
-                      {boxId}
-                    </button>
-                  ) : (
-                    <span>—</span>
-                  )}
-                </td>
-                <td className="col-location">
-                  {representative?.LocationRedacted ? (
-                    // Another org's item: the "location" is its owner's name, not a shelf to open.
-                    <button
-                      type="button"
-                      className="link-btn"
-                      onClick={(e) => { e.stopPropagation(); void openOrgInfo(representative.TenantId, shelfId); }}
-                    >
-                      <LocationTag item={locationItem} itemId={representativeItemId} />
-                    </button>
-                  ) : parentItemUUID ? (
-                    <button
-                      type="button"
-                      className="link-btn"
-                      onClick={(e) => { e.stopPropagation(); setEntity('item', parentItemUUID); }}
-                    >
-                      <LocationTag item={locationItem} itemId={representativeItemId} />
-                    </button>
-                  ) : shelfId ? (
-                    <button
-                      type="button"
-                      className="link-btn"
-                      onClick={(e) => { e.stopPropagation(); setEntity('box', shelfId); }}
-                    >
-                      <LocationTag item={locationItem} itemId={representativeItemId} />
-                    </button>
-                  ) : (
-                    <LocationTag item={locationItem} itemId={representativeItemId} />
-                  )}
-                </td>
-                {features.agentic && <td className="col-agentic optional-column">{agenticLabel}</td>}
-                <td className="col-stock optional-column">{countValue}</td>
-                <td className="col-quality optional-column">
-                  <QualityBadge compact value={qualityValue} />
-                </td>
-                {features.shopware && (
-                  <td className="col-shop optional-column">
-                    <ShopBadge compact shopartikel={shopartikelValue} publishedStatus={publishedStatusValue} />
-                  </td>
-                )}
-                <td className="col-zubehoer optional-column">
-                  <ZubehoerBadge compact mode={zubehoerMode} />
-                </td>
-                <td className="col-subcategory optional-column">{subcategoryValue ?? '—'}</td>
+                {shownColumns.map((key) => (
+                  <td key={key} className={COLUMN_LAYOUT[key].className}>{cells[key]}</td>
+                ))}
                 {sortKey === 'entryDate' && (
                   <td className="col-date optional-column">{formatDate(representative?.Datum_erfasst)}</td>
                 )}

@@ -60,12 +60,14 @@ describe('resumeStaleAgenticRuns', () => {
     mockQuery.mockResolvedValue([]);
   });
 
-  test('schedules stale queued runs for asynchronous invocation', async () => {
+  // A stale 'running' run (process died mid-run) is what resume re-invokes. Stale 'queued' runs are
+  // picked up by the dispatcher's claim instead: the invocation only proceeds for claimed (running) runs.
+  test('schedules stale running runs for asynchronous invocation', async () => {
     const staleRun: AgenticRun = {
       Id: 10,
       Artikel_Nummer: 'resume-item-1',
       SearchQuery: 'Resumable Item',
-      Status: 'queued',
+      Status: 'running',
       LastModified: '2024-01-01T00:00:00.000Z',
       ReviewState: 'not_required',
       ReviewedBy: null,

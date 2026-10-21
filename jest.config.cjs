@@ -1,3 +1,6 @@
+// Tests run in UTC like the container: date parsing of zone-less ERP timestamps is local-time based.
+process.env.TZ = 'UTC';
+
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
