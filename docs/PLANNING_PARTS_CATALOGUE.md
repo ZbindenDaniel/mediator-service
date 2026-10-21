@@ -621,7 +621,7 @@ migration.
 | Step | Content | Tests |
 |---|---|---|
 | 6a ✅ | Part IDs: generator, root resolution, graduation without re-key (#991) | Jest: format, counter, nesting, graduation keeps ID |
-| 6b | Contract fields + validator; shared question selector; scoring (11.4) | Jest: validator, score cases incl. refurbishment unchanged |
+| 6b ✅ | Contract fields + validator; shared question selector; scoring (11.4) (#993) | Jest: validator, score cases incl. refurbishment unchanged |
 | 6c | Answer merge PATCH + carry-over in `POST …/quality-review` | route tests: chip then full save keeps both |
 | 6d | Creation: `askOnCreate`, article specs block | jsdom: block editable/read-only, warning |
 | 6e | Einzelteile page + panel entity; Zubehör split; parity; retire Zerlegen card + level stack | jsdom + **browser walkthrough** on a disposable DB |

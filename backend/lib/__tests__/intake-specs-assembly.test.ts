@@ -2,7 +2,8 @@
 // the accessory questionnaire and scan-derived specs line up with the canonical spec keys.
 import { deriveInstanceSpecsFromScan, normalizeScanComponents, resolveIntakeQuestions, resolveAutoFill } from '../intake-quality-map';
 import type { QualityQuestion } from '../../../models/quality-contract';
-import { assemblyToQualityContract, buildQualityCheckResponse, loadGeneralContract, loadSubCategoryContract } from '../quality-contracts';
+import { buildQualityCheckResponse, loadGeneralContract, loadSubCategoryContract } from '../quality-contracts';
+import { assemblyToQualityContract } from '../../../models/assembly-contract';
 import { getAssemblyContract, getSpecContract } from '../../contracts/registry';
 import type { IntakeScanPayload } from '../../../models/intake';
 

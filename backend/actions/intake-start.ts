@@ -3,8 +3,7 @@ import { defineHttpAction } from './index';
 import { requireIntakeAuth } from '../utils/intake-auth';
 import { queryOne, query } from '../db-client';
 import { IN_DEVICE_COMPONENT_SQL } from '../db';
-import { loadGeneralContract, loadSubCategoryContract, assemblyToQualityContract } from '../lib/quality-contracts';
-import { getAssemblyContract } from '../contracts/registry';
+import { loadCreationQuestions } from '../lib/quality-contracts';
 import { resolveIntakeQuestions } from '../lib/intake-quality-map';
 import { searchItemReferences } from './search';
 import type { IntakeScanPayload, IntakeStartResponse, IntakeRefCandidate, IntakeInstanceCandidate, IntakeQuestion, IntakeDetectedSpecView } from '../../models/intake';
@@ -180,19 +179,9 @@ function buildQualityQuestions(
   scan: IntakeScanPayload
 ): { ask: IntakeQuestion[]; detectedSpecs: IntakeDetectedSpecView[] } {
   try {
-    const general = loadGeneralContract();
-    const subCat = unterkategorienA ? loadSubCategoryContract(unterkategorienA) : null;
-    // Assembly (accessory) questions ask about parts — presence drives quality, spec answers
-    // fill specs — so the intake questionnaire can produce a complete item, not just quality.
-    const assembly = unterkategorienA ? getAssemblyContract(unterkategorienA) : null;
-    const assemblyQ = assembly ? assemblyToQualityContract(assembly) : null;
-    const allQuestions = [
-      ...general.questions,
-      ...(subCat?.questions ?? []),
-      ...(assemblyQ?.questions ?? [])
-    ];
-    // Only return questions a human must answer; the rest are auto-resolved at the quality step.
-    const resolution = resolveIntakeQuestions(allQuestions, scan);
+    // Same device-check set as the create form (slots limited by askOnCreate). Only return questions
+    // a human must answer; the rest are auto-resolved at the quality step.
+    const resolution = resolveIntakeQuestions(loadCreationQuestions(unterkategorienA), scan);
     logIntakeResolution(unterkategorienA, resolution);
     return {
       ask: resolution.ask,

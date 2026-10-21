@@ -156,4 +156,64 @@ describe('contract validator', () => {
     });
     expect(errors.join('\n')).toMatch(/"part_condition" is defined in both quality\/group-210.json and quality\/2109.json/);
   });
+
+  describe('Phase 6 fields (askOnCreate, steps, default, refinedBy)', () => {
+    const presence = (id: string) => ({ id, type: 'select', question: '?', values: ['Vorhanden', 'Nicht vorhanden', 'Nicht vorgesehen', 'Fest verbaut'] });
+
+    it('accepts a well-formed assembly with steps, defaults and askOnCreate', () => {
+      expect(validateContractDocument('assembly', {
+        version: 1,
+        askOnCreate: ['battery'],
+        steps: [{ key: 'bottom', label: 'Akku & Boden' }],
+        parts: [
+          slot('battery', 2132, { weight: 5, step: 'bottom', question: presence('part_battery') }),
+          slot('drive_2', 2130, { weight: 2, default: 'Nicht vorgesehen', question: presence('part_drive_2') })
+        ]
+      })).toEqual([]);
+    });
+
+    it('rejects unknown askOnCreate keys, undeclared or duplicate steps', () => {
+      const errors = validateContractDocument('assembly', {
+        askOnCreate: ['nope'],
+        steps: [{ key: 's', label: 'S' }, { key: 's', label: 'again' }],
+        parts: [slot('a', 1, { step: 'missing' })]
+      }).join('\n');
+      expect(errors).toMatch(/askOnCreate "nope" is not a part key/);
+      expect(errors).toMatch(/duplicate step key "s"/);
+      expect(errors).toMatch(/step "missing" is not declared/);
+    });
+
+    it('rejects a default that is not a value, is "missing", or has no question', () => {
+      const errors = validateContractDocument('assembly', {
+        parts: [
+          slot('a', 1, { default: 'Vielleicht', question: presence('qa') }),
+          slot('b', 1, { default: 'Nicht vorhanden', question: presence('qb') }),
+          slot('c', 1, { default: 'Vorhanden' })
+        ]
+      }).join('\n');
+      expect(errors).toMatch(/part "a": default "Vielleicht" is not one of/);
+      expect(errors).toMatch(/part "b": default must not be a "missing" answer/);
+      expect(errors).toMatch(/part "c": "default" needs a presence "question"/);
+    });
+
+    it('refinedBy must name weighted slots of the same subcategory and sit on a scored question', () => {
+      const errors = set({
+        quality: {
+          general: { scale: { Gut: 1 }, questions: [] },
+          '201': {
+            questions: [
+              { id: 'chassis', type: 'select', question: '?', values: ['Gut'], weight: 3, refinedBy: ['palmrest', 'fan'] },
+              { id: 'note', type: 'text', question: '?', refinedBy: ['palmrest'] }
+            ]
+          }
+        },
+        assembly: {
+          '201': { parts: [slot('palmrest', 2102, { weight: 6, question: presence('part_palmrest') }), slot('fan', 2118)] }
+        }
+      }).join('\n');
+      expect(errors).toMatch(/refinedBy "fan" is not a weighted slot of assembly\/201.json/);
+      expect(errors).not.toMatch(/refinedBy "palmrest" is not/);
+      expect(errors).toMatch(/question "note": "refinedBy" only makes sense on a scored question/);
+    });
+  });
 });

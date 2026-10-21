@@ -35,10 +35,16 @@ const general: QualityContract = { version: 1, scale, questions: [] };
 
 describe('computeQualityScore', () => {
   it('reproduces the worked example: 20 total, 12 certain, 17 possible → 60–85 %', () => {
+    // The unchecked keyboard is a device question here: unanswered questions are uncertainty,
+    // while an unassessed slot no longer counts (next test).
+    const keyboardQuestion: QualityContract = {
+      version: 1,
+      questions: [{ id: 'keyboard_condition', type: 'select', question: 'Tastatur?', weight: 5, values: ['Gut', 'Kaputt'], states: { Gut: 1, Kaputt: 0 } }]
+    };
     const score = computeQualityScore({
-      contracts: [],
-      answers: { part_keyboard: 'Vorhanden' },
-      assembly: laptop,
+      contracts: [keyboardQuestion],
+      answers: {},
+      assembly: { ...laptop, parts: laptop.parts.filter((p) => p.key !== 'keyboard') },
       children: [
         { slotKey: 'webcam', inDevice: true, score: { min: 1, max: 1 } },
         { slotKey: 'hinges', inDevice: true, score: { min: 0.75, max: 0.75 } },
@@ -70,14 +76,60 @@ describe('computeQualityScore', () => {
     expect(score).toEqual({ total: 7, certain: 0, possible: 0, cap: null });
   });
 
-  it('treats an in-device child without a score and an unanswered slot as fully uncertain', () => {
+  it('leaves out slots nobody looked at: unanswered, present without an assessed part, unassessed child', () => {
+    const score = computeQualityScore({
+      contracts: [],
+      answers: { part_keyboard: 'Vorhanden' },
+      assembly: laptop,
+      children: [{ slotKey: 'webcam', inDevice: true, score: null }]
+    });
+    expect(score).toEqual({ total: 0, certain: 0, possible: 0, cap: null });
+    expect(scoreToRange(score)).toBeNull();
+  });
+
+  it('a multipleAllowed slot averages only its assessed instances', () => {
     const score = computeQualityScore({
       contracts: [],
       answers: {},
-      assembly: { ...laptop, parts: laptop.parts.slice(0, 2) },
-      children: [{ slotKey: 'webcam', inDevice: true, score: null }]
+      assembly: { ...laptop, parts: [{ ...laptop.parts[3], key: 'ram', multipleAllowed: true }] },
+      children: [
+        { slotKey: 'ram', inDevice: true, score: { min: 0.5, max: 0.5 } },
+        { slotKey: 'ram', inDevice: true, score: null }
+      ]
     });
-    expect(score).toEqual({ total: 7, certain: 0, possible: 7, cap: null });
+    expect(score).toEqual({ total: 8, certain: 4, possible: 4, cap: null });
+  });
+
+  describe('refinedBy (S1): parts replace the device question they cover', () => {
+    const chassis: QualityContract = {
+      version: 1,
+      questions: [{
+        id: 'chassis_condition', type: 'select', question: 'Gehäuse?', weight: 4,
+        values: ['Gut', 'Kaputt'], states: { Gut: 1, Kaputt: 0 }, refinedBy: ['webcam', 'hinges']
+      }]
+    };
+    const assembly: AssemblyContract = { ...laptop, parts: laptop.parts.slice(0, 2) };
+    const run = (answers: Record<string, string>, children: Array<{ slotKey: string; inDevice: boolean; score: { min: number; max: number } | null }>) =>
+      computeQualityScore({ contracts: [chassis], answers: { chassis_condition: 'Gut', ...answers }, assembly, children });
+
+    it('keeps the device question while one covered part is still open', () => {
+      expect(run({}, [{ slotKey: 'webcam', inDevice: true, score: { min: 0.5, max: 0.5 } }]))
+        .toEqual({ total: 4 + 3, certain: 4 + 1.5, possible: 4 + 1.5, cap: null });
+    });
+
+    it('drops it once every covered slot is assessed, removed or missing', () => {
+      expect(run({ part_hinges: 'Nicht vorhanden' }, [{ slotKey: 'webcam', inDevice: true, score: { min: 0.5, max: 0.5 } }]))
+        .toEqual({ total: 3 + 4, certain: 1.5, possible: 1.5, cap: null });
+      expect(run({}, [
+        { slotKey: 'webcam', inDevice: false, score: { min: 1, max: 1 } },
+        { slotKey: 'hinges', inDevice: true, score: { min: 1, max: 1 } }
+      ])).toEqual({ total: 3 + 4, certain: 4, possible: 4, cap: null });
+    });
+
+    it('keeps it when a covered slot is built in or not applicable (judged on the device)', () => {
+      expect(run({ part_hinges: 'Fest verbaut' }, [{ slotKey: 'webcam', inDevice: true, score: { min: 1, max: 1 } }]))
+        .toEqual({ total: 4 + 3, certain: 4 + 3, possible: 4 + 3, cap: null });
+    });
   });
 
   it('averages the instances of a multipleAllowed slot', () => {

@@ -1,4 +1,4 @@
-import type { QualityKnockout, QualityQuestion } from './quality-contract';
+import type { QualityContract, QualityKnockout, QualityQuestion } from './quality-contract';
 
 export interface AssemblyPart {
   key: string;
@@ -19,6 +19,19 @@ export interface AssemblyPart {
   weight?: number;
   /** Weighted slots: if the part scores below `below`, the parent is capped at `cap`. */
   knockout?: QualityKnockout;
+  /** Key of the work step (`AssemblyContract.steps`) in which this part is reached. */
+  step?: string;
+  /**
+   * Presence shown pre-set until the operator answers (e.g. "Nicht vorgesehen" for a rarely fitted
+   * second drive). Display-only — never stored or scored — so changing it later applies to every item.
+   */
+  default?: string;
+}
+
+/** One work step of taking the item apart, in the order of `AssemblyContract.steps`. */
+export interface AssemblyStep {
+  key: string;
+  label: string;
 }
 
 /**
@@ -46,4 +59,33 @@ export interface AssemblyContract {
   version: number;
   subCategory: number;
   parts: AssemblyPart[];
+  /** Slot keys asked when the item is created (device check). Absent = every slot, [] = none. */
+  askOnCreate?: string[];
+  /** Work steps for taking the item apart; parts without a step are grouped as "Weitere Teile". */
+  steps?: AssemblyStep[];
+}
+
+/** `all` = every slot (re-assessment); `create` = only what the device check at creation asks. */
+export type AssemblyQuestionScope = 'all' | 'create';
+
+export function partsInScope(ac: AssemblyContract, scope: AssemblyQuestionScope): AssemblyPart[] {
+  if (scope === 'all' || !Array.isArray(ac.askOnCreate)) return ac.parts;
+  const asked = new Set(ac.askOnCreate);
+  return ac.parts.filter((p) => asked.has(p.key));
+}
+
+/**
+ * The slot questions (presence + secondary spec question) as a QualityContract, for asking and
+ * scoring alongside the item's own contracts. The one conversion for frontend, intake and server,
+ * so the creation form and the intake station ask the same questions.
+ */
+export function assemblyToQualityContract(ac: AssemblyContract, scope: AssemblyQuestionScope = 'all'): QualityContract {
+  return {
+    version: ac.version,
+    subCategory: ac.subCategory,
+    questions: partsInScope(ac, scope).flatMap((p) => [
+      ...(p.question ? [p.question] : []),
+      ...(p.specQuestion ? [p.specQuestion] : [])
+    ])
+  };
 }

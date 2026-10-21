@@ -36,7 +36,7 @@ jest.mock('../../utils/intake-auth', () => ({
 jest.mock('../../lib/quality-contracts', () => ({
   loadGeneralContract: jest.fn(() => ({ questions: [] })),
   loadSubCategoryContract: jest.fn(() => ({ questions: [] })),
-  assemblyToQualityContract: jest.fn(() => ({ questions: [] })),
+  loadCreationQuestions: jest.fn(() => []),
   buildQualityCheckResponse: jest.fn(() => ({ qualityTag: 'good', qualityValue: 4, derivedSpecs: {}, answers: {} })),
 }));
 

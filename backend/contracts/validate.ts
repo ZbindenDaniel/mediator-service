@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { listContractCodes, resolveContractReadPath } from './paths';
-import { SLOT_PRESENCE_VALUES } from '../../models/assembly-contract';
+import { SLOT_PRESENCE_VALUES, isSlotMissingAnswer } from '../../models/assembly-contract';
 
 // One validator for every contract entry point (Jest over shipped + overlay, `npm run contracts:check`,
 // admin upload). Contracts reference each other (slot → subcategory → assembly → …), so a structural
@@ -57,6 +57,13 @@ function checkQuestion(where: string, q: unknown, errors: string[]): void {
   checkWeight(at, q.weight, errors);
   checkStates(at, q, errors);
   checkKnockout(at, q.knockout, errors);
+  if (q.refinedBy !== undefined) {
+    if (!Array.isArray(q.refinedBy) || q.refinedBy.length === 0 || !q.refinedBy.every((k) => typeof k === 'string' && k.trim())) {
+      errors.push(`${at}: "refinedBy" must be a non-empty array of slot keys`);
+    } else if (q.weight === undefined && q.states === undefined && q.qualityImpact === undefined) {
+      errors.push(`${at}: "refinedBy" only makes sense on a scored question (weight/states)`);
+    }
+  }
 }
 
 function isFraction(v: unknown): boolean {
@@ -116,6 +123,18 @@ export function validateContractDocument(type: ContractType, doc: unknown, name:
     if (doc.guidance !== undefined && !Array.isArray(doc.guidance)) errors.push(`${name}: "guidance" must be an array of strings`);
   } else {
     if (!Array.isArray(doc.parts)) return [...errors, `${name}: "parts" must be an array`];
+    const stepKeys = new Set<string>();
+    if (doc.steps !== undefined) {
+      if (!Array.isArray(doc.steps)) errors.push(`${name}: "steps" must be an array`);
+      else for (const st of doc.steps) {
+        if (!isObject(st) || typeof st.key !== 'string' || !st.key.trim() || typeof st.label !== 'string' || !st.label.trim()) {
+          errors.push(`${name}: each step needs a non-empty "key" and "label"`);
+          continue;
+        }
+        if (stepKeys.has(st.key)) errors.push(`${name}: duplicate step key "${st.key}"`);
+        stepKeys.add(st.key);
+      }
+    }
     const keys = new Set<string>();
     for (const p of doc.parts) {
       if (!isObject(p)) { errors.push(`${name}: each part must be an object`); continue; }
@@ -130,6 +149,8 @@ export function validateContractDocument(type: ContractType, doc: unknown, name:
       if (p.knockout !== undefined && p.weight === undefined) errors.push(`${at}: a slot "knockout" needs a "weight" (only weighted slots are scored as slots)`);
       if (p.question !== undefined) checkQuestion(at, p.question, errors);
       if (p.specQuestion !== undefined) checkQuestion(at, p.specQuestion, errors);
+      if (p.step !== undefined && (typeof p.step !== 'string' || !stepKeys.has(p.step))) errors.push(`${at}: step "${String(p.step)}" is not declared in "steps"`);
+      if (p.default !== undefined) checkSlotDefault(at, p, errors);
       // A weighted slot is scored by presence + child score; a select presence question must speak
       // the canonical values, and an own qualityImpact would score the part twice.
       if (p.weight !== undefined && isObject(p.question)) {
@@ -142,7 +163,24 @@ export function validateContractDocument(type: ContractType, doc: unknown, name:
       }
     }
   }
+  if (type === 'assembly' && doc.askOnCreate !== undefined) {
+    const partKeys = new Set(Array.isArray(doc.parts) ? doc.parts.filter(isObject).map((p) => p.key) : []);
+    if (!Array.isArray(doc.askOnCreate)) errors.push(`${name}: "askOnCreate" must be an array of slot keys`);
+    else for (const k of doc.askOnCreate) {
+      if (typeof k !== 'string' || !partKeys.has(k)) errors.push(`${name}: askOnCreate "${String(k)}" is not a part key`);
+    }
+  }
   return errors;
+}
+
+// A default is shown as if answered, so it must be a real answer — and never "missing": an
+// unconfirmed "Nicht vorhanden" would read as a defect nobody checked.
+function checkSlotDefault(at: string, p: Doc, errors: string[]): void {
+  const q = p.question;
+  if (!isObject(q)) { errors.push(`${at}: "default" needs a presence "question"`); return; }
+  const allowed = q.type === 'boolean' ? ['true'] : (Array.isArray(q.values) ? (q.values as unknown[]) : []);
+  if (typeof p.default !== 'string' || !allowed.includes(p.default)) errors.push(`${at}: default "${String(p.default)}" is not one of its question's values`);
+  else if (isSlotMissingAnswer(p.default)) errors.push(`${at}: default must not be a "missing" answer`);
 }
 
 export interface ContractSetInput {
@@ -223,6 +261,15 @@ export function validateContractSet(input: ContractSetInput): string[] {
           typeof scale[a] === 'number' ||
           (isObject(q.qualityImpact) && typeof q.qualityImpact[a] === 'number'));
         if (!valued) errors.push(`${src} question "${q.id}": scored, but none of its answers has a value (states/scale)`);
+      }
+    }
+    // refinedBy names weighted slots of this subcategory's own assembly (only they carry a part range);
+    // a group contract's refinedBy must therefore fit every subcategory it applies to.
+    const weightedSlots = new Set(partsOf(input.assembly.get(code)).filter((p) => p.weight !== undefined).map((p) => p.key as string));
+    for (const { q, src } of merged) {
+      if (!Array.isArray(q.refinedBy)) continue;
+      for (const k of q.refinedBy) {
+        if (!weightedSlots.has(k as string)) errors.push(`${src} question "${q.id}": refinedBy "${String(k)}" is not a weighted slot of assembly/${code}.json`);
       }
     }
     for (const { q, src } of merged) {

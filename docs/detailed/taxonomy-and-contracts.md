@@ -69,7 +69,7 @@ quality  = certain / total  …  possible / total            e.g. "60–85 %"
 |---|---|---|---|---|
 | Webcam | 3 | Gut (1.0) | 3 | 3 |
 | Scharniere | 4 | Abgenutzt (0.75) | 3 | 3 |
-| Tastatur | 5 | not checked | 0 | 5 |
+| Tastatur (device question) | 5 | not answered | 0 | 5 |
 | Mainboard | 8 | 0.75 | 6 | 6 |
 | | **20** | | **12** | **17** → **60–85 %** |
 
@@ -77,8 +77,14 @@ quality  = certain / total  …  possible / total            e.g. "60–85 %"
   them with its own `states`. An answer with no value ("Ungetestet", "?") counts as *not checked*.
   `null` means "doesn't apply" (left out entirely).
 - **Parts** count with their own range: a webcam assessed at 50–90 % in a slot of weight 3 adds 1.5–2.7.
-  A part taken out of the device, or answered "Nicht vorhanden", counts 0; "Nicht vorgesehen" (the model
-  never had it) and "Fest verbaut" are left out.
+  A part taken out of the device, or answered "Nicht vorhanden", counts 0. A slot **nobody has looked at
+  yet** — unanswered, or "Vorhanden" without an assessed part — is **left out**, like "Nicht vorgesehen" and
+  "Fest verbaut". So a device graded at creation keeps its grade while it is taken apart; each assessed
+  part only adds detail. (An unanswered *question* still counts as not checked, as in the table.)
+- **Parts replace device questions (`refinedBy`):** a device question can name the slots it stands in
+  for — `"refinedBy": ["palmrest", "bottom_case"]` on "Gehäuse-Zustand". Once **every** listed slot is
+  assessed, removed or "Nicht vorhanden", the question leaves the score and the parts speak for the
+  chassis. If one of them is "Fest verbaut"/"Nicht vorgesehen", the question stays.
 - **Knock-outs** cap the whole item when something is *certainly* bad: a swollen battery with
   `"knockout": { "below": 0.5, "cap": 0.19 }` makes the device at most 19 % (= "Ersatzteil"), however good
   the rest is.
@@ -126,6 +132,18 @@ quality  = certain / total  …  possible / total            e.g. "60–85 %"
                 "values": ["Vorhanden", "Nicht vorhanden", "Nicht vorgesehen", "Fest verbaut"] } }
 ```
 - Weighted slots use exactly those four presence values. `multipleAllowed: true` for RAM-like slots.
+- `"default": "Nicht vorgesehen"` shows a slot pre-set (e.g. a rarely fitted second drive). Display only —
+  it is not saved or scored until someone answers; "Nicht vorhanden" is refused as a default.
+- `"step": "<key>"` puts the slot into a work step for taking the item apart (see below).
+
+**Assembly-level fields** (next to `parts`):
+```json
+{ "askOnCreate": ["battery"],
+  "steps": [{ "key": "bottom", "label": "Akku & Bodenabdeckung" }, { "key": "display", "label": "Display abnehmen" }] }
+```
+- `askOnCreate`: the slots asked in the **device check at creation** (create form and intake station).
+  Left out = every slot (refurbishment); `[]` = none (catalogue: the laptop is not opened at intake).
+- `steps`: the order in which the item is taken apart; slots without a `step` are "Weitere Teile".
 - **Nesting:** give `targetSubcategory` its own `assembly/` file and the part has parts of its own
   (Laptop → Displayassembly → Webcam). The assessment lets you click into each level ("Bewerten →").
 

@@ -1865,6 +1865,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
               : undefined
           }
           layout={layout}
+          questionScope="create"
         />
       </>
     );

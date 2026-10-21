@@ -16,7 +16,8 @@ import QualityBadge from './QualityBadge';
 import { parseMultiAnswer, computeQualityScore, scoreToRange, formatQualityScoreRange, gradeFromRange, gradingFrom } from '../../../models/quality-score';
 import type { QualityScoreChild } from '../../../models/quality-score';
 import type { AssemblyContract, AssemblyPart } from '../../../models/assembly-contract';
-import { isSlotExcludedAnswer, isSlotMissingAnswer, SLOT_PRESENT } from '../../../models/assembly-contract';
+import { isSlotExcludedAnswer, isSlotMissingAnswer, SLOT_PRESENT, assemblyToQualityContract } from '../../../models/assembly-contract';
+import type { AssemblyQuestionScope } from '../../../models/assembly-contract';
 import { readQualityDraft, writeQualityDraft, clearQualityDraft } from '../lib/qualityDraft';
 
 export interface QualityReviewResult {
@@ -44,6 +45,8 @@ interface QualityReviewStepProps {
   submitLabel?: string;
   skipLabel?: string;
   heading?: string;
+  /** `create` = the device check at creation: only the slots in the contract's askOnCreate. */
+  questionScope?: AssemblyQuestionScope;
 }
 
 interface SparePartRow {
@@ -309,6 +312,7 @@ export default function QualityReviewStep({
   submitLabel = 'Weiter →',
   skipLabel = 'Überspringen',
   heading = 'Qualitätsbewertung',
+  questionScope = 'all',
 }: QualityReviewStepProps) {
   const [contracts, setContracts] = useState<{ general: QualityContract | null; assembly: QualityContract | null; subCat: QualityContract | null; assemblyRaw: AssemblyContract | null }>({
     general: null,
@@ -340,14 +344,14 @@ export default function QualityReviewStep({
   useEffect(() => {
     let cancelled = false;
     setContractsLoading(true);
-    loadContractsAsync(subCategory).then((loaded) => {
+    loadContractsAsync(subCategory, questionScope).then((loaded) => {
       if (!cancelled) {
         setContracts(loaded);
         setContractsLoading(false);
       }
     });
     return () => { cancelled = true; };
-  }, [subCategory]);
+  }, [subCategory, questionScope]);
 
   const { general, assembly, subCat } = contracts;
   const questions = getAllQuestions(general, subCat, assembly);
@@ -391,9 +395,10 @@ export default function QualityReviewStep({
     });
   };
 
+  // Scored with every slot question, like the server — the scope only limits what is asked.
   const activeContracts = [
     ...(general ? [general] : []),
-    ...(assembly ? [assembly] : []),
+    ...(contracts.assemblyRaw ? [assemblyToQualityContract(contracts.assemblyRaw)] : []),
     ...(subCat ? [subCat] : [])
   ];
   const qualityValue = deriveQualityFromAnswers(activeContracts, answers, contracts.assemblyRaw);

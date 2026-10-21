@@ -41,6 +41,12 @@ export interface WeightedQuestionFields {
    */
   states?: Record<string, number | null>;
   knockout?: QualityKnockout;
+  /**
+   * Assembly slot keys (of the same item's assembly contract) this device-level question is a
+   * stand-in for, e.g. "Gehäuse-Zustand" → ["palmrest", "bottom_case"]. Once every listed slot is
+   * assessed or missing, the parts speak for that area and this question leaves the score (S1).
+   */
+  refinedBy?: string[];
 }
 
 export interface SelectQuestion extends IntakeResolveFields, WeightedQuestionFields {

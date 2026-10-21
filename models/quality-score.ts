@@ -7,8 +7,8 @@ import { QUALITY_LABELS } from './quality';
  * The one quality calculation (backend store, intake, live preview).
  *
  * Every scored component — a question, or an assembly slot with `weight` — adds its weight to `total`.
- * What has been checked adds `weight × fraction` to `certain` and `possible`; what has not been
- * checked adds its full weight to `possible` only. Quality is the range certain/total … possible/total.
+ * What has been checked adds `weight × fraction` to `certain` and `possible`; an unanswered question
+ * adds its full weight to `possible` only. A weighted slot counts only once it has been looked at. Quality is the range certain/total … possible/total.
  * Example: webcam 3 (3/3), hinges 4 (3/4), keyboard 5 (unchecked), mainboard 8 (6/8) → 60–85 %.
  *
  * Answers become fractions through named states ("Gut" 0.75, "Kaputt" 0 — the contract scale, or a
@@ -162,22 +162,42 @@ function questionScore(question: QualityQuestion, answers: Record<string, string
   return { total: w, certain: w * fraction, possible: w * fraction, cap: knockoutCap(question.knockout, fraction) };
 }
 
+// A weighted slot counts only once it has been looked at: a part with its own range in it, the part
+// removed, or the slot answered missing. "Vorhanden" without an assessed part, an unanswered slot and
+// "Nicht vorgesehen"/"Fest verbaut" stay out of the score — otherwise starting to take a device apart
+// would widen its range (every ticked slot adds uncertainty) and drop the grade it got at creation.
 function slotScore(part: AssemblyPart, answers: Record<string, string>, children: QualityScoreChild[]): QualityScore {
   const w = part.weight as number;
   const linked = children.filter((c) => c.slotKey === part.key);
   const inDevice = linked.filter((c) => c.inDevice);
   if (inDevice.length > 0) {
-    // multipleAllowed slots (RAM): the slot is worth the average of its instances
-    const min = inDevice.reduce((sum, c) => sum + (c.score ? c.score.min : 0), 0) / inDevice.length;
-    const max = inDevice.reduce((sum, c) => sum + (c.score ? c.score.max : 1), 0) / inDevice.length;
+    // multipleAllowed slots (RAM): the slot is worth the average of its assessed instances
+    const assessed = inDevice.filter((c) => c.score !== null);
+    if (assessed.length === 0) return EMPTY;
+    const min = assessed.reduce((sum, c) => sum + c.score!.min, 0) / assessed.length;
+    const max = assessed.reduce((sum, c) => sum + c.score!.max, 0) / assessed.length;
     return { total: w, certain: w * min, possible: w * max, cap: knockoutCap(part.knockout, max) };
   }
   // Removed to a box = gone from this device; its value now belongs to the part itself.
   if (linked.length > 0) return { total: w, certain: 0, possible: 0, cap: knockoutCap(part.knockout, 0) };
   const answer = part.question ? answers[part.question.id] : undefined;
-  if (isSlotExcludedAnswer(answer)) return EMPTY;
   if (isSlotMissingAnswer(answer)) return { total: w, certain: 0, possible: 0, cap: knockoutCap(part.knockout, 0) };
-  return { total: w, certain: 0, possible: w, cap: null };
+  return EMPTY;
+}
+
+/** Slot keys whose part now speaks for itself (assessed, removed or missing) — see `refinedBy`. */
+function refinedSlotKeys(parts: AssemblyPart[], answers: Record<string, string>, children: QualityScoreChild[]): Set<string> {
+  const keys = new Set<string>();
+  for (const part of parts) {
+    const linked = children.filter((c) => c.slotKey === part.key);
+    const inDevice = linked.filter((c) => c.inDevice);
+    const answer = part.question ? answers[part.question.id] : undefined;
+    const refined = inDevice.length > 0
+      ? inDevice.some((c) => c.score !== null)
+      : linked.length > 0 || isSlotMissingAnswer(answer);
+    if (refined) keys.add(part.key);
+  }
+  return keys;
 }
 
 export function computeQualityScore(input: QualityScoreInput): QualityScore {
@@ -186,12 +206,16 @@ export function computeQualityScore(input: QualityScoreInput): QualityScore {
   const weightedParts = (assembly?.parts ?? []).filter((p) => isPositiveWeight(p.weight));
   // A weighted slot is scored through the slot; its presence question must not count twice.
   const slotQuestionIds = new Set(weightedParts.map((p) => p.question?.id).filter(Boolean));
+  const refined = refinedSlotKeys(weightedParts, answers, children);
   const seen = new Set<string>();
   let score = EMPTY;
   for (const contract of contracts) {
     for (const question of contract.questions) {
       if (slotQuestionIds.has(question.id) || seen.has(question.id)) continue;
       seen.add(question.id);
+      // S1: all covered parts speak for themselves → the device-level stand-in leaves the score.
+      // A covered slot that is "Fest verbaut"/"Nicht vorgesehen" never refines, so the question stays.
+      if (question.refinedBy?.length && question.refinedBy.every((key) => refined.has(key))) continue;
       score = add(score, questionScore(question, answers, scale));
     }
   }

@@ -1,6 +1,7 @@
 import { query as defaultQuery, queryOne as defaultQueryOne, execute as defaultExecute } from '../db-client';
+import { assemblyToQualityContract } from '../../models/assembly-contract';
 import { getAssemblyContract } from '../contracts/registry';
-import { loadGeneralContract, loadSubCategoryContract, assemblyToQualityContract } from './quality-contracts';
+import { loadGeneralContract, loadSubCategoryContract } from './quality-contracts';
 import { computeQualityScore, scoreToRange, formatQualityScoreRange, gradeFromRange, gradingFrom } from '../../models/quality-score';
 import type { QualityScoreChild, QualityScoreRange } from '../../models/quality-score';
 import type { QualityGrading } from '../../models/quality-contract';

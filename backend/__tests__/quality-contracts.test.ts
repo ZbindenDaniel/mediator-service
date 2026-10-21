@@ -1,11 +1,11 @@
 import {
-  assemblyToQualityContract,
   deriveQualityFromAnswers,
   deriveSpecsFromAnswers,
   buildQualityCheckResponse,
 } from '../lib/quality-contracts';
 import type { QualityContract } from '../../models/quality-contract';
 import type { AssemblyContract } from '../../models/assembly-contract';
+import { assemblyToQualityContract } from '../../models/assembly-contract';
 
 const generalContract: QualityContract = {
   version: 1,

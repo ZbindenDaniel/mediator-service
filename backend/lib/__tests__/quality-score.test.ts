@@ -115,16 +115,16 @@ describe('backend quality score', () => {
     expect(byId.get('C-webcam')).toMatchObject({ QualityScoreMin: 0, QualityScoreMax: 0 });
     // display assembly: webcam slot (3) worth 0 → 0 %
     expect(byId.get('C-display')).toMatchObject({ QualityScoreMin: 0, QualityScoreMax: 0 });
-    // laptop: display 8 × 0 + keyboard 2 present-but-unassessed → 0–20 %
+    // laptop: display 8 × 0; keyboard "Vorhanden" without an assessed part does not count → 0 %
     expect(byId.get('L')!.QualityScoreMin).toBeCloseTo(0);
-    expect(byId.get('L')!.QualityScoreMax).toBeCloseTo(0.2);
+    expect(byId.get('L')!.QualityScoreMax).toBeCloseTo(0);
     expect(events).toEqual(['C-webcam:QualityScoreChanged', 'C-display:QualityScoreChanged', 'L:QualityScoreChanged']);
   });
 
-  it('a good webcam makes the laptop 80–100 %; an unassessed one leaves it uncertain', async () => {
+  it('a good webcam makes the laptop 100 % (unassessed keyboard left out); an unassessed webcam leaves it uncertain', async () => {
     const good = tree('OK');
     await recomputeQualityScoreUpward('C-webcam', {}, good.db);
-    expect(good.byId.get('L')!.QualityScoreMin).toBeCloseTo(0.8);
+    expect(good.byId.get('L')!.QualityScoreMin).toBeCloseTo(1);
     expect(good.byId.get('L')!.QualityScoreMax).toBeCloseTo(1);
 
     const open = tree(null);
@@ -156,14 +156,14 @@ describe('backend quality score', () => {
   it('recompute-all processes children before parents in one pass', async () => {
     const { db, byId } = tree('OK');
     expect(await recomputeAllQualityScores(db)).toEqual({ items: 3, changed: 3 });
-    expect(byId.get('L')!.QualityScoreMin).toBeCloseTo(0.8);
+    expect(byId.get('L')!.QualityScoreMin).toBeCloseTo(1);
     expect(await recomputeAllQualityScores(db)).toEqual({ items: 3, changed: 0 });
   });
 
   it('derives the 1–5 grade pessimistically for assessed items, null when too uncertain', async () => {
     const good = tree('OK');
     await recomputeQualityScoreUpward('C-webcam', {}, good.db);
-    // laptop 80–100 %: 0.2 wide ≤ 0.25 → grade from lower bound 0.8 → 5
+    // laptop 100 % → 5
     expect(good.byId.get('L')!.Quality).toBe(5);
     // webcam has an assessment (QualityId 2) and is certain → 5; display has no assessment → grade untouched (U5)
     expect(good.byId.get('C-webcam')!.Quality).toBe(5);

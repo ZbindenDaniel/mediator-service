@@ -1,5 +1,6 @@
 import type { QualityContract, QualityQuestion } from '../../../models/quality-contract';
-import type { AssemblyContract } from '../../../models/assembly-contract';
+import type { AssemblyContract, AssemblyQuestionScope } from '../../../models/assembly-contract';
+import { assemblyToQualityContract } from '../../../models/assembly-contract';
 import { fetchQualityContract, fetchAssemblyContract } from './contractsApi';
 import { computeQualityScore, scoreToRange, gradeFromRange, gradingFrom } from '../../../models/quality-score';
 
@@ -8,17 +9,10 @@ export function isQuestionVisible(question: QualityQuestion, answers: Record<str
   return answers[question.showIf.questionId] === question.showIf.value;
 }
 
-/** Converts assembly contract part questions into a synthetic QualityContract for rendering/scoring. */
-function assemblyToQualityContract(ac: AssemblyContract): QualityContract {
-  return {
-    version: ac.version,
-    subCategory: ac.subCategory,
-    questions: ac.parts.flatMap(p => p.question ? [p.question] : [])
-  };
-}
-
-export async function loadContractsAsync(subCategory?: number): Promise<{
+/** `scope` limits which slot questions are asked (`create` = askOnCreate); scoring uses `assemblyRaw`. */
+export async function loadContractsAsync(subCategory?: number, scope: AssemblyQuestionScope = 'all'): Promise<{
   general: QualityContract | null;
+  /** The slot questions to ask in this scope. */
   assembly: QualityContract | null;
   subCat: QualityContract | null;
   /** The assembly contract as-is (slots + weights), for the percentage score preview. */
@@ -29,7 +23,7 @@ export async function loadContractsAsync(subCategory?: number): Promise<{
     subCategory !== undefined ? fetchAssemblyContract(subCategory) : Promise.resolve(null),
     subCategory !== undefined ? fetchQualityContract(subCategory) : Promise.resolve(null)
   ]);
-  const assembly = assemblyRaw ? assemblyToQualityContract(assemblyRaw) : null;
+  const assembly = assemblyRaw ? assemblyToQualityContract(assemblyRaw, scope) : null;
   return { general, assembly, subCat, assemblyRaw: assemblyRaw ?? null };
 }
 

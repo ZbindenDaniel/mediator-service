@@ -1,11 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { assemblyToQualityContract } from '../../models/assembly-contract';
 import { defineHttpAction } from './index';
 import { insertQualityAssessment, updateItemQualityAssessment, updateItemInstanceSpecs, getItemQualityResponses } from '../db';
 import {
   loadGeneralContract,
   loadSubCategoryContract,
   buildQualityCheckResponse,
-  assemblyToQualityContract,
 } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveActor } from '../utils/actor';

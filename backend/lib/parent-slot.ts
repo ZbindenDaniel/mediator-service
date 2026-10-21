@@ -1,10 +1,10 @@
 import { execute, queryOne } from '../db-client';
 import { insertQualityAssessment, updateItemQualityAssessment } from '../db';
 import { getAssemblyContract } from '../contracts/registry';
-import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse, assemblyToQualityContract } from './quality-contracts';
+import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse } from './quality-contracts';
 import { resolveEffectiveSubCategory, recomputeQualityScoreSafely } from './quality-score';
 import type { RecomputeOptions } from './quality-score';
-import { SLOT_MISSING } from '../../models/assembly-contract';
+import { SLOT_MISSING, assemblyToQualityContract } from '../../models/assembly-contract';
 import type { QualityTag } from '../../models/quality';
 
 // A part left its parent device (Entnehmen). Instead of overwriting the parent's grade with a bare

@@ -2,10 +2,11 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import type { QualityContract, QualityQuestion, QualityCheckResponse } from '../../models/quality-contract';
 import type { AssemblyContract } from '../../models/assembly-contract';
+import { assemblyToQualityContract } from '../../models/assembly-contract';
 import { QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX, QUALITY_LABELS } from '../../models/quality';
 import type { QualityTag } from '../../models/quality';
 import { resolveContractReadPath } from '../contracts/paths';
-import { getQualityContract } from '../contracts/registry';
+import { getAssemblyContract, getQualityContract } from '../contracts/registry';
 import { parseMultiAnswer, computeQualityScore, scoreToRange, gradeFromRange, gradingFrom } from '../../models/quality-score';
 import type { QualityScoreRange } from '../../models/quality-score';
 
@@ -28,6 +29,21 @@ export function loadGeneralContract(): QualityContract {
 // Includes the shared Hauptkategorie contract (group-<haupt>.json), see registry.getQualityContract.
 export function loadSubCategoryContract(subCatCode: number): QualityContract | null {
   return getQualityContract(subCatCode);
+}
+
+/**
+ * The questions of the device check at creation (intake station): general + subcategory + the slots
+ * the assembly contract asks on create (`askOnCreate`, absent = all). Scoring still uses every slot.
+ */
+export function loadCreationQuestions(subCatCode: number | null): QualityQuestion[] {
+  const general = loadGeneralContract();
+  const subCat = subCatCode ? loadSubCategoryContract(subCatCode) : null;
+  const assembly = subCatCode ? getAssemblyContract(subCatCode) : null;
+  return [
+    ...general.questions,
+    ...(subCat?.questions ?? []),
+    ...(assembly ? assemblyToQualityContract(assembly, 'create').questions : [])
+  ];
 }
 
 function clamp(value: number): number {
@@ -93,23 +109,6 @@ export function deriveSpecsFromAnswers(
 }
 
 /** Converts assembly contract part questions into a synthetic QualityContract for scoring/spec derivation. */
-export function assemblyToQualityContract(ac: AssemblyContract): QualityContract {
-  return {
-    version: ac.version,
-    subCategory: ac.subCategory,
-    // Include both primary question and secondary specQuestion so all specs are derived
-    questions: ac.parts.flatMap(p => {
-      const q = p.question; // support both field names
-      const sq = p.specQuestion;
-      return [
-        ...(q ? [q] : []),
-        ...(sq ? [sq] : [])
-      ];
-    })
-  };
-}
-
-
 export function buildQualityCheckResponse(
   generalContract: QualityContract,
   subCatContract: QualityContract | null,
