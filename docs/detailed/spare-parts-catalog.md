@@ -206,7 +206,7 @@ removed); else the stored answer, else the contract `default` (shown dashed, not
 **Runtime:**
 1. Create a laptop (catalogue): only device questions are asked (`askOnCreate: []`); refurbishment still asks its slots.
 2. Instance tab → **Einzelteile** → steps with progress; "2. Laufwerk" shows a dashed "– n. v." default.
-3. Battery "✓ da" → saved at once; click the battery → assess → "Speichern & nächstes →" creates `C-<Art>-2132-0001`.
+3. Battery "✓ da" → saved at once; click the battery → assess → "Speichern" creates `C-<Art>-2132-0001` and stays on it.
 4. Device range follows; re-saving the device's Zustand keeps the presence answers.
 5. "Entnehmen…" → box → row shows "entnommen · B-…"; "Lösen" deletes a wrongly created part.
 6. `GET /api/contracts/assembly/201` returns the contract JSON.

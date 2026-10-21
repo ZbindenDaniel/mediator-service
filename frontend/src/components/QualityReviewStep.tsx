@@ -29,7 +29,8 @@ export interface QualityReviewResult {
 
 interface QualityReviewStepProps {
   onComplete: (result: QualityReviewResult) => void;
-  onSkip: () => void;
+  /** Omitted = no skip/cancel button (the Einzelteile page only saves). */
+  onSkip?: () => void;
   subCategory?: number;
   layout?: 'page' | 'embedded';
   initialAnswers?: Record<string, string>;
@@ -40,7 +41,8 @@ interface QualityReviewStepProps {
   draftKey?: string;
   submitLabel?: string;
   skipLabel?: string;
-  heading?: string;
+  /** null = no header block (the caller shows its own title). */
+  heading?: string | null;
   /** `create` = the device check at creation: only the slots in the contract's askOnCreate. */
   questionScope?: AssemblyQuestionScope;
 }
@@ -400,8 +402,12 @@ export default function QualityReviewStep({
   return (
     <div className="item-create__step">
       <div className="item-create__step-header">
-        <h2>{heading}</h2>
-        <p className="muted">Bitte den Zustand des Artikels bewerten.</p>
+        {heading !== null && (
+          <>
+            <h2>{heading}</h2>
+            <p className="muted">Bitte den Zustand des Artikels bewerten.</p>
+          </>
+        )}
         {draftRestored && (
           <p className="muted">
             Ungespeicherter Entwurf wiederhergestellt ·{' '}
@@ -483,9 +489,11 @@ export default function QualityReviewStep({
         )}
 
         <div className="item-create__step-actions">
-          <button type="button" className="btn btn--secondary" onClick={onSkip} disabled={disabled}>
-            {skipLabel}
-          </button>
+          {onSkip && (
+            <button type="button" className="btn btn--secondary" onClick={onSkip} disabled={disabled}>
+              {skipLabel}
+            </button>
+          )}
           <button type="submit" className="btn btn--primary" disabled={!canSubmit || disabled}>
             {submitLabel}
           </button>

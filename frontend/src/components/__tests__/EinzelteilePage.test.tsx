@@ -74,7 +74,7 @@ describe('Einzelteile page', () => {
     expect(await screen.findByText('1 · Akku & Bodenabdeckung')).toBeTruthy();
     // The default counts as answered for progress (1 of 2) and is shown as not yet confirmed.
     expect(screen.getByText('1/2')).toBeTruthy();
-    expect(document.querySelector('.parts-tree__chip--default')?.textContent).toBe('– n. v.');
+    expect(document.querySelector('.ptree__chip--default')?.textContent).toBe('– n. v.');
 
     const batteryChips = screen.getByRole('group', { name: 'part_battery?' });
     await act(async () => { fireEvent.click(batteryChips.querySelector('button:nth-child(2)')!); });
@@ -83,12 +83,21 @@ describe('Einzelteile page', () => {
     expect(patch.body).toEqual({ reviewed_by: 'alice', answers: { part_battery: 'Nicht vorhanden' } });
   });
 
+  it('has the device as tree root, a close button and only a "Speichern" action', async () => {
+    renderPage();
+    const root = await screen.findByRole('button', { name: /ThinkPad T480.*Gerät · L1/ });
+    expect(root.closest('.ptree__row--selected')).toBeTruthy(); // the device is selected by default
+    expect(screen.getByRole('button', { name: '✕ Schliessen' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Speichern' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Verwerfen' })).toBeNull();
+  });
+
   it('assessing a not yet catalogued part creates it, marks it present and sends only its own answers', async () => {
     renderPage('/items/L1/einzelteile?node=L1~battery');
     expect(await screen.findByText('noch nicht erfasst — wird beim Speichern angelegt')).toBeTruthy();
     const select = (await screen.findByText('Zustand des Teils?')).closest('.row')!.querySelector('select')!;
     fireEvent.change(select, { target: { value: 'Gut' } });
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Speichern & nächstes →' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Speichern' })); });
 
     await waitFor(() => expect(calls.some((c) => c.url === '/api/items/C-104523-2132-0001/quality-review' && c.method === 'POST')).toBe(true));
     expect(calls.find((c) => c.url.endsWith('/spare-parts/component'))!.body).toEqual({ actor: 'alice', slotKey: 'battery' });

@@ -1,4 +1,4 @@
-import { effectiveAnswer, groupSlotsBySteps, nextOpenNode, slotState } from '../frontend/src/lib/partsTree';
+import { effectiveAnswer, groupSlotsBySteps, slotState } from '../frontend/src/lib/partsTree';
 import type { PartsTreeNode, PartsTreeSlot } from '../models/parts-tree';
 
 const PRESENCE = ['Vorhanden', 'Nicht vorhanden', 'Nicht vorgesehen', 'Fest verbaut'];
@@ -33,17 +33,5 @@ describe('parts tree helpers', () => {
     expect(groupSlotsBySteps(tree).map((g) => [g.label, g.slots.map((s) => s.part.key)])).toEqual([
       ['A', ['early']], ['B', ['late']], ['Weitere Teile', ['loose']],
     ]);
-  });
-
-  it('next open part: unassessed in-device parts and present-but-uncatalogued slots, depth-first', () => {
-    const display = node('C-disp', [slot(part('webcam', { step: 'a' }), 'Vorhanden')], { assessed: true });
-    const tree = node('L', [
-      slot(part('battery', { step: 'a' }), null, [node('C-bat', null)]),
-      slot(part('display', { step: 'b' }), null, [display]),
-      slot(part('fan', { step: 'b' }), 'Nicht vorhanden'),
-    ]);
-    expect(nextOpenNode(tree, { itemUUID: 'L' })).toEqual({ itemUUID: 'C-bat' });
-    expect(nextOpenNode(tree, { itemUUID: 'C-bat' })).toEqual({ parentUUID: 'C-disp', slotKey: 'webcam' });
-    expect(nextOpenNode(tree, { parentUUID: 'C-disp', slotKey: 'webcam' })).toBeNull();
   });
 });

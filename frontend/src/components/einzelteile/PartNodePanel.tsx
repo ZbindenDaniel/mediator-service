@@ -30,12 +30,13 @@ interface Props {
   canEdit: boolean;
   /** Reloads the tree and resolves with the fresh one. */
   refresh: () => Promise<PartsTreeNode | null>;
-  /** Moves on after a save: the caller picks the next open part in the fresh tree. */
-  onSaved: (savedRef: NodeRef, freshTree: PartsTreeNode | null) => void;
   onSelect: (ref: NodeRef) => void;
 }
 
-export default function PartNodePanel({ tree, selected, canEdit, refresh, onSaved, onSelect }: Props) {
+// Survives the remount after a save (the page remounts this panel per tree revision).
+let lastSavedKey: string | null = null;
+
+export default function PartNodePanel({ tree, selected, canEdit, refresh, onSelect }: Props) {
   const node = 'itemUUID' in selected ? findNode(tree, selected.itemUUID) : null;
   const slot = 'itemUUID' in selected ? null : findSlot(tree, selected.parentUUID, selected.slotKey);
   const parentNode = 'itemUUID' in selected ? null : findNode(tree, selected.parentUUID);
@@ -44,7 +45,8 @@ export default function PartNodePanel({ tree, selected, canEdit, refresh, onSave
   const isRoot = node?.itemUUID === tree.itemUUID;
 
   const [initialAnswers, setInitialAnswers] = useState<Record<string, string> | null>(node ? null : {});
-  const [formKey, setFormKey] = useState(0);
+  const [justSaved] = useState(() => lastSavedKey === draftKey);
+  useEffect(() => { if (justSaved) lastSavedKey = null; }, [justSaved]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showRelocate, setShowRelocate] = useState(false);
@@ -90,18 +92,15 @@ export default function PartNodePanel({ tree, selected, canEdit, refresh, onSave
       }
       await saveOwnAssessment(itemUUID, answers, result.assessment.notes ?? null);
       clearQualityDraft(draftKey);
-      const fresh = await refresh();
-      onSaved({ itemUUID }, fresh);
+      // Stay on the saved node; a just-created part is now addressed by its own id.
+      lastSavedKey = itemUUID;
+      await refresh();
+      if (!node) onSelect({ itemUUID });
     } catch (err) {
       setError((err as Error).message);
     } finally {
       setSaving(false);
     }
-  };
-
-  const discard = () => {
-    clearQualityDraft(draftKey);
-    setFormKey((k) => k + 1);
   };
 
   const handleDetach = async () => {
@@ -123,18 +122,19 @@ export default function PartNodePanel({ tree, selected, canEdit, refresh, onSave
 
   return (
     <div className="panel-tab-body part-node">
-      <nav className="part-node__crumbs muted" aria-label="Pfad">{crumbs.join(' › ')}</nav>
+      <nav className="part-node__crumbs" aria-label="Pfad">{crumbs.join(' › ')}</nav>
       <div className="part-node__head">
-        <h2>{isRoot ? 'Gerät — Zustand' : label}</h2>
+        <h2>{isRoot ? `${label} — Zustand des Geräts` : label}</h2>
         <p className="muted">
           {node ? node.itemUUID : 'noch nicht erfasst — wird beim Speichern angelegt'}
           {node?.artikelNummer && !isRoot ? ` · Artikel ${node.artikelNummer}` : ''}
           {range ? ` · ${range}` : ''}
           {node?.boxId ? ` · entnommen in ${node.boxId}` : ''}
         </p>
+        {justSaved && <p className="part-node__saved" role="status">✓ Gespeichert</p>}
       </div>
 
-      {error && <p className="parts-tree__error" role="alert">{error}</p>}
+      {error && <p className="ptree__error" role="alert">{error}</p>}
 
       {!canEdit ? (
         <p className="muted">Nur lesbar: dieses Gerät gehört einer anderen Organisation.</p>
@@ -142,19 +142,16 @@ export default function PartNodePanel({ tree, selected, canEdit, refresh, onSave
         <p className="muted">Bewertung wird geladen…</p>
       ) : (
         <QualityReviewStep
-          key={formKey}
           subCategory={subCategory ?? undefined}
           itemId={node?.itemUUID}
           draftKey={draftKey}
           initialAnswers={initialAnswers}
           questionScope="none"
-          heading={isRoot ? 'Zustand des Geräts' : 'Zustand des Teils'}
-          submitLabel={saving ? 'Speichert…' : 'Speichern & nächstes →'}
-          skipLabel="Verwerfen"
+          heading={null}
+          submitLabel={saving ? 'Speichert…' : 'Speichern'}
           layout="embedded"
           disabled={saving}
           onComplete={(r) => void handleComplete(r)}
-          onSkip={discard}
         />
       )}
 

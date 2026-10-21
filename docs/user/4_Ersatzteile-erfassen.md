@@ -26,7 +26,9 @@ Die Seite hat zwei Hälften:
 |---|---|
 | Was steckt im Gerät, was ist da? Gruppiert nach **Arbeitsschritten** (1 · Akku & Bodenabdeckung, 2 · Speicher & Funk, …). | Die Bewertung des Teils, das du links angeklickt hast — nur seine eigenen Fragen. |
 
-Ganz oben links steht **Gerät — Zustand**: dort änderst du die Bewertung des ganzen Geräts.
+Ganz oben im Baum steht das **Gerät** selbst: anklicken, um rechts die Bewertung des ganzen Geräts zu ändern. Darunter verzweigen die Arbeitsschritte, darunter die Teile.
+
+**Schliessen:** Knopf **✕ Schliessen** oben rechts (oder Taste **Esc**) — zurück zum Artikel.
 
 ---
 
@@ -53,9 +55,9 @@ Die Zahl rechts beim Arbeitsschritt (z. B. **2/3**) zeigt, wie viele Teile du sc
 
 1. Links auf den **Namen** des Teils klicken.
 2. Rechts die Fragen zum Teil beantworten (Zustand, Teilenummer/FRU, …).
-3. **Speichern & nächstes →** — das Teil wird dabei angelegt (es bekommt eine Nummer wie `C-104523-2132-0001`: Gerät · Teiletyp · laufende Nummer) und das nächste offene Teil öffnet sich.
+3. **Speichern** — beim ersten Speichern wird das Teil angelegt (es bekommt eine Nummer wie `C-104523-2132-0001`: Gerät · Teiletyp · laufende Nummer). Danach klickst du links das nächste Teil an.
 
-**Verwerfen** löscht nur deine ungespeicherten Eingaben. Ungespeicherte Eingaben bleiben übrigens erhalten, wenn du zwischendurch ein anderes Teil anklickst oder die Seite neu lädst.
+Ungespeicherte Eingaben bleiben erhalten, wenn du zwischendurch ein anderes Teil anklickst oder die Seite neu lädst.
 
 Baugruppen wie die **Displayassembly** haben selbst wieder Teile: sobald sie bewertet ist, erscheinen ihre Teile eingerückt darunter.
 
@@ -77,6 +79,6 @@ Bei einem noch nicht erfassten Teil: **Mit Artikel erfassen…** verknüpft es g
 
 1. Laptop erfassen: startet, Display hat Kratzer, 16 GB RAM, 512 GB SSD → Bewertung z. B. „Gut".
 2. **Einzelteile** öffnen. Schritt 1: Akku **✓ da**, Bodenabdeckung **✓ da**, CMOS-Batterie **✕ fehlt**.
-3. Auf **Akku** klicken → rechts „Zustand des Teils: Gut", FRU eintragen → **Speichern & nächstes →**.
+3. Auf **Akku** klicken → rechts „Zustand des Teils: Gut", FRU eintragen → **Speichern**.
 4. Weiter mit der Bodenabdeckung, dann Schritt 2 …
 5. Akku ausbauen: Akku anklicken → **Entnehmen…** → `B-042`.

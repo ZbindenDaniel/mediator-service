@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
+import QualityBadge from '../QualityBadge';
 import type { PartsTreeNode, PartsTreeSlot, NodeRef, SlotState } from '../../lib/partsTree';
 import { effectiveAnswer, groupSlotsBySteps, isPresenceQuestion, isSlotDone, nodeRefKey, saveSlotAnswers, slotState } from '../../lib/partsTree';
 import { formatQualityScoreRange } from '../../../../models/quality-score';
 import type { QualityQuestion } from '../../../../models/quality-contract';
 
-// Left panel of the Einzelteile page: what the device is made of and what is there (Aufbau).
-// Presence is answered right here (saved per click into the item's assessment); the condition of a
-// part is assessed in the right panel. A slot with a part item in it takes its state from the item,
-// so its presence cannot be set to contradict an existing part.
+// Left side of the Einzelteile page: the device as the root of a tree, its work steps as branches,
+// the parts as leaves (sub-assemblies branch again). Presence is answered right in the row (saved per
+// click); clicking a name opens that node's condition on the right. A slot with a part item in it takes
+// its state from the item, so its presence cannot be set to contradict an existing part.
 
 interface Props {
   tree: PartsTreeNode;
@@ -15,6 +16,14 @@ interface Props {
   canEdit: boolean;
   onSelect: (ref: NodeRef) => void;
   onChanged: () => void;
+}
+
+interface RowContext {
+  selectedKey: string;
+  canEdit: boolean;
+  onSelect: (ref: NodeRef) => void;
+  onChanged: () => void;
+  setError: (msg: string | null) => void;
 }
 
 const CHIP_LABELS: Record<string, string> = {
@@ -43,10 +52,6 @@ function rangeOf(node: PartsTreeNode): string | null {
 
 function slotStatus(slot: PartsTreeSlot): string {
   const state = slotState(slot);
-  if (state === 'assessed') {
-    const ranges = slot.items.filter((n) => !n.boxId).map(rangeOf).filter(Boolean);
-    return ranges.length ? `bewertet · ${ranges.join(', ')}` : 'bewertet';
-  }
   if (state === 'removed') {
     const box = slot.items.find((n) => n.boxId)?.boxId;
     return box ? `entnommen · ${box}` : 'entnommen';
@@ -64,14 +69,14 @@ function AnswerControl({ question, value, isDefault, disabled, onChange }: {
   if (question.type === 'boolean' || (question.type === 'select' && question.values.every((v) => v in CHIP_LABELS))) {
     const values = question.type === 'boolean' ? ['true', 'false'] : question.values;
     return (
-      <span className="parts-tree__chips" role="group" aria-label={question.question}>
+      <span className="ptree__chips" role="group" aria-label={question.question}>
         {values.map((v) => {
           const active = value === v;
           return (
             <button
               key={v}
               type="button"
-              className={`quality-review-step__toggle parts-tree__chip${active ? ' quality-review-step__toggle--active' : ''}${active && isDefault ? ' parts-tree__chip--default' : ''}`}
+              className={`ptree__chip${active ? ' ptree__chip--active' : ''}${active && isDefault ? ' ptree__chip--default' : ''}`}
               title={active && isDefault ? `${v} (Vorgabe — noch nicht bestätigt)` : v}
               disabled={disabled}
               // Clicking the stored answer again clears it; clicking a pre-set default confirms it.
@@ -87,23 +92,14 @@ function AnswerControl({ question, value, isDefault, disabled, onChange }: {
   // Spec-like slot questions (refurbishment "RAM?", "Akkuzustand?") keep their own values.
   const values = question.type === 'select' ? question.values : [];
   return (
-    <select className="parts-tree__select" value={value ?? ''} disabled={disabled} aria-label={question.question} onChange={(e) => onChange(e.target.value)}>
+    <select className="ptree__select" value={value ?? ''} disabled={disabled} aria-label={question.question} onChange={(e) => onChange(e.target.value)}>
       <option value="">{question.question}</option>
       {values.map((v) => <option key={v} value={v}>{v}</option>)}
     </select>
   );
 }
 
-function SlotRow({ node, slot, depth, selectedKey, canEdit, onSelect, onChanged, setError }: {
-  node: PartsTreeNode;
-  slot: PartsTreeSlot;
-  depth: number;
-  selectedKey: string;
-  canEdit: boolean;
-  onSelect: (ref: NodeRef) => void;
-  onChanged: () => void;
-  setError: (msg: string | null) => void;
-}) {
+function SlotRow({ node, slot, ctx }: { node: PartsTreeNode; slot: PartsTreeSlot; ctx: RowContext }) {
   const [saving, setSaving] = useState(false);
   const { part } = slot;
   const state = slotState(slot);
@@ -114,130 +110,150 @@ function SlotRow({ node, slot, depth, selectedKey, canEdit, onSelect, onChanged,
 
   const save = async (questionId: string, answer: string) => {
     setSaving(true);
-    setError(null);
+    ctx.setError(null);
     try {
       await saveSlotAnswers(node.itemUUID, { [questionId]: answer });
-      onChanged();
+      ctx.onChanged();
     } catch (err) {
-      setError(`${part.label}: ${(err as Error).message}`);
+      ctx.setError(`${part.label}: ${(err as Error).message}`);
     } finally {
       setSaving(false);
     }
   };
 
-  // Without an item: the slot itself (part created on first save). One item: that item.
-  const ownRef: NodeRef = inDevice[0] ? { itemUUID: inDevice[0].itemUUID } : removed[0] ? { itemUUID: removed[0].itemUUID } : { parentUUID: node.itemUUID, slotKey: part.key };
+  // Without an item: the slot itself (the part is created on its first save). Otherwise that item.
+  const item = inDevice[0] ?? removed[0] ?? null;
+  const ownRef: NodeRef = item ? { itemUUID: item.itemUUID } : { parentUUID: node.itemUUID, slotKey: part.key };
   const selectable = state !== 'missing' && state !== 'notApplicable' && state !== 'integrated';
-  const isSelected = nodeRefKey(ownRef) === selectedKey;
-  const instances = part.multipleAllowed ? inDevice : [];
+  const extraInstances = part.multipleAllowed ? inDevice.slice(1) : [];
+  const children = inDevice.filter((child) => child.assembly);
 
   return (
-    <li className="parts-tree__slot">
-      <div className={`parts-tree__row${isSelected ? ' parts-tree__row--selected' : ''}`} style={{ paddingLeft: `${depth * 18}px` }}>
-        <button type="button" className="parts-tree__label link-btn" disabled={!selectable} onClick={() => onSelect(ownRef)}>
-          {part.label}
+    <li className={`ptree__item ptree__item--${state}`}>
+      <div className={`ptree__row${nodeRefKey(ownRef) === ctx.selectedKey ? ' ptree__row--selected' : ''}`}>
+        <button type="button" className="ptree__name" disabled={!selectable} onClick={() => ctx.onSelect(ownRef)}>
+          <span className="ptree__label">{part.label}</span>
+          {item && <span className="ptree__id">{item.itemUUID}</span>}
         </button>
-        {part.question && (
-          // Presence follows the part item once there is one (in the device or removed).
-          <AnswerControl
-            question={part.question}
-            value={hasItem && isPresenceQuestion(part) ? (part.question.type === 'boolean' ? 'true' : 'Vorhanden') : value}
-            isDefault={!hasItem && isDefault}
-            disabled={!canEdit || saving || (hasItem && isPresenceQuestion(part))}
-            onChange={(v) => void save(part.question!.id, v)}
-          />
-        )}
-        {part.specQuestion && (
-          <AnswerControl question={part.specQuestion} value={slot.specAnswer} isDefault={false} disabled={!canEdit || saving} onChange={(v) => void save(part.specQuestion!.id, v)} />
-        )}
-        <span className={`parts-tree__status parts-tree__status--${state}`}>{slotStatus(slot)}</span>
+        <span className="ptree__controls">
+          {part.question && (
+            // Presence follows the part item once there is one (in the device or removed).
+            <AnswerControl
+              question={part.question}
+              value={hasItem && isPresenceQuestion(part) ? (part.question.type === 'boolean' ? 'true' : 'Vorhanden') : value}
+              isDefault={!hasItem && isDefault}
+              disabled={!ctx.canEdit || saving || (hasItem && isPresenceQuestion(part))}
+              onChange={(v) => void save(part.question!.id, v)}
+            />
+          )}
+          {part.specQuestion && (
+            <AnswerControl question={part.specQuestion} value={slot.specAnswer} isDefault={false} disabled={!ctx.canEdit || saving} onChange={(v) => void save(part.specQuestion!.id, v)} />
+          )}
+        </span>
+        <span className="ptree__status">
+          {state === 'assessed' && item ? (
+            <>
+              <QualityBadge value={item.quality} compact />
+              <span>{rangeOf(item) ?? 'bewertet'}</span>
+            </>
+          ) : (
+            slotStatus(slot)
+          )}
+        </span>
       </div>
-      {instances.length > 1 && (
-        <ul className="parts-tree__instances">
-          {instances.map((child, i) => (
-            <li key={child.itemUUID}>
-              <button
-                type="button"
-                className={`parts-tree__row link-btn${child.itemUUID === selectedKey ? ' parts-tree__row--selected' : ''}`}
-                style={{ paddingLeft: `${depth * 18 + 18}px` }}
-                onClick={() => onSelect({ itemUUID: child.itemUUID })}
-              >
-                {part.label} #{i + 1} · {child.assessed ? `bewertet ${rangeOf(child) ?? ''}` : 'nicht bewertet'}
-              </button>
+      {(extraInstances.length > 0 || (part.multipleAllowed && inDevice.length > 0 && ctx.canEdit)) && (
+        <ul className="ptree__list">
+          {extraInstances.map((child, i) => (
+            <li key={child.itemUUID} className="ptree__item">
+              <div className={`ptree__row${child.itemUUID === ctx.selectedKey ? ' ptree__row--selected' : ''}`}>
+                <button type="button" className="ptree__name" onClick={() => ctx.onSelect({ itemUUID: child.itemUUID })}>
+                  <span className="ptree__label">{part.label} {i + 2}</span>
+                  <span className="ptree__id">{child.itemUUID}</span>
+                </button>
+                <span className="ptree__controls" />
+                <span className="ptree__status">{child.assessed ? rangeOf(child) ?? 'bewertet' : 'nicht bewertet'}</span>
+              </div>
             </li>
           ))}
+          {part.multipleAllowed && inDevice.length > 0 && ctx.canEdit && (
+            <li className="ptree__item">
+              <button type="button" className="ptree__add" onClick={() => ctx.onSelect({ parentUUID: node.itemUUID, slotKey: part.key })}>
+                + weiteres {part.label}
+              </button>
+            </li>
+          )}
         </ul>
       )}
-      {part.multipleAllowed && inDevice.length > 0 && canEdit && (
-        <button
-          type="button"
-          className="link-btn parts-tree__more"
-          style={{ paddingLeft: `${depth * 18 + 18}px` }}
-          onClick={() => onSelect({ parentUUID: node.itemUUID, slotKey: part.key })}
-        >
-          + weiteres {part.label}
-        </button>
-      )}
-      {inDevice.filter((child) => child.assembly).map((child) => (
-        <NodeGroups key={child.itemUUID} node={child} depth={depth + 1} selectedKey={selectedKey} canEdit={canEdit} onSelect={onSelect} onChanged={onChanged} setError={setError} />
+      {children.map((child) => (
+        <StepBranches key={child.itemUUID} node={child} ctx={ctx} />
       ))}
     </li>
   );
 }
 
-function NodeGroups({ node, depth, ...rest }: {
-  node: PartsTreeNode;
-  depth: number;
-  selectedKey: string;
-  canEdit: boolean;
-  onSelect: (ref: NodeRef) => void;
-  onChanged: () => void;
-  setError: (msg: string | null) => void;
-}) {
+function StepBranches({ node, ctx }: { node: PartsTreeNode; ctx: RowContext }) {
   const groups = groupSlotsBySteps(node);
+  if (groups.length === 0) return null;
   return (
-    <>
+    <ul className="ptree__list">
       {groups.map((group, i) => {
         const done = group.slots.filter(isSlotDone).length;
+        const complete = done === group.slots.length;
         return (
-          <details key={group.key} className="parts-tree__step" open style={{ marginLeft: `${depth * 18}px` }}>
-            <summary className="parts-tree__step-head">
-              <span>{group.key === '__rest' ? group.label : `${i + 1} · ${group.label}`}</span>
-              <span className={`parts-tree__progress${done === group.slots.length ? ' parts-tree__progress--done' : ''}`}>{done}/{group.slots.length}</span>
-            </summary>
-            <ul className="parts-tree__slots">
-              {group.slots.map((slot) => (
-                <SlotRow key={slot.part.key} node={node} slot={slot} depth={0} {...rest} />
-              ))}
-            </ul>
-          </details>
+          <li key={group.key} className="ptree__item ptree__item--step">
+            <details open>
+              <summary className="ptree__step">
+                <span className="ptree__step-label">{group.key === '__rest' ? group.label : `${i + 1} · ${group.label}`}</span>
+                <span className={`ptree__progress${complete ? ' ptree__progress--done' : ''}`}>
+                  <span className="ptree__progress-bar" style={{ width: `${Math.round((done / group.slots.length) * 100)}%` }} />
+                  <span className="ptree__progress-text">{done}/{group.slots.length}</span>
+                </span>
+              </summary>
+              <ul className="ptree__list">
+                {group.slots.map((slot) => <SlotRow key={slot.part.key} node={node} slot={slot} ctx={ctx} />)}
+              </ul>
+            </details>
+          </li>
         );
       })}
-    </>
+    </ul>
   );
 }
 
 export default function PartsTreeView({ tree, selected, canEdit, onSelect, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null);
   const selectedKey = nodeRefKey(selected);
-  const rootSelected = selectedKey === tree.itemUUID;
+  const ctx: RowContext = { selectedKey, canEdit, onSelect, onChanged, setError };
   const range = rangeOf(tree);
   return (
-    <div className="parts-tree">
-      <button
-        type="button"
-        className={`parts-tree__root${rootSelected ? ' parts-tree__row--selected' : ''}`}
-        onClick={() => onSelect({ itemUUID: tree.itemUUID })}
-      >
-        <strong>Gerät — Zustand</strong>
-        <span className="muted">{tree.assessed ? `bewertet${range ? ` · ${range}` : ''}` : 'noch nicht bewertet'}</span>
-      </button>
-      {error && <p className="parts-tree__error" role="alert">{error}</p>}
-      {tree.assembly ? (
-        <NodeGroups node={tree} depth={0} selectedKey={selectedKey} canEdit={canEdit} onSelect={onSelect} onChanged={onChanged} setError={setError} />
-      ) : (
-        <p className="muted">Für diese Kategorie ist kein Aufbau hinterlegt.</p>
-      )}
+    <div className="ptree">
+      {error && <p className="ptree__error" role="alert">{error}</p>}
+      <ul className="ptree__list ptree__list--root">
+        <li className="ptree__item ptree__item--device">
+          <div className={`ptree__row ptree__row--device${selectedKey === tree.itemUUID ? ' ptree__row--selected' : ''}`}>
+            <button type="button" className="ptree__name" onClick={() => onSelect({ itemUUID: tree.itemUUID })}>
+              <span className="ptree__label">{tree.label}</span>
+              <span className="ptree__id">Gerät · {tree.itemUUID}</span>
+            </button>
+            <span className="ptree__controls" />
+            <span className="ptree__status">
+              {tree.assessed ? (
+                <>
+                  <QualityBadge value={tree.quality} compact />
+                  <span>{range ?? 'bewertet'}</span>
+                </>
+              ) : (
+                'noch nicht bewertet'
+              )}
+            </span>
+          </div>
+          {tree.assembly ? (
+            <StepBranches node={tree} ctx={ctx} />
+          ) : (
+            <p className="muted ptree__empty">Für diese Kategorie ist kein Aufbau hinterlegt.</p>
+          )}
+        </li>
+      </ul>
     </div>
   );
 }

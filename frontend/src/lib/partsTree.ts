@@ -1,6 +1,6 @@
 import type { PartsTreeNode, PartsTreeSlot } from '../../../models/parts-tree';
 import type { AssemblyPart } from '../../../models/assembly-contract';
-import { SLOT_PRESENCE_VALUES, SLOT_PRESENT, isSlotExcludedAnswer, isSlotMissingAnswer } from '../../../models/assembly-contract';
+import { SLOT_PRESENCE_VALUES, isSlotExcludedAnswer, isSlotMissingAnswer } from '../../../models/assembly-contract';
 import { ensureUser } from './user';
 
 export type { PartsTreeNode, PartsTreeSlot };
@@ -110,33 +110,6 @@ export function pathTo(root: PartsTreeNode, ref: NodeRef): string[] {
     return null;
   };
   return walk(root, []) ?? [root.label];
-}
-
-/**
- * The next part to assess after `current`, in tree order (steps, nesting depth-first): an in-device
- * part without its own assessment, or a slot answered present whose part is not catalogued yet.
- */
-export function nextOpenNode(root: PartsTreeNode, current: NodeRef): NodeRef | null {
-  const order: NodeRef[] = [];
-  const walk = (node: PartsTreeNode) => {
-    for (const group of groupSlotsBySteps(node)) {
-      for (const slot of group.slots) {
-        const inDevice = slot.items.filter((n) => !n.boxId);
-        if (inDevice.length > 0) {
-          for (const child of inDevice) {
-            if (!child.assessed) order.push({ itemUUID: child.itemUUID });
-            walk(child);
-          }
-        } else if (slot.items.length === 0 && effectiveAnswer(slot).value === (slot.part.question?.type === 'boolean' ? 'true' : SLOT_PRESENT)) {
-          order.push({ parentUUID: node.itemUUID, slotKey: slot.part.key });
-        }
-      }
-    }
-  };
-  walk(root);
-  const currentKey = nodeRefKey(current);
-  const at = order.findIndex((r) => nodeRefKey(r) === currentKey);
-  return order.slice(at + 1).find((r) => nodeRefKey(r) !== currentKey) ?? null;
 }
 
 export async function fetchPartsTree(itemUUID: string): Promise<PartsTreeNode> {

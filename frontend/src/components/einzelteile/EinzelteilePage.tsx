@@ -1,24 +1,27 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import PartsTreeView from './PartsTreeView';
 import PartNodePanel from './PartNodePanel';
 import type { PartsTreeNode, NodeRef } from '../../lib/partsTree';
-import { fetchPartsTree, nextOpenNode, nodeRefKey, parseNodeRef } from '../../lib/partsTree';
+import { fetchPartsTree, nodeRefKey, parseNodeRef } from '../../lib/partsTree';
 
-// Einzelteile: take a device apart part by part. Left = Aufbau (what is there, per work step),
-// right = Zustand of the selected node. A full-screen route with its own two columns (the shell's
-// classes, so mobile list ↔ detail works the same) because both sides belong to one device and
-// must share one tree snapshot; the selected node lives in the URL (?node=) so a reload keeps it.
+// Einzelteile: take a device apart part by part, on the whole page. Left the tree (device → work
+// steps → parts), right the condition of the selected node. Both sides belong to one device and read
+// one tree snapshot; the selected node lives in the URL (?node=) so a reload keeps the place.
 
 export default function EinzelteilePage() {
   const { itemId = '' } = useParams();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const selected = parseNodeRef(searchParams.get('node'), itemId);
   const [tree, setTree] = useState<PartsTreeNode | null>(null);
   const [revision, setRevision] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [canEdit, setCanEdit] = useState(true);
-  const [showDetail, setShowDetail] = useState(() => window.matchMedia('(min-width: 901px)').matches);
+  // Narrow screens show one side at a time: the tree, or the selected node.
+  const [showDetail, setShowDetail] = useState(false);
+
+  const close = useCallback(() => navigate(`/items?entity=item&id=${encodeURIComponent(itemId)}&tab=instance`), [navigate, itemId]);
 
   const refresh = useCallback(async (): Promise<PartsTreeNode | null> => {
     try {
@@ -41,6 +44,18 @@ export default function EinzelteilePage() {
       .catch(() => { /* keep editable; the server guards every write anyway */ });
   }, [itemId, refresh]);
 
+  useEffect(() => {
+    // Esc leaves the page — but not while typing in a field or inside a dialog.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('input, textarea, select, [role="dialog"]')) return;
+      close();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [close]);
+
   const select = useCallback((ref: NodeRef) => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -50,42 +65,41 @@ export default function EinzelteilePage() {
     setShowDetail(true);
   }, [setSearchParams]);
 
-  const onSaved = useCallback((saved: NodeRef, fresh: PartsTreeNode | null) => {
-    const next = fresh ? nextOpenNode(fresh, saved) : null;
-    select(next ?? saved);
-  }, [select]);
-
-  if (error && !tree) return <div className="panel-tab-body"><p className="parts-tree__error">Einzelteile konnten nicht geladen werden: {error}</p></div>;
-  if (!tree) return <div className="panel-tab-body"><p className="muted">Einzelteile werden geladen…</p></div>;
-
   return (
-    <div className={`app-shell einzelteile ${showDetail ? 'app-shell--mobile-detail' : 'app-shell--mobile-list'}`}>
-      <div className="panel-main einzelteile__main">
-        <div className="einzelteile__head">
-          <Link to={`/items?entity=item&id=${encodeURIComponent(itemId)}`} className="link-btn">← zum Artikel</Link>
-          <h1>Einzelteile · {tree.label}</h1>
-          <p className="muted">{tree.itemUUID}{tree.artikelNummer ? ` · Artikel ${tree.artikelNummer}` : ''}</p>
+    <div className="einzelteile">
+      <header className="einzelteile__bar">
+        <div className="einzelteile__title">
+          <span className="einzelteile__kicker">Einzelteile</span>
+          <h1>{tree?.label ?? '…'}</h1>
+          {tree && <span className="muted">{tree.itemUUID}{tree.artikelNummer ? ` · Artikel ${tree.artikelNummer}` : ''}</span>}
         </div>
-        <PartsTreeView tree={tree} selected={selected} canEdit={canEdit} onSelect={select} onChanged={() => void refresh()} />
-      </div>
-      <div className="app-shell__right">
-        <div className="panel-detail-header einzelteile__mobile-back">
-          <button type="button" className="panel-detail-header__back" onClick={() => setShowDetail(false)}>
-            <span className="panel-detail-header__arrow" aria-hidden="true">←</span>
-            <span>Aufbau</span>
-          </button>
+        <button type="button" className="btn einzelteile__close" onClick={close} title="Schliessen (Esc)">
+          ✕ Schliessen
+        </button>
+      </header>
+
+      {error && !tree && <p className="ptree__error">Einzelteile konnten nicht geladen werden: {error}</p>}
+      {!tree && !error && <p className="muted einzelteile__loading">Einzelteile werden geladen…</p>}
+
+      {tree && (
+        <div className={`einzelteile__body${showDetail ? ' einzelteile__body--detail' : ''}`}>
+          <section className="einzelteile__tree" aria-label="Aufbau">
+            <PartsTreeView tree={tree} selected={selected} canEdit={canEdit} onSelect={select} onChanged={() => void refresh()} />
+          </section>
+          <section className="einzelteile__detail" aria-label="Zustand">
+            <button type="button" className="link-btn einzelteile__back" onClick={() => setShowDetail(false)}>← Aufbau</button>
+            {/* Remount per node and tree revision: the form reloads its answers, unsaved input survives via the draft. */}
+            <PartNodePanel
+              key={`${nodeRefKey(selected)}:${revision}`}
+              tree={tree}
+              selected={selected}
+              canEdit={canEdit}
+              refresh={refresh}
+              onSelect={select}
+            />
+          </section>
         </div>
-        {/* Remount per node and tree revision: the form reloads its answers, unsaved input survives via the draft. */}
-        <PartNodePanel
-          key={`${nodeRefKey(selected)}:${revision}`}
-          tree={tree}
-          selected={selected}
-          canEdit={canEdit}
-          refresh={refresh}
-          onSaved={onSaved}
-          onSelect={select}
-        />
-      </div>
+      )}
     </div>
   );
 }
