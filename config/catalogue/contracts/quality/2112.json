@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "subCategory": 2112,
+  "questions": [
+    {
+      "id": "touchpad_function",
+      "type": "select",
+      "question": "Touchpad-Funktion?",
+      "values": [
+        "Einwandfrei",
+        "Springt / ungenau",
+        "Defekt",
+        "Ungetestet"
+      ],
+      "states": {
+        "Einwandfrei": 1,
+        "Springt / ungenau": 0.4,
+        "Defekt": 0
+      },
+      "weight": 3
+    },
+    {
+      "id": "touchpad_buttons",
+      "type": "boolean",
+      "question": "Tasten funktionieren?",
+      "states": {
+        "true": 1,
+        "false": 0.3
+      },
+      "weight": 1
+    }
+  ]
+}

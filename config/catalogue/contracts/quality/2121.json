@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "subCategory": 2121,
+  "questions": [
+    {
+      "id": "speaker_sound",
+      "type": "select",
+      "question": "Ton?",
+      "values": [
+        "Klar",
+        "Verzerrt / knistert",
+        "Kein Ton",
+        "Ungetestet"
+      ],
+      "states": {
+        "Klar": 1,
+        "Verzerrt / knistert": 0.4,
+        "Kein Ton": 0
+      },
+      "weight": 3
+    }
+  ]
+}

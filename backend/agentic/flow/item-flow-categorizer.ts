@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { FlowError } from './errors';
-import { renderCategorizerReference } from '../../lib/taxonomy';
+import { parentCategoryCode, renderCategorizerReference } from '../../lib/taxonomy';
 import { stringifyLangChainContent } from '../utils/langchain';
 import { parseJsonWithSanitizer } from '../utils/json';
 import type { ChatModel, ExtractionLogger } from './item-flow-extraction';
@@ -244,8 +244,9 @@ function normalizeCategorizerAltShape(parsed: unknown): Record<string, unknown> 
   if (primary == null && secondary == null) {
     return null;
   }
+  // The parent comes from the taxonomy (210 → 2101–2132); floor(code / 10) only for unknown codes.
   const deriveMain = (code: number | null | undefined): number | null =>
-    typeof code === 'number' && code >= 1000 ? Math.floor(code / 10) : null;
+    typeof code === 'number' && code >= 1000 ? parentCategoryCode(code) ?? Math.floor(code / 10) : null;
   return {
     Hauptkategorien_A: deriveMain(primary),
     Unterkategorien_A: primary ?? null,

@@ -4,6 +4,7 @@ import type { QualityContract } from '../../models/quality-contract';
 import type { SpecContract } from '../../models/spec-contract';
 import type { AssemblyContract } from '../../models/assembly-contract';
 import { resolveContractReadPath, listContractCodes } from './paths';
+import { parentCategoryCode } from '../lib/taxonomy';
 
 // Module-level caches — cleared on restart, populated lazily on first access.
 const qualityCache = new Map<string, QualityContract>();
@@ -32,8 +33,12 @@ export function getGeneralQualityContract(): QualityContract | null {
 }
 
 /** Hauptkategorie of a subcategory by the taxonomy's numeric convention (201 → 20, 2101 → 210). */
-export function groupKeyFor(subcategory: number): string {
-  return `group-${Math.floor(subcategory / 10)}`;
+/**
+ * Key of the shared Hauptkategorie contract. The parent comes from the taxonomy; `floor(code / 10)`
+ * is only the fallback for codes outside it (it is wrong for 2110+ under main category 210).
+ */
+export function groupKeyFor(subcategory: number, parentCode: number | null = parentCategoryCode(subcategory)): string {
+  return `group-${parentCode ?? Math.floor(subcategory / 10)}`;
 }
 
 /**

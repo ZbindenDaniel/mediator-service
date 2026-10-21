@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { listContractCodes, resolveContractReadPath } from './paths';
+import { groupKeyFor } from './registry';
 import { SLOT_PRESENCE_VALUES, isSlotMissingAnswer } from '../../models/assembly-contract';
 
 // One validator for every contract entry point (Jest over shipped + overlay, `npm run contracts:check`,
@@ -190,6 +191,8 @@ export interface ContractSetInput {
   assembly: Map<string, unknown>;
   /** Known subcategory codes; when given, slot targets and file codes are checked against it. */
   knownSubcategories?: Set<number>;
+  /** Subcategory → Hauptkategorie from the taxonomy being checked against (which group contract applies). */
+  parentCodes?: Map<number, number>;
   /** false = do not require a file's own code to exist (an upload may precede the category). */
   checkFileCodes?: boolean;
   /**
@@ -238,7 +241,7 @@ export function validateContractSet(input: ContractSetInput): string[] {
       ...general.map((q) => ({ q, src: 'quality/general.json' })),
       ...partsOf(input.assembly.get(code)).flatMap((p) =>
         [p.question, p.specQuestion].filter(isObject).map((q) => ({ q: q as Doc, src: `assembly/${code}.json` }))),
-      ...questionsOf(input.quality.get(`group-${Math.floor(Number(code) / 10)}`)).map((q) => ({ q, src: `quality/group-${Math.floor(Number(code) / 10)}.json` })),
+      ...questionsOf(input.quality.get(groupKeyFor(Number(code), input.parentCodes?.get(Number(code))))).map((q) => ({ q, src: `quality/${groupKeyFor(Number(code), input.parentCodes?.get(Number(code)))}.json` })),
       ...questionsOf(input.quality.get(code)).map((q) => ({ q, src: `quality/${code}.json` }))
     ];
     const byId = new Map<string, { q: Doc; src: string }>();

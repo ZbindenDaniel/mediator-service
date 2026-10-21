@@ -13,6 +13,16 @@ export interface ItemCategoryLookups {
 
 // Accepts an explicit category array so the runtime/DB-backed loader can build
 // lookups over loaded data; defaults to the hardcoded const for existing callers.
+/**
+ * Subcategory → Hauptkategorie code. The parent is not derivable from the code: catalogue main
+ * category 210 has subcategories 2101–2132, so floor(2127 / 10) would be 212.
+ */
+export function parentCodeMap(categories: ItemCategoryDefinition[]): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const category of categories) for (const sub of category.subcategories) map.set(sub.code, category.code);
+  return map;
+}
+
 export function buildItemCategoryLookups(categories: ItemCategoryDefinition[] = itemCategories): ItemCategoryLookups {
   const haupt = new Map<number, ItemCategoryDefinition>();
   const unter = new Map<number, ItemSubcategoryWithParent>();

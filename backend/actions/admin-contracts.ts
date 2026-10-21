@@ -10,6 +10,7 @@ import {
 import { clearContractCaches, listContractSubcategories } from '../contracts/registry';
 import { validateContractDocument, validateContractSet, loadContractSetFromDisk } from '../contracts/validate';
 import { getItemCategories } from '../lib/taxonomy';
+import { parentCodeMap } from '../../models/item-category-lookups';
 
 // Runtime contract editing via the file overlay (see docs/PLANNING_TAXONOMY_EXTERNALIZATION.md
 // Phase 4). Download is the existing GET /api/contracts/{type}/<code>; this adds a validated
@@ -39,13 +40,16 @@ function validateContract(type: ContractType, code: string, doc: unknown): strin
   const own = validateContractDocument(type, doc, `${type}/${code}.json`);
   if (own.length) return own.join('; ');
   let known: Set<number> | undefined;
+  let parentCodes: Map<number, number> | undefined;
   try {
-    known = new Set(getItemCategories().flatMap((c) => c.subcategories.map((s) => s.code)));
+    const categories = getItemCategories();
+    known = new Set(categories.flatMap((c) => c.subcategories.map((s) => s.code)));
+    parentCodes = parentCodeMap(categories);
   } catch {
     known = undefined; // taxonomy not loaded (e.g. tests) — skip the target check rather than fail
   }
-  const before = new Set(validateContractSet({ ...loadContractSetFromDisk(), knownSubcategories: known, checkFileCodes: false }));
-  const after = validateContractSet({ ...loadContractSetFromDisk({ type, code, doc }), knownSubcategories: known, checkFileCodes: false });
+  const before = new Set(validateContractSet({ ...loadContractSetFromDisk(), knownSubcategories: known, parentCodes, checkFileCodes: false }));
+  const after = validateContractSet({ ...loadContractSetFromDisk({ type, code, doc }), knownSubcategories: known, parentCodes, checkFileCodes: false });
   const introduced = after.filter((e) => !before.has(e));
   return introduced.length ? introduced.join('; ') : null;
 }

@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "subCategory": 2115,
+  "questions": [
+    {
+      "id": "board_interfaces",
+      "type": "multi",
+      "question": "Anschlüsse auf dem Board?",
+      "values": [
+        "USB-A",
+        "USB-C",
+        "Thunderbolt",
+        "HDMI",
+        "DisplayPort",
+        "VGA",
+        "LAN",
+        "Audio",
+        "SD-Karte",
+        "SIM"
+      ],
+      "specField": "Anschlüsse",
+      "specValue": "%v"
+    },
+    {
+      "id": "ports_working",
+      "type": "select",
+      "question": "Funktionieren die Anschlüsse?",
+      "values": [
+        "Alle",
+        "Teilweise",
+        "Keine",
+        "Ungetestet"
+      ],
+      "states": {
+        "Alle": 1,
+        "Teilweise": 0.5,
+        "Keine": 0
+      },
+      "weight": 3
+    }
+  ]
+}

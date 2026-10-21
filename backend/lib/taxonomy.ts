@@ -1,7 +1,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import type { ItemCategoryDefinition } from '../../models/item-categories';
-import { buildItemCategoryLookups } from '../../models/item-category-lookups';
+import { buildItemCategoryLookups, parentCodeMap } from '../../models/item-category-lookups';
 import type { ItemCategoryLookups } from '../../models/item-category-lookups';
 import { countTaxonomyCategories, readTaxonomyFromDb, seedTaxonomy } from '../db';
 
@@ -173,9 +173,20 @@ export function getTaxonomyLookups(): ItemCategoryLookups {
   return buildItemCategoryLookups(getItemCategories());
 }
 
+let parentCodes: { of: ItemCategoryDefinition[]; map: Map<number, number> } | null = null;
+
+/** Hauptkategorie of a subcategory in the loaded taxonomy, or null when the code is unknown. */
+export function parentCategoryCode(subcategory: number): number | null {
+  const categories = getItemCategories();
+  // Rebuilt only when the cache was replaced (startup, admin edit) — contract lookups call this often.
+  if (!parentCodes || parentCodes.of !== categories) parentCodes = { of: categories, map: parentCodeMap(categories) };
+  return parentCodes.map.get(subcategory) ?? null;
+}
+
 /** Test/hot-reload seam. */
 export function resetTaxonomyCache(): void {
   cache = null;
+  parentCodes = null;
 }
 
 // Verbatim numbering-convention line from docs/data_struct.md, kept here so the

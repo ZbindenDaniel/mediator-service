@@ -1,5 +1,7 @@
 import { validateContractDocument, validateContractSet, loadContractSetFromDisk, unusedContractCodes } from '../validate';
 import { parseTaxonomySeed } from '../../lib/taxonomy';
+import { parentCodeMap } from '../../../models/item-category-lookups';
+import { groupKeyFor } from '../registry';
 import fs from 'fs';
 import path from 'path';
 
@@ -29,7 +31,7 @@ describe('contract validator', () => {
       const dir = path.join(repo, 'config/catalogue/contracts', type);
       for (const f of fs.readdirSync(dir)) shipped[type].set(f.replace(/\.json$/, ''), JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
     }
-    expect(validateContractSet({ ...shipped, knownSubcategories: known, skipUnknownCodes: true })).toEqual([]);
+    expect(validateContractSet({ ...shipped, knownSubcategories: known, parentCodes: parentCodeMap(parseTaxonomySeed(seed)), skipUnknownCodes: true })).toEqual([]);
     // the catalogue taxonomy is only Laptop + its components, so the shipped refurbishment files are unused there
     expect(unusedContractCodes({ ...shipped, knownSubcategories: known })).toContain('quality/102.json');
   });
@@ -215,5 +217,30 @@ describe('contract validator', () => {
       expect(errors).not.toMatch(/refinedBy "palmrest" is not/);
       expect(errors).toMatch(/question "note": "refinedBy" only makes sense on a scored question/);
     });
+  });
+
+  it('applies the Hauptkategorie contract by the taxonomy parent, not by floor(code / 10)', () => {
+    // 2127 (Mainboard) belongs to 210; floor(2127 / 10) = 212 would miss group-210.
+    expect(groupKeyFor(2127, 210)).toBe('group-210');
+    expect(groupKeyFor(2127, null)).toBe('group-212');
+    const errors = set({
+      quality: {
+        general: { questions: [] },
+        'group-210': { questions: [{ id: 'part_condition', type: 'select', question: '?', values: ['Gut'] }] },
+        '2127': { questions: [{ id: 'part_condition', type: 'select', question: '?', values: ['Gut'] }] }
+      }
+    });
+    expect(errors.join('\n')).not.toMatch(/group-210/); // without parents the group is not found
+    const withParents = validateContractSet({
+      quality: new Map(Object.entries({
+        general: { questions: [] },
+        'group-210': { questions: [{ id: 'part_condition', type: 'select', question: '?', values: ['Gut'] }] },
+        '2127': { questions: [{ id: 'part_condition', type: 'select', question: '?', values: ['Gut'] }] }
+      })),
+      specs: new Map(),
+      assembly: new Map(),
+      parentCodes: new Map([[2127, 210]])
+    });
+    expect(withParents.join('\n')).toMatch(/"part_condition" is defined in both quality\/group-210.json and quality\/2127.json/);
   });
 });
