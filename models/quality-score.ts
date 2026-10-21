@@ -200,22 +200,37 @@ function refinedSlotKeys(parts: AssemblyPart[], answers: Record<string, string>,
   return keys;
 }
 
+/**
+ * Device questions whose parts now speak for themselves (S1): every slot in `refinedBy` is assessed,
+ * removed or missing. They leave the score, and the forms lock them — a general answer given before
+ * the device was taken apart must not contradict (or be edited against) the parts' own assessments.
+ * A covered slot that is "Fest verbaut"/"Nicht vorgesehen" never refines, so such a question stays.
+ */
+export function refinedQuestionIds(input: Pick<QualityScoreInput, 'contracts' | 'answers' | 'assembly' | 'children'>): Set<string> {
+  const weightedParts = (input.assembly?.parts ?? []).filter((p) => isPositiveWeight(p.weight));
+  const refined = refinedSlotKeys(weightedParts, input.answers, input.children ?? []);
+  const ids = new Set<string>();
+  for (const contract of input.contracts) {
+    for (const question of contract.questions) {
+      if (question.refinedBy?.length && question.refinedBy.every((key) => refined.has(key))) ids.add(question.id);
+    }
+  }
+  return ids;
+}
+
 export function computeQualityScore(input: QualityScoreInput): QualityScore {
   const { contracts, answers, assembly, children = [] } = input;
   const scale = input.scale ?? contracts.find((c) => c.scale)?.scale ?? {};
   const weightedParts = (assembly?.parts ?? []).filter((p) => isPositiveWeight(p.weight));
   // A weighted slot is scored through the slot; its presence question must not count twice.
   const slotQuestionIds = new Set(weightedParts.map((p) => p.question?.id).filter(Boolean));
-  const refined = refinedSlotKeys(weightedParts, answers, children);
+  const refined = refinedQuestionIds(input);
   const seen = new Set<string>();
   let score = EMPTY;
   for (const contract of contracts) {
     for (const question of contract.questions) {
-      if (slotQuestionIds.has(question.id) || seen.has(question.id)) continue;
+      if (slotQuestionIds.has(question.id) || seen.has(question.id) || refined.has(question.id)) continue;
       seen.add(question.id);
-      // S1: all covered parts speak for themselves → the device-level stand-in leaves the score.
-      // A covered slot that is "Fest verbaut"/"Nicht vorgesehen" never refines, so the question stays.
-      if (question.refinedBy?.length && question.refinedBy.every((key) => refined.has(key))) continue;
       score = add(score, questionScore(question, answers, scale));
     }
   }

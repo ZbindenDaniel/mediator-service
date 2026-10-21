@@ -3,6 +3,7 @@ import QualityBadge from '../QualityBadge';
 import type { PartsTreeNode, PartsTreeSlot, NodeRef, SlotState } from '../../lib/partsTree';
 import { effectiveAnswer, groupSlotsBySteps, isPresenceQuestion, isSlotDone, nodeRefKey, saveSlotAnswers, slotState } from '../../lib/partsTree';
 import { formatQualityScoreRange } from '../../../../models/quality-score';
+import { SLOT_INTEGRATED } from '../../../../models/assembly-contract';
 import type { QualityQuestion } from '../../../../models/quality-contract';
 
 // Left side of the Einzelteile page: the device as the root of a tree, its work steps as branches,
@@ -124,7 +125,9 @@ function SlotRow({ node, slot, ctx }: { node: PartsTreeNode; slot: PartsTreeSlot
   // Without an item: the slot itself (the part is created on its first save). Otherwise that item.
   const item = inDevice[0] ?? removed[0] ?? null;
   const ownRef: NodeRef = item ? { itemUUID: item.itemUUID } : { parentUUID: node.itemUUID, slotKey: part.key };
-  const selectable = state !== 'missing' && state !== 'notApplicable' && state !== 'integrated';
+  // Built-in parts are assessed as their own (non-removable) record, so they stay selectable.
+  const selectable = state !== 'missing' && state !== 'notApplicable';
+  const builtIn = slot.answer === SLOT_INTEGRATED;
   const extraInstances = part.multipleAllowed ? inDevice.slice(1) : [];
   const children = inDevice.filter((child) => child.assembly);
 
@@ -136,6 +139,7 @@ function SlotRow({ node, slot, ctx }: { node: PartsTreeNode; slot: PartsTreeSlot
           {item && <span className="ptree__id">{item.itemUUID}</span>}
         </button>
         <span className="ptree__controls">
+          {builtIn && hasItem && <span className="ptree__tag">▣ fest verbaut</span>}
           {part.question && !(hasItem && isPresenceQuestion(part)) && (
             // Once a part item sits in the slot its presence is the item itself — no chips to contradict it.
             <AnswerControl

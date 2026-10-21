@@ -71,6 +71,15 @@ on the parent's (effective) assembly contract; an occupied single slot returns 4
 `itemUUID`; `multipleAllowed` slots accept more. The UI calls it lazily — only when the part's own
 assessment is saved — so opening and abandoning a part creates nothing.
 
+### One way out of the device (#1001)
+`remove-from-device` is the only path for an article-less part: the Einzelteile "Entnehmen" form
+sends the box plus `artikelNummer` or `newRef` (`Artikelbeschreibung`, `Hersteller`,
+`Unterkategorien_A`, optional `Langtext`, e.g. `{ "FRU": "…" }`). `move-item` refuses a part still in
+its device that has no article (409, "über Einzelteile entnehmen") and any part in a "Fest verbaut"
+slot (`isIntegratedSlot`, also enforced by `remove-from-device`); parts with an article
+(refurbishment) still relocate through `move-item` as before. Item lists hide article-less in-device
+parts (`LISTABLE_ITEM_SQL` in `backend/db.ts`) — they live in the device's Einzelteile tree.
+
 ### Graduation → extracted item (`backend/lib/graduate-component.ts`)
 Folded into `remove-from-device`. When the item still needs graduation (`needsGraduation`:
 no Artikelnummer yet):

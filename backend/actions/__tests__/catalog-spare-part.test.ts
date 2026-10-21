@@ -29,6 +29,7 @@ jest.mock('../../contracts/registry', () => ({
 }));
 
 import action from '../catalog-spare-part';
+import componentAction from '../part-component';
 import * as dbClient from '../../db-client';
 
 const mockQuery = dbClient.query as jest.Mock;
@@ -288,13 +289,13 @@ describe('catalog-spare-part action', () => {
     });
 
     it('matches the route', () => {
-      expect(action.matches(url, 'POST')).toBe(true);
+      expect(componentAction.matches(url, 'POST')).toBe(true);
     });
 
     it('creates a part named after the root device and slot subcategory', async () => {
       const ctx = makeCtx({ getItem: jest.fn(async (id: string) => (id === 'P-001' ? parentItem : null)) });
       const { res, getStatus, getBody } = createMockResponse();
-      await action.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'webcam' }), res, ctx);
+      await componentAction.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'webcam' }), res, ctx);
       expect(getStatus()).toBe(201);
       expect(getBody().itemUUID).toBe('C-104523-2109-0001');
       expect(getBody().subCategory).toBe(2109);
@@ -308,7 +309,7 @@ describe('catalog-spare-part action', () => {
       mockQueryOne.mockResolvedValue(null);
       const ctx = makeCtx({ getItem: jest.fn(async (id: string) => (id === 'P-001' ? parentItem : null)) });
       const { res, getStatus } = createMockResponse();
-      await action.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'webcam' }), res, ctx);
+      await componentAction.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'webcam' }), res, ctx);
       expect(getStatus()).toBe(400);
       expect(mockWithTransaction).not.toHaveBeenCalled();
     });
@@ -316,7 +317,7 @@ describe('catalog-spare-part action', () => {
     it('rejects a slot the device contract does not define', async () => {
       const ctx = makeCtx();
       const { res, getStatus } = createMockResponse();
-      await action.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'nope' }), res, ctx);
+      await componentAction.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'nope' }), res, ctx);
       expect(getStatus()).toBe(400);
     });
 
@@ -324,11 +325,11 @@ describe('catalog-spare-part action', () => {
       mockQuery.mockResolvedValue([{ ItemUUID: 'C-existing' }]);
       const ctx = makeCtx({ getItem: jest.fn(async (id: string) => (id === 'P-001' ? parentItem : null)) });
       const first = createMockResponse();
-      await action.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'webcam' }), first.res, ctx);
+      await componentAction.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'webcam' }), first.res, ctx);
       expect(first.getStatus()).toBe(409);
       expect(first.getBody().itemUUID).toBe('C-existing');
       const second = createMockResponse();
-      await action.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'ram' }), second.res, ctx);
+      await componentAction.handle(makeRequest(url, 'POST', { actor: 'alice', slotKey: 'ram' }), second.res, ctx);
       expect(second.getStatus()).toBe(201);
     });
   });

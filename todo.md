@@ -77,6 +77,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
+- **Locked device answers still write InstanceSpecs.** When a device question is locked because its parts are assessed (#1001), the specs it wrote earlier (e.g. "Gehäuse-Zustand: Beschädigt") stay on the device's InstanceSpecs and show in the instance tab. Decide: drop them on lock, or mark them as superseded.
+
 - **Agentic resume: dead branch for stale `queued` runs.** `resumeStaleAgenticRuns` schedules stale `queued` runs (and spends a slot on them), but since the claim model (#913) the invocation only proceeds for `running` runs, so this does nothing — the dispatcher's claim picks them up anyway. Drop the `queued` branch from resume (or claim there). Found while fixing the tests (#1000).
 - **ERP CSV: zone-less timestamps are parsed as server-local time.** `insertdateset`-style values without a zone become UTC on the container but CEST on a dev machine (2 h apart). Decide the source zone of the Kivitendo export (likely Europe/Zurich) and parse explicitly. (#1000)
 

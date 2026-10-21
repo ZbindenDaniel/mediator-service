@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { execute, queryOne, withTransaction } from '../db-client';
 import { generateShopwareCorrelationId } from '../db';
-import { recordPartLeftParent } from '../lib/parent-slot';
+import { isIntegratedSlot, recordPartLeftParent } from '../lib/parent-slot';
 import { resolveEffectiveSubCategory } from '../lib/quality-score';
 import { graduateComponentInTx, needsGraduation, WriteOnceIdentityError } from '../lib/graduate-component';
 import { resolveActor } from '../utils/actor';
@@ -61,12 +61,16 @@ async function resolveGraduationRef(
     };
   }
 
+  // Optional specs for the new article, e.g. the part number (FRU) read off the part.
+  const langtext = newRef.Langtext && typeof newRef.Langtext === 'object' && !Array.isArray(newRef.Langtext)
+    ? Object.fromEntries(Object.entries(newRef.Langtext as Record<string, unknown>).filter(([, v]) => typeof v === 'string' && v.trim()))
+    : {};
   const maxStr: string | null = await ctx.getMaxArtikelNummer();
   const next = String((maxStr ? parseInt(maxStr, 10) : 0) + 1).padStart(6, '0');
   await execute(
-    `INSERT INTO item_refs ("Artikel_Nummer","Artikelbeschreibung","Hersteller","Unterkategorien_A","ContributedByTenant")
-     VALUES ($1,$2,$3,$4,$5)`,
-    [next, artikelbeschreibung, hersteller || null, subCategory, resolveTenant(ctx)]
+    `INSERT INTO item_refs ("Artikel_Nummer","Artikelbeschreibung","Hersteller","Unterkategorien_A","Langtext","ContributedByTenant")
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [next, artikelbeschreibung, hersteller || null, subCategory, Object.keys(langtext).length ? JSON.stringify(langtext) : null, resolveTenant(ctx)]
   );
   return { artikelNummer: next };
 }
@@ -114,6 +118,9 @@ const action = defineHttpAction({
       }
       const parentUuid = relation.ParentItemUUID;
       const slotKey = relation.SlotKey ?? null;
+      if (await isIntegratedSlot(parentUuid, slotKey)) {
+        return sendJson(res, 409, { error: 'Teil ist fest verbaut und kann nicht entnommen werden' });
+      }
 
       const dest = await ctx.getBox(toBoxId);
       if (!dest) {

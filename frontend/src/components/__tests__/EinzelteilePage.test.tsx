@@ -11,9 +11,12 @@ jest.mock('../../lib/contractsApi', () => ({
   fetchQualityContract: jest.fn(async (key: string | number) => {
     if (key === 'general') return { version: 1, scale: { Gut: 0.7, Defekt: 0 }, questions: [] };
     if (key === 2132) return { version: 1, questions: [{ id: 'part_condition', type: 'select', question: 'Zustand des Teils?', values: ['Gut', 'Defekt'], weight: 3 }] };
+    if (key === 201) return { version: 1, questions: [{ id: 'battery_health', type: 'select', question: 'Akkuzustand?', values: ['Gut', 'Schwach'], states: { Gut: 1, Schwach: 0.5 }, weight: 2, refinedBy: ['battery'] }] };
     return null;
   }),
-  fetchAssemblyContract: jest.fn(async () => null),
+  fetchAssemblyContract: jest.fn(async (code: number) => (code === 201
+    ? { version: 1, subCategory: 201, parts: [{ key: 'battery', label: 'Akku', targetSubcategory: 2132, weight: 5, question: { id: 'part_battery', type: 'select', question: 'part_battery?', values: ['Vorhanden', 'Nicht vorhanden', 'Nicht vorgesehen', 'Fest verbaut'] } }] }
+    : null)),
 }));
 jest.mock('../../lib/user', () => ({ ensureUser: jest.fn(async () => 'alice'), getUser: jest.fn(() => 'alice') }));
 
@@ -104,5 +107,49 @@ describe('Einzelteile page', () => {
     expect(calls.find((c) => c.method === 'PATCH')!.body.answers).toEqual({ part_battery: 'Vorhanden' });
     const review = calls.find((c) => c.url === '/api/items/C-104523-2132-0001/quality-review' && c.method === 'POST')!;
     expect(review.body.answers).toEqual({ part_condition: 'Gut' });
+  });
+
+  describe('with an assessed battery in the device', () => {
+    const battery = (answer: string | null) => {
+      tree.assembly.slots[0] = {
+        ...tree.assembly.slots[0],
+        answer,
+        items: [{ itemUUID: 'C-104523-2132-0001', artikelNummer: null, label: 'Akku', subCategory: 2132, boxId: null, assessed: true, scoreMin: 0.9, scoreMax: 0.9, quality: 5, assembly: null }],
+      };
+    };
+
+    it('locks the device question the battery now stands for', async () => {
+      battery('Vorhanden');
+      renderPage();
+      expect(await screen.findByText(/ersetzt durch die Bewertung von Akku/)).toBeTruthy();
+      expect(screen.queryByRole('combobox', { name: /Akkuzustand/ })).toBeNull();
+    });
+
+    it('takes a part out through remove-from-device, with a new article carrying the FRU', async () => {
+      battery('Vorhanden');
+      const fetchMock = (global as any).fetch as jest.Mock;
+      const base = fetchMock.getMockImplementation()!;
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) => (url === '/api/items/C-104523-2132-0001/quality-review' && !init
+        ? { ok: true, status: 200, json: async () => ({ responses: { part_fru: '01AV431' } }) }
+        : url.endsWith('/remove-from-device') ? (calls.push({ url, method: 'POST', body: JSON.parse(String(init!.body)) }), { ok: true, status: 200, json: async () => ({ ok: true }) })
+        : base(url, init)));
+      renderPage('/items/L1/einzelteile?node=C-104523-2132-0001');
+      fireEvent.click(await screen.findByRole('button', { name: 'Entnehmen…' }));
+      fireEvent.change(screen.getByLabelText('Behälter'), { target: { value: 'B-042' } });
+      expect((screen.getByLabelText('Teilenummer (FRU)') as HTMLInputElement).value).toBe('01AV431');
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Entnehmen' })); });
+      const removal = calls.find((c) => c.url.endsWith('/remove-from-device'))!;
+      expect(removal.body).toMatchObject({
+        toBoxId: 'B-042',
+        newRef: { Artikelbeschreibung: 'Akku · ThinkPad T480', Unterkategorien_A: 2132, Langtext: { FRU: '01AV431' } },
+      });
+    });
+
+    it('a built-in part has no Entnehmen', async () => {
+      battery('Fest verbaut');
+      renderPage('/items/L1/einzelteile?node=C-104523-2132-0001');
+      expect(await screen.findByText(/fest verbaut — kann nicht entnommen werden/)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Entnehmen…' })).toBeNull();
+    });
   });
 });

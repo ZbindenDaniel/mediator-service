@@ -14,7 +14,7 @@ import {
 } from '../lib/qualityContracts';
 import { useFeature } from '../context/FeaturesContext';
 import QualityBadge from './QualityBadge';
-import { parseMultiAnswer, computeQualityScore, scoreToRange, formatQualityScoreRange, gradeFromRange, gradingFrom } from '../../../models/quality-score';
+import { parseMultiAnswer, computeQualityScore, scoreToRange, formatQualityScoreRange, gradeFromRange, gradingFrom, refinedQuestionIds } from '../../../models/quality-score';
 import type { QualityScoreChild } from '../../../models/quality-score';
 import type { AssemblyContract } from '../../../models/assembly-contract';
 import { assemblyToQualityContract } from '../../../models/assembly-contract';
@@ -36,8 +36,11 @@ interface QualityReviewStepProps {
   layout?: 'page' | 'embedded';
   initialAnswers?: Record<string, string>;
   disabled?: boolean;
-  /** When set, the preview includes the item's in-device parts in the percentage score. */
-  itemId?: string;
+  /**
+   * The item's parts (slot, in device, stored range): the preview includes them, and device
+   * questions whose parts are all assessed are shown locked (S1). The caller already has them.
+   */
+  parts?: QualityScoreChild[];
   /** Mirror unsaved answers to localStorage under this key (survives a reload or switching parts). */
   draftKey?: string;
   submitLabel?: string;
@@ -48,13 +51,8 @@ interface QualityReviewStepProps {
   questionScope?: AssemblyQuestionScope;
 }
 
-interface SparePartRow {
-  ItemUUID: string;
-  slotKey: string | null;
-  BoxID: string | null;
-  QualityScoreMin: number | null;
-  QualityScoreMax: number | null;
-}
+// Stable empty default for callers without parts.
+const NO_PARTS: QualityScoreChild[] = [];
 
 const AI_PRIORITY_LABELS: Record<AiPriority, string> = {
   high: 'Hoch',
@@ -178,11 +176,24 @@ function QuestionRow({
   question,
   value,
   onChange,
+  lockedBy,
 }: {
   question: QualityQuestion;
   value: string | undefined;
   onChange: (v: string) => void;
+  /** Set when the parts now speak for this question: shown, not editable. */
+  lockedBy?: string[];
 }) {
+  if (lockedBy) {
+    return (
+      <div className="row quality-review-step__locked">
+        <label>{question.question}</label>
+        <p className="muted">
+          {value ? <s>{question.type === 'boolean' ? (value === 'true' ? 'Ja' : 'Nein') : value}</s> : '–'} · ersetzt durch die Bewertung von {lockedBy.join(', ')}
+        </p>
+      </div>
+    );
+  }
   if (question.type === 'boolean') {
     return (
       <div className="row">
@@ -258,7 +269,7 @@ export default function QualityReviewStep({
   layout,
   initialAnswers,
   disabled,
-  itemId,
+  parts,
   draftKey,
   submitLabel = 'Weiter →',
   skipLabel = 'Überspringen',
@@ -271,26 +282,8 @@ export default function QualityReviewStep({
     subCat: null,
     assemblyRaw: null,
   });
-  const [spareParts, setSpareParts] = useState<SparePartRow[]>([]);
   const agenticEnabled = useFeature('agentic');
-
-  useEffect(() => {
-    if (!itemId) return;
-    let cancelled = false;
-    fetch(`/api/items/${encodeURIComponent(itemId)}/spare-parts`)
-      .then((res) => (res.ok ? res.json() : { spareParts: [] }))
-      .then((data: { spareParts?: SparePartRow[] }) => {
-        if (!cancelled) setSpareParts(data.spareParts ?? []);
-      })
-      .catch(() => { /* preview only — without parts the slots count as unassessed */ });
-    return () => { cancelled = true; };
-  }, [itemId]);
-
-  const partScores = useMemo<QualityScoreChild[]>(() => spareParts.map((p) => ({
-    slotKey: p.slotKey,
-    inDevice: !p.BoxID,
-    score: p.QualityScoreMin != null && p.QualityScoreMax != null ? { min: p.QualityScoreMin, max: p.QualityScoreMax } : null,
-  })), [spareParts]);
+  const partScores = parts ?? NO_PARTS;
   const [contractsLoading, setContractsLoading] = useState(true);
 
   useEffect(() => {
@@ -354,6 +347,11 @@ export default function QualityReviewStep({
     ...(subCat ? [subCat] : [])
   ];
   const qualityValue = deriveQualityFromAnswers(activeContracts, answers, contracts.assemblyRaw);
+  // Locked device questions name the parts that replaced them.
+  const locked = refinedQuestionIds({ contracts: activeContracts, answers, assembly: contracts.assemblyRaw, children: partScores });
+  const lockedBy = (q: QualityQuestion): string[] | undefined => (locked.has(q.id)
+    ? (q.refinedBy ?? []).map((key) => contracts.assemblyRaw?.parts.find((p) => p.key === key)?.label ?? key)
+    : undefined);
   // Same function the server stores with, so the preview matches what gets saved.
   const scoreRange = scoreToRange(computeQualityScore({
     contracts: activeContracts,
@@ -424,6 +422,7 @@ export default function QualityReviewStep({
             <QuestionRow
               key={q.id}
               question={q}
+              lockedBy={lockedBy(q)}
               value={answers[q.id]}
               onChange={(v) => setAnswer(q.id, v)}
             />
@@ -439,7 +438,7 @@ export default function QualityReviewStep({
             </div>
             {assemblyQuestions.map((q) =>
               isQuestionVisible(q, answers) ? (
-                <QuestionRow key={q.id} question={q} value={answers[q.id]} onChange={(v) => setAnswer(q.id, v)} />
+                <QuestionRow key={q.id} question={q} lockedBy={lockedBy(q)} value={answers[q.id]} onChange={(v) => setAnswer(q.id, v)} />
               ) : null
             )}
           </>
@@ -460,6 +459,7 @@ export default function QualityReviewStep({
                 <QuestionRow
                   key={q.id}
                   question={q}
+                  lockedBy={lockedBy(q)}
                   value={answers[q.id]}
                   onChange={(v) => setAnswer(q.id, v)}
                 />

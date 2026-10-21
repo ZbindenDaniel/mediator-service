@@ -76,6 +76,26 @@ export async function computeItemQualityScore(itemUUID: string, db: QualityScore
   return (await evaluateItem(itemUUID, db))?.range ?? null;
 }
 
+/** The item's parts as the score sees them: slot, still in the device, stored range. */
+export async function loadScoreChildren(itemUUID: string, db: QualityScoreDb = defaultDb): Promise<QualityScoreChild[]> {
+  const rows = await db.query<{ SlotKey: string | null; BoxID: string | null; QualityScoreMin: unknown; QualityScoreMax: unknown }>(
+    `SELECT ir."SlotKey", c."BoxID", c."QualityScoreMin", c."QualityScoreMax"
+       FROM item_relations ir
+       JOIN items c ON c."ItemUUID" = ir."ChildItemUUID"
+      WHERE ir."ParentItemUUID" = $1 AND ir."RelationType" = 'Zerlegt_aus'`,
+    [itemUUID]
+  );
+  return rows.map((c) => {
+    const min = toNumberOrNull(c.QualityScoreMin);
+    const max = toNumberOrNull(c.QualityScoreMax);
+    return {
+      slotKey: c.SlotKey,
+      inDevice: c.BoxID === null || c.BoxID === undefined || c.BoxID === '',
+      score: min !== null && max !== null ? { min, max } : null
+    };
+  });
+}
+
 async function evaluateItem(itemUUID: string, db: QualityScoreDb): Promise<{ range: QualityScoreRange | null; grading: QualityGrading } | null> {
   const item = await db.queryOne<{ QualityId: unknown }>(`SELECT "QualityId" FROM items WHERE "ItemUUID" = $1`, [itemUUID]);
   if (!item) return null;
@@ -92,24 +112,7 @@ async function evaluateItem(itemUUID: string, db: QualityScoreDb): Promise<{ ran
   if (sub) contracts.push(sub);
 
   const answers = await loadAnswers(item.QualityId, db);
-  const childRows = assembly
-    ? await db.query<{ SlotKey: string | null; BoxID: string | null; QualityScoreMin: unknown; QualityScoreMax: unknown }>(
-        `SELECT ir."SlotKey", c."BoxID", c."QualityScoreMin", c."QualityScoreMax"
-           FROM item_relations ir
-           JOIN items c ON c."ItemUUID" = ir."ChildItemUUID"
-          WHERE ir."ParentItemUUID" = $1 AND ir."RelationType" = 'Zerlegt_aus'`,
-        [itemUUID]
-      )
-    : [];
-  const children: QualityScoreChild[] = childRows.map((c) => {
-    const min = toNumberOrNull(c.QualityScoreMin);
-    const max = toNumberOrNull(c.QualityScoreMax);
-    return {
-      slotKey: c.SlotKey,
-      inDevice: c.BoxID === null || c.BoxID === undefined || c.BoxID === '',
-      score: min !== null && max !== null ? { min, max } : null
-    };
-  });
+  const children = assembly ? await loadScoreChildren(itemUUID, db) : [];
   return { range: scoreToRange(computeQualityScore({ contracts, answers, assembly, children })), grading: gradingFrom(contracts) };
 }
 

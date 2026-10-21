@@ -11,7 +11,9 @@ import {
 import { getAssemblyContract } from '../contracts/registry';
 import { resolveActor } from '../utils/actor';
 import { guardWrite } from '../utils/write-guard';
-import { resolveEffectiveSubCategory, recomputeQualityScoreSafely } from '../lib/quality-score';
+import { resolveEffectiveSubCategory, recomputeQualityScoreSafely, loadScoreChildren } from '../lib/quality-score';
+import { refinedQuestionIds } from '../../models/quality-score';
+import type { QualityContract } from '../../models/quality-contract';
 import { queryOne } from '../db-client';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -39,6 +41,15 @@ async function readBody(req: IncomingMessage): Promise<Record<string, unknown> |
   } catch {
     return null;
   }
+}
+
+function scoringContracts(subCategory: number | undefined, assemblyContract: AssemblyContract | null): QualityContract[] {
+  const subCatContract = subCategory !== undefined ? loadSubCategoryContract(subCategory) : null;
+  return [
+    loadGeneralContract(),
+    ...(assemblyContract ? [assemblyToQualityContract(assemblyContract)] : []),
+    ...(subCatContract ? [subCatContract] : []),
+  ];
 }
 
 function scoreAnswers(subCategory: number | undefined, assemblyContract: AssemblyContract | null, answers: Record<string, string>) {
@@ -104,6 +115,14 @@ const action = defineHttpAction({
       const answers: Record<string, string> = { ...submitted };
       for (const id of slotQuestionIds(assemblyContract)) {
         if (!(id in answers) && id in stored) answers[id] = stored[id];
+      }
+      // Device questions whose parts are all assessed are locked (S1): keep the stored answer.
+      if (assemblyContract) {
+        const children = await loadScoreChildren(itemUUID);
+        for (const id of refinedQuestionIds({ contracts: scoringContracts(subCategory, assemblyContract), answers, assembly: assemblyContract, children })) {
+          if (id in stored) answers[id] = stored[id];
+          else delete answers[id];
+        }
       }
 
       let checkResponse;

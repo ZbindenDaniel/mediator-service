@@ -900,6 +900,11 @@ export const IN_DEVICE_COMPONENT_SQL =
   `SELECT 1 FROM item_relations ir_indev ` +
   `WHERE ir_indev."ChildItemUUID" = i."ItemUUID" AND ir_indev."RelationType" = 'Zerlegt_aus'))`;
 
+// Lists show a part only once it has an article: an article-less in-device part lives in its
+// device's Einzelteile tree, and in a flat list it would be a row of dashes. Parts catalogued with
+// an article (refurbishment) stay listed while in the device, as before.
+const LISTABLE_ITEM_SQL = `NOT (NULLIF(i."Artikel_Nummer", '') IS NULL AND ${IN_DEVICE_COMPONENT_SQL})`;
+
 const ITEM_JOIN_BASE = `
   FROM items i
   LEFT JOIN item_refs r ON r."Artikel_Nummer" = ${ITEM_REFERENCE_JOIN_KEY}
@@ -1333,6 +1338,7 @@ export async function listItems(): Promise<any[]> {
     ])}${ITEM_JOIN_WITH_BOX}
      LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
      WHERE COALESCE(i."Auf_Lager", 0) > 0
+     AND ${LISTABLE_ITEM_SQL}
      ORDER BY i."ItemUUID"`
   );
   return redactItemRows(parseLangtextRows(rows as Record<string, unknown>[], 'db:listItems'));
@@ -1360,6 +1366,7 @@ export async function listItemsWithFilters(filters: {
      AND ($3::TEXT IS NULL OR $3 = '' OR LOWER(COALESCE(i."BoxID",'')) LIKE $3)
      AND ($4::TEXT[] IS NULL OR COALESCE(ar."Status",'notStarted') = ANY($4))
      AND ($5::INTEGER IS NULL OR $5 = 0 OR i."BoxID" IS NULL)
+     AND ${LISTABLE_ITEM_SQL}
      ORDER BY i."ItemUUID"`,
     [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatuses, filters.unplacedOnly]
   );

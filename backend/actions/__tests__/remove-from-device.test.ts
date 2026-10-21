@@ -27,6 +27,7 @@ import action from '../remove-from-device';
 import * as qualityScore from '../../lib/quality-score';
 import * as dbClient from '../../db-client';
 import * as db from '../../db';
+import * as parentSlot from '../../lib/parent-slot';
 
 const mockQueryOne = dbClient.queryOne as jest.Mock;
 const mockExecute = dbClient.execute as jest.Mock;
@@ -357,6 +358,31 @@ describe('remove-from-device action', () => {
         expect.stringContaining('INSERT INTO item_refs'),
         expect.arrayContaining(['000042', 'Samsung SSD 256GB'])
       );
+    });
+
+    it('stores specs given with a new reference (e.g. the FRU read off the part)', async () => {
+      const ctx = makeGradCtx();
+      const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', {
+        actor: 'alice',
+        toBoxId: 'B-042',
+        newRef: { Artikelbeschreibung: 'Akku · T480', Langtext: { FRU: '01AV431', Leer: ' ' } },
+      });
+      const { res, getStatus } = createMockResponse();
+      await action.handle(req, res, ctx);
+      expect(getStatus()).toBe(200);
+      const insert = mockExecute.mock.calls.find((c: any[]) => String(c[0]).includes('INSERT INTO item_refs'))!;
+      expect(insert[1]).toContain(JSON.stringify({ FRU: '01AV431' }));
+    });
+
+    it('refuses a built-in ("Fest verbaut") part', async () => {
+      const spy = jest.spyOn(parentSlot, 'isIntegratedSlot').mockResolvedValue(true);
+      const ctx = makeGradCtx();
+      const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', { actor: 'alice', toBoxId: 'B-042', artikelNummer: '000042' });
+      const { res, getStatus, getBody } = createMockResponse();
+      await action.handle(req, res, ctx);
+      expect(getStatus()).toBe(409);
+      expect(getBody().error).toMatch(/fest verbaut/);
+      spy.mockRestore();
     });
 
     describe('subcategory guard (R5)', () => {

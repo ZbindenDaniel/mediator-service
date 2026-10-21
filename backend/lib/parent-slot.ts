@@ -4,7 +4,7 @@ import { getAssemblyContract } from '../contracts/registry';
 import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse } from './quality-contracts';
 import { resolveEffectiveSubCategory, recomputeQualityScoreSafely } from './quality-score';
 import type { RecomputeOptions } from './quality-score';
-import { SLOT_MISSING, assemblyToQualityContract } from '../../models/assembly-contract';
+import { SLOT_INTEGRATED, SLOT_MISSING, assemblyToQualityContract } from '../../models/assembly-contract';
 import type { QualityTag } from '../../models/quality';
 
 // A part left its parent device (Entnehmen). Instead of overwriting the parent's grade with a bare
@@ -30,6 +30,18 @@ async function loadAnswers(parentUuid: string): Promise<Record<string, string>> 
   } catch {
     return {};
   }
+}
+
+/**
+ * True when the parent answered this slot "Fest verbaut": the part is assessed as its own record but
+ * is soldered/built in, so it can never leave the device (no Entnehmen, no relocation).
+ */
+export async function isIntegratedSlot(parentUuid: string, slotKey: string | null): Promise<boolean> {
+  if (!slotKey) return false;
+  const subCategory = await resolveEffectiveSubCategory(parentUuid);
+  const question = subCategory !== null ? getAssemblyContract(subCategory)?.parts.find((p) => p.key === slotKey)?.question : undefined;
+  if (!question) return false;
+  return (await loadAnswers(parentUuid))[question.id] === SLOT_INTEGRATED;
 }
 
 export async function recordPartLeftParent(

@@ -22,7 +22,10 @@
 - **Einzelteile page (#996)** `/items/:id/einzelteile`: left the Aufbau tree (slots per work step, presence chips
   saved per click via `PATCH …/quality-review/answers`, nested assemblies indented), right the selected node's own
   Zustand (`QualityReviewStep` with `questionScope="none"`), Entnehmen/Lösen/Mit Artikel erfassen. Data from one call,
-  `GET /api/items/:id/parts-tree`. Replaced the Zerlegen section of the Accessories tab and the modal drill-down.
+  `GET /api/items/:id/parts-tree` (`actions/parts-tree.ts`; reference-less creation in `actions/part-component.ts`).
+  Replaced the Zerlegen section of the Accessories tab and the modal drill-down. Entnehmen = `PartRemovalForm` →
+  `remove-from-device` (sets the article when there is none); built-in parts are assessed but never removable; device
+  questions fully covered by assessed parts are locked in the form and on the server (`refinedQuestionIds`).
 - Slot states: Unknown, Present, Empty, Cataloged, Removed, plus NotApplicable ("Nicht vorgesehen") and Integrated
   ("Fest verbaut") for canonical presence selects (#980).
 - Parts are created lazily on their first save (`POST …/spare-parts/component`); unsaved answers per node survive

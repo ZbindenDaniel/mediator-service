@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { resolveActor } from '../utils/actor';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
-import { recordPartLeftParent } from '../lib/parent-slot';
+import { isIntegratedSlot, recordPartLeftParent } from '../lib/parent-slot';
 import { withTransaction, queryOne } from '../db-client';
 import { guardWrite } from '../utils/write-guard';
 
@@ -57,6 +57,17 @@ const action = defineHttpAction({
         );
         assemblyParentUuid = relation?.ParentItemUUID ?? null;
         assemblySlotKey = relation?.SlotKey ?? null;
+      }
+
+      // One way out of a device: remove-from-device, which sets the article when there is none.
+      // A plain relocation would put an article-less part into stock as a row of dashes.
+      if (assemblyParentUuid) {
+        if (await isIntegratedSlot(assemblyParentUuid, assemblySlotKey)) {
+          return sendJson(res, 409, { error: 'Teil ist fest verbaut und kann nicht entnommen werden' });
+        }
+        if (!item.Artikel_Nummer || !String(item.Artikel_Nummer).trim()) {
+          return sendJson(res, 409, { error: 'Teil hat noch keinen Artikel — bitte über Einzelteile → Entnehmen ausbauen' });
+        }
       }
 
       await withTransaction(async (client) => {

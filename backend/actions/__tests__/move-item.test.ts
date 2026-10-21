@@ -11,9 +11,16 @@ jest.mock('../../db-client', () => ({
     const client = { query: jest.fn(async () => ({ rows: [] })) };
     return fn(client);
   }),
+  queryOne: jest.fn(async () => null),
+}));
+jest.mock('../../lib/parent-slot', () => ({
+  isIntegratedSlot: jest.fn(async () => false),
+  recordPartLeftParent: jest.fn(async () => ({ markedSpare: false, assessmentId: null })),
 }));
 
 import action from '../move-item';
+import * as dbClient from '../../db-client';
+import * as parentSlot from '../../lib/parent-slot';
 
 function createMockResponse() {
   let statusCode: number | undefined;
@@ -154,5 +161,40 @@ describe('move-item action', () => {
     const { res } = createMockResponse();
     await action.handle(req, res, ctx);
     expect(ctx.getItem).toHaveBeenCalledWith('I-0001/special');
+  });
+
+  describe('a part still in its device', () => {
+    beforeEach(() => {
+      (dbClient.queryOne as jest.Mock).mockResolvedValue({ ParentItemUUID: 'I-DEV-0001', SlotKey: 'battery' });
+    });
+    afterEach(() => {
+      (dbClient.queryOne as jest.Mock).mockResolvedValue(null);
+      (parentSlot.isIntegratedSlot as jest.Mock).mockResolvedValue(false);
+    });
+
+    it('refuses an article-less part: it must leave through remove-from-device', async () => {
+      const { ctx } = makeCtx({ item: { ItemUUID: 'C-1-2132-0001', BoxID: null, Artikel_Nummer: null } });
+      const { res, getStatus, getBody } = createMockResponse();
+      await action.handle(makeRequest('/api/items/C-1-2132-0001/move', { actor: 'ana', toBoxId: 'B-042' }), res, ctx);
+      expect(getStatus()).toBe(409);
+      expect(getBody().error).toMatch(/Einzelteile/);
+    });
+
+    it('refuses a built-in ("Fest verbaut") part', async () => {
+      (parentSlot.isIntegratedSlot as jest.Mock).mockResolvedValue(true);
+      const { ctx } = makeCtx({ item: { ItemUUID: 'I-77-0001', BoxID: null, Artikel_Nummer: '77' } });
+      const { res, getStatus, getBody } = createMockResponse();
+      await action.handle(makeRequest('/api/items/I-77-0001/move', { actor: 'ana', toBoxId: 'B-042' }), res, ctx);
+      expect(getStatus()).toBe(409);
+      expect(getBody().error).toMatch(/fest verbaut/);
+    });
+
+    it('still relocates a part that has an article (refurbishment)', async () => {
+      const { ctx } = makeCtx({ item: { ItemUUID: 'I-77-0001', BoxID: null, Artikel_Nummer: '77' } });
+      const { res, getStatus } = createMockResponse();
+      await action.handle(makeRequest('/api/items/I-77-0001/move', { actor: 'ana', toBoxId: 'B-042' }), res, ctx);
+      expect(getStatus()).toBe(200);
+      expect(parentSlot.recordPartLeftParent).toHaveBeenCalled();
+    });
   });
 });

@@ -5217,6 +5217,17 @@ body.simple-mode {
 .ptree__chip--active:disabled {
   background: var(--acc);
 }
+.ptree__tag {
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.quality-review-step__locked p {
+  margin: 2px 0 0;
+}
 .ptree__select {
   font-size: 0.8rem;
   max-width: 200px;

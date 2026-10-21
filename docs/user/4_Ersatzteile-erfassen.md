@@ -28,6 +28,8 @@ Die Seite hat zwei Hälften:
 
 Ganz oben im Baum steht das **Gerät** selbst: anklicken, um rechts die Bewertung des ganzen Geräts zu ändern. Darunter verzweigen die Arbeitsschritte, darunter die Teile.
 
+**Gerätefragen werden abgelöst:** Sobald alle Teile bewertet sind, für die eine Gerätefrage steht (z. B. „Gehäuse-Zustand" → C-Cover und D-Cover), ist diese Frage beim Gerät gesperrt und durchgestrichen — „ersetzt durch die Bewertung von …". Die Teile sprechen dann für sich; so kann das Gerät nicht „beschädigt" sagen, während die Teile „neuwertig" sind.
+
 **Schliessen:** Knopf **✕ Schliessen** oben rechts (oder Taste **Esc**) — zurück zum Artikel.
 
 ---
@@ -41,7 +43,7 @@ In jeder Zeile wählst du direkt:
 | **✓ da** | Teil ist vorhanden | erst, wenn das Teil bewertet ist |
 | **✕ fehlt** | sollte da sein, fehlt aber | ja, als 0 |
 | **– n. v.** | dieses Modell hat das Teil nicht | nein |
-| **▣ fest** | fest verbaut (z. B. verlöteter RAM) | nein — wird am Gerät beurteilt |
+| **▣ fest** | fest verbaut (z. B. verlöteter RAM) | sobald das Teil bewertet ist — es lässt sich wie jedes Teil anklicken und bewerten, aber nie entnehmen |
 
 Jeder Klick wird sofort gespeichert. Nochmals auf den gewählten Knopf klicken löscht die Angabe.
 
@@ -67,7 +69,8 @@ Baugruppen wie die **Displayassembly** haben selbst wieder Teile: sobald sie bew
 
 Bei einem erfassten Teil, das noch im Gerät steckt, gibt es rechts unten:
 
-- **Entnehmen…** — Teil ausgebaut: Behälter-ID eingeben. Danach steht links „entnommen · B-042", und das Teil zählt beim Gerät als fehlend.
+- **Entnehmen…** — Teil ausgebaut: Behälter wählen. Hat das Teil noch keinen Artikel, wird er hier gleich festgelegt: **Neuer Artikel** (Bezeichnung „Akku · ThinkPad T480", Hersteller, Teilenummer — aus der Bewertung übernommen) oder **Bestehender Artikel** (z. B. ein bekannter RAM-Riegel). Danach steht links „entnommen · B-042", und das Teil zählt beim Gerät als fehlend. Ohne Artikel kommt nichts ins Lager — Teile im Gerät erscheinen deshalb auch nicht in der Artikelliste, nur hier im Baum.
+- Fest verbaute Teile haben kein **Entnehmen**.
 - **Lösen** — Teil war falsch erfasst: löscht das Teil (samt Bewertung), der Platz ist wieder frei.
 - **Artikel-Details** — öffnet das Teil wie jeden anderen Artikel.
 

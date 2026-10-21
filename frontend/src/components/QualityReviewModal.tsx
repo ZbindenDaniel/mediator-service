@@ -68,7 +68,6 @@ export default function QualityReviewModal({ itemId, subCategory, onDone, onCanc
       >
         <QualityReviewStep
           subCategory={subCategory ?? undefined}
-          itemId={itemId}
           draftKey={itemId}
           onComplete={(result) => void handleComplete(result)}
           onSkip={onCancel}

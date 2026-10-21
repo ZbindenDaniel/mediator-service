@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import QualityReviewStep from '../QualityReviewStep';
 import type { QualityReviewResult } from '../QualityReviewStep';
-import RelocateItemCard from '../RelocateItemCard';
+import PartRemovalForm from './PartRemovalForm';
 import SparepartSlotPopup from '../SparepartSlotPopup';
 import { dialogService } from '../dialog';
 import { clearQualityDraft } from '../../lib/qualityDraft';
@@ -16,8 +16,10 @@ import {
   pathTo,
   saveOwnAssessment,
   saveSlotAnswers,
+  scoreChildrenOf,
+  slotOf,
 } from '../../lib/partsTree';
-import { SLOT_PRESENT } from '../../../../models/assembly-contract';
+import { SLOT_INTEGRATED, SLOT_PRESENT } from '../../../../models/assembly-contract';
 import { formatQualityScoreRange } from '../../../../models/quality-score';
 
 // Right panel of the Einzelteile page: the selected node's own condition (Zustand) — only its own
@@ -43,6 +45,9 @@ export default function PartNodePanel({ tree, selected, canEdit, refresh, onSele
   const subCategory = node ? node.subCategory : slot ? slot.part.targetSubcategory : null;
   const draftKey = 'itemUUID' in selected ? selected.itemUUID : `${selected.parentUUID}>${selected.slotKey}`;
   const isRoot = node?.itemUUID === tree.itemUUID;
+  const home = node && !isRoot ? slotOf(tree, node.itemUUID) : null;
+  // Built-in parts are assessed like any part but can never leave the device.
+  const integrated = (home?.slot ?? slot)?.answer === SLOT_INTEGRATED;
 
   const [initialAnswers, setInitialAnswers] = useState<Record<string, string> | null>(node ? null : {});
   const [justSaved] = useState(() => lastSavedKey === draftKey);
@@ -143,7 +148,7 @@ export default function PartNodePanel({ tree, selected, canEdit, refresh, onSele
       ) : (
         <QualityReviewStep
           subCategory={subCategory ?? undefined}
-          itemId={node?.itemUUID}
+          parts={node ? scoreChildrenOf(node) : undefined}
           draftKey={draftKey}
           initialAnswers={initialAnswers}
           questionScope="none"
@@ -155,22 +160,29 @@ export default function PartNodePanel({ tree, selected, canEdit, refresh, onSele
         />
       )}
 
-      {canEdit && !isRoot && (
+      {/* After the answers loaded: the removal form takes the part's FRU from them once. */}
+      {canEdit && !isRoot && initialAnswers !== null && (
         <div className="part-node__actions">
-          {inDevice && (
-            <>
-              <button type="button" className="btn" onClick={() => setShowRelocate((v) => !v)}>Entnehmen…</button>
-              <button type="button" className="btn btn--secondary" onClick={() => void handleDetach()}>Lösen</button>
-            </>
-          )}
+          {inDevice && !integrated && <button type="button" className="btn" onClick={() => setShowRelocate((v) => !v)}>Entnehmen…</button>}
+          {inDevice && <button type="button" className="btn btn--secondary" onClick={() => void handleDetach()}>Lösen</button>}
+          {inDevice && integrated && <span className="muted">fest verbaut — kann nicht entnommen werden</span>}
           {!node && slot && parentNode && (
             <button type="button" className="btn btn--secondary" onClick={() => setShowRefPicker(true)}>Mit Artikel erfassen…</button>
           )}
           {node && <Link className="btn btn--secondary" to={`/items/${encodeURIComponent(node.itemUUID)}`}>Artikel-Details</Link>}
         </div>
       )}
-      {showRelocate && node && (
-        <RelocateItemCard itemId={node.itemUUID} onRelocated={async () => { setShowRelocate(false); await refresh(); }} />
+      {showRelocate && node && home && (
+        <PartRemovalForm
+          itemUUID={node.itemUUID}
+          artikelNummer={node.artikelNummer}
+          partLabel={home.slot.part.label}
+          deviceLabel={tree.label}
+          targetSubcategory={home.slot.part.targetSubcategory}
+          fru={initialAnswers?.part_fru ?? null}
+          onDone={async () => { setShowRelocate(false); await refresh(); }}
+          onCancel={() => setShowRelocate(false)}
+        />
       )}
       {showRefPicker && slot && parentNode && (
         <SparepartSlotPopup

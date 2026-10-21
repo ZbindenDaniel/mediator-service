@@ -1,27 +1,15 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
 import type { QualityContract, QualityQuestion, QualityCheckResponse } from '../../models/quality-contract';
 import type { AssemblyContract } from '../../models/assembly-contract';
 import { assemblyToQualityContract } from '../../models/assembly-contract';
 import { QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX, QUALITY_LABELS } from '../../models/quality';
 import type { QualityTag } from '../../models/quality';
-import { resolveContractReadPath } from '../contracts/paths';
-import { getAssemblyContract, getQualityContract } from '../contracts/registry';
+import { getAssemblyContract, getGeneralQualityContract, getQualityContract } from '../contracts/registry';
 import { parseMultiAnswer, computeQualityScore, scoreToRange, gradeFromRange, gradingFrom } from '../../models/quality-score';
 import type { QualityScoreRange } from '../../models/quality-score';
 
-function loadContractFile(filename: string): QualityContract | null {
-  try {
-    // Overlay-first (CONTRACTS_OVERLAY_DIR), else the shipped contracts/quality default.
-    const raw = readFileSync(resolveContractReadPath(join('quality', filename)), 'utf-8');
-    return JSON.parse(raw) as QualityContract;
-  } catch {
-    return null;
-  }
-}
-
+// One loader for every contract: the registry (overlay-first, cached, cleared on admin upload).
 export function loadGeneralContract(): QualityContract {
-  const contract = loadContractFile('general.json');
+  const contract = getGeneralQualityContract();
   if (!contract) throw new Error('General quality contract not found');
   return contract;
 }

@@ -37,11 +37,14 @@ jest.mock('../../contracts/registry', () => ({
 jest.mock('../../lib/quality-score', () => ({
   resolveEffectiveSubCategory: jest.fn(async () => 201),
   recomputeQualityScoreSafely: jest.fn(async () => undefined),
+  loadScoreChildren: jest.fn(async () => []),
 }));
 jest.mock('../../utils/write-guard', () => ({ guardWrite: jest.fn(async () => true) }));
 
 import action from '../quality-review';
 import * as db from '../../db';
+import * as qualityScore from '../../lib/quality-score';
+import * as qualityContracts from '../../lib/quality-contracts';
 
 function request(url: string, method: string, body?: unknown): IncomingMessage {
   const payload = body !== undefined ? JSON.stringify(body) : '';
@@ -126,5 +129,19 @@ describe('quality-review: slot answers and full assessment never overwrite each 
     store.responses = { keyboard: 'Abgenutzt', scratches: 'Viele', part_battery: 'Vorhanden' };
     await call('POST', postUrl, { reviewed_by: 'ana', answers: { keyboard: 'Gut', part_battery: 'Nicht vorhanden' } });
     expect(store.responses).toEqual({ keyboard: 'Gut', part_battery: 'Nicht vorhanden' });
+  });
+
+  it('locks a device question once all the parts it stands for are assessed (S1)', async () => {
+    store.qualityId = 3;
+    store.responses = { battery_health: 'Gut', boots: 'Ja' };
+    const deviceContract = { version: 1, questions: [
+      { id: 'battery_health', type: 'select', question: '?', values: ['Gut', 'Schlecht'], weight: 2, states: { Gut: 1, Schlecht: 0 }, refinedBy: ['battery'] },
+      { id: 'boots', type: 'select', question: '?', values: ['Ja', 'Nein'], weight: 4, states: { Ja: 1, Nein: 0 } },
+    ] };
+    (qualityContracts.loadSubCategoryContract as jest.Mock).mockReturnValueOnce(deviceContract);
+    (qualityScore.loadScoreChildren as jest.Mock).mockResolvedValueOnce([{ slotKey: 'battery', inDevice: true, score: { min: 0.9, max: 0.9 } }]);
+    await call('POST', postUrl, { reviewed_by: 'ana', answers: { battery_health: 'Schlecht', boots: 'Nein' } });
+    // battery_health is now the battery part's business: the stored answer stays; boots is still editable.
+    expect(store.responses).toMatchObject({ battery_health: 'Gut', boots: 'Nein' });
   });
 });

@@ -2,6 +2,7 @@ import type { PartsTreeNode, PartsTreeSlot } from '../../../models/parts-tree';
 import type { AssemblyPart } from '../../../models/assembly-contract';
 import { SLOT_PRESENCE_VALUES, isSlotExcludedAnswer, isSlotMissingAnswer } from '../../../models/assembly-contract';
 import { ensureUser } from './user';
+import type { QualityScoreChild } from '../../../models/quality-score';
 
 export type { PartsTreeNode, PartsTreeSlot };
 
@@ -89,6 +90,27 @@ export function findNode(root: PartsTreeNode, itemUUID: string): PartsTreeNode |
     }
   }
   return null;
+}
+
+/** The slot an item sits in, with its parent — null for the root device. */
+export function slotOf(root: PartsTreeNode, itemUUID: string): { parent: PartsTreeNode; slot: PartsTreeSlot } | null {
+  for (const slot of root.assembly?.slots ?? []) {
+    for (const child of slot.items) {
+      if (child.itemUUID === itemUUID) return { parent: root, slot };
+      const deeper = slotOf(child, itemUUID);
+      if (deeper) return deeper;
+    }
+  }
+  return null;
+}
+
+/** A node's parts as the quality score sees them (slot, still in the device, stored range). */
+export function scoreChildrenOf(node: PartsTreeNode): QualityScoreChild[] {
+  return (node.assembly?.slots ?? []).flatMap((slot) => slot.items.map((child) => ({
+    slotKey: slot.part.key,
+    inDevice: !child.boxId,
+    score: child.scoreMin !== null && child.scoreMax !== null ? { min: child.scoreMin, max: child.scoreMax } : null,
+  })));
 }
 
 export function findSlot(root: PartsTreeNode, parentUUID: string, slotKey: string): PartsTreeSlot | null {
