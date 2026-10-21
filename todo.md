@@ -77,6 +77,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
+- **Fresh DB: nightly ERP sync setting not seeded on first start.** `server.ts` seeds `erp_nightly_sync_enabled` in a fire-and-forget IIFE that can run before the schema exists (`relation "system_settings" does not exist`, seen 2026-10-21 after a DB wipe). Until the next restart the setting is NULL, so the nightly sync stays off even with `ERP_NIGHTLY_SYNC_ENABLED=true`. Run the seed after schema initialisation.
+
 0zd. ✅ **Event-log CSV round-trip corrupted `Meta` into `[object Object]` → re-import dropped the event (erp-sync #936).**
   `events.Meta` is a `jsonb` column, so `pg` returns it as a parsed JS object; `export-data.ts`'s `toCsvValue`
   serialized cells with `String(value)`, turning the object into the literal `"[object Object]"` in `events.csv`.
