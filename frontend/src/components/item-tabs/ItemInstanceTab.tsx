@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
+import { Link } from 'react-router-dom';
+import { fetchAssemblyContract } from '../../lib/contractsApi';
 import RelocateItemCard from '../RelocateItemCard';
 import EditInstanceCard from '../EditInstanceCard';
 import QualityReviewModal from '../QualityReviewModal';
@@ -83,6 +85,15 @@ export default function ItemInstanceTab({
     onQualityReview();
   }
 
+  const assemblySubCategory = item.EffectiveSubCategory ?? item.Unterkategorien_A ?? null;
+  const [hasAssembly, setHasAssembly] = useState(false);
+  useEffect(() => {
+    if (typeof assemblySubCategory !== 'number') { setHasAssembly(false); return; }
+    let cancelled = false;
+    void fetchAssemblyContract(assemblySubCategory).then((c) => { if (!cancelled) setHasAssembly(!!c && c.parts.length > 0); });
+    return () => { cancelled = true; };
+  }, [assemblySubCategory]);
+
   async function handleEntnehmen() {
     let confirmed = false;
     try {
@@ -105,7 +116,12 @@ export default function ItemInstanceTab({
       {canEdit && <div className="tab-actions">
         <PrintLabelButton itemId={item.ItemUUID} inline />
         <button type="button" className="btn" onClick={onEditInstance}>Bearbeiten</button>
-        <button type="button" className="btn" onClick={() => void handleOpenQualityReview()}>Neu bewerten</button>
+        {hasAssembly ? (
+          // Devices with an assembly are (re-)assessed on the Einzelteile page: Zustand + Aufbau in one place.
+          <Link className="btn" to={`/items/${encodeURIComponent(item.ItemUUID)}/einzelteile`}>Einzelteile</Link>
+        ) : (
+          <button type="button" className="btn" onClick={() => void handleOpenQualityReview()}>Neu bewerten</button>
+        )}
         {!isOutOfStock && (
           <QrScanButton
             searchTarget={item.ItemUUID}
@@ -221,7 +237,6 @@ export default function ItemInstanceTab({
         <QualityReviewModal
           itemId={item.ItemUUID}
           subCategory={item.EffectiveSubCategory ?? item.Unterkategorien_A}
-          itemLabel={item.Artikelbeschreibung ?? item.Kurzbeschreibung ?? undefined}
           onDone={onQualityReviewDone}
           onCancel={onQualityReviewDone}
           initialAnswers={existingAnswers}

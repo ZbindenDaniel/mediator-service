@@ -50,7 +50,8 @@ export default function Layout({ children }: { children: ReactNode }) {
   }, []);
 
   // Full-screen routes bypass the two-column shell entirely
-  const isFullScreen = pathname.startsWith('/scan') || pathname.startsWith('/placement/');
+  // Einzelteile brings its own two columns (tree + selected part) for one device.
+  const isFullScreen = pathname.startsWith('/scan') || pathname.startsWith('/placement/') || /^\/items\/[^/]+\/einzelteile/.test(pathname);
   if (isFullScreen) {
     return (
       <div className="layout">

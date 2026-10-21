@@ -7,6 +7,7 @@ import { resolveTenant } from '../utils/tenant';
 import { recomputeQualityScoreSafely, resolveEffectiveSubCategory } from '../lib/quality-score';
 import { getAssemblyContract } from '../contracts/registry';
 import { mintPartItemUUID, PartIdError } from '../lib/part-ids';
+import { buildPartsTree } from '../lib/parts-tree';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -17,6 +18,7 @@ const SPARE_PARTS_ROUTE = /^\/api\/items\/([^/]+)\/spare-parts$/;
 const SPARE_PARTS_NEW_REF_ROUTE = /^\/api\/items\/([^/]+)\/spare-parts\/new-ref$/;
 const SPARE_PART_LINK_DELETE_ROUTE = /^\/api\/items\/([^/]+)\/spare-part-link$/;
 const SPARE_PARTS_COMPONENT_ROUTE = /^\/api\/items\/([^/]+)\/spare-parts\/component$/;
+const PARTS_TREE_ROUTE = /^\/api\/items\/([^/]+)\/parts-tree$/;
 
 const action = defineHttpAction({
   key: 'catalog-spare-part',
@@ -26,6 +28,7 @@ const action = defineHttpAction({
     (SPARE_PARTS_ROUTE.test(path) && (method === 'GET' || method === 'POST')) ||
     (SPARE_PARTS_NEW_REF_ROUTE.test(path) && method === 'POST') ||
     (SPARE_PARTS_COMPONENT_ROUTE.test(path) && method === 'POST') ||
+    (PARTS_TREE_ROUTE.test(path) && method === 'GET') ||
     (SPARE_PART_LINK_DELETE_ROUTE.test(path) && method === 'DELETE'),
 
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
@@ -102,6 +105,15 @@ const action = defineHttpAction({
       await recomputeQualityScoreSafely(newItemUUID, { actor, logEvent: ctx.logEvent });
       console.info('[catalog-spare-part] Component cataloged (no reference)', { parentUuid, newItemUUID, slotKey, actor });
       return sendJson(res, 201, { itemUUID: newItemUUID, subCategory: part.targetSubcategory });
+    }
+
+    // ── GET /api/items/:uuid/parts-tree ───────────────────────────────────────
+    // The Einzelteile page: slots, stored answers and linked parts, recursively (lib/parts-tree).
+    if (method === 'GET' && PARTS_TREE_ROUTE.test(urlPath)) {
+      const uuid = decodeURIComponent(urlPath.match(PARTS_TREE_ROUTE)![1]);
+      const tree = await buildPartsTree(uuid);
+      if (!tree) return sendJson(res, 404, { error: 'item not found' });
+      return sendJson(res, 200, { tree });
     }
 
     // ── GET /api/items/:parentUuid/spare-parts ────────────────────────────────

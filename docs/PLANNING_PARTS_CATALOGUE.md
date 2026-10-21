@@ -365,7 +365,7 @@ Checked and **holds**:
 | 3 `multi` type | type, validator, scoring, specs, chip/checkbox input, intake skip | ✅ #980 |
 | 4 Nested assessment UI | breadcrumb drill-down, reference-less catalogue route + lazy creation, drafts, assessed/open markers, graduation subcategory guard (R5) | ✅ #984 (component-tested; browser walkthrough pending) |
 | 5 Catalogue content | taxonomy 210, part tree, weights, per-part contracts | **draft** ✅ #982 in `config/catalogue/` (validated in Jest); rework on the test environment |
-| 6 Device-first + Einzelteile | stable part IDs (✅ #991), `askOnCreate`/`steps`/`refinedBy`, slot scoring change, answer merge, article specs at creation, Einzelteile page, Zubehör split | **planned** (§11) |
+| 6 Device-first + Einzelteile | stable part IDs, contract fields, slot scoring, answer merge, article specs at creation, Einzelteile page, Zubehör split | ✅ #991–#996 (browser walkthrough by the testers) |
 
 ---
 
@@ -505,7 +505,8 @@ refurbishment score tests plus new ones for (1)–(2).
   battery. *The team reviews these mappings and weights* (C1).
 - **Article specs block** (E3), shown once the subcategory is known: the fields of `specs/<sub>.json`, required ones
   marked, saved into the article's Langtext. New article → editable, prefilled from the intake scan where a field
-  matches; **existing article → read-only** with a link to edit the article (a change would hit every unit). Blank
+  matches; **existing article → read-only** with a link to edit the article (a change would hit every unit) — *as
+  built: picking an existing article creates the item right after the quality step, so the form never opens*. Blank
   fields keep today's empty-key placeholders (`import-item.ts` `applySpecContract`), so the AI still sees the gaps.
   Missing required fields → warning, never a block. **Reuse** the article form's Langtext editor
   (`frontend/src/components/forms/itemFormShared.tsx`), no second spec editor.
@@ -538,8 +539,9 @@ ThinkPad T480 · I-104523-0001                    Gut · 72–80 %
 - A step counts as done when every slot in it has a presence answer; the next step opens.
 - Nested assemblies: a part with its own assembly contract expands **under its row** with its own steps.
 
-**Right — the selected node** (new panel entity, URL-addressable `?entity=part&node=<rootId>/<slot>/<slot>` so a
-reload keeps the place; an existing part may also be addressed by its ItemUUID):
+**Right — the selected node.** *As built:* the page is its own full-screen route with both columns (the shell's
+classes) instead of a new panel entity, since both sides share one tree snapshot; `?node=<itemUUID>` or
+`?node=<parent>~<slotKey>` (part not created yet) keeps the place on reload:
 - Header: label, ID (or "noch nicht erfasst"), range.
 - The node's **own** questions only (general + group + subcategory — no "Komponenten" block), via `QualityReviewStep`.
 - **"Speichern & nächster offener →"** creates the part lazily (and any not-yet-created ancestors, as #984 does), saves
@@ -625,9 +627,9 @@ migration.
 | 6a ✅ | Part IDs: generator, root resolution, graduation without re-key (#991) | Jest: format, counter, nesting, graduation keeps ID |
 | 6b ✅ | Contract fields + validator; shared question selector; scoring (11.4) (#993) | Jest: validator, score cases incl. refurbishment unchanged |
 | 6c ✅ | Answer merge PATCH + carry-over in `POST …/quality-review` (#994) | route tests: chip then full save keeps both |
-| 6d | Creation: `askOnCreate`, article specs block | jsdom: block editable/read-only, warning |
-| 6e | Einzelteile page + panel entity; Zubehör split; parity; retire Zerlegen card + level stack | jsdom + **browser walkthrough** on a disposable DB |
-| 6f | Catalogue content drafts: 201 device questions, `refinedBy`, steps for 201/2101 | `contracts:check` |
+| 6d ✅ | Creation: `askOnCreate`, article specs prefilled in the Langtext editor + warning (#996) | Jest: prefill, missing required |
+| 6e ✅ | Einzelteile page (own full-screen route, `?node=`); Zubehör split; parity; Zerlegen card + level stack retired (#996) | jsdom + API smoke; **browser walkthrough still open** |
+| 6f ✅ | Catalogue content drafts: 201 device questions, `refinedBy`, steps + defaults for 201/2101 (#996) | `contracts:check` |
 | — | Docs: this plan, `component-lifecycle.md`, `spare-parts-catalog.md`, `taxonomy-and-contracts.md`, user help | — |
 
 **Workload (estimate, 2026-10-20):** ~8–10 working sessions; 6e is about half of it. Delivered in three mergeable

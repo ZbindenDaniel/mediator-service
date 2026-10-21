@@ -34,7 +34,7 @@ Wenn du einen Artikel öffnest, siehst du oben verschiedene Tabs:
 | **KI** | KI-Anreicherung starten und reviewen |
 | **Bilder** | Fotos hochladen und anzeigen |
 | **Anhänge** | Dokumente und Dateien |
-| **Zubehör** | Verknüpfte Artikel, Ersatzteile (Zerlegen) |
+| **Zubehör** | Verknüpfte Artikel (z. B. Ladegerät); Knopf zu den **Einzelteile** |
 
 ---
 

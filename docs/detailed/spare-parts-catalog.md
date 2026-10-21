@@ -1,4 +1,4 @@
-# Spare Parts Catalog (Zerlegen)
+# Spare Parts Catalog (Einzelteile)
 
 > [!NOTE]
 > **Authoring rules**
@@ -9,7 +9,7 @@
 
 ## In short
 
-- **Business goal:** Broken devices that enter the workshop as part donors have no inventory presence. The Zerlegen feature lets operators catalog components (fan, RAM, SSD, battery …) as individual item instances linked back to the source device — enabling traceability, search, and eventual sale.
+- **Business goal:** Broken devices that enter the workshop as part donors have no inventory presence. The Einzelteile page lets operators catalog components (fan, RAM, SSD, battery …) as individual item instances linked back to the source device — enabling traceability, search, and eventual sale.
 - **User value:** One tab, one workflow. Operators assess the device, answer component questions in the quality review, then either confirm parts are still in the device (Cataloged) or extract them to a storage box (Removed).
 
 ## Scope
@@ -19,12 +19,14 @@
 - Quality integration: component questions rendered alongside general/subcategory questions;
   answers contribute to the quality score and InstanceSpecs — in both the operator quality
   review **and** the intake quality step.
-- Zerlegen section inside the existing Accessories tab (no new tab).
+- **Einzelteile page (#996)** `/items/:id/einzelteile`: left the Aufbau tree (slots per work step, presence chips
+  saved per click via `PATCH …/quality-review/answers`, nested assemblies indented), right the selected node's own
+  Zustand (`QualityReviewStep` with `questionScope="none"`), Entnehmen/Lösen/Mit Artikel erfassen. Data from one call,
+  `GET /api/items/:id/parts-tree`. Replaced the Zerlegen section of the Accessories tab and the modal drill-down.
 - Slot states: Unknown, Present, Empty, Cataloged, Removed, plus NotApplicable ("Nicht vorgesehen") and Integrated
   ("Fest verbaut") for canonical presence selects (#980).
-- **Nested assessment (#984):** in "Qualität bewerten", weighted slots show their part's status and
-  "Bewerten →"; the part's own assessment opens on top (breadcrumb Laptop › Displayassembly › Webcam),
-  the part is created on save, unsaved answers survive in localStorage.
+- Parts are created lazily on their first save (`POST …/spare-parts/component`); unsaved answers per node survive
+  in localStorage (`qualityDraft`). The #984 modal drill-down was removed in #996.
 - Removing a part (Entnehmen / remove-from-device) records its slot as missing on the parent with the parent's
   answers carried over; unweighted slots additionally set the parent to grade 1 (manual), as before (#982).
 - Percentage quality range per item incl. in-device parts (weighted slots/questions, unchecked = uncertainty),
@@ -173,17 +175,15 @@ Physically extracts the spare part to a storage box. Body: `{ toBoxId, actor, ma
 
 | Component | File | Role |
 |---|---|---|
-| `ItemAccessoriesTab` | `frontend/src/components/item-tabs/ItemAccessoriesTab.tsx` | Fetches the assembly contract, spare parts list, and quality responses; passes all to `ZubehoerCard` |
-| `ZubehoerCard` | `frontend/src/components/ZubehoerCard.tsx` | Renders Zerlegen table below Zubehör content; derives slot states; shows action buttons |
-| `SparepartSlotPopup` | `frontend/src/components/SparepartSlotPopup.tsx` | Quick-confirm popup on "Hinzufügen": shows top matching refs, one-tap confirm, fallback to full search |
-| `QualityReviewStep` | `frontend/src/components/QualityReviewStep.tsx` | Renders assembly (component) questions in a dedicated section before subcategory questions |
+| `EinzelteilePage` | `frontend/src/components/einzelteile/EinzelteilePage.tsx` | Full-screen route, two columns, selected node in `?node=` (`<itemUUID>` or `<parent>~<slotKey>` for a part not created yet) |
+| `PartsTreeView` | `frontend/src/components/einzelteile/PartsTreeView.tsx` | Left: steps, slot rows, presence chips / spec selects, status |
+| `PartNodePanel` | `frontend/src/components/einzelteile/PartNodePanel.tsx` | Right: own questions, lazy create, Entnehmen (`RelocateItemCard`), Lösen, Mit Artikel erfassen (`SparepartSlotPopup`) |
+| helpers | `frontend/src/lib/partsTree.ts` | Slot state, step grouping, next open part, API calls |
+| `ItemAccessoriesTab` | `frontend/src/components/item-tabs/ItemAccessoriesTab.tsx` | Components summary + link; `ZubehoerCard` keeps only accessory links |
+| `QualityReviewStep` | `frontend/src/components/QualityReviewStep.tsx` | Asks the slot questions of its `questionScope` (`create` at creation, `none` on the Einzelteile page) |
 
-Slot state derivation in `ZubehoerCard.deriveSlotState()`:
-1. Linked spare part exists → Cataloged or Removed (based on BoxID).
-2. No link; quality answer is `"false"` or `"Nicht vorhanden"` → Empty.
-3. Otherwise → Potential.
-
-The Zerlegen section only renders when an assembly contract exists for the item's subcategory.
+Slot state (`slotState` in `lib/partsTree.ts`): a part item in the slot wins (in device → assessed/open, in a box →
+removed); else the stored answer, else the contract `default` (shown dashed, not stored); else unknown.
 
 ## Logging
 
@@ -204,11 +204,11 @@ The Zerlegen section only renders when an assembly contract exists for the item'
 - `backend/actions/__tests__/remove-from-device.test.ts` — relocate + graduation + contract-gate.
 
 **Runtime:**
-1. Quality assessment for a Laptop → component questions appear (fan, keyboard, battery, RAM, storage).
-2. Answer "Akku: Nicht vorhanden" → battery slot shows ✕ (Empty) in Zerlegen.
-3. Answer "RAM: 16 GB" → InstanceSpecs shows "RAM: 16 GB"; RAM slot shows ◎ (Potential).
-4. Click "Hinzufügen" on Lüfter → popup shows matching fan articles → confirm → slot becomes ◉ (Cataloged).
-5. Click "Entnehmen" → select box → slot becomes ○ (Removed); parent quality badge shows "Ersatzteil" only if marked as a spare.
+1. Create a laptop (catalogue): only device questions are asked (`askOnCreate: []`); refurbishment still asks its slots.
+2. Instance tab → **Einzelteile** → steps with progress; "2. Laufwerk" shows a dashed "– n. v." default.
+3. Battery "✓ da" → saved at once; click the battery → assess → "Speichern & nächstes →" creates `C-<Art>-2132-0001`.
+4. Device range follows; re-saving the device's Zustand keeps the presence answers.
+5. "Entnehmen…" → box → row shows "entnommen · B-…"; "Lösen" deletes a wrongly created part.
 6. `GET /api/contracts/assembly/201` returns the contract JSON.
 
 ## Open questions

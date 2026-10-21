@@ -15,8 +15,8 @@ import {
 import QualityBadge from './QualityBadge';
 import { parseMultiAnswer, computeQualityScore, scoreToRange, formatQualityScoreRange, gradeFromRange, gradingFrom } from '../../../models/quality-score';
 import type { QualityScoreChild } from '../../../models/quality-score';
-import type { AssemblyContract, AssemblyPart } from '../../../models/assembly-contract';
-import { isSlotExcludedAnswer, isSlotMissingAnswer, SLOT_PRESENT, assemblyToQualityContract } from '../../../models/assembly-contract';
+import type { AssemblyContract } from '../../../models/assembly-contract';
+import { assemblyToQualityContract } from '../../../models/assembly-contract';
 import type { AssemblyQuestionScope } from '../../../models/assembly-contract';
 import { readQualityDraft, writeQualityDraft, clearQualityDraft } from '../lib/qualityDraft';
 
@@ -36,12 +36,8 @@ interface QualityReviewStepProps {
   disabled?: boolean;
   /** When set, the preview includes the item's in-device parts in the percentage score. */
   itemId?: string;
-  /** Mirror unsaved answers to localStorage under this key (nested assessment). */
+  /** Mirror unsaved answers to localStorage under this key (survives a reload or switching parts). */
   draftKey?: string;
-  /** Enables "Bewerten →" on weighted slots; `childItemId` null = part not catalogued yet. */
-  onOpenPart?: (part: AssemblyPart, childItemId: string | null) => void;
-  /** Bump to reload the parts' stored ranges (after a sub-assembly was saved). */
-  partsRefreshKey?: number;
   submitLabel?: string;
   skipLabel?: string;
   heading?: string;
@@ -55,52 +51,6 @@ interface SparePartRow {
   BoxID: string | null;
   QualityScoreMin: number | null;
   QualityScoreMax: number | null;
-}
-
-/** Status + "Bewerten →" for a weighted slot (sub-assembly) inside the quality form. */
-function SubassemblyRow({
-  part,
-  answer,
-  parts,
-  onOpen,
-}: {
-  part: AssemblyPart;
-  answer: string | undefined;
-  parts: SparePartRow[];
-  onOpen: (childItemId: string | null) => void;
-}) {
-  const linked = parts.filter((p) => p.slotKey === part.key);
-  const inDevice = linked.filter((p) => !p.BoxID);
-  if (inDevice.length === 0 && linked.length > 0) {
-    return <div className="row muted" style={{ marginTop: '-0.25rem' }}>↳ entnommen – zählt beim Gerät als fehlend</div>;
-  }
-  if (inDevice.length === 0 && (isSlotMissingAnswer(answer) || isSlotExcludedAnswer(answer))) return null;
-  return (
-    <div className="row" style={{ marginTop: '-0.25rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
-      {inDevice.map((child, i) => {
-        const assessed = child.QualityScoreMin != null && child.QualityScoreMax != null;
-        return (
-          <span key={child.ItemUUID} style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
-            <span className="muted">
-              ↳ {inDevice.length > 1 ? `${part.label} ${i + 1}: ` : ''}
-              {assessed ? `bewertet · ${formatQualityScoreRange({ min: child.QualityScoreMin!, max: child.QualityScoreMax! })}` : 'offen'}
-            </span>
-            <button type="button" className="btn btn--small" onClick={() => onOpen(child.ItemUUID)}>
-              {assessed ? 'Ändern →' : 'Bewerten →'}
-            </button>
-          </span>
-        );
-      })}
-      {(inDevice.length === 0 || part.multipleAllowed) && (
-        <span style={{ display: 'inline-flex', gap: '0.4rem', alignItems: 'center' }}>
-          {inDevice.length === 0 && <span className="muted">↳ noch nicht bewertet</span>}
-          <button type="button" className="btn btn--small" onClick={() => onOpen(null)}>
-            {inDevice.length === 0 ? 'Bewerten →' : '+ weiteres bewerten →'}
-          </button>
-        </span>
-      )}
-    </div>
-  );
 }
 
 const AI_PRIORITY_LABELS: Record<AiPriority, string> = {
@@ -307,8 +257,6 @@ export default function QualityReviewStep({
   disabled,
   itemId,
   draftKey,
-  onOpenPart,
-  partsRefreshKey = 0,
   submitLabel = 'Weiter →',
   skipLabel = 'Überspringen',
   heading = 'Qualitätsbewertung',
@@ -332,7 +280,7 @@ export default function QualityReviewStep({
       })
       .catch(() => { /* preview only — without parts the slots count as unassessed */ });
     return () => { cancelled = true; };
-  }, [itemId, partsRefreshKey]);
+  }, [itemId]);
 
   const partScores = useMemo<QualityScoreChild[]>(() => spareParts.map((p) => ({
     slotKey: p.slotKey,
@@ -481,30 +429,11 @@ export default function QualityReviewStep({
                 <strong>Komponenten</strong>
               </p>
             </div>
-            {assemblyQuestions.map((q) => {
-              if (!isQuestionVisible(q, answers)) return null;
-              const part = contracts.assemblyRaw?.parts.find((p) => p.question?.id === q.id);
-              const drillable = !!onOpenPart && !!part && typeof part.weight === 'number' && part.weight > 0;
-              return (
-                <React.Fragment key={q.id}>
-                  <QuestionRow question={q} value={answers[q.id]} onChange={(v) => setAnswer(q.id, v)} />
-                  {drillable && (
-                    <SubassemblyRow
-                      part={part!}
-                      answer={answers[q.id]}
-                      parts={spareParts}
-                      onOpen={(childItemId) => {
-                        // Opening a part to assess it implies it is there.
-                        if (answers[q.id] === undefined || answers[q.id] === '') {
-                          setAnswer(q.id, q.type === 'boolean' ? 'true' : SLOT_PRESENT);
-                        }
-                        onOpenPart!(part!, childItemId);
-                      }}
-                    />
-                  )}
-                </React.Fragment>
-              );
-            })}
+            {assemblyQuestions.map((q) =>
+              isQuestionVisible(q, answers) ? (
+                <QuestionRow key={q.id} question={q} value={answers[q.id]} onChange={(v) => setAnswer(q.id, v)} />
+              ) : null
+            )}
           </>
         )}
 

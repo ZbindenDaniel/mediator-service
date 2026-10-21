@@ -1,6 +1,20 @@
 {
-  "version": 1,
+  "version": 2,
   "subCategory": 2101,
+  "steps": [
+    {
+      "key": "bezel",
+      "label": "Rahmen & Panel"
+    },
+    {
+      "key": "camera",
+      "label": "Kamera & Mikrofon"
+    },
+    {
+      "key": "back",
+      "label": "Rückdeckel & Scharniere"
+    }
+  ],
   "parts": [
     {
       "key": "panel",
@@ -21,7 +35,8 @@
       "knockout": {
         "below": 0.25,
         "cap": 0.19
-      }
+      },
+      "step": "bezel"
     },
     {
       "key": "a_cover",
@@ -38,7 +53,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "back"
     },
     {
       "key": "b_cover",
@@ -55,7 +71,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "bezel"
     },
     {
       "key": "hinge_left",
@@ -72,7 +89,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "back"
     },
     {
       "key": "hinge_right",
@@ -89,7 +107,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "back"
     },
     {
       "key": "webcam",
@@ -106,7 +125,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "camera"
     },
     {
       "key": "microphone",
@@ -123,7 +143,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "camera"
     },
     {
       "key": "antenna_left",
@@ -140,7 +161,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "back"
     },
     {
       "key": "antenna_right",
@@ -157,7 +179,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "back"
     },
     {
       "key": "display_cable",
@@ -174,7 +197,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "back"
     },
     {
       "key": "inverter",
@@ -191,7 +215,9 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "bezel",
+      "default": "Nicht vorgesehen"
     }
   ]
 }

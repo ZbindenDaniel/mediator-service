@@ -30,8 +30,15 @@ docker compose -f docker-compose.yml -f docker-compose.catalogue.yml restart med
 their codes; nothing is deleted). `--keep-others` leaves them active. Re-applying `config/taxonomy.seed.json`
 switches back (and deactivates 210).
 
-The compose override bind-mounts `config/catalogue/contracts` as the writable overlay, so contract edits made in
-Admin land in the repo — handy on the test environment. For a real deployment mount a persistent non-repo copy.
+The overlay lives in the `mediator-data` volume (`/var/lib/mediator/contracts-overlay`, writable by the app's
+uid 33). Fill it — and refresh it after editing `config/catalogue/contracts/` — with:
+```bash
+F="-f docker-compose.yml -f docker-compose.catalogue.yml"
+docker compose $F run --rm --no-deps -u 0 --entrypoint sh mediator -c \
+  'mkdir -p /var/lib/mediator/contracts-overlay && cp -r /srv/catalogue/contracts/. /var/lib/mediator/contracts-overlay/ && chown -R 33:33 /var/lib/mediator/contracts-overlay'
+docker compose $F restart mediator
+```
+Contract uploads made in Admin land in the volume, not in the repo; copying from the repo overwrites them.
 
 **Staging / production host** (stack from `docker-compose.prod.yaml`): the image does not contain
 `config/catalogue/`, so the files live in host folders next to the compose files and

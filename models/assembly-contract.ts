@@ -65,10 +65,14 @@ export interface AssemblyContract {
   steps?: AssemblyStep[];
 }
 
-/** `all` = every slot (re-assessment); `create` = only what the device check at creation asks. */
-export type AssemblyQuestionScope = 'all' | 'create';
+/**
+ * `all` = every slot (re-assessment); `create` = only what the device check at creation asks;
+ * `none` = no slot (the Einzelteile page asks presence in its own tree, the form only the item's own questions).
+ */
+export type AssemblyQuestionScope = 'all' | 'create' | 'none';
 
 export function partsInScope(ac: AssemblyContract, scope: AssemblyQuestionScope): AssemblyPart[] {
+  if (scope === 'none') return [];
   if (scope === 'all' || !Array.isArray(ac.askOnCreate)) return ac.parts;
   const asked = new Set(ac.askOnCreate);
   return ac.parts.filter((p) => asked.has(p.key));

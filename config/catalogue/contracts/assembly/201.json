@@ -1,6 +1,29 @@
 {
-  "version": 1,
+  "version": 2,
   "subCategory": 201,
+  "askOnCreate": [],
+  "steps": [
+    {
+      "key": "bottom",
+      "label": "Akku & Bodenabdeckung"
+    },
+    {
+      "key": "storage",
+      "label": "Speicher & Funk"
+    },
+    {
+      "key": "top",
+      "label": "Tastatur & Handauflage"
+    },
+    {
+      "key": "display",
+      "label": "Display abnehmen"
+    },
+    {
+      "key": "board",
+      "label": "Mainboard & Kühlung"
+    }
+  ],
   "parts": [
     {
       "key": "display_assembly",
@@ -21,7 +44,8 @@
       "knockout": {
         "below": 0.25,
         "cap": 0.19
-      }
+      },
+      "step": "display"
     },
     {
       "key": "palmrest",
@@ -38,7 +62,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "top"
     },
     {
       "key": "bottom_case",
@@ -55,7 +80,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "bottom"
     },
     {
       "key": "mainboard",
@@ -76,7 +102,8 @@
       "knockout": {
         "below": 0.25,
         "cap": 0.19
-      }
+      },
+      "step": "board"
     },
     {
       "key": "daughterboard_1",
@@ -93,7 +120,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "board"
     },
     {
       "key": "daughterboard_2",
@@ -110,7 +138,9 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "board",
+      "default": "Nicht vorgesehen"
     },
     {
       "key": "daughterboard_3",
@@ -127,7 +157,9 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "board",
+      "default": "Nicht vorgesehen"
     },
     {
       "key": "dc_jack",
@@ -144,7 +176,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "board"
     },
     {
       "key": "cpu",
@@ -165,7 +198,8 @@
       "knockout": {
         "below": 0.25,
         "cap": 0.19
-      }
+      },
+      "step": "board"
     },
     {
       "key": "heatsink",
@@ -182,7 +216,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "board"
     },
     {
       "key": "fan_1",
@@ -199,7 +234,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "board"
     },
     {
       "key": "fan_2",
@@ -216,7 +252,9 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "board",
+      "default": "Nicht vorgesehen"
     },
     {
       "key": "ram",
@@ -234,7 +272,8 @@
           "Fest verbaut"
         ]
       },
-      "multipleAllowed": true
+      "multipleAllowed": true,
+      "step": "storage"
     },
     {
       "key": "caddy_1",
@@ -251,7 +290,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "storage"
     },
     {
       "key": "drive_cable_1",
@@ -268,7 +308,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "storage"
     },
     {
       "key": "drive_25_1",
@@ -285,7 +326,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "storage"
     },
     {
       "key": "caddy_2",
@@ -302,7 +344,9 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "storage",
+      "default": "Nicht vorgesehen"
     },
     {
       "key": "drive_cable_2",
@@ -319,7 +363,9 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "storage",
+      "default": "Nicht vorgesehen"
     },
     {
       "key": "drive_25_2",
@@ -336,7 +382,9 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "storage",
+      "default": "Nicht vorgesehen"
     },
     {
       "key": "m2_1",
@@ -353,7 +401,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "storage"
     },
     {
       "key": "m2_2",
@@ -370,7 +419,9 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "storage",
+      "default": "Nicht vorgesehen"
     },
     {
       "key": "optical_drive",
@@ -387,7 +438,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "storage"
     },
     {
       "key": "speaker_left",
@@ -404,7 +456,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "top"
     },
     {
       "key": "speaker_right",
@@ -421,7 +474,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "top"
     },
     {
       "key": "wlan",
@@ -438,7 +492,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "storage"
     },
     {
       "key": "bluetooth",
@@ -455,7 +510,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "storage"
     },
     {
       "key": "cmos_battery",
@@ -472,7 +528,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "bottom"
     },
     {
       "key": "battery",
@@ -489,7 +546,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "bottom"
     },
     {
       "key": "internal_cables",
@@ -506,7 +564,8 @@
           "Nicht vorgesehen",
           "Fest verbaut"
         ]
-      }
+      },
+      "step": "board"
     }
   ]
 }

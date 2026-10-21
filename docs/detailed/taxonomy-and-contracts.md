@@ -4,7 +4,7 @@ How categories and contracts decide what the app asks about an item, how quality
 and how to change them without breaking existing data. Written for whoever maintains a deployment's
 categories and question sets — no code changes needed for anything in here.
 
-Related: [spare-parts-catalog.md](spare-parts-catalog.md) (Zerlegen, slots) ·
+Related: [spare-parts-catalog.md](spare-parts-catalog.md) (slots, Einzelteile) ·
 [component-lifecycle.md](component-lifecycle.md) (parts without an article number) ·
 [contracts/README.md](../../contracts/README.md) (file reference) ·
 [PLANNING_PARTS_CATALOGUE.md](../PLANNING_PARTS_CATALOGUE.md) (design + open questions)
@@ -20,7 +20,7 @@ Taxonomy                 Contracts (JSON files, one per subcategory code)
  └─ 201 Laptop ─────┼──► quality/group-20.json  asked for every item of main category 20 (optional)
                     ├──► quality/201.json       asked for laptops
                     ├──► specs/201.json         article specs for laptops (shown as "missing" when empty)
-                    └──► assembly/201.json      the laptop's parts (slots) → Zerlegen tab + quality
+                    └──► assembly/201.json      the laptop's parts (slots) → Einzelteile page + quality
 210 Laptop-Komponenten
  └─ 2105 Displaypanel ──► quality/group-210.json + quality/2105.json + specs/2105.json (+ assembly/2105.json if it has parts)
 ```
@@ -145,7 +145,7 @@ quality  = certain / total  …  possible / total            e.g. "60–85 %"
   Left out = every slot (refurbishment); `[]` = none (catalogue: the laptop is not opened at intake).
 - `steps`: the order in which the item is taken apart; slots without a `step` are "Weitere Teile".
 - **Nesting:** give `targetSubcategory` its own `assembly/` file and the part has parts of its own
-  (Laptop → Displayassembly → Webcam). The assessment lets you click into each level ("Bewerten →").
+  (Laptop → Displayassembly → Webcam). The Einzelteile page shows each level indented under its part.
 
 **`specs/<code>.json`**: `{ "version": 1, "subCategory": 2105, "fields": [{ "key": "Diagonale", "required": true, "description": "…" }] }`
 
@@ -206,7 +206,7 @@ Bump `version` when you change questions — it is stored with each assessment.
 |---|---|
 | Taxonomy still shows the old categories | Seed only fills an empty DB → `npm run taxonomy:apply -- <seed>`, restart. Check the stack actually sets `TAXONOMY_SEED_FILE` (e.g. include `docker-compose.catalogue.yml`). |
 | Contract changes have no effect | Overlay not set or not mounted (`CONTRACTS_OVERLAY_DIR`); a same-named overlay file shadows the shipped one; restart after editing files directly. |
-| Badge shows "?" after an assessment | Range too wide — too much unchecked (§3). Answer more, or assess the parts ("Bewerten →"). |
+| Badge shows "?" after an assessment | Range too wide — too much unchecked (§3). Answer more of the device questions, or assess parts on the Einzelteile page. |
 | All grades shifted after a contract change | Expected after weight/scale/band changes; `quality:recompute` applied them to stored items. |
 | A part has no questions | Its slot's `targetSubcategory` has no quality file and no group file — add one. |
 | Upload refused | The error names the problem (cycle, unknown target subcategory, duplicate id, value without state …). |

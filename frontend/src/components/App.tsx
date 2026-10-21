@@ -24,6 +24,7 @@ import OrganisationsAdminPage from './admin/OrganisationsAdminPage';
 import PlacementScanView from './PlacementScanView';
 import StubListPage from './StubListPage';
 import HilfePage from './HilfePage';
+import EinzelteilePage from './einzelteile/EinzelteilePage';
 import { createScanDetector } from '../utils/scannerDetection';
 import { applySimpleModeClass } from '../lib/simpleMode';
 
@@ -77,6 +78,7 @@ export function AppRoutes() {
       <Route path="/items/new" element={<ItemCreate />} />
       <Route path="/items/:itemId" element={<ItemRoute />} />
       <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />
+      <Route path="/items/:itemId/einzelteile" element={<EinzelteilePage />} />
       <Route path="/scan" element={gate(features['qr-scan'], <QrScannerPage />)} />
       <Route path="/activities" element={gate(features.logs, <RecentActivitiesPage />)} />
       <Route path="/stubs" element={gate(features.stubs, <StubListPage />)} />
