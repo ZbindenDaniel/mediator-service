@@ -330,11 +330,17 @@
      Phase 1 audit + Phase 4 admin role gating ✅ (#969, browser check pending).
      Deployment feature flags ✅ (#970, browser check pending).
      Org admin page ✅ (#971, browser check pending).
-     Phase 3a writes ✅ (#976). Phase 3b reads ✅ (#979). Next:** two-org test
-     matrix with real logins; item detail actions hidden for foreign items ✅ (#981),
-     still open: bulk bar + KI tab on foreign items, create buttons for no-org users; DL2 global stock total;
-     per-org export (`/api/export/data` is unrestricted-only for now). Grey zone
-     still visible by decision (serial/MAC, intake data, photos, attachments).
+     Phase 3a writes ✅ (#976). Phase 3b reads ✅ (#979). Phase 3c item-detail
+     actions hidden for foreign items ✅ (#981/#983). Two-org matrix ✅ (#1011,
+     `tenancy-two-org-matrix.test.ts` — read+write layers across A/B/admin/no-login/
+     no-org). DL2 global stock total ✅ resolved without code (subsumed by §2a
+     shared-reads: reads aren't tenant-filtered, so grouped quantities already sum
+     across orgs; matrix pins the "no instance dropped" invariant). Next:** bulk bar
+     + KI tab on foreign items, create buttons for no-org users; per-org export
+     (`/api/export/data` is unrestricted-only for now); **host verification of the
+     opt-in forward-auth proxy** (local ✅ 2026-10-13; on-host pending) before Basic
+     Auth is dropped, per `docs/detailed/identity-provider.md` Part A/B incl. the
+     spoof test. Grey zone still visible by decision (serial/MAC, intake data, photos, attachments).
      Later: role permissions (delete, bulk,
      shelf create) together with defining `super`. Open: intake station
      rows get `defaultTenant` (per-station tenant?); SPA has no graceful

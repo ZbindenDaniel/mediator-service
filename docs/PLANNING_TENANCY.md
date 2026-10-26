@@ -172,8 +172,21 @@ handler guards (`utils/write-guard.ts`) on every write route; owners inherited o
 `canSeePrivate`; another org's item location shows the owner name, its boxes/shelves/Fundsachen are
 "not found", item/box logs and feeds show only own events, marks/reviewer hidden, search by box id
 blind to foreign boxes, item export own rows only, full export unrestricted-only. Applied in the
-shared `db.ts` reads + handlers with own SQL. **Next:** two-org test matrix, DL2 total, FE hiding of
-write actions on foreign items.
+shared `db.ts` reads + handlers with own SQL. **3c ✅ FE hiding (#983):** item detail returns
+`permissions { canEditItem, canEditReference }`; instance/reference/photo/attachment/accessory actions
+hidden when they would 403; a foreign location opens the org card, not a box.
+**Verified (#1011):** `backend/__tests__/tenancy-two-org-matrix.test.ts` — a two-org cross-product
+driving the real read (redaction/visibility/people) and write (guard) layers through `runWithIdentity`
+for org A, org B, platform-admin, no-login and no-org, asserting the full own/foreign/legacy outcome
+set in one place. **DL2 resolved (no code):** the "cross-org aggregate quantity" is *subsumed by the
+2a shared-reads pivot* — reads are not tenant-filtered (only event feeds + box visibility are), so
+redaction hides a foreign instance's location but never drops it, and any quantity grouped over the
+item list already sums across every org. The matrix pins this as an invariant ("no requester loses
+instances") so a later tenant WHERE-filter on list reads can't silently make totals org-local. DL2's
+old "total only, never tenant rows" was already superseded by §2a.
+**Remaining (operator):** local + on-host verification of the opt-in forward-auth proxy (Phase 1b)
+before Basic Auth is dropped — the one P3-adjacent step that can't be done from the repo; runbook in
+`docs/detailed/identity-provider.md`.
 - **Logistics:** reads *and* writes filtered by `ctx.tenant` with **no shared
   fallback**, enforced in the `db.ts` logistics functions (not per handler) so it
   can't be bypassed. Destructive ops assert ownership.
