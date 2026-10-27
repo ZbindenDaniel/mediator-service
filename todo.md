@@ -335,14 +335,16 @@
      `tenancy-two-org-matrix.test.ts` — read+write layers across A/B/admin/no-login/
      no-org). DL2 global stock total ✅ resolved without code (subsumed by §2a
      shared-reads: reads aren't tenant-filtered, so grouped quantities already sum
-     across orgs; matrix pins the "no instance dropped" invariant). Next:** bulk bar
-     + KI tab on foreign items, create buttons for no-org users; per-org export
-     (`/api/export/data` is unrestricted-only for now); **host verification of the
-     opt-in forward-auth proxy** (local ✅ 2026-10-13; on-host pending) before Basic
-     Auth is dropped, per `docs/detailed/identity-provider.md` Part A/B incl. the
-     spoof test. Grey zone still visible by decision (serial/MAC, intake data, photos, attachments).
-     Later: role permissions (delete, bulk,
-     shelf create) together with defining `super`. Open: intake station
+     across orgs; matrix pins the "no instance dropped" invariant). Bulk bar blocks
+     cross-org mass writes ✅ (#1012). Next (defined FE polish):** KI-tab action gating +
+     create buttons hidden for no-org users (backend already 403s both; deferred, touches
+     several components); per-org export (`/api/export/data` is unrestricted-only for now);
+     **host verification of the opt-in forward-auth proxy** (local ✅ 2026-10-13; on-host
+     pending) before Basic Auth is dropped, per `docs/detailed/identity-provider.md`
+     Part A/B incl. the spoof test. **Phase 4 undefined — questions prepared in
+     `PLANNING_TENANCY.md` §7:** super-role powers (Q1), within-org delete/bulk rights (Q2),
+     user/site onboarding (Q3), grey-zone confirmation (Q4: serial/MAC, intake data, photos,
+     attachments still visible by decision), catalogue-edit model (Q5). Open: intake station
      rows get `defaultTenant` (per-station tenant?); SPA has no graceful
      session-expiry handling; (4) tenant/user
      admin + self-registration. Auth mechanism decided

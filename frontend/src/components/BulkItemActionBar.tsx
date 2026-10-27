@@ -311,6 +311,18 @@ export default function BulkItemActionBar({
     try { return sessionStorage.getItem('adminSecret') ?? ''; } catch { return ''; }
   });
 
+  // Tenancy (Phase 3): the bulk write endpoints reject a mixed selection all-or-nothing
+  // (guardWriteMany), so one foreign item makes every bulk write 403. Foreign rows arrive already
+  // redacted from the server (LocationRedacted set), so block the mutating actions and say why
+  // rather than let the operator click into a guaranteed failure. Unrestricted requests (no login /
+  // platform admin) never see redacted rows, so this is a no-op for them; read-only export stays on.
+  const foreignCount = useMemo(
+    () => (selectedItems ?? []).filter((it) => it.LocationRedacted === true).length,
+    [selectedItems]
+  );
+  const hasForeign = foreignCount > 0;
+  const writeDisabled = isProcessing || !hasSelection || hasForeign;
+
   const selectionLabel = useMemo(() => {
     if (!hasSelection) {
       return 'Keine Artikel ausgewählt';
@@ -1159,6 +1171,13 @@ export default function BulkItemActionBar({
       <div className="bulk-item-action-bar__summary">
         <strong>{selectionLabel}</strong>
         {isProcessing ? <span className="muted"> Verarbeitung…</span> : null}
+        {hasForeign ? (
+          <p className="bulk-item-action-bar__notice" role="note" data-testid="bulk-foreign-notice">
+            {foreignCount === selectedCount
+              ? 'Auswahl gehört anderen Organisationen – Massenaktionen sind nur für eigene Artikel möglich.'
+              : `${foreignCount} von ${selectedCount} Artikeln gehören anderen Organisationen – Massenaktionen sind deaktiviert, solange fremde Artikel ausgewählt sind.`}
+          </p>
+        ) : null}
       </div>
       <div className="bulk-item-action-bar__controls">
         <div className="bulk-item-action-bar__field row">
@@ -1175,7 +1194,7 @@ export default function BulkItemActionBar({
           />
           <button
             className="bulk-item-action-bar__button bulk-item-action-bar__button--primary"
-            disabled={isProcessing || !hasSelection}
+            disabled={writeDisabled}
             onClick={() => {
               void handleBulkMove();
             }}
@@ -1191,7 +1210,7 @@ export default function BulkItemActionBar({
 
         <button
           className="bulk-item-action-bar__button"
-          disabled={isProcessing || !hasSelection}
+          disabled={writeDisabled}
           onClick={() => {
             void handleCreateAndMove();
           }}
@@ -1204,7 +1223,7 @@ export default function BulkItemActionBar({
         {features['agentic'] && (
           <button
             className="bulk-item-action-bar__button"
-            disabled={isProcessing || !hasSelection}
+            disabled={writeDisabled}
             onClick={() => {
               void handleBulkKi();
             }}
@@ -1218,7 +1237,7 @@ export default function BulkItemActionBar({
         {features['erp-sync'] && (
           <button
             className="bulk-item-action-bar__button"
-            disabled={isProcessing || !hasSelection}
+            disabled={writeDisabled}
             onClick={() => {
               void handleBulkSyncToErp();
             }}
@@ -1232,7 +1251,7 @@ export default function BulkItemActionBar({
         {features.shopware && (adminToken || identity.isPlatformAdmin) ? (
           <button
             className="bulk-item-action-bar__button"
-            disabled={isProcessing || !hasSelection}
+            disabled={writeDisabled}
             onClick={() => {
               void handleBulkSyncToShop();
             }}
@@ -1247,7 +1266,7 @@ export default function BulkItemActionBar({
         {features['shopware'] && (
           <button
             className="bulk-item-action-bar__button"
-            disabled={isProcessing || !hasSelection}
+            disabled={writeDisabled}
             onClick={() => {
               void handleBulkUpdateShopStatus();
             }}
@@ -1260,7 +1279,7 @@ export default function BulkItemActionBar({
 
         <button
           className="bulk-item-action-bar__button bulk-item-action-bar__button--danger"
-          disabled={isProcessing || !hasSelection}
+          disabled={writeDisabled}
           onClick={() => {
             void handleBulkDelete();
           }}

@@ -261,3 +261,49 @@ Pulled ahead of Phase 3 because it is small and independent. `super` powers stil
 - **Feature-flag system** is deferred and independent; its role-gating will reuse
   Phase 1's identity + `group → role` map, so doing tenancy first is not wasted.
 - **Taxonomy/contracts** are deployment-wide, so tenancy does not touch them.
+
+---
+
+## 7. Phase 4 — open questions to settle (prepared 2026-10-27)
+
+Phase 3 enforcement is built and verified; Phase 4 (roles + onboarding) is the remaining tenancy
+work and is **undefined** on these points. The ownership/redaction policy (ownership.ts) is the one
+place to extend, so answers here translate to small, localised changes. Grouped by decision.
+
+### Q1 — What may a `super` (tenant admin) do that a `normal` user cannot?
+Today both roles resolve to the same write rule (own org only); `super` carries no extra power yet.
+Candidate powers, pick the set:
+- **a.** Manage its org's **sites/shelves** (create/rename/retire) — currently sites are defined by
+  revamp-it in the org admin tab (§2a). Should `super` self-manage them?
+- **b.** Manage its org's **users** (invite/remove, promote a member to `super`) — or does revamp-it
+  (platform-admin) do all user management in Authentik?
+- **c.** **Delete** its org's items/boxes (see Q2).
+- **d.** Edit its **org profile** (contact email for the mailto ordering flow, name).
+If `super` is deferred entirely for now, say so and `normal` + `platform-admin` is the whole model.
+
+### Q2 — Delete and other destructive/bulk rights: role-gated or ownership-only?
+Right now any member of the owning org can do any write to its own rows (delete, bulk move, bulk
+remove), because write = "same org". Is that the intended model, or should **delete / bulk /
+shelf-create** be restricted to `super` (with `normal` limited to cataloguing + quality)? This is the
+"role permissions" item parked in the todo. (The bulk bar now blocks *cross-org* writes; this is
+about *within-org* role limits.)
+
+### Q3 — How do new orgs and users get provisioned (onboarding)?
+§2a settled that orgs live in the app DB (admin tab) linked by Authentik group name. Still open:
+- **Users:** does revamp-it create every user in Authentik by hand, or is there a **self-registration
+  / enrollment** flow (org token → Authentik enrollment → lands in the right group)? If self-serve,
+  who issues the token, what's its lifetime, and who approves?
+- **Sites:** §2a lists "registration / revamp / CSV" as undecided for how an org's sites arrive. Is
+  revamp-it-defines-in-admin-tab the answer for now, or do we need CSV import / an org-side request?
+
+### Q4 — Confirm the "grey zone" stays shared.
+By the 2026-10-13 decision, these stay visible across orgs for now: **serial numbers / MAC
+addresses, intake scan data, photos, attachments**. As real external orgs come on, should any of
+these be redacted to the owning org (e.g. serials/MACs as identifying, photos as potentially
+sensitive), or is full visibility still wanted? (Each is a localised redaction if tightened.)
+
+### Q5 — Catalogue reference editing: single-contributor or collaborative?
+Today a catalogue reference (`item_refs`, keyed by `Artikel_Nummer`) is editable only by the org that
+first contributed it (`ContributedByTenant`). If two orgs stock the same part, only the first can
+improve the shared description/specs. Keep single-contributor, or allow any org to edit shared
+catalogue data (with platform-admin as arbiter), given the catalogue is meant to benefit everyone?
