@@ -30,7 +30,7 @@ import { calculateCo2Impact } from '../lib/co2Calculator';
 import { query as dbQuery, withTransaction } from '../db-client';
 import { guardWrite } from '../utils/write-guard';
 import { redactItemRows, redactPeople } from '../lib/redaction';
-import { canEditReference, canWrite, currentIdentity, isUnrestricted } from '../lib/ownership';
+import { canDeleteReference, canEditReference, canWrite, currentIdentity, isUnrestricted } from '../lib/ownership';
 import { getRowOwner } from '../db';
 
 const MEDIA_PREFIX = '/media/';
@@ -608,13 +608,17 @@ function normalizeSearchTerm(
 async function resolveItemPermissions(
   itemTenant: string | null | undefined,
   artikelNummer: string | null | undefined
-): Promise<{ canEditItem: boolean; canEditReference: boolean }> {
+): Promise<{ canEditItem: boolean; canEditReference: boolean; canDeleteReference: boolean }> {
   const identity = currentIdentity();
-  if (isUnrestricted(identity)) return { canEditItem: true, canEditReference: true };
+  if (isUnrestricted(identity)) return { canEditItem: true, canEditReference: true, canDeleteReference: true };
   const nr = (artikelNummer ?? '').trim();
   const refOwner = nr ? await getRowOwner('ref', nr) : null;
-  // Operators edit their own org's references; tenant admins curate any reference (§7 M2).
-  return { canEditItem: canWrite(identity, itemTenant), canEditReference: canEditReference(identity, refOwner) };
+  // Operators edit their own org's references; tenant admins curate (edit any) and delete references (§7 M2).
+  return {
+    canEditItem: canWrite(identity, itemTenant),
+    canEditReference: canEditReference(identity, refOwner),
+    canDeleteReference: canDeleteReference(identity)
+  };
 }
 
 const action = defineHttpAction({

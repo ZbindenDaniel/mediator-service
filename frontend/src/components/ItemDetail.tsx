@@ -181,7 +181,7 @@ export default function ItemDetail({ itemId }: Props) {
   const features = useFeatures();
   const statisticsEnabled = features.statistics;
   // Missing (older backend) = everything allowed, as before tenancy.
-  const [permissions, setPermissions] = useState<ItemPermissions>({ canEditItem: true, canEditReference: true });
+  const [permissions, setPermissions] = useState<ItemPermissions>({ canEditItem: true, canEditReference: true, canDeleteReference: false });
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [neighborIds, setNeighborIds] = useState<{ previousId: string | null; nextId: string | null }>({
@@ -1106,7 +1106,9 @@ export default function ItemDetail({ itemId }: Props) {
         setInstances(normalizeInstanceList(data.instances));
         setPermissions({
           canEditItem: data.permissions?.canEditItem !== false,
-          canEditReference: data.permissions?.canEditReference !== false
+          canEditReference: data.permissions?.canEditReference !== false,
+          // Delete is opt-in (tenant-admin only): hidden unless the server explicitly grants it.
+          canDeleteReference: data.permissions?.canDeleteReference === true
         });
         setConnectedAccessories(Array.isArray((data as any).connectedAccessories) ? (data as any).connectedAccessories : []);
         setConnectedToDevices(Array.isArray((data as any).connectedToDevices) ? (data as any).connectedToDevices : []);
@@ -2488,6 +2490,50 @@ export default function ItemDetail({ itemId }: Props) {
     navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`);
   }
 
+  // Delete the whole catalogue reference (tenant-admin only; the button is hidden otherwise). The
+  // backend refuses while any instance still exists (409), so the operator removes instances first.
+  async function handleDeleteReference() {
+    if (!item) return;
+    const artikelNummer = (item.Artikel_Nummer ?? '').trim();
+    if (!artikelNummer) {
+      await dialogService.alert({ title: 'Nicht möglich', message: 'Dieser Eintrag hat keine Artikelnummer.' }).catch(() => {});
+      return;
+    }
+    const actor = await ensureUser();
+    if (!actor) {
+      await dialogService.alert({ title: 'Aktion nicht möglich', message: 'Bitte zuerst oben den Benutzer setzen.' }).catch(() => {});
+      return;
+    }
+    const confirmed = await dialogService.confirm({
+      title: 'Referenz löschen',
+      message: `Die gesamte Katalog-Referenz ${artikelNummer} löschen? Das ist nur möglich, wenn keine Instanzen mehr existieren.`,
+      confirmLabel: 'Löschen',
+      cancelLabel: 'Zurück'
+    }).catch(() => false);
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/references/${encodeURIComponent(artikelNummer)}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor, confirm: true })
+      });
+      if (res.ok) {
+        navigate('/items');
+        return;
+      }
+      const body = await res.json().catch(() => ({} as any));
+      const message = res.status === 409
+        ? `Referenz wird noch verwendet (${body.instanceCount ?? '?'} Instanz(en)). Bitte zuerst alle Instanzen entfernen.`
+        : res.status === 403
+          ? 'Referenzen löschen ist Organisations-Admins vorbehalten.'
+          : (body.error || `Löschen fehlgeschlagen (HTTP ${res.status}).`);
+      await dialogService.alert({ title: 'Referenz nicht gelöscht', message }).catch(() => {});
+    } catch (err) {
+      console.error('Delete reference failed', err);
+      await dialogService.alert({ title: 'Fehler', message: 'Netzwerkfehler beim Löschen der Referenz.' }).catch(() => {});
+    }
+  }
+
   async function handleShopStatus() {
     if (!item) return;
     let shopValues: ShopStatusValues = { shopartikel: null, veröffentlicht: null, verkaufspreis: null };
@@ -2709,6 +2755,7 @@ export default function ItemDetail({ itemId }: Props) {
             compatibleParentRefs={compatibleParentRefs}
             onEdit={permissions.canEditReference ? () => void handleEdit() : undefined}
             onShopStatus={permissions.canEditReference ? () => void handleShopStatus() : undefined}
+            onDelete={permissions.canDeleteReference ? () => void handleDeleteReference() : undefined}
           />
         );
         break;

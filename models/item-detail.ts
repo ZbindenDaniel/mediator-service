@@ -72,4 +72,6 @@ export interface ItemPermissions {
   canEditItem: boolean;
   // The catalogue entry: description, images, specs.
   canEditReference: boolean;
+  // Delete the catalogue reference — tenant admins only (§7 M2); operators never, even for own refs.
+  canDeleteReference: boolean;
 }

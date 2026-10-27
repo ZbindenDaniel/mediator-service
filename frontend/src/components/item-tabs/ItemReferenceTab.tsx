@@ -13,6 +13,8 @@ interface Props {
   // Omitted when the requester may not change this catalogue entry (another org's, tenancy 3a).
   onEdit?: () => void;
   onShopStatus?: () => void;
+  // Omitted unless the requester may delete the reference (tenant admins only, §7 M2).
+  onDelete?: () => void;
 }
 
 export default function ItemReferenceTab({
@@ -21,7 +23,8 @@ export default function ItemReferenceTab({
   connectedToDevices,
   compatibleParentRefs,
   onEdit,
-  onShopStatus
+  onShopStatus,
+  onDelete
 }: Props) {
   const shopwareEnabled = useFeature('shopware');
   return (
@@ -29,6 +32,7 @@ export default function ItemReferenceTab({
       <div className="tab-actions">
         {onEdit && <button type="button" className="btn" onClick={onEdit}>Bearbeiten</button>}
         {shopwareEnabled && onShopStatus && <button type="button" className="btn" onClick={onShopStatus}>Shopartikel</button>}
+        {onDelete && <button type="button" className="btn btn--danger" onClick={onDelete}>Referenz löschen</button>}
       </div>
       <div className="card">
       <div className="item-reference-tab__badges">

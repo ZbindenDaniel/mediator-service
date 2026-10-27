@@ -352,10 +352,11 @@
      nightly-erp, shopware, printer queues/settings); `requireAdminAuth` admits `super` for the
      operational ones; `GET /api/admin/access` drives the page tier split. **Phase 4 essentially
      done** (role model + shelf gate #1013, reference curation #1014, admin split #1015); `super`
-     user-management + self-registration ruled out for now (manual onboarding). **FE follow-ups:**
-     delete-reference button placement; hide the shelf-create control for operators. Shop cleanup on
-     ref-delete deferred. **Operator action pending:** host-verify the forward-auth proxy before
-     dropping Basic Auth. Open: intake station
+     user-management + self-registration ruled out for now (manual onboarding). **FE polish ✅ (#1016):**
+     "Referenz löschen" button on the reference tab (tenant-admin only, `canDeleteReference`, 409
+     in-use handling); shelf-create already operator-invisible via the M1 panel split. **Phase 4
+     complete.** Shop cleanup on ref-delete still deferred. **Operator action pending:** host-verify
+     the forward-auth proxy before dropping Basic Auth. Open: intake station
      rows get `defaultTenant` (per-station tenant?); SPA has no graceful
      session-expiry handling; (4) tenant/user
      admin + self-registration. Auth mechanism decided
