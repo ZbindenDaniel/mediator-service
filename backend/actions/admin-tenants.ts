@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { requireAdminAuth } from '../utils/admin-auth';
+import { requireSuperAdminAuth } from '../utils/admin-auth';
 import { loadConfigTenantGroupMap } from '../lib/identity';
 import {
   EMAIL_PATTERN,
@@ -128,7 +128,7 @@ const action = defineHttpAction({
     (TENANT_ROUTE.test(p) && ['GET', 'POST', 'PUT'].includes(method))
     || (SITE_ROUTE.test(p) && ['POST', 'PUT', 'DELETE'].includes(method)),
   async handle(req: IncomingMessage, res: ServerResponse) {
-    if (!requireAdminAuth(req, res)) return;
+    if (!requireSuperAdminAuth(req, res)) return;
     const url = (req.url || '').split('?')[0];
     const method = req.method || 'GET';
     const tenantMatch = TENANT_ROUTE.exec(url);

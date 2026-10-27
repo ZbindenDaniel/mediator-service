@@ -294,12 +294,17 @@ gate added so a tenant admin in the panel can't reach them).
 
 ### Resolved 2026-10-27 (both forks):
 
-**M1 — Admin panel split (RESOLVED): all deployment-wide controls are super-admin-only.** The
-super-admin-only set is everything that affects *every* org — orgs, taxonomy, feature flags,
-Shopware/ERP wiring, printer config. Tenant admins get the operational/status cards (print queues,
-system status, nightly-sync view, etc.). *To build:* admit `super` to `requireAdminAuth`; add a
-`requireSuperAdminAuth` (platform-admin / ADMIN_SECRET) and apply it to the deployment-wide admin
-endpoints; split the admin page UI the same way.
+**M1 — Admin panel split (RESOLVED + ✅ built #1015): all deployment-wide controls are
+super-admin-only.** `requireAdminAuth` now admits `super` (tenant admin); a new
+`requireSuperAdminAuth` (platform-admin / ADMIN_SECRET / local-dev) gates the deployment-wide
+endpoints — `admin-config`, `admin-contracts`, `admin-taxonomy`, `admin-tenants` (orgs),
+`admin-nightly-erp-sync`, `admin-shopware`, `admin-printer-queues`, `admin-printer-settings`; the
+operational ones (`admin-label-queue`, `admin-agentic-dispatch`, system status) stay at the
+tenant-admin tier. Feature flags are host config (`FEATURES`/`FEATURES_FILE`), no endpoint to gate.
+The admin page probes the new `GET /api/admin/access` (tenant-admin tier) for its `tier`, admits
+tenant admins, and shows the super-admin-only sections (orgs + taxonomy nav, printer config, ERP,
+Shopware) only when `tier === 'super-admin'`. The break-glass password path is unchanged (token =
+super-admin).
 
 **M2 — Reference edit/delete (RESOLVED + ✅ built #1014):** tenant admins edit/delete **any**
 reference (shared-catalogue curation); operators keep editing their **own org's** references;

@@ -60,3 +60,48 @@ describe('requireAdminAuth', () => {
     });
   });
 });
+
+// Two-tier split (§7 M1): tenant admins reach the panel/operational endpoints; only super admins
+// reach the deployment-wide ones. Needs a map that defines a tenant with a superGroup.
+function loadTierGuards(adminSecret: string) {
+  const prev = { secret: process.env.ADMIN_SECRET, map: process.env.TENANT_GROUP_MAP };
+  process.env.ADMIN_SECRET = adminSecret;
+  process.env.TENANT_GROUP_MAP = JSON.stringify({
+    platformAdminGroup: 'mediator-admin',
+    tenants: [{ id: 'revamp', group: 'tenant-revamp', superGroup: 'tenant-revamp-admin' }],
+    defaultTenant: null
+  });
+  let mod!: { requireAdminAuth: any; requireSuperAdminAuth: any };
+  jest.isolateModules(() => { mod = require('../admin-auth'); });
+  // Restore ADMIN_SECRET now (captured at module load), but leave the map set: the isolated identity
+  // module reads it lazily at call time, i.e. during the it() blocks that run after this helper.
+  process.env.ADMIN_SECRET = prev.secret;
+  return mod;
+}
+
+describe('admin tiers — requireAdminAuth vs requireSuperAdminAuth', () => {
+  const { requireAdminAuth: adminGuard, requireSuperAdminAuth: superGuard } = loadTierGuards('s3cret');
+  const platformAdmin = { 'x-authentik-username': 'carol', 'x-authentik-groups': 'mediator-admin' };
+  const tenantAdmin = { 'x-authentik-username': 'bob', 'x-authentik-groups': 'tenant-revamp|tenant-revamp-admin' };
+  const operator = { 'x-authentik-username': 'alice', 'x-authentik-groups': 'tenant-revamp' };
+
+  it('platform admin passes both tiers', () => {
+    expect(call(adminGuard, platformAdmin).ok).toBe(true);
+    expect(call(superGuard, platformAdmin).ok).toBe(true);
+  });
+
+  it('tenant admin reaches the panel but not the deployment-wide endpoints', () => {
+    expect(call(adminGuard, tenantAdmin).ok).toBe(true);
+    expect(call(superGuard, tenantAdmin)).toEqual({ ok: false, status: 403 });
+  });
+
+  it('operator is forbidden from both', () => {
+    expect(call(adminGuard, operator)).toEqual({ ok: false, status: 403 });
+    expect(call(superGuard, operator)).toEqual({ ok: false, status: 403 });
+  });
+
+  it('the break-glass bearer passes both tiers', () => {
+    expect(call(adminGuard, { authorization: 'Bearer s3cret' }).ok).toBe(true);
+    expect(call(superGuard, { authorization: 'Bearer s3cret' }).ok).toBe(true);
+  });
+});

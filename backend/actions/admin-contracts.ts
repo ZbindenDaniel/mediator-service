@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import fs from 'fs';
 import path from 'path';
 import { defineHttpAction } from './index';
-import { requireAdminAuth } from '../utils/admin-auth';
+import { requireSuperAdminAuth } from '../utils/admin-auth';
 import {
   isContractOverlayEnabled,
   contractOverlayWritePath
@@ -66,7 +66,7 @@ const action = defineHttpAction({
     (p === '/api/admin/contracts' && method === 'GET') ||
     (UPLOAD_ROUTE.test(p) && (method === 'PUT' || method === 'DELETE')),
   async handle(req: IncomingMessage, res: ServerResponse) {
-    if (!requireAdminAuth(req, res)) return;
+    if (!requireSuperAdminAuth(req, res)) return;
     const url = (req.url || '').split('?')[0];
     const method = req.method || 'GET';
 

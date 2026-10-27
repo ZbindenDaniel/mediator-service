@@ -347,11 +347,15 @@
      `canManageShelves`). No-work confirms: within-org deletion ungated (operators remove
      own instances), onboarding manual, grey zone stays shared. Reference curation ✅ (#1014, §7 M2 resolved):
      operators edit own-org refs, tenant-admins edit/delete any; `POST /api/references/<nr>/delete`
-     with 409 in-use guard. **Still to wire (M1 resolved — all deployment-wide controls are
-     super-admin-only):** admit `super` to `requireAdminAuth`, add `requireSuperAdminAuth` for the
-     deployment-wide endpoints (orgs, taxonomy, feature-flags, ERP/Shopware, printers), split the
-     admin page UI. FE follow-ups: delete-reference button placement; hide the shelf-create control
-     for operators. Shop cleanup on ref-delete deferred. Open: intake station
+     with 409 in-use guard. Admin-panel split ✅ (#1015, §7 M1):
+     `requireSuperAdminAuth` gates the deployment-wide endpoints (config, contracts, taxonomy, orgs,
+     nightly-erp, shopware, printer queues/settings); `requireAdminAuth` admits `super` for the
+     operational ones; `GET /api/admin/access` drives the page tier split. **Phase 4 essentially
+     done** (role model + shelf gate #1013, reference curation #1014, admin split #1015); `super`
+     user-management + self-registration ruled out for now (manual onboarding). **FE follow-ups:**
+     delete-reference button placement; hide the shelf-create control for operators. Shop cleanup on
+     ref-delete deferred. **Operator action pending:** host-verify the forward-auth proxy before
+     dropping Basic Auth. Open: intake station
      rows get `defaultTenant` (per-station tenant?); SPA has no graceful
      session-expiry handling; (4) tenant/user
      admin + self-registration. Auth mechanism decided

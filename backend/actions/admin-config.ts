@@ -7,7 +7,7 @@ import {
   ERP_IMPORT_URL,
   SHOPWARE_SYNC_ENABLED,
 } from '../config';
-import { requireAdminAuth } from '../utils/admin-auth';
+import { requireSuperAdminAuth } from '../utils/admin-auth';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -20,7 +20,7 @@ const action = defineHttpAction({
   appliesTo: () => false,
   matches: (path, method) => path === '/api/admin/config' && method === 'GET',
   handle(req: IncomingMessage, res: ServerResponse) {
-    if (!requireAdminAuth(req, res)) return;
+    if (!requireSuperAdminAuth(req, res)) return;
     sendJson(res, 200, {
       mediaStorageMode: MEDIA_STORAGE_MODE,
       erpSyncEnabled: ERP_SYNC_ENABLED,

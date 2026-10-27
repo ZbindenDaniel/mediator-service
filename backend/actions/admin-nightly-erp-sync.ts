@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
-import { requireAdminAuth } from '../utils/admin-auth';
+import { requireSuperAdminAuth } from '../utils/admin-auth';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -15,7 +15,7 @@ const action = defineHttpAction({
   matches: (path, method) =>
     path === '/api/admin/nightly-erp-sync' && (method === 'GET' || method === 'POST'),
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
-    if (!requireAdminAuth(req, res)) return;
+    if (!requireSuperAdminAuth(req, res)) return;
 
     if (req.method === 'GET') {
       const value = await ctx.getSystemSetting('erp_nightly_sync_enabled');
