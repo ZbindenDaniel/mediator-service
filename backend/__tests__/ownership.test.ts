@@ -1,4 +1,4 @@
-import { canCreate, canManageShelves, canWrite, currentIdentity, isSuperAdmin, isTenantAdmin, ownerOf, runWithIdentity, writeScopeParams } from '../lib/ownership';
+import { canCreate, canDeleteReference, canEditReference, canManageShelves, canWrite, currentIdentity, isSuperAdmin, isTenantAdmin, ownerOf, refWriteScopeParams, runWithIdentity, writeScopeParams } from '../lib/ownership';
 import { resetTenantGroupMapCache } from '../lib/identity';
 import type { RequestIdentity } from '../lib/identity';
 
@@ -76,6 +76,38 @@ describe('role tiers (operator < tenant-admin < super-admin)', () => {
     expect(canManageShelves(anon)).toBe(true);        // live system (no login) unchanged
     expect(canManageShelves(orgA)).toBe(false);       // operator
     expect(canManageShelves(noOrg)).toBe(false);
+  });
+
+  it('reference editing: operators own-org only, tenant admins any reference (§7 M2)', () => {
+    withDefaultTenant(null, () => {
+      // operator (org A): own ref yes, another org's ref no
+      expect(canEditReference(orgA, 'a')).toBe(true);
+      expect(canEditReference(orgA, 'b')).toBe(false);
+      // tenant admin of org A: any reference, including org B's
+      expect(canEditReference(tenantAdmin, 'a')).toBe(true);
+      expect(canEditReference(tenantAdmin, 'b')).toBe(true);
+      // unrestricted (no login) edits anything; no-org edits nothing
+      expect(canEditReference(anon, 'b')).toBe(true);
+      expect(canEditReference(noOrg, 'b')).toBe(false);
+    });
+  });
+
+  it('reference deletion is tenant-admin+ only, any reference; operators never', () => {
+    expect(canDeleteReference(tenantAdmin)).toBe(true);
+    expect(canDeleteReference(admin)).toBe(true);
+    expect(canDeleteReference(anon)).toBe(true);       // live system unchanged
+    expect(canDeleteReference(orgA)).toBe(false);      // operator
+    expect(canDeleteReference(noOrg)).toBe(false);
+  });
+
+  it('refWriteScopeParams lets a tenant admin bypass the owner check (unlike writeScopeParams)', async () => {
+    await runWithIdentity(tenantAdmin, () => {
+      expect(refWriteScopeParams()[0]).toBe(true);     // unrestricted-for-refs
+      expect(writeScopeParams()[0]).toBe(false);       // but not for items/boxes
+    });
+    await runWithIdentity(orgA, () => {
+      expect(refWriteScopeParams()[0]).toBe(false);    // operator still owner-scoped for refs
+    });
   });
 });
 

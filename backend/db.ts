@@ -7,7 +7,7 @@ import { getFilterableSpecKeys } from './contracts/registry';
 import { resolveShopwareImageInputs } from './lib/shopware-media';
 import type { ShopwareImageInput } from './shopware/adminClient';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
-import { writeScopeParams } from './lib/ownership';
+import { writeScopeParams, refWriteScopeParams } from './lib/ownership';
 import { redactItemRows, visibleBoxRows, isBoxVisible } from './lib/redaction';
 import type {
   ShopwareSyncQueueEntry,
@@ -1086,7 +1086,8 @@ function warnIfBlocked(rowCount: number, kind: string, id: unknown): void {
 }
 
 async function upsertItemReferenceRow(row: ItemRefRow): Promise<void> {
-  const [unrestricted, requesterTenant, defaultOrg] = writeScopeParams();
+  // Tenant admins may curate any reference (§7 M2), so the reference safety net uses the ref scope.
+  const [unrestricted, requesterTenant, defaultOrg] = refWriteScopeParams();
   const n = await execute(UPSERT_ITEM_REFERENCE_SQL, [
     row.Artikel_Nummer, row.Suchbegriff, row.Grafikname, row.ImageNames, row.Artikelbeschreibung,
     row.Verkaufspreis, row.Kurzbeschreibung, row.Langtext, row.Hersteller,
@@ -1123,6 +1124,23 @@ export async function persistItemReference(ref: ItemRef): Promise<void> {
     console.error('Failed to persist item reference', { artikelNummer: ref.Artikel_Nummer, error: err });
     throw err;
   }
+}
+
+/** Live instances of a reference — the in-use guard for reference deletion (§7 M2c). */
+export async function countInstancesForReference(artikelNummer: string): Promise<number> {
+  const row = await queryOne<{ c: string }>(
+    `SELECT COUNT(*) AS c FROM items WHERE "Artikel_Nummer" = $1`, [artikelNummer]
+  );
+  return row ? parseInt(row.c, 10) || 0 : 0;
+}
+
+/**
+ * Delete a catalogue reference. Caller must enforce the in-use guard (no instances) and the
+ * tenant-admin role first; this is the raw delete. FK cascades clean up the reference's own metadata
+ * (ref relations, agentic runs, ref-scoped quality/assembly); with no instances, nothing is orphaned.
+ */
+export async function deleteItemReference(artikelNummer: string): Promise<void> {
+  await execute(`DELETE FROM item_refs WHERE "Artikel_Nummer" = $1`, [artikelNummer]);
 }
 
 export async function persistItemInstance(instance: ItemInstance): Promise<void> {

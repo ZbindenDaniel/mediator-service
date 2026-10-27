@@ -69,6 +69,21 @@ export function canManageShelves(identity: RequestIdentity | null | undefined): 
   return isUnrestricted(identity) || isTenantAdmin(identity);
 }
 
+/**
+ * May this identity edit a catalogue reference owned by `refOwner`? Operators edit only their own
+ * org's references (as before); tenant admins curate **any** reference in the shared catalogue
+ * (§7 M2). Reads stay global regardless.
+ */
+export function canEditReference(identity: RequestIdentity | null | undefined, refOwner: string | null | undefined): boolean {
+  if (isUnrestricted(identity) || isTenantAdmin(identity)) return true;
+  return canWrite(identity, refOwner); // operator: own org only
+}
+
+/** Deleting a catalogue reference is a tenant-admin capability (§7 Q1) — any reference; operators never delete references. */
+export function canDeleteReference(identity: RequestIdentity | null | undefined): boolean {
+  return isUnrestricted(identity) || isTenantAdmin(identity);
+}
+
 // --- Request context -------------------------------------------------------------------------
 // The DB layer needs the requester to guard its shared upserts (catalogue entries are written from
 // a dozen paths). AsyncLocalStorage carries it from the dispatcher without threading an identity
@@ -91,4 +106,13 @@ export function currentIdentity(): RequestIdentity | null {
 export function writeScopeParams(): [boolean, string | null, string | null] {
   const identity = currentIdentity();
   return [isUnrestricted(identity), identity?.tenant ?? null, defaultTenant()];
+}
+
+/**
+ * Like `writeScopeParams`, but for the reference-upsert safety net: tenant admins bypass the owner
+ * check too, because they may curate any reference (§7 M2). Operators still match only own-org refs.
+ */
+export function refWriteScopeParams(): [boolean, string | null, string | null] {
+  const identity = currentIdentity();
+  return [isUnrestricted(identity) || isTenantAdmin(identity), identity?.tenant ?? null, defaultTenant()];
 }

@@ -1,7 +1,13 @@
 import type { ServerResponse } from 'http';
 import type { RequestIdentity } from '../lib/identity';
-import { canCreate, canWrite, isUnrestricted } from '../lib/ownership';
+import { canCreate, canEditReference, canWrite, isUnrestricted } from '../lib/ownership';
 import { getItemOwners, getRefOwners, getRowOwner } from '../db';
+
+// Reference writes follow the reference rule (operators: own org; tenant admins: any — §7 M2);
+// item/box writes follow plain ownership. One place so the guards and the message stay aligned.
+function mayWrite(identity: RequestIdentity | undefined, kind: 'item' | 'box' | 'ref', owner: string | null | undefined): boolean {
+  return kind === 'ref' ? canEditReference(identity, owner) : canWrite(identity, owner);
+}
 
 // Handler-level tenancy checks (Phase 3): reject writes to another org's rows up front with a clear
 // 403. The DB upserts carry the same rule as a safety net; this layer exists for the message and
@@ -24,7 +30,7 @@ export async function guardWrite(ctx: Ctx, res: ServerResponse, kind: 'item' | '
   // so the live system pays no extra query per write.
   if (!id || isUnrestricted(ctx?.identity)) return true;
   const owner = await getRowOwner(kind, id);
-  if (owner === undefined || canWrite(ctx?.identity, owner)) return true;
+  if (owner === undefined || mayWrite(ctx?.identity, kind, owner)) return true;
   return forbid(res, FOREIGN, { kind, id });
 }
 
@@ -33,7 +39,7 @@ export async function guardWriteMany(ctx: Ctx, res: ServerResponse, kind: 'item'
   const unique = [...new Set(ids.filter(Boolean))];
   if (unique.length === 0 || isUnrestricted(ctx?.identity)) return true;
   const owners = kind === 'item' ? await getItemOwners(unique) : await getRefOwners(unique);
-  const blocked = unique.filter((id) => owners.has(id) && !canWrite(ctx?.identity, owners.get(id)));
+  const blocked = unique.filter((id) => owners.has(id) && !mayWrite(ctx?.identity, kind, owners.get(id)));
   if (blocked.length === 0) return true;
   return forbid(res, FOREIGN, { kind, ids: blocked });
 }

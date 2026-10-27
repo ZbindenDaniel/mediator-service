@@ -345,12 +345,13 @@
      three cumulative tiers operator (`normal`) < tenant-admin (`super`) < super-admin
      (`platform-admin`). Shelf creation gated to tenant-admin+ ✅ (#1013,
      `canManageShelves`). No-work confirms: within-org deletion ungated (operators remove
-     own instances), onboarding manual, grey zone stays shared. **Still to wire:** admit
-     `super` to the admin panel with orgs+taxonomy super-admin-only; reference edit/delete
-     gating. **Open forks (M1/M2 §7):** exact super-admin-only admin set (orgs+taxonomy only,
-     or also feature-flags/ERP/Shopware/printers?); reference scope (own-org vs cross-org,
-     whether operators keep own-ref editing) + reference deletion is a **new feature** (not
-     built; needs an in-use guard). Open: intake station
+     own instances), onboarding manual, grey zone stays shared. Reference curation ✅ (#1014, §7 M2 resolved):
+     operators edit own-org refs, tenant-admins edit/delete any; `POST /api/references/<nr>/delete`
+     with 409 in-use guard. **Still to wire (M1 resolved — all deployment-wide controls are
+     super-admin-only):** admit `super` to `requireAdminAuth`, add `requireSuperAdminAuth` for the
+     deployment-wide endpoints (orgs, taxonomy, feature-flags, ERP/Shopware, printers), split the
+     admin page UI. FE follow-ups: delete-reference button placement; hide the shelf-create control
+     for operators. Shop cleanup on ref-delete deferred. Open: intake station
      rows get `defaultTenant` (per-station tenant?); SPA has no graceful
      session-expiry handling; (4) tenant/user
      admin + self-registration. Auth mechanism decided

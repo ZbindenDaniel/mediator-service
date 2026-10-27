@@ -30,7 +30,7 @@ import { calculateCo2Impact } from '../lib/co2Calculator';
 import { query as dbQuery, withTransaction } from '../db-client';
 import { guardWrite } from '../utils/write-guard';
 import { redactItemRows, redactPeople } from '../lib/redaction';
-import { canWrite, currentIdentity, isUnrestricted } from '../lib/ownership';
+import { canEditReference, canWrite, currentIdentity, isUnrestricted } from '../lib/ownership';
 import { getRowOwner } from '../db';
 
 const MEDIA_PREFIX = '/media/';
@@ -613,7 +613,8 @@ async function resolveItemPermissions(
   if (isUnrestricted(identity)) return { canEditItem: true, canEditReference: true };
   const nr = (artikelNummer ?? '').trim();
   const refOwner = nr ? await getRowOwner('ref', nr) : null;
-  return { canEditItem: canWrite(identity, itemTenant), canEditReference: canWrite(identity, refOwner) };
+  // Operators edit their own org's references; tenant admins curate any reference (§7 M2).
+  return { canEditItem: canWrite(identity, itemTenant), canEditReference: canEditReference(identity, refOwner) };
 }
 
 const action = defineHttpAction({

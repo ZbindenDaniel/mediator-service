@@ -292,16 +292,17 @@ unrestricted system + platform admins).
 admin endpoints to `platform-admin` only (orgs already are; taxonomy endpoints need the `super-admin`
 gate added so a tenant admin in the panel can't reach them).
 
-### Open — two sub-points that still fork the implementation:
+### Resolved 2026-10-27 (both forks):
 
-**M1 — Admin panel split for tenant admins.** They get panel access, but orgs + taxonomy are
-super-admin-only. What is the exact super-admin-only set — just {orgs, taxonomy}, or also the other
-*deployment-wide* controls (feature flags, Shopware/ERP wiring, printer config), since those affect
-every org, not one tenant's warehouse?
+**M1 — Admin panel split (RESOLVED): all deployment-wide controls are super-admin-only.** The
+super-admin-only set is everything that affects *every* org — orgs, taxonomy, feature flags,
+Shopware/ERP wiring, printer config. Tenant admins get the operational/status cards (print queues,
+system status, nightly-sync view, etc.). *To build:* admit `super` to `requireAdminAuth`; add a
+`requireSuperAdminAuth` (platform-admin / ADMIN_SECRET) and apply it to the deployment-wide admin
+endpoints; split the admin page UI the same way.
 
-**M2 — Reference edit/delete scope + building deletion.** Q5 makes reference editing a tenant-admin
-capability. Open: (a) may a tenant admin edit/delete **any** reference (shared-catalogue curation) or
-**only its own org's** (`ContributedByTenant`)? (b) do operators keep editing their **own org's**
-references (as today), or is all reference editing now tenant-admin-only? (c) **reference deletion is
-not built today** (`delete-entity` handles only Item/Box) — build it now (with an in-use guard that
-blocks deleting a reference that still has instances), or defer deletion and gate editing only?
+**M2 — Reference edit/delete (RESOLVED + ✅ built #1014):** tenant admins edit/delete **any**
+reference (shared-catalogue curation); operators keep editing their **own org's** references;
+operators never delete references. Reference **deletion built now** with an in-use guard (409 while
+instances exist). Shop cleanup on delete deferred. The only remaining M2 piece is the FE
+delete-reference button placement (endpoint `POST /api/references/<nr>/delete` is ready).

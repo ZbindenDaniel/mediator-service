@@ -52,6 +52,8 @@ import {
   boxesByLocation,
   getBox,
   getItemReference,
+  countInstancesForReference,
+  deleteItemReference,
   listBoxes,
   upsertAgenticRun,
   getAgenticRun,
@@ -483,6 +485,8 @@ type ActionContext = {
   boxesByLocation: typeof boxesByLocation;
   getBox: typeof getBox;
   getItemReference: typeof getItemReference;
+  countInstancesForReference: typeof countInstancesForReference;
+  deleteItemReference: typeof deleteItemReference;
   listBoxes: typeof listBoxes;
   getItem: typeof getItem;
   decrementItemStock: typeof decrementItemStock;
@@ -1072,6 +1076,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           boxesByLocation,
           getBox,
           getItemReference,
+          countInstancesForReference,
+          deleteItemReference,
           listBoxes,
           upsertAgenticRun,
           getAgenticRun,
