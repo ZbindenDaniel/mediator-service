@@ -242,7 +242,7 @@ The "Abschliessen" dialog is the same for all use cases:
 - `confirmedTargetId` is the shelf ID the employee actually chose (scanned or selected).
 - If `confirmedTargetId` equals `TargetId`: normal completion, `ActualTargetId` stays null.
 - If they differ: override is accepted and `ActualTargetId = confirmedTargetId` is persisted. The mismatch is logged with structured context (`plannedTargetId`, `actualTargetId`, `actor`). No 400 error — the frontend already required explicit confirmation before sending.
-- **Stub auto-resolve:** after relocating items, `complete-transport` resolves all active `box_stubs` records for the source shelf (`SourceId` or the shelf containing the source box) by setting `IsActive = 0`, `ResolvedAt = now`, `ResolvedBy = actor`. See `docs/PLANNING_STUB_BOXES.md` for stub schema.
+- **Stub auto-resolve:** after relocating items, `complete-transport` resolves all active `box_stubs` records for the source shelf (`SourceId` or the shelf containing the source box) by setting `IsActive = 0`, `ResolvedAt = now`, `ResolvedBy = actor`. See `docs/detailed/stubs.md` for stub schema.
 
 **Shelf list with counts** (`GET /api/boxes?type=shelf&counts=1`):
 

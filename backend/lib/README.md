@@ -27,4 +27,4 @@ Reusable domain logic only. HTTP request/response handling belongs in `../action
 
 ## Rules
 - Functions here are stateless where possible — take inputs, return outputs
-- No direct Express `req`/`res` imports — this layer is HTTP-agnostic
+- No `req`/`res` (HTTP) imports — this layer is HTTP-agnostic

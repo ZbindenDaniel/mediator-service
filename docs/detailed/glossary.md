@@ -72,6 +72,3 @@ Terms below map directly to model fields and should stay verbatim in docs/review
 - Prefer canonical terms in docs, code reviews, issue comments, and agent prompts.
 - If a legacy synonym appears in code, mention canonical + legacy once (for migration clarity), then continue with canonical terminology.
 - When proposing schema changes, re-check this glossary against `models/` before merging to avoid accidental field renames.
-
-## Open questions / TODO
-- [ ] TODO(glossary): Add frontend component-level term mapping examples after next UI copy refresh.

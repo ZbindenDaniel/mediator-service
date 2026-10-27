@@ -13,7 +13,7 @@ CUPS print server Docker image — provides label printing for Brother QL and ot
 
 ## Relations
 - Used by: `backend/actions/admin-printer-queues.ts`, `backend/actions/printer-status.ts`
-- Backend communicates via: `backend/lib/cups-client.ts` (CUPS HTTP API on port 631)
+- Backend communicates via: `backend/utils/cups-client.ts` (wraps `lp`/`lpstat`/`lpadmin`)
 
 ## Scope
 Print server only. Label content and PDF rendering live in `backend/labelpdf.ts` and `frontend/public/print/`. This container receives rendered PDFs via `lp`.

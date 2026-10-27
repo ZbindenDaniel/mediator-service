@@ -1,167 +1,100 @@
-# Architecture Outline
+# Architecture
 
-This document details the structure and data flow of the mediator service across backend services, frontend UI, shared models, and legacy assets.
+How the pieces fit together. Per-domain detail lives in the runbooks under
+[`detailed/`](detailed/README.md); folder-level rules and decisions in each folder's `README.md`.
 
-See the detailed-docs index for deep-dive runbooks and implementation notes: [`docs/detailed/README.md`](./detailed/README.md).
+```
+ browser (React SPA, scanners)        intake station (netboot)        Brother QL printers
+            │  /api/*                            │ /api/intake/*                ▲
+            ▼                                    ▼                              │ lp
+ ┌──────────────────────────── backend (Node http) ───────────────────────┐   CUPS
+ │ server.ts → action loader → actions/<endpoint>.ts → db.ts / lib/ / agentic/ │──┘
+ │ background loops: print queue · agentic dispatcher · Shopware worker ·     │
+ │                   nightly ERP sync · CSV inbox watcher                     │
+ └───────┬───────────────────────┬──────────────────────┬─────────────────────┘
+         ▼                       ▼                      ▼
+     Postgres            media (local / WebDAV)    external: Ollama/OpenAI, Tavily,
+                                                   kivitendo ERP, Shopware
+```
 
-_Diagram follow-up:_ Import, agentic, and printing sequence diagrams remain outstanding. Track this under the `docs/` backlog — see [`docs/detailed/diagrams/README.md`](./detailed/diagrams/README.md).
+## Principles
 
+- **One action per endpoint.** `backend/server.ts` loads every module in `backend/actions/` and routes
+  requests to it. Actions validate, delegate to `db.ts`/`lib/`/`agentic/`, log, and shape errors.
+  No web framework — plain `http`/`https` servers.
+- **Shared types.** `models/` is imported by backend and frontend alike, so a contract change breaks
+  both sides at compile time.
+- **Contracts as data.** Quality questions, required spec fields, assembly slots and CO₂ thresholds
+  are JSON files in `contracts/`, loaded at runtime by `backend/contracts/` and served to the UI and
+  the intake station. Adding a subcategory contract needs no code change.
+- **References vs instances.** `item_refs` (one row per Artikel-Nummer) holds product data and is
+  what the agentic pipeline enriches and what ERP/Shopware receive; `items` (one row per unit, keyed by
+  `ItemUUID`) holds stock, location, identifiers and condition.
+- **Everything persistent is in Postgres** (`DATABASE_URL` required). Background queues (print jobs,
+  agentic runs, Shopware sync) are tables, claimed with `FOR UPDATE SKIP LOCKED`, so several app
+  instances can share one database (see *Running several instances* below).
+- **Schema is created and migrated in code.** `initDb()` in `backend/db.ts` runs `CREATE … IF NOT EXISTS`
+  then additive `ALTER … ADD COLUMN IF NOT EXISTS` on every start. Indexes on added columns must come
+  after the `ALTER` that adds them.
 
-## Mediator Architecture Principles
-- **Action-first orchestration** – Every API route resolves to a module in `backend/actions/`. Actions own validation,
-  transaction scope, audit logging, and error shaping so behaviour stays consistent across the service.
-- **Shared contracts** – Models in `models/` define items, boxes, and agentic metadata. Both backend and frontend import these
-  TypeScript types directly to prevent drift.
-- **Structured observability** – Backend modules use structured `console`-compatible logging and consistent context payloads, while the frontend relies on `frontend/src/utils/logger.ts` wrappers. Actions wrap risky operations in `try/catch` blocks that surface context and rethrow typed errors for the HTTP layer; frontend components log async effects (agentic polling, print triggers, scanner flows).
-- **Separation of rendering** – Printing flows reuse the canonical HTML template at `frontend/public/print/62x100.html`. The
-  backend renders this template for both preview and printer jobs, avoiding duplication and keeping box/item labels in sync.
-- **Progressive automation** – Agentic enrichment runs asynchronously, persisting state transitions so manual fallbacks remain
-  available. Background workers build on the same event log to integrate with future services (e.g., Shopware).
+## Backend
 
-## Backend (`backend/`)
+| Path | Role |
+|---|---|
+| `server.ts` | HTTP(S) server, action loader, static UI, help pages, background loops |
+| `config.ts` | Environment parsing ([ENVIRONMENT.md](ENVIRONMENT.md)) |
+| `db-client.ts` / `db.ts` | Pool + `query`/`withTransaction`; schema init and persistence helpers |
+| `actions/` | One file per endpoint |
+| `agentic/` | Enrichment pipeline: queue, invoker, flow stages, prompts, tools |
+| `lib/` | Domain helpers: media, external docs, quality, langtext, CO₂, components, labels |
+| `importer.ts`, `ops/` | CSV ingestion pipeline |
+| `print.ts`, `labelpdf.ts` | Label rendering (HTML template → PDF via Chromium) and `lp` dispatch |
+| `shopware/`, `workers/` | Shopware clients and the sync-queue worker |
+| `scripts/erp-sync.sh` | kivitendo CSV import, invoked by `/api/sync/erp` |
 
-### Runtime & Framework
-- Node.js with TypeScript for API handlers, workers, and supporting utilities.
-- Actions are dynamically loaded from the `actions/` directory and mapped to HTTP routes via the central loader in `server.ts`.
-- Error handling centralises around the loader: actions throw typed `HttpError` variants while the loader logs structured
-  metadata before formatting responses.
+### Background loops (started in `server.ts`)
 
-### Key Directories
-- `actions/` – request handlers grouped by concern:
-  - **Agentic flows**: `agentic-status`, `agentic-restart`, `agentic-cancel`, `agentic-bulk-queue`, `agentic-trigger`, and `agentic-trigger-failure` coordinate AI-assisted enrichment, queueing, and fallback handling.
-  - **Inventory operations**: `create-box`, `move-box`, `move-item`, `remove-item`, `delete-entity`, and `save-item` enforce transactional updates for boxes and items.
-  - **Data services**: `overview`, `list-boxes`, `list-items`, `box-detail`, `recent-activities`, `search`, and `material-number` expose read models for the UI.
-  - **Import/Export**: `import-item`, `csv-import`, `validate-csv`, and `export-items` handle CSV ingestion, validation with aggregate counts, and export regimes used by manual and ERP sync flows.
-  - **Printing & status**: `print-box`, `print-item`, `print-label`, `printer-status`, `qr-scan`, and `health` power label rendering, printer diagnostics, and QR logging.
-  - **Stub management**: `list-stubs` and `create-stub` support the `box_stubs` table — lightweight records that a shelf has uncatalogued physical content (see [`docs/detailed/stubs.md`](detailed/stubs.md)).
-  - **Quality review**: `quality-review` persists item condition assessments to `quality_assessments` (columns: `responses`, `contract_version`, `derived_specs`). Versioned JSON contracts in `contracts/quality/` drive the questionnaire; derived specs are merged into `ItemRef.Langtext` automatically after review.
-  - **Printing actor attribution** – Interactive print endpoints (`/api/print/box/:id`, `/api/print/item/:id`) now require a JSON body containing the triggering `actor` so audit logs capture the human operator. Legacy surfaces still POST without an actor:
-    - The queued worker in `backend/server.ts` dispatches labels automatically when CSV imports enqueue jobs; no actor metadata is available for those background tasks.
-    - The legacy admin card rendered via `backend/actions/print-label.ts` issues fetch requests without a JSON payload (and without sanitising the preview link per the existing TODO). Follow-up work should align that UI with the actor prompt used in the React frontend.
-- `agentic/` – extraction/categorization/pricing/review orchestration and prompt/flow utilities.
-- `ops/` – reusable operation helpers and service abstractions for database and workflow tasks.
-- `shopware/` + `workers/` – queued Shopware sync processing and background job execution.
-- `config.ts` – central configuration surface for environment and runtime toggles.
-- `db.ts` – database connection bootstrap and helper exports.
-- `lib/` + `utils/` – shared helpers (langtext/media/item id/grouping/label utilities) used across actions to normalize persistence and formatting logic.
-- `server.ts` – HTTP entry point wiring the dynamic action loader, static asset serving, and API error handling.
+| Loop | What it does |
+|---|---|
+| Print worker (750 ms) | Sends queued label jobs to CUPS |
+| Agentic dispatcher | Promotes `queued` runs to `running` up to the concurrency cap; resumes interrupted runs on start; optional keep-busy feeder and `AUTO_REWORK` idle sweeper |
+| Shopware worker | Only with `SHOPWARE_SYNC_ENABLED`; pushes queued product/stock changes |
+| Nightly ERP sync (60 s poll) | Once per UTC day at `ERP_NIGHTLY_SYNC_HOUR`, if enabled in `system_settings`; see [nightly-erp-sync](detailed/nightly-erp-sync.md) |
+| Inbox watcher | Imports CSVs dropped into `INBOX_DIR` |
 
-### Logging & Error Handling Expectations
-- Actions log at `info` for state transitions (e.g., move, remove, import) and `warn`/`error` for failures, usually with scoped context payloads (route, identifiers, phase) to support operations and incident triage.
-- Database mutations execute inside `try/catch` blocks. Failures trigger rollbacks, emit structured errors, and surface
-  user-friendly messages to the frontend.
-- Printing and external integrations guard shell or HTTP calls with retries and detailed logging to ease on-call diagnosis.
+`system_settings` is a key/value table for runtime toggles that admins flip in the UI (nightly sync,
+keep-busy feeder, printer settings). Add new toggles there rather than new tables.
 
-### Responsibilities
-- Maintain transactional data integrity when moving, importing, or deleting boxes and items.
-- Persist agentic run metadata, image uploads, and QR scan events.
-- Provide HTML payloads and JSON data for printable labels while delegating rendering to frontend templates.
+### Running several instances
 
-## Frontend (`frontend/`)
+Several instances on one database are safe: each queue row is claimed atomically, so nothing is
+processed twice. Caveats:
 
-### Runtime & Framework
-- React with TypeScript bundled via `esbuild`.
-- Routing handled by `react-router-dom` and centralised in `frontend/src/index.tsx`.
-- Shared hooks and context providers (e.g., loading states, agentic polling) live alongside components to keep side effects
-  encapsulated.
+- **Labels print wherever they're claimed.** Every instance polls `label_queue` and prints to its own
+  CUPS queue; a job can't be targeted at a printer or location yet.
+- **The agentic concurrency cap is per instance**, so the effective global cap is N × cap.
+- Instances have no identity, registration or liveness tracking.
 
-### Directory Structure
-- `public/` – static assets (`index.html`, bundled JS/CSS) plus standalone `print/` templates for box/item/shelf labels.
-- `src/` – React application source.
-  - `components/` – UI modules such as `Layout`, `Header`, `App`, `LandingPage`, `BoxDetail`, `ItemDetail`, `ItemEdit`, `ImportCard`, `RecentActivitiesPage`, `BoxListPage`, `PrintLabelButton`, `QrScannerPage`, and dialogs supporting CSV import/export and agentic workflows.
-  - `styles.css` – shared styling entry point.
-  - `index.tsx` – application bootstrap and router wiring.
+## Frontend
 
-### Responsibilities
-- Surface inventory overviews, search, and statistics for logistics operators.
-- Provide item/box detail pages, editing experiences, and CSV import/export flows.
-- Trigger agentic runs asynchronously while reflecting status and error handling in the UI. UI components wrap agentic calls in
-  `try/catch` blocks to show inline toasts and persist draft edits on failure.
-- Integrate printing controls (preview + send) by calling backend print actions and presenting the rendered templates.
+React 18 + `react-router-dom`, bundled with esbuild (`frontend/bundle.js`), served by the backend from
+`dist/frontend/public`. Routes are in `frontend/src/components/App.tsx`; the main layout is a list on the
+left and a tabbed detail panel on the right (single column on mobile). API calls go through
+`frontend/src/data/`. Print templates are plain HTML in `frontend/public/print/`, rendered by the backend
+for both preview and printing. See [frontend/README.md](../frontend/README.md).
 
-## Shared Models (`models/`)
-- TypeScript interfaces describing entities such as boxes, items, event logs, and agentic run metadata.
-- Consumed by both backend and frontend to maintain consistent typing.
+## Media
 
-## Data & Media (`data/`)
-- `data/` contains CSV seeds and archive import/export payloads used by test and operational flows.
-- Runtime media storage is controlled only by `MEDIA_STORAGE_MODE` and `MEDIA_ROOT_DIR`:
-  - `MEDIA_STORAGE_MODE=local` always uses fixed `dist/media` (no directory override variables are supported).
-  - `MEDIA_STORAGE_MODE=webdav` requires absolute filesystem `MEDIA_ROOT_DIR` (URLs/relative paths are rejected), then derives fixed paths `<MEDIA_ROOT_DIR>/shopbilder` and `<MEDIA_ROOT_DIR>/shopbilder-import`.
-- `MEDIA_DIR` and `MEDIA_DIR_OVERRIDE` are unsupported and ignored after the cutoff; with `CONFIG_STRICT=true` startup fails fast if either legacy variable is present.
-- Item image naming conventions keep `Artikel_Nummer` + image index semantics so importer/exporter and print previews resolve assets consistently.
-- `Grafikname`/`ImageNames` metadata is authoritative for media references; runtime actions do not synthesize dynamic fallback paths from bare filenames.
+- Item photos: `MEDIA_STORAGE_MODE=local` → `dist/media`; `webdav` → `<MEDIA_ROOT_DIR>/shopbilder`
+  (a mounted filesystem path, never a URL). The ERP mirror uses `<MEDIA_ROOT_DIR>/shopbilder-import`.
+- External documents (wipe reports, test results, datasheets) are read from mounts configured in
+  `ALT_DOC_DIRS_FILE`, keyed by serial, MAC, EAN or Artikel-Nummer.
+- Runtime code never bulk-deletes in media roots; cleanup is an explicit operator script.
 
-### Media environment matrix
-| Variable | Allowed values | Effect |
-| --- | --- | --- |
-| `MEDIA_STORAGE_MODE` | `local` (default) \| `webdav` | Selects fixed local storage (`dist/media`) or mounted root-derived storage. |
-| `MEDIA_ROOT_DIR` | Absolute filesystem path (required for `webdav`) | Root path used to derive `shopbilder` and `shopbilder-import`. Ignored in `local` mode for runtime media writes. |
-| `ERP_IMPORT_INCLUDE_MEDIA` | Boolean (`true`/`false`) | Enables ERP media mirror only when `MEDIA_ROOT_DIR` is valid. |
-| `MEDIA_DIR`, `MEDIA_DIR_OVERRIDE` | Unsupported | Ignored; emits error log or startup failure in strict mode. |
+Details: [media-storage](detailed/media-storage.md).
 
-Examples:
-- Local runtime + no mirror:
-  - `MEDIA_STORAGE_MODE=local`
-  - `ERP_IMPORT_INCLUDE_MEDIA=false`
-  - Effective directories: media=`dist/media`, mirror=disabled
-- WebDAV runtime + mirror:
-  - `MEDIA_STORAGE_MODE=webdav`
-  - `MEDIA_ROOT_DIR=/mnt/media`
-  - `ERP_IMPORT_INCLUDE_MEDIA=true`
-  - Effective directories: media=`/mnt/media/shopbilder`, mirror=`/mnt/media/shopbilder-import`
+## Auth (current state)
 
-### Media cleanup policy
-- Application cleanup should remain minimal by default: avoid recursive bulk deletion across `shopbilder/` and `shopbilder-import/` during routine API operations.
-- Runtime item-update flows must not prune media directories automatically; empty-folder cleanup is operator-driven only.
-- When operational cleanup is required, prefer explicit operator-run shell scripts over implicit runtime cleanup paths so scope and timing are auditable.
-- Destructive file operations should emit structured logs and keep `try/catch` boundaries close to filesystem calls to preserve incident forensics.
-
-## Scripts & Root Utilities
-- `scripts/` hosts operational helpers and test/build wrappers (including `scripts/run-tests.js`).
-- Root-level TypeScript configuration and npm scripts orchestrate backend build/start, frontend bundling, and repository-level validation commands.
-
-## External Integrations
-- CSV import/export interacts with file system and database storage.
-- QR scanning leverages camera APIs within the browser and logs scans server-side.
-- Printing flows generate HTML templates consumed by external label printers.
-
-## Import/Export Archive Format
-
-- `/api/export/items` streams a ZIP archive containing `items.csv`, `boxes.csv`, and a `media/` folder mirroring resolved media storage. The CSV payloads retain partner column ordering and reuse metadata lookups (e.g., `collectMediaAssets`) so downstream clients receive stable image hints. Export mode supports `backup`/`erp` plus import-regime aliases (`manual_import`/`automatic_import`) mapped onto the same serializer paths.
-- `/api/import` accepts ZIP uploads and stages `items.csv`, optional `boxes.csv`, and any `media/` assets. Missing components are tolerated; boxes-only or media-only uploads merge into existing records without clearing prior metadata, while `items.csv` updates continue to use duplicate detection and zero-stock flags.
-- `/api/import/validate` validates the ZIP structure and reports item counts, referenced box IDs, and `boxes.csv` row counts to the frontend dialog. Validation surfaces server messages and any parser errors so operators can correct malformed archives before ingestion.
-
-## Background Schedulers
-
-The backend runs two in-process background intervals, both started unconditionally at server startup in `backend/server.ts`.
-
-### Agentic queue dispatcher
-
-Interval: `agenticQueueDispatchIntervalMs` (config-driven, typically a few seconds).
-
-Calls `dispatchQueuedRuns()`, which promotes `QUEUED` agentic runs to `RUNNING` up to the concurrency cap, and `resumeStaleAgenticRuns()` on startup to recover runs that were `RUNNING` when the process last stopped.
-
-### Nightly ERP sync scheduler
-
-Interval: **60 seconds** (wall-clock polling).
-
-Fires the actual sync at most once per UTC calendar day, at the hour configured by `ERP_NIGHTLY_SYNC_HOUR` (default: 2). Once the sync starts, `lastErpNightlySyncDate` is recorded **before** the HTTP call so a slow sync or mid-call restart cannot trigger a second run for the same day.
-
-**Opt-in model**: `listRefsChangedSinceSync()` returns only `item_refs` rows where `LastSyncedAt IS NOT NULL`. A ref enters the nightly cycle only after its first manual ERP export, which sets `LastSyncedAt`. Refs that have never been manually synced are never touched automatically.
-
-**Detection**: a ref is eligible if any of its instances has `UpdatedAt > ref.LastSyncedAt` — meaning the ref data changed since the last sync. After a successful HTTP 200 from `/api/sync/erp`, `markRefsSynced()` advances `LastSyncedAt` to the current timestamp.
-
-**Runtime toggle**: the scheduler reads `erp_nightly_sync_enabled` from the `system_settings` table on every check. The table is seeded once from `ERP_NIGHTLY_SYNC_ENABLED` env on first startup; afterwards the admin page controls it and changes survive restarts.
-
-### `system_settings` table
-
-A simple key-value store (`key TEXT PRIMARY KEY, value TEXT NOT NULL`) used for persistent runtime toggles that operators can change from the admin UI without redeploying. Currently used only for `erp_nightly_sync_enabled`. New toggles should follow the same `getSystemSetting` / `setSystemSetting` pattern rather than adding new database tables.
-
-See [`docs/detailed/nightly-erp-sync.md`](./detailed/nightly-erp-sync.md) for the full operator runbook.
-
-## Langtext Migration Notes
-
-- `models/item.ts` still allows `Langtext` as either a legacy string or a structured payload (`Record<string, string | string[]>`), so callers must treat the field as mixed type until the legacy path is retired.
-- Backend persistence, importer, and export flows route `Langtext` values through `backend/lib/langtext.ts`, which logs `[langtext]` warnings when JSON parsing fails or non-object data is encountered and falls back to string handling.
-- Import actions warn when form-supplied Langtext values are rejected and fall back to reference defaults, keeping ingest resilient while migration telemetry is collected.
+Shared secrets only: nginx Basic Auth at the proxy, `ADMIN_SECRET` for `/api/admin/*`, `INTAKE_TOKEN`
+for `/api/intake/*`. The operator name is typed into the browser and sent as `actor`. Authentik runs
+in the Compose stack but is not enforced yet (todo 33c).

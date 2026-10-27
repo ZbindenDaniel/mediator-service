@@ -29,7 +29,7 @@ Presentation layer only. Data fetching through `data/` API clients. No business 
 - Components in `components/` are named by what they render, not what action triggers them
 
 ## Decisions
-- **React SPA (no SSR)**: the app is operator-facing on a LAN; SEO irrelevant; full SPA gives simpler deployment alongside the Express backend
+- **React SPA (no SSR)**: the app is operator-facing on a LAN; SEO irrelevant; full SPA gives simpler deployment alongside the Node backend
 - **No component framework (no MUI/Shadcn)**: custom CSS for precise control over label-printing and mobile-first layout without fighting framework defaults
 
 ## See also

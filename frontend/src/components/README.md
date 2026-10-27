@@ -19,7 +19,7 @@ All React UI components for the application — organized by feature area in sub
 - `AdminPage.tsx` — admin panel
 - `LoadingPage.tsx` / `ChatPlaceholder.tsx` — system states
 - `ImportCard.tsx` — CSV import UI
-- Agentic: `AgenticStatusCard.tsx`, `AgenticReviewMetricsRows.tsx`, `AgenticSpecFieldReviewModal.tsx`, `ItemForm_agentic.tsx`
+- Agentic: `AgenticStatusCard.tsx`, `AgenticReviewWizard.tsx` (review), `AgenticSearchSources.tsx`, `AgenticSnapshotsPanel.tsx`, `AgenticReviewMetricsRows.tsx`, `ItemForm_agentic.tsx`
 - Item actions: `EditInstanceCard.tsx`, `ItemEdit.tsx`, `ItemForm.tsx`, `ItemBasicInfoForm.tsx`, `ItemMatchSelection.tsx`
 - Media: `ItemMediaGallery.tsx`, `PhotoCaptureModal.tsx`, `AttachmentsCard.tsx`, `AttachmentBindingModal.tsx`
 - Printing: `PrintLabelButton.tsx`

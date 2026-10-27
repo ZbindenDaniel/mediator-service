@@ -35,7 +35,7 @@ Add a single line to the top of the **"Recent changes"** section:
 N. ✅ <one-line summary> → [topic]
 ```
 
-Where `[topic]` is the changelog file the full entry lives in (e.g., `→ [agentic]`, `→ [printing]`, `→ [item-lifecycle]`).
+Keep it to one short line — the details belong in the changelog entry. Where `[topic]` is the changelog file the full entry lives in (e.g., `→ [agentic]`, `→ [printing]`, `→ [item-lifecycle]`).
 
 **Keep Recent changes at 10 entries.** When it reaches 11, drop the oldest line.
 
@@ -69,7 +69,7 @@ When a change spans multiple topics, pick the domain where the primary model or 
 
 ### 3. Update `todo.md`
 
-- If the task resolved a listed bug or feature item, mark it done or remove it.
+- If the task resolved a listed bug or feature item, remove it (the changelog keeps the history).
 - If new issues were discovered during the work, add them to the appropriate priority section.
 - If new open questions surfaced, add them to "Open Questions".
 
@@ -94,7 +94,6 @@ Do not comment on what the code does — only on why it does it that way.
 ## Related files
 
 - Quick-start guide: [`AGENTS.md`](AGENTS.md)
-- Detailed workflow: [`docs/AGENT.md`](docs/AGENT.md)
 - Coding standards: [`docs/CODING_GUIDELINES.md`](docs/CODING_GUIDELINES.md)
 - Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Changelogs: [`docs/changelogs/`](docs/changelogs/)

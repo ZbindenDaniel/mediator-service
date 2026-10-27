@@ -1,11 +1,5 @@
 # QR Codes
 
-> [!NOTE]
-> **Authoring rules**
-> - Prefer links over duplicated schema definitions.
-> - Keep each section short and contract-focused.
-> - Explicitly call out where data structures must stay synchronized across `models/`, `backend/src/models/`, and frontend types/usages.
-
 ## In short
 - Business goal: Make item/box/shelf identification fast and reliable by standardizing how QR payloads are generated, scanned, routed, and audit-logged.
 - User value: Operators can scan printed labels and reach the right entity page (or return flow) with clear error states and traceable backend audit events.
@@ -80,7 +74,6 @@
 - Key components:
   - `frontend/src/components/QrScanButton.tsx`: builds scanner URL/state (`returnTo`, `callback`, `intent`) and navigates to scanner.
   - `frontend/src/components/QrScannerPage.tsx`: camera lifecycle, QR decode/validation, optional return routing, scan logging.
-  - `frontend/src/components/SearchCard.tsx`: consumes `qrReturn` payload and can directly navigate to entities.
   - `frontend/src/components/BoxDetail.tsx` / `AddItemToBoxDialog.tsx` / `RelocateBoxCard.tsx`: specialized return consumers for scan intents.
 - User flows:
   - Direct flow: open scanner -> decode QR -> validate -> log scan -> navigate to entity route.

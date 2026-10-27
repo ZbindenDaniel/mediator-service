@@ -263,7 +263,7 @@ target; detail carries the tabs in §9; the per-item quick trigger stays in `Ite
 
 ## 14. Relation to shipped AI-runs-optimization work (#916 / #917 / #918)
 
-A sibling effort ([`PLANNING_ai_runs_optimization.md`](PLANNING_ai_runs_optimization.md)) already
+A sibling effort (AI-runs optimization effort (git history; remaining phase is todo 0z4)) already
 shipped pieces this plan assumed it would build. Reuse, don't duplicate:
 
 | Shipped | What it gives us | How this feature reuses it |
