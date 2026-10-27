@@ -1,4 +1,4 @@
-import { canCreate, canWrite, currentIdentity, ownerOf, runWithIdentity, writeScopeParams } from '../lib/ownership';
+import { canCreate, canManageShelves, canWrite, currentIdentity, isSuperAdmin, isTenantAdmin, ownerOf, runWithIdentity, writeScopeParams } from '../lib/ownership';
 import { resetTenantGroupMapCache } from '../lib/identity';
 import type { RequestIdentity } from '../lib/identity';
 
@@ -56,6 +56,26 @@ describe('tenancy write rules', () => {
       expect(canCreate(noOrg)).toBe(false);
       expect(canCreate(orgA)).toBe(true);
     });
+  });
+});
+
+describe('role tiers (operator < tenant-admin < super-admin)', () => {
+  const tenantAdmin = id({ tenant: 'a', role: 'super' });
+
+  it('names the tenant-admin and super-admin tiers', () => {
+    expect(isTenantAdmin(tenantAdmin)).toBe(true);   // super
+    expect(isTenantAdmin(admin)).toBe(true);          // platform-admin is also a tenant admin
+    expect(isTenantAdmin(orgA)).toBe(false);          // operator
+    expect(isSuperAdmin(admin)).toBe(true);
+    expect(isSuperAdmin(tenantAdmin)).toBe(false);
+  });
+
+  it('shelf creation is a tenant-admin capability; operators and no-org cannot', () => {
+    expect(canManageShelves(tenantAdmin)).toBe(true);
+    expect(canManageShelves(admin)).toBe(true);
+    expect(canManageShelves(anon)).toBe(true);        // live system (no login) unchanged
+    expect(canManageShelves(orgA)).toBe(false);       // operator
+    expect(canManageShelves(noOrg)).toBe(false);
   });
 });
 

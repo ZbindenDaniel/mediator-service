@@ -341,10 +341,16 @@
      several components); per-org export (`/api/export/data` is unrestricted-only for now);
      **host verification of the opt-in forward-auth proxy** (local ✅ 2026-10-13; on-host
      pending) before Basic Auth is dropped, per `docs/detailed/identity-provider.md`
-     Part A/B incl. the spoof test. **Phase 4 undefined — questions prepared in
-     `PLANNING_TENANCY.md` §7:** super-role powers (Q1), within-org delete/bulk rights (Q2),
-     user/site onboarding (Q3), grey-zone confirmation (Q4: serial/MAC, intake data, photos,
-     attachments still visible by decision), catalogue-edit model (Q5). Open: intake station
+     Part A/B incl. the spoof test. **Phase 4 role model resolved (2026-10-27, `PLANNING_TENANCY.md` §7):**
+     three cumulative tiers operator (`normal`) < tenant-admin (`super`) < super-admin
+     (`platform-admin`). Shelf creation gated to tenant-admin+ ✅ (#1013,
+     `canManageShelves`). No-work confirms: within-org deletion ungated (operators remove
+     own instances), onboarding manual, grey zone stays shared. **Still to wire:** admit
+     `super` to the admin panel with orgs+taxonomy super-admin-only; reference edit/delete
+     gating. **Open forks (M1/M2 §7):** exact super-admin-only admin set (orgs+taxonomy only,
+     or also feature-flags/ERP/Shopware/printers?); reference scope (own-org vs cross-org,
+     whether operators keep own-ref editing) + reference deletion is a **new feature** (not
+     built; needs an in-use guard). Open: intake station
      rows get `defaultTenant` (per-station tenant?); SPA has no graceful
      session-expiry handling; (4) tenant/user
      admin + self-registration. Auth mechanism decided

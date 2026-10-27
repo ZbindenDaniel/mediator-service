@@ -49,6 +49,26 @@ export function canCreate(identity: RequestIdentity | null | undefined): boolean
   return isUnrestricted(identity) || Boolean(identity?.tenant);
 }
 
+// Role tiers (docs/PLANNING_TENANCY.md §7, 2026-10-27): operator (`normal`) < tenant-admin (`super`)
+// < super-admin (`platform-admin`), cumulative. Unrestricted requests (no login / platform admin)
+// already pass every check; these name the higher tiers for the capabilities they add. Ownership
+// (own-org vs foreign) is orthogonal — these gate *what kind* of action a role may take at all.
+
+/** Tenant admin or above (`super` / `platform-admin`). */
+export function isTenantAdmin(identity: RequestIdentity | null | undefined): boolean {
+  return identity?.role === 'super' || identity?.role === 'platform-admin';
+}
+
+/** Super admin only (`platform-admin`) — manages orgs and taxonomy. */
+export function isSuperAdmin(identity: RequestIdentity | null | undefined): boolean {
+  return identity?.role === 'platform-admin';
+}
+
+/** Creating warehouse structure (shelves/sites) is a tenant-admin capability, not an operator one. */
+export function canManageShelves(identity: RequestIdentity | null | undefined): boolean {
+  return isUnrestricted(identity) || isTenantAdmin(identity);
+}
+
 // --- Request context -------------------------------------------------------------------------
 // The DB layer needs the requester to guard its shared upserts (catalogue entries are written from
 // a dozen paths). AsyncLocalStorage carries it from the dispatcher without threading an identity

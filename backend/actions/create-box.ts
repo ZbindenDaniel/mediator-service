@@ -7,6 +7,7 @@ import { defineHttpAction } from './index';
 import type { CreateBoxPayload, CreateShelfPayload } from '../../models';
 import { withTransaction } from '../db-client';
 import { guardCreate } from '../utils/write-guard';
+import { canManageShelves } from '../lib/ownership';
 
 // TODO(agent): Verify shelf ID padding once the label template specification is clarified.
 // TODO(agent): Remove category-based shelf label fallback assumptions from any remaining admin tooling.
@@ -87,6 +88,12 @@ const action = defineHttpAction({
 
       const normalizedType = typeof data.type === 'string' ? data.type.trim().toLowerCase() : '';
       if (normalizedType === 'shelf') {
+        // Shelves are warehouse structure — a tenant-admin capability (§7 Q1). Operators catalogue
+        // into existing shelves; boxes below stay open to any org member. No-op for the live system
+        // (unrestricted) and platform admins.
+        if (!canManageShelves(ctx?.identity)) {
+          return sendJson(res, 403, { error: 'Regale anlegen ist Organisations-Admins vorbehalten.' });
+        }
         const shelfPayload = data as CreateShelfPayload;
         const missingFields: string[] = [];
         const invalidFields: string[] = [];
