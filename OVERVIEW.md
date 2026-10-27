@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+964. ✅ Docker image moved from EOL Debian bullseye to bookworm (apt 404s broke the build) → [docs-infra]
 963. ✅ Plans trimmed to three future designs in `docs/plans/`, user help updated for recent features, legacy compose/deploy files removed → [docs-infra]
 962. ✅ Docs cleanup: rewrote README/setup/architecture/env docs for v3.3, deleted stale trackers, finished plans and placeholder docs, pruned resolved items from todo.md → [docs-infra]
 961. ✅ Item list: "Preis" filter and sort; unpriced rows sink to the bottom → [ui]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 957. ✅ Intake `select_ref` strips vendor noise ("Intel(R) Client Systems") so named devices find their ref → [intake]
 956. ✅ Shopware sync survives a shop DB reset (verifies stored product id, re-creates if gone) → [erp-sync]
 955. 🔧 Planning: instance agentic flow — reconcile intake evidence against the reference, operator-gated (`docs/plans/instance-flow.md`) → [agentic]
-954. ✅ Rejected reviews feed a before→after correction diff into the next run's prompts → [agentic]
