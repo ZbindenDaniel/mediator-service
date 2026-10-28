@@ -4,7 +4,7 @@
 ############################
 # Builder stage
 ############################
-FROM node:20-bullseye AS builder
+FROM node:20-bookworm AS builder
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ RUN npm prune --omit=dev
 ############################
 # Runtime stage
 ############################
-FROM node:20-bullseye-slim AS runtime
+FROM node:20-bookworm-slim AS runtime
 
 # Install system dependencies required at runtime
 RUN apt-get update \
