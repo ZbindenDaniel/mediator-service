@@ -37,7 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
-963. ✅ **Relocation searches keep box-name matches**: the shared destination picker preserves backend-ranked results, displays each box's Label alongside its BoxID, and keeps selecting by BoxID. → [ui]
+963. ✅ **Relocation searches keep box-name matches**: the shared destination picker preserves backend-ranked results, displays each box's Label alongside its BoxID, and keeps selecting by BoxID; documented API/UI test-box creation, public HTTPS/Basic Auth, and missing-box 404 troubleshooting. → [ui]
 962. ✅ **Documented item relocation execution flow** through the dialog, move API, persistence, and refresh; identified the destination input filtering out box-name matches already returned by the backend. → [ui]
 961. ✅ **Item list: price filter + price sort.** New "Preis" filter (Alle / Ohne Preis / Mit Preis — 0 or empty counts as no price) and a "Preis" sort key; unpriced rows always sink to the bottom, and the CHF column shows the amount instead of ✓ while sorting by price. Persisted with the other list filters; jest now maps the bare `models` alias so `ItemListPage` logic is testable. → [ui]
 960. ✅ **Shelf colour picker**: the shelf "Regal-Details" card (Notizen tab) gained a colour picker (Standort palette as swatches, reset to default); stored as `boxes."Color"` (`#rrggbb`, validated in `move-box`) and used as the shelf row's left marker in the box list. → [storage]
