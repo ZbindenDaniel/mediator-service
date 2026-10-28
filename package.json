@@ -1,6 +1,6 @@
 {
   "name": "mediator-service",
-  "version": "3.3.0",
+  "version": "4.0.0",
   "private": true,
   "scripts": {
     "prebuild": "node scripts/prebuild.js",

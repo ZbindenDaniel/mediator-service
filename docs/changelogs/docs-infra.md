@@ -4,6 +4,10 @@ Covers: documentation updates, CLAUDE.md/OVERVIEW.md changes, environment config
 
 ---
 
+## 1020. ✅ Version bumped to 4.0.0 (major release)
+**Why:** The branch merging into main is a major release — it adds the whole multi-tenant spare-part-cataloguing line (Authentik forward-auth identity, tenant `TenantId` schema + stamping + class-aware read/write scoping, the operator/tenant-admin/super-admin role model with a role-split admin panel and reference curation, taxonomy externalization, one weighted quality system, and the laptop parts catalogue). A feature set this size is a major version, so `package.json` goes `3.3.0` → `4.0.0` (operator decision, over following main's minor-line bump). Also fixed the `package-lock.json` root `version`, which had drifted to `3.1.0` (neither the 3.3.0 bump on main nor earlier bumps had synced it) — both the top-level and `packages[""]` entries now read 4.0.0.
+**Deferred:** The prod compose still falls back to a `ghcr.io/…:3.0` image tag when `MEDIATOR_IMAGE` is unset (todo 57) — unrelated to the package version and left as its own operator decision. No code or dependency changes.
+
 ## 1019. ✅ Docker image moved from EOL Debian bullseye to bookworm
 **Why:** Debian 11 LTS ended in Aug 2026. Since then deb.debian.org returns 404 for `bullseye-security` packages, so the runtime stage's `apt-get install` failed with exit code 100. Both stages moved to Debian 12 (`node:20-bookworm` / `node:20-bookworm-slim`) together, so native modules (`better-sqlite3`) built in the builder link against the same glibc as the runtime. Verified: the image builds and Chromium 155, `lp` and `better-sqlite3` load. Pointing apt at archive.debian.org was rejected because it would leave the image on a distro that gets no security fixes.
 **Deferred:** Node 20 is also past EOL (Apr 2026). Moving to Node 22/24 is a separate change and needs a test pass (todo 58).
