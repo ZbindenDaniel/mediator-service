@@ -77,6 +77,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
+- ✅ **Relocation box-name search preserves valid results.** `BoxSearchInput` now keeps backend-ranked matches and displays `Label` alongside `BoxID`; mouse and keyboard selection still pass the BoxID. UI changelog #963.
+
 0zd. ✅ **Event-log CSV round-trip corrupted `Meta` into `[object Object]` → re-import dropped the event (erp-sync #936).**
   `events.Meta` is a `jsonb` column, so `pg` returns it as a parsed JS object; `export-data.ts`'s `toCsvValue`
   serialized cells with `String(value)`, turning the object into the literal `"[object Object]"` in `events.csv`.
