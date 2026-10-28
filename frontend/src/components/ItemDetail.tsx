@@ -1532,6 +1532,10 @@ export default function ItemDetail({ itemId }: Props) {
     [agentic?.CurrentFindings]
   );
 
+  // Catalogue data-quality grade (L10), derived on read alongside the findings; null when the item has
+  // no spec contract (nothing to grade). Surfaced as a badge in the KI tab.
+  const agenticDataQuality = agentic?.CurrentDataQuality ?? null;
+
   // Derived agentic state — computed before early returns so the hooks below can reference them
   const normalizedAgenticStatus = agentic ? normalizeAgenticRunStatus(agentic.Status) : null;
   const normalizedAgenticReview = agentic ? (agentic.ReviewState || '').trim().toLowerCase() : null;
@@ -2777,6 +2781,7 @@ export default function ItemDetail({ itemId }: Props) {
           <ItemKiTab
             agenticCardProps={agenticCardProps}
             findings={agenticFindings}
+            dataQuality={agenticDataQuality}
             reviewWizardState={reviewWizardModalState?.data ?? null}
             onReviewWizardResolve={handleReviewWizardResolve}
             reworkFieldOptions={reworkFieldOptions}

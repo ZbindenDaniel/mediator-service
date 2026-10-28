@@ -9,12 +9,16 @@ import AgenticSpecFieldReviewModal, {
 } from '../AgenticSpecFieldReviewModal';
 import { AgenticReviewWizard, type AgenticReviewWizardData, type AgenticReviewWizardResult } from '../AgenticReviewWizard';
 import { FindingsPanel } from '../FindingsPanel';
+import { DataQualityBadge } from '../DataQualityBadge';
 import type { Finding } from '../../../../models/agentic-findings';
+import type { DataQualityGrade } from '../../../../models/data-quality';
 
 interface Props {
   agenticCardProps: AgenticStatusCardProps;
   // Persistent findings for the current run ("Zu prüfen") — shown in the tab, not only during review.
   findings?: Finding[];
+  // Catalogue data-quality grade (L10), derived on read; shown as a badge above the findings.
+  dataQuality?: DataQualityGrade | null;
   reviewWizardState?: AgenticReviewWizardData | null;
   onReviewWizardResolve?: (result: AgenticReviewWizardResult | null) => void;
   // Targeted rework ("KI Überarbeitung"): selectable fields + a submit handler. Kept local to this tab
@@ -36,6 +40,7 @@ interface Props {
 export default function ItemKiTab({
   agenticCardProps,
   findings,
+  dataQuality,
   reviewWizardState,
   onReviewWizardResolve,
   reworkFieldOptions,
@@ -100,6 +105,7 @@ export default function ItemKiTab({
         </div>
       )}
       <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
+      <DataQualityBadge quality={dataQuality ?? null} />
       <FindingsPanel findings={findings ?? []} />
       {snapshotArtikelNummer ? (
         <AgenticSnapshotsPanel
