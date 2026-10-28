@@ -78,17 +78,50 @@ Mit dem Scan-Symbol navigierst du blitzschnell zu einem Artikel oder Behälter.
 
 ## 6. Artikel und Behälter umlagern
 
-**Artikel in einen anderen Behälter:**
-1. Artikel öffnen → Tab **Vorrat** → **Umlagern**.
-2. Ziel-Behälter scannen oder ID eingeben.
-3. Bestätigen.
+### Was macht Umlagern?
 
-**Behälter auf ein anderes Regal:**
-1. Behälter öffnen → **Umlagern**.
-2. Zielregal auswählen oder scannen.
-3. Bestätigen.
+Mit **Umlagern** hältst du fest, wo ein Artikel oder Behälter im Lager liegt:
 
-Der neue Standort ist sofort in der Artikel- und Behälteransicht sichtbar.
+- **Artikel umlagern:** Der geöffnete Artikel wird dem gewählten Zielbehälter zugeordnet. Dabei übernimmt er dessen hinterlegten Standort. Hat der Zielbehälter noch keinen Standort, bleibt diese Angabe beim Artikel leer.
+- **Behälter umlagern:** Du ordnest den Behälter einem neuen Standort, zum Beispiel einem Regal, zu.
+
+> Lege den Artikel beziehungsweise Behälter auch tatsächlich an den gewählten Platz. Die Zuordnung im System und der physische Lagerort sollen übereinstimmen.
+
+### Artikel in einen vorhandenen Behälter verschieben
+
+1. Öffne den gewünschten Artikel und wechsle auf den Tab **Vorrat**.
+2. Klick auf **Umlagern**. Der Dialog **Artikel umlagern** öffnet sich.
+3. Gib unter **Ziel wählen** die **Box-ID** oder den **Namen des Behälters** ein. Ab zwei Zeichen erscheinen Suchvorschläge.
+4. Wähle den passenden Treffer aus der Liste. Die Vorschläge zeigen die Box-ID und, falls vorhanden, den Behälternamen. Nach der Auswahl steht die Box-ID im Eingabefeld.
+5. Prüfe die Ziel-ID und klick auf **Verschieben**.
+6. Nach erfolgreichem Verschieben schließt sich der Dialog. Prüfe die neue Zuordnung unter **Behälter** im Tab **Vorrat**.
+
+**Beispiel:** Dein Zielbehälter heißt **Kabelkiste** und hat die ID `B-281026-0001`. Suche nach **Kabelkiste**, wähle den Treffer mit der passenden ID und klick auf **Verschieben**.
+
+**Alternativ per QR-Code:** Klick neben dem Suchfeld auf **Zielbehälter scannen** und scanne das Etikett des Zielbehälters. Die Box-ID wird übernommen. Prüfe sie und bestätige mit **Verschieben**. Du kannst eine bekannte Box-ID auch direkt vollständig eingeben.
+
+> Bei einer Suche nach dem Namen musst du einen Treffer auswählen. Der Name allein im Eingabefeld wählt noch keinen Zielbehälter aus.
+
+### Artikel in einen neuen Behälter verschieben
+
+1. Öffne den Artikel → Tab **Vorrat** → **Umlagern**.
+2. Klick auf **In neuen Behälter verschieben**. Das System erstellt einen Behälter mit einer neuen Box-ID und ordnet den Artikel diesem Behälter zu.
+3. Prüfe nach dem Schließen des Dialogs die neue Zuordnung unter **Behälter** und öffne den verlinkten Behälter.
+4. Drucke dort bei Bedarf das Behälteretikett und ordne den neuen Behälter über **Umlagern** seinem Standort zu.
+
+### Behälter auf ein anderes Regal verschieben
+
+1. Öffne den Behälter und klick auf **Umlagern**.
+2. Wähle im Feld **Neuer Ort** den gewünschten Standort aus.
+3. Klick auf **Verschieben** und prüfe anschließend den angezeigten Standort des Behälters.
+
+**Alternativ per QR-Code:** Wähle **Standort scannen** und scanne das Etikett des Zielregals. Falls der Dialog anschließend noch geöffnet ist, bestätige mit **Verschieben**.
+
+### Ergebnis prüfen und Fehler korrigieren
+
+Prüfe nach jeder Bewegung die Zuordnung beim Artikel beziehungsweise den Standort beim Behälter. Die Bewegung wird mit deinem Benutzernamen in den Aktivitäten protokolliert. Falls noch kein Benutzername gesetzt ist, wirst du vor dem Verschieben danach gefragt.
+
+**Falsches Ziel gewählt?** Öffne **Umlagern** erneut und verschiebe den Artikel oder Behälter an den richtigen Ort. Bei einer Fehlermeldung prüfe zuerst die Ziel-ID und ob der Zielbehälter bereits existiert.
 
 ---
 
@@ -140,7 +173,7 @@ Ein Gerät kommt rein, das noch nicht im System ist:
 4. **Review:** Wenn die KI fertig ist, erscheint **Review erforderlich**. Kurz die Vorschläge prüfen und bestätigen.
 5. **Alle Infos vollständig?** Im Tab **Referenz** prüfen, ob Spezifikationen und Preis eingetragen sind. Fehlende Felder ergänzen.
 6. **Bereit für den Shop markieren:** Nach dem Review ist der Artikel als freigegeben markiert.
-7. **Einlagern:** Artikel in den richtigen Behälter legen → Tab **Vorrat** → **Umlagern**, Behälter-ID einscannen oder eingeben.
+7. **Einlagern:** Artikel in den richtigen Behälter legen → Tab **Vorrat** → **Umlagern**, Zielbehälter per Box-ID oder Name suchen und auswählen oder den QR-Code scannen → **Verschieben**. Details findest du in Abschnitt 6.
 
 ---
 

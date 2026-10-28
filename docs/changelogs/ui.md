@@ -4,6 +4,18 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 965. ✅ Format all help documents and explain Umlagern
+**Date:** 2026-10-28
+**Why:** Tables and headings alone left numbered procedures, nested printer instructions, quoted notes, and indented commands displayed as Markdown text. Extended the shared help renderer to render semantic ordered/unordered lists, nested step content, checklist items, blockquotes, joined paragraphs, italic text, and formatted link labels while retaining the existing table and code rendering. CSS now provides consistent paragraph/list spacing, highlighted notes, readable code blocks, and wrapping for long content across all help pages; no new dependencies or raw HTML rendering were introduced. Expanded Erste Schritte section 6 with the purpose of relocation, article destination searches by BoxID or box name, selecting a result before submitting, QR scanning, creating a new box, moving a box to a shelf, checking the result, and correcting mistakes. Updated the later Einlagern summary to point to section 6.
+**Validation:** All 8 `HilfePage.test.tsx` tests pass, covering all six existing help documents, expected table counts, valid list nesting, nested printer steps and commands, italic link labels, checklists, quoted notes, and literal code/HTML examples. `npm run bundle`, `npm run prebuild`, and `git diff --check` pass. Temporary desktop and narrow-window browser previews use the actual help component; screenshots of the Umlagern excerpt are stored in `/tmp/erfassung-help-preview/`.
+**Deferred:** The broader Suche documentation expansion and new Artikel help page remain session goals. Other help content was kept as written; this does not introduce a full Markdown library.
+
+## 964. ✅ Help renders Markdown tables with clearer headings
+**Date:** 2026-10-28
+**Why:** The help renderer displayed pipe-delimited Markdown tables as individual paragraphs, making the navigation overview difficult to read. Added basic table recognition to the existing renderer, preserving inline bold text and code inside semantic header/data cells. Help tables now have a shaded header, alternating rows, cell padding, borders, and a keyboard-accessible horizontal scroll container. Increased the help heading sizes and spacing to clarify the document hierarchy without changing help content or adding dependencies.
+**Validation:** `npm run bundle`, `npm run prebuild`, and `git diff --check` pass. A temporary browser preview using the actual `HilfePage` and Erste Schritte document renders both tables; the navigation table has two column headers and eight data rows. Desktop and narrow-window screenshots were inspected in `/tmp/erfassung-help-preview/`.
+**Deferred:** Umlagern explanations and the remaining user documentation are separate tasks. This is basic pipe-table rendering, not a replacement of the Markdown renderer.
+
 ## 963. ✅ Relocation destination search preserves box-name matches
 **Date:** 2026-10-28
 **Why:** The backend already searches BoxID and Label, but the shared `BoxSearchInput` discarded name-only matches by filtering the response again against BoxID/Location. Removed that extra filter so server ranking and token matches survive, added the optional Label to the suggestion type and display, and kept selection callbacks using the BoxID. Both single-item and bulk relocation use this picker. Regression coverage checks name, multiple-word, and ID searches, response order, optional labels, and selecting named boxes with the mouse or keyboard.
