@@ -8,11 +8,12 @@ import HilfePage from '../HilfePage';
 
 const documents = [
   ['0_Overview', 0],
-  ['1_Erste-Schritte', 2],
+  ['1_Erste-Schritte', 3],
   ['2_Fehlerbehebung', 0],
   ['3_Drucker-Einrichtung', 6],
   ['4_Ersatzteile-erfassen', 1],
-  ['5_CO2-Berechnung', 2]
+  ['5_CO2-Berechnung', 2],
+  ['6_Artikel', 8]
 ] as const;
 
 const loadDocument = (name: string) => readFileSync(`docs/user/${name}.md`, 'utf8');

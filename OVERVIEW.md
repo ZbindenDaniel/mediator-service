@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+966. ✅ **Search and Artikel help checked against source**: expand search instructions, add article fields/quality/specifications/contracts/components documentation, and align the linked spare-parts guide with current controls. → [ui]
 965. ✅ **Consistent help formatting and Umlagern guide**: render steps, nested lists, notes, and code across all help pages; expand Erste Schritte with relocation by BoxID/name, scanning, new boxes, and result checks. → [ui]
 964. ✅ **Help tables and headings**: render Markdown tables as styled HTML tables with shaded headers and alternating rows; improve heading sizes and spacing. → [ui]
 963. ✅ **Relocation searches keep box-name matches**: the shared destination picker preserves backend-ranked results, displays each box's Label alongside its BoxID, and keeps selecting by BoxID; documented API/UI test-box creation, public HTTPS/Basic Auth, and missing-box 404 troubleshooting. → [ui]
@@ -46,5 +47,4 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 959. ✅ **Fotos tab captures from the camera**: `ItemImagesTab` gained a "Foto aufnehmen" button that opens the existing `PhotoCaptureModal` (from `ItemCreate`); the shot is persisted through the same `persistMediaUpdate`/slot logic as a picked file. Hidden when no camera API. → [media]
 958. ✅ **Search never returns nothing when weaker matches exist**: the ≥50 % token rule moved from SQL (`WHERE token_hits >= …`, now `>= 1`) into JS — identical results whenever any row clears it, otherwise the best weaker matches come back ranked, with `relaxed: true` on the `/api/search` response and a `(relaxed…)` note on the `[search]` log. Covers items, boxes, refs and every `searchItemReferences` caller (intake `select_ref` included). UI hint deferred. → [ui]
 957. ✅ Intake `select_ref` no longer comes back **empty for a clearly-named device**: the DMI vendor string ("Intel(R) Client Systems") polluted the ref search term — 5 tokens with a ≥50% hit threshold meant an `Intel NUC …` ref (2 hits) never qualified → `0 references`. `findRefCandidates` now strips `(R)`/`(TM)` marks + corporate filler (Inc/Corp/Client Systems/…), dedupes tokens, and falls back vendor+model → model → vendor before giving up; logs `[intake-start] ref candidates` with the tried terms. The untagged `search … (refs) →` line is now `[search]`. → [intake]
-956. ✅ Shopware sync **survives a shop DB reset**: `upsertProduct` verifies the persisted `ShopwareProductId` (`/api/search-ids/product`) before PATCHing and falls back to the `productNumber` lookup → re-create instead of `WRITE_TYPE_INTEND_ERROR`; the re-resolved id is persisted → [erp-sync]
 

@@ -4029,7 +4029,9 @@ button:focus {
 
 .hilfe-table {
     width: 100%;
+    min-width: 520px;
     border-collapse: collapse;
+    overflow-wrap: normal;
 
     th, td {
         padding: 12px 16px;
@@ -4134,6 +4136,10 @@ button:focus {
 @media (max-width: 600px) {
     .hilfe-layout {
         flex-direction: column;
+    }
+
+    .hilfe-content {
+        width: 100%;
     }
 
     .hilfe-sidebar {

@@ -70,9 +70,60 @@ Mit dem Scan-Symbol navigierst du blitzschnell zu einem Artikel oder Behälter.
 
 ## 5. Artikel finden
 
-- **Suche:** Artikelnummer oder Beschreibung ins Suchfeld oben eingeben.
-- **Filter:** In der Artikelliste kannst du nach Behälter, Qualität, Shop-Status und Platzierungsstatus filtern.
-- **Direktnavigation:** Behälter-ID (z. B. `B-042`) direkt ins Suchfeld eingeben — springt sofort zur Behälterdetailansicht.
+### Welche Suche passt zu deiner Aufgabe?
+
+| Wo? | Was wird gesucht? | Wie startest du? |
+|-----|------------------|-----------------|
+| Suchfeld **Suchen…** oben | Artikel sowie Behälter und Regale | Begriff eingeben → Enter oder Lupe |
+| Artikelliste, Feld **Artikelname** | Artikelbeschreibung oder Artikelnummer | Text eingeben → Enter |
+| Behälterliste, Feld **Suche** | Box-ID, Behältername, Standort-ID oder Regalname | Text eingeben; die Liste wird beim Tippen gefiltert |
+| Dialog **Artikel umlagern**, Feld **Ziel wählen** | Box-ID oder Behältername | Mindestens zwei Zeichen eingeben → Treffer auswählen |
+
+### Oben nach einem Artikel oder Behälter suchen
+
+1. Gib deinen Begriff in **Suchen…** ein.
+2. Drück **Enter** oder klick auf die **Lupe**.
+3. Klick in der Ergebnisliste auf den gewünschten Artikel oder Behälter, um ihn zu öffnen.
+
+Bei Artikeln werden **Artikelnummer**, **Artikelbeschreibung**, der hinterlegte **Suchbegriff**, **Kurzbeschreibung**, **Referenz-Spezifikationen**, **Hersteller**, **Seriennummer**, **MAC-Adresse**, **EAN**, **ItemUUID** und **Box-ID** berücksichtigt. Die Spezifikationen des einzelnen Exemplars unter **Vorrat** werden hier nicht mit durchsucht.
+
+Bei Behältern und Regalen werden **Box-ID** und **Name** durchsucht. Für eine Suche nach der Standort-ID oder dem zugehörigen Regalnamen benutze die **Behälterliste**.
+
+**Beispiele:** Suche nach einer Artikelnummer wie `000001`, einem Hersteller oder einer bekannten Seriennummer. Einen benannten Behälter kannst du über seinen Namen suchen, zum Beispiel **Kabelkiste**.
+
+Groß- und Kleinschreibung werden bei der Textsuche nicht unterschieden. Mehrere durch Leerzeichen getrennte Wörter werden einzeln berücksichtigt; ein Treffer muss daher nicht die gesamte Eingabe als zusammenhängenden Text enthalten. Prüfe die angezeigte Artikelnummer beziehungsweise Box-ID vor der Auswahl.
+
+> Die obere Suche zeigt eine begrenzte Auswahl von Treffern. Benutze für die Arbeit mit einer längeren Liste die Artikel- oder Behälterliste und deren Filter.
+
+### Mit einer vollständigen ID direkt öffnen
+
+Wenn die Eingabe oben mit **I-**, **B-** oder **S-** beginnt, behandelt das System sie beim Absenden als direkte ID:
+
+- **I-…:** öffnet die Artikelinstanz, zum Beispiel `I-000001-0001`.
+- **B-…:** öffnet den Behälter, zum Beispiel `B-281026-0001`.
+- **S-…:** öffnet das Regal.
+
+Gib dafür die **vollständige ID** ein. Eine unvollständige ID mit einem dieser Präfixe öffnet keine Liste ähnlicher IDs. Teile einer Box-ID kannst du in der Behälterliste oder in der Zielsuche beim Umlagern suchen. Für Teile einer Artikelnummer eignet sich das Feld **Artikelname** in der Artikelliste.
+
+### Die Artikelliste eingrenzen
+
+1. Öffne die Artikelliste über das **Listen-Symbol**.
+2. Gib im Feld **Artikelname** eine Beschreibung oder Artikelnummer ein und drück **Enter**.
+3. Ergänze bei Bedarf weitere Filter, zum Beispiel **Behälter**, **Unterkategorie**, **Qualität**, **Ki-Status**, Bilder oder Preis.
+
+Das Feld **Artikelname** sucht einen zusammenhängenden Textteil in Beschreibung oder Artikelnummer. Seriennummer, MAC-Adresse und EAN suchst du über die **obere Suche**.
+
+Im separaten Feld **Behälter** kannst du eine Box-ID oder Standortangabe eingeben. Übernimm den Filter mit **Enter** oder indem du das Feld verlässt. Dieses Feld sucht nicht nach dem Behälternamen.
+
+**Zu wenige Treffer?** Prüfe zusätzlich gesetzte Filter. Wenn **Filter zurücksetzen** angezeigt wird, kannst du damit die Listenfilter auf ihre Standardwerte zurückstellen. Artikel ohne Lagerbestand sind in der Standardliste ausgeblendet; eine bekannte vollständige ItemUUID kannst du weiterhin über die obere Suche öffnen.
+
+### Behälter suchen und ein Umlagerungsziel wählen
+
+In der **Behälterliste** findet das Suchfeld trotz des Platzhalters **Box-ID suchen** auch Behälter- und Regalnamen sowie Standort-IDs. Die übrigen Filter, etwa Typ und Standort, gelten zusätzlich.
+
+Beim **Umlagern** kannst du nach **Box-ID oder Behältername** suchen. Wähle einen Vorschlag aus; erst dann wird dessen Box-ID als Ziel übernommen. Alternativ gibst du eine bekannte Box-ID vollständig ein oder scannst den Zielbehälter. Den Ablauf erklärt Abschnitt 6.
+
+Zum Verständnis von Artikelnummer, ItemUUID und Spezifikationen siehe die Hilfeseite [Artikel](/hilfe?doc=6_Artikel).
 
 ---
 
