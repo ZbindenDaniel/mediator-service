@@ -194,6 +194,8 @@ export function resolveIntakeQuestions(
   const unresolvedAutoFill: { id: string; autoFill: string }[] = [];
   const pending: QualityQuestion[] = [];
   for (const q of questions) {
+    // The intake script has no multi-value input; asking it there would send an unknown type.
+    if (q.type === 'multi') continue;
     if (q.skipAtIntake) {
       if (q.type === 'boolean') autoAnswers[q.id] = 'true';
       continue;

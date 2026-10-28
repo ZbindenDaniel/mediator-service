@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "subCategory": 2128,
+  "fields": [
+    {
+      "key": "Prozessor",
+      "required": true,
+      "description": "Model, e.g. Intel Core i5-8250U"
+    },
+    {
+      "key": "Sockel",
+      "required": false,
+      "description": "Socket, or BGA (soldered)"
+    },
+    {
+      "key": "Kerne",
+      "required": false,
+      "description": ""
+    },
+    {
+      "key": "Taktfrequenz",
+      "required": false,
+      "description": "Base clock, e.g. 1.6 GHz"
+    },
+    {
+      "key": "FRU",
+      "required": false,
+      "description": "Manufacturer part number (FRU / P/N / Spare part no.), e.g. 01YR564"
+    },
+    {
+      "key": "Kompatible Modelle",
+      "required": false,
+      "description": "Device models this part fits, comma-separated, e.g. ThinkPad T480, T480s"
+    }
+  ]
+}

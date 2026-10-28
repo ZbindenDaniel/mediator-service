@@ -9,9 +9,12 @@ Frontend library layer — API client functions, formatting utilities, contract 
 - `categoryLookup.ts` — category/subcategory lookup helpers using `../data/itemCategories`
 - `contractsApi.ts` — fetches quality/spec/assembly contracts from the backend
 - `format.ts` — general formatting helpers (dates, numbers, labels)
+- `tabFeatures.ts` — which detail tab belongs to which feature flag; `resolveTab()` falls back to the default tab when one is disabled
 - `itemDetailFormatting.tsx` — renders item field values for the detail panel
 - `itemGrouping.ts` — groups item list results for display
 - `itemListFiltersStorage.ts` — persists item list filter state in sessionStorage
+- `itemListColumns.ts` — which optional item list columns are shown (per browser, localStorage)
+- `itemSearch.ts` — item list search: every word in any order across name, numbers and spec values
 - `langtext.ts` — parses and formats Langtext (rich product description) content
 - `qualityContracts.ts` — loads and caches quality contracts, derives quality tags/scores
 - `shelfLabel.ts` — formats shelf/location labels for display

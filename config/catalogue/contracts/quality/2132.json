@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "subCategory": 2132,
+  "questions": [
+    {
+      "id": "battery_health",
+      "type": "select",
+      "question": "Akku-Kapazität?",
+      "values": [
+        ">80%",
+        "50–80%",
+        "<50%",
+        "Defekt",
+        "Ungetestet"
+      ],
+      "states": {
+        ">80%": 1,
+        "50–80%": 0.7,
+        "<50%": 0.4,
+        "Defekt": 0
+      },
+      "weight": 4,
+      "knockout": {
+        "below": 0.25,
+        "cap": 0.19
+      },
+      "specField": "Akku",
+      "specValue": "%v"
+    }
+  ]
+}

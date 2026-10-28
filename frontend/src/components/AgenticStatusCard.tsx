@@ -14,7 +14,7 @@ import {
   normalizeAgenticRunStatus
 } from '../../../models';
 import type { AgenticRun } from '../../../models';
-import { normalizeDetailValue } from '../lib/itemDetailFormatting';
+import DetailRows from './DetailRows';
 import { describeAgenticFailureReason } from '../lib/agentic';
 
 export type AgenticBadgeVariant = 'info' | 'success' | 'error' | 'pending' | 'warning';
@@ -145,21 +145,7 @@ export function AgenticStatusCard({
           </div>
           <p className="muted">{status.description}</p>
           {rows.length > 0 ? (
-            <table className="details">
-              <tbody>
-                {rows.map(([k, v], idx) => {
-                  const cell = normalizeDetailValue(v);
-                  return (
-                    <tr key={`${k}-${idx}`} className="responsive-row">
-                      <th className="responsive-th">{k}</th>
-                      <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                        {cell.content}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <DetailRows rows={rows} />
           ) : null}
           {!hideInlineActions && !needsReview && (canStart || canRestart) ? (
             <div className="row">
@@ -174,13 +160,13 @@ export function AgenticStatusCard({
                 />
               </label>
               {searchTermError ? (
-                <p className="muted" style={{ color: '#a30000' }}>{searchTermError}</p>
+                <p className="muted" style={{ color: 'var(--danger)' }}>{searchTermError}</p>
               ) : null}
             </div>
           ) : null}
           {actionPending ? <p className="muted">Ki-Aktion wird ausgeführt…</p> : null}
           {reviewIntent ? <p className="muted">Review-Checkliste wird gesendet…</p> : null}
-          {error ? <p className="muted" style={{ color: '#a30000' }}>{error}</p> : null}
+          {error ? <p className="muted" style={{ color: 'var(--danger)' }}>{error}</p> : null}
           {!hideInlineActions && canCancel ? (
             <div className='row'>
               <button type="button" className="btn" disabled={actionPending} onClick={onCancel}>Abbrechen</button>

@@ -1,12 +1,17 @@
 {
-  "version": 8,
+  "version": 9,
   "subCategory": 201,
   "questions": [
     {
       "id": "keyboard_layout",
       "type": "select",
       "question": "Tastatur-Layout?",
-      "values": ["CH", "DE", "US", "Anderes"],
+      "values": [
+        "CH",
+        "DE",
+        "US",
+        "Anderes"
+      ],
       "specField": "Tastatur-Layout",
       "specValue": "%v"
     },
@@ -14,40 +19,89 @@
       "id": "keyboard_condition",
       "type": "select",
       "question": "Tastatur-Zustand?",
-      "values": ["Top", "Gut", "Abgenutzt", "Beschädigt"],
+      "values": [
+        "Top",
+        "Gut",
+        "Abgenutzt",
+        "Beschädigt"
+      ],
       "specField": "Tastatur-Zustand",
       "specValue": "%v",
-      "qualityImpact": { "Top": 4,  "Gut": 4, "Abgenutzt": 3, "Beschädigt": 2 }
+      "knockout": {
+        "below": 0.5,
+        "cap": 0.59
+      },
+      "states": {
+        "Top": 0.75,
+        "Gut": 0.75,
+        "Abgenutzt": 0.5,
+        "Beschädigt": 0.25
+      },
+      "weight": 3
     },
     {
       "id": "screen_condition",
       "type": "select",
       "question": "Display-Zustand?",
-      "values": ["Einwandfrei", "Kratzer", "Flecken/Pixelfehler"],
+      "values": [
+        "Einwandfrei",
+        "Kratzer",
+        "Flecken/Pixelfehler"
+      ],
       "specField": "Display-Zustand",
       "specValue": "%v",
-      "qualityImpact": { "Einwandfrei": 5, "Kratzer": 4, "Flecken/Pixelfehler": 3 }
+      "states": {
+        "Einwandfrei": 1.0,
+        "Kratzer": 0.75,
+        "Flecken/Pixelfehler": 0.5
+      },
+      "weight": 4
     },
     {
       "id": "chassis_condition",
       "type": "select",
       "question": "Gehäuse-Zustand?",
-      "values": ["Einwandfrei", "Kratzer", "Beschädigt"],
-      "specField": "Display-Zustand",
+      "values": [
+        "Einwandfrei",
+        "Kratzer",
+        "Beschädigt"
+      ],
+      "specField": "Gehäuse-Zustand",
       "specValue": "%v",
-      "qualityImpact": { "Einwandfrei": 5, "Kratzer": 4, "Beschädigt": 3 }
+      "states": {
+        "Einwandfrei": 1.0,
+        "Kratzer": 0.75,
+        "Beschädigt": 0.5
+      },
+      "weight": 3
     },
     {
       "id": "battery_swollen",
       "type": "boolean",
       "question": "Akku aufgebläht oder verformt?",
-      "qualityImpact": { "true": 1, "false": 5 }
+      "knockout": {
+        "below": 0.25,
+        "cap": 0.19
+      },
+      "states": {
+        "true": 0.0,
+        "false": 1.0
+      },
+      "weight": 2
     },
     {
       "id": "hinges_ok",
       "type": "boolean",
       "question": "Scharniere in Ordnung?",
-      "qualityImpact": { "true": 5, "false": 2 }
+      "knockout": {
+        "below": 0.5,
+        "cap": 0.59
+      },
+      "states": {
+        "true": 1.0,
+        "false": 0.25
+      },
+      "weight": 2
     }
   ]
 }

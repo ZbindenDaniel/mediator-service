@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { Entity } from '../../models';
 import type { IncomingMessage, ServerResponse } from 'http';
+import type { FeatureKey } from '../lib/features';
 
 // TODO(agent): Ensure new ERP sync actions register cleanly through the loader to keep CLI parity.
 
@@ -12,6 +13,8 @@ export interface Action {
   view: (entity: Entity) => string;
   matches?: (path: string, method: string) => boolean;
   handle?: (req: IncomingMessage, res: ServerResponse, ctx: any) => Promise<void> | void;
+  // Feature this action belongs to; the dispatcher answers 404 while it is disabled. Unset = core.
+  feature?: FeatureKey;
 }
 
 export interface HttpAction extends Omit<Action, 'matches' | 'handle'> {
@@ -33,7 +36,8 @@ function normalizeAction(mod: any, filename: string): Action {
     : (entity: Entity) => `<div class="card"><h3>${label}</h3><p class="muted">No view implemented for ${key}.</p></div>`;
   const matches = typeof a.matches === 'function' ? a.matches : () => false;
   const handle = typeof a.handle === 'function' ? a.handle : async () => {};
-  return { key, label, appliesTo, view, matches, handle };
+  const feature = typeof a.feature === 'string' ? a.feature as FeatureKey : undefined;
+  return { key, label, appliesTo, view, matches, handle, feature };
 }
 
 export function loadActions(): Action[] {

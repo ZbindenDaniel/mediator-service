@@ -24,3 +24,4 @@ export * from './item-relation';
 export * from './item-attachment';
 export * from './external-doc';
 export * from './co2';
+export * from './features';

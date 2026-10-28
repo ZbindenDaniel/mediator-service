@@ -1,4 +1,5 @@
 import React from 'react';
+import { GoTrash } from 'react-icons/go';
 import AttachmentBindingModal, { BindingOption } from './AttachmentBindingModal';
 import type { ExternalDocSummary } from '../../../models/external-doc';
 
@@ -13,6 +14,8 @@ interface AttachmentsCardProps extends AttachmentIdentifiers {
   itemUUID: string;
   attachments: any[];
   onChanged: (next: any[]) => void;
+  // Another org's item (tenancy 3a): files stay visible (grey zone), upload/delete would 403.
+  readOnly?: boolean;
 }
 
 type ExternalFileRow = { fileName: string; url: string; deletable: boolean };
@@ -114,7 +117,8 @@ export default function AttachmentsCard({
   artikelNummer,
   serialNumber,
   macAddress,
-  ean
+  ean,
+  readOnly = false
 }: AttachmentsCardProps) {
   const [uploading, setUploading] = React.useState(false);
   const [pendingFile, setPendingFile] = React.useState<File | null>(null);
@@ -247,82 +251,75 @@ export default function AttachmentsCard({
       <div className="card">
         <h3>Anhänge ({totalCount})</h3>
         {rows.length > 0 && (
-          <table className="details">
-            <tbody>
-              {rows.map((row, idx) => {
-                if (row.kind === 'instance') {
-                  const att = row.att;
-                  const binding = parseBindingLabel(att.Label);
-                  return (
-                    <tr key={`i-${att.Id}`}>
-                      <td>
-                        <a href={`/media/${att.FilePath}`} target="_blank" rel="noopener noreferrer">
-                          {att.FileName}
-                        </a>
-                      </td>
-                      <td className="muted" style={{ fontSize: '0.85em' }}>
-                        {att.Scope === 'product'
-                          ? 'Artikel (alle Instanzen)'
-                          : binding ? bindingBadgeText(binding.type) : att.Label || null}
-                      </td>
-                      <td className="muted">{att.MimeType || ''}</td>
-                      <td className="muted">{formatBytes(att.FileSize)}</td>
-                      <td className="muted">{att.CreatedAt ? att.CreatedAt.slice(0, 10) : ''}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className="sml-btn btn"
-                          onClick={() => handleInstanceDelete(att.Id)}
-                          title="Anhang löschen"
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                }
-                if (row.kind === 'external-header') {
-                  return (
-                    <tr key={`eh-${row.dirName}`} style={{ borderTop: idx > 0 ? '1px solid var(--border, #ddd)' : undefined }}>
-                      <td colSpan={5} className="muted" style={{ fontSize: '0.82em', paddingTop: '8px', paddingBottom: '2px' }}>
-                        <strong>{row.docType || row.dirName}</strong>
-                        {row.identifierValue && (
-                          <span style={{ marginLeft: '8px' }}>
-                            {identifierTypeLabel(row.identifierType)}: {row.identifierValue}
-                          </span>
-                        )}
-                      </td>
-                      <td />
-                    </tr>
-                  );
-                }
+          // A list, not a 6-column table: in the ~400px detail panel the table pushed the delete
+          // button off-screen. Name + trash on one line, meta underneath.
+          <ul className="attachment-list">
+            {rows.map((row, idx) => {
+              if (row.kind === 'instance') {
+                const att = row.att;
+                const binding = parseBindingLabel(att.Label);
+                const scope = att.Scope === 'product'
+                  ? 'Artikel (alle Instanzen)'
+                  : binding ? bindingBadgeText(binding.type) : att.Label || null;
+                const meta = [scope, att.MimeType, formatBytes(att.FileSize), att.CreatedAt ? att.CreatedAt.slice(0, 10) : null]
+                  .filter(Boolean)
+                  .join(' · ');
                 return (
-                  <tr key={`ef-${row.dirName}-${idx}`}>
-                    <td style={{ paddingLeft: '16px' }}>
-                      <a href={row.url} target="_blank" rel="noopener noreferrer">
-                        {row.fileName}
+                  <li key={`i-${att.Id}`} className="attachment-list__row">
+                    <div className="attachment-list__main">
+                      <a href={`/media/${att.FilePath}`} target="_blank" rel="noopener noreferrer">
+                        {att.FileName}
                       </a>
-                    </td>
-                    <td className="muted" colSpan={4} />
-                    <td>
-                      {row.deletable && (
-                        <button
-                          type="button"
-                          className="sml-btn btn"
-                          onClick={() => handleExternalDelete(row.dirName, row.fileName)}
-                          title="Datei löschen"
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </td>
-                  </tr>
+                      {meta && <span className="attachment-list__meta">{meta}</span>}
+                    </div>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        className="icon-btn attachment-list__delete"
+                        onClick={() => handleInstanceDelete(att.Id)}
+                        title="Anhang löschen"
+                        aria-label="Anhang löschen"
+                      >
+                        <GoTrash aria-hidden="true" />
+                      </button>
+                    )}
+                  </li>
                 );
-              })}
-            </tbody>
-          </table>
+              }
+              if (row.kind === 'external-header') {
+                return (
+                  <li key={`eh-${row.dirName}`} className="attachment-list__group">
+                    <strong>{row.docType || row.dirName}</strong>
+                    {row.identifierValue && (
+                      <span> · {identifierTypeLabel(row.identifierType)}: {row.identifierValue}</span>
+                    )}
+                  </li>
+                );
+              }
+              return (
+                <li key={`ef-${row.dirName}-${idx}`} className="attachment-list__row attachment-list__row--nested">
+                  <div className="attachment-list__main">
+                    <a href={row.url} target="_blank" rel="noopener noreferrer">
+                      {row.fileName}
+                    </a>
+                  </div>
+                  {row.deletable && !readOnly && (
+                    <button
+                      type="button"
+                      className="icon-btn attachment-list__delete"
+                      onClick={() => handleExternalDelete(row.dirName, row.fileName)}
+                      title="Datei löschen"
+                      aria-label="Datei löschen"
+                    >
+                      <GoTrash aria-hidden="true" />
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         )}
-        <div style={{ marginTop: '8px' }}>
+        {!readOnly && <div style={{ marginTop: '8px' }}>
           <input
             ref={fileRef}
             type="file"
@@ -334,7 +331,7 @@ export default function AttachmentsCard({
           <button type="button" className="btn" onClick={() => fileRef.current?.click()}>
             {uploading ? 'Lädt hoch…' : '+ Datei anhängen'}
           </button>
-        </div>
+        </div>}
       </div>
     </>
   );

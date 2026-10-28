@@ -5,6 +5,7 @@ interface Props extends AttachmentIdentifiers {
   itemUUID: string;
   attachments: any[];
   onChanged: (next: any[]) => void;
+  readOnly?: boolean;
 }
 
 export default function ItemAttachmentsTab({ itemUUID, attachments, onChanged, ...ids }: Props) {

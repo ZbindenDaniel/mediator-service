@@ -4,6 +4,10 @@ Covers: ERP import/export, CSV ingestion, Langtext formatting, nightly sync sche
 
 ---
 
+## 1006. ✅ ERP timestamps without a zone read as Zurich time; nightly-sync setting seeded after the schema exists
+**Why:** (1) `parseDatumErfasst` turned zone-less values with a time of day into server-local time ("05.05.2024 08:30" via `new Date()`), so the container (UTC) and a dev machine (CEST) were 2 h apart. Formats without a time already went through UTC midnight. Kivitendo runs in Zurich, so zone-less ISO and `dd.mm.yyyy hh:mm` values are now converted from Europe/Zurich via `Intl` (with a second pass for the DST switch). Date-only values stay UTC midnight, so they show the same calendar day in UTC and in Zurich. Zoned ISO strings are unchanged. `dd/mm/yyyy` is now always read as day/month; before, `new Date()` read e.g. `05/03/2024` as US month/day. (2) `erp_nightly_sync_enabled` was seeded in a fire-and-forget block at module load. On a fresh DB that ran before `system_settings` existed, so the nightly sync stayed off until the next restart. It is now seeded right after `initDb`.
+**Deferred:** existing `Datum_erfasst` values imported on the UTC container are 1–2 h late and are not corrected; re-importing the CSV fixes them if it matters.
+
 
 ## 956. ✅ Shopware sync survives a shop DB reset (stale `ShopwareProductId` no longer breaks item-upsert)
 **Why:** After the Shopware dev DB was recreated without products (WMS is now the source of truth for items), every `item-upsert` job failed permanently with `PATCH /api/product/<id> … FRAMEWORK__WRITE_TYPE_INTEND_ERROR … Use POST method to create new entities`. `upsertProduct` trusted `snapshot.shopwareProductId` (persisted in `item_refs` from an earlier sync) blindly and PATCHed it; the id no longer existed in the shop, and the 400 is classified terminal, so nothing self-healed. Clearing the column by hand would fix it once but break again on the next reset.

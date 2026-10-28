@@ -6,7 +6,7 @@ import { cupsLpinfo, cupsLpstat, cupsCancel, cupsRefreshDiscovery, cupsDiscovery
 
 const runCupsCancel = cupsCancel;
 import { syncPrinterQueuesToCups, removePrinterQueueFromCups } from '../utils/sync-printer-queues';
-import { requireAdminAuth } from '../utils/admin-auth';
+import { requireSuperAdminAuth } from '../utils/admin-auth';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -38,6 +38,7 @@ function extractQueueName(urlPath: string): string | null {
 }
 
 const action = defineHttpAction({
+  feature: 'printing',
   key: 'admin-printer-queues',
   label: 'Admin: printer queues',
   appliesTo: () => false,
@@ -52,7 +53,7 @@ const action = defineHttpAction({
            /^\/api\/admin\/printer-queues\/[^/]+$/.test(path);
   },
   async handle(req: IncomingMessage, res: ServerResponse) {
-    if (!requireAdminAuth(req, res)) return;
+    if (!requireSuperAdminAuth(req, res)) return;
     const { url = '', method = '' } = req;
     const urlPath = url.split('?')[0];
 

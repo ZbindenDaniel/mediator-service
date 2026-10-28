@@ -29,6 +29,10 @@ import QualityReviewStep from './QualityReviewStep';
 import type { QualityReviewResult } from './QualityReviewStep';
 import QualityBadge from './QualityBadge';
 import ArtikelNummerLookupStep from './ArtikelNummerLookupStep';
+import { fetchSpecContract } from '../lib/contractsApi';
+import { missingRequiredSpecs, prefillSpecFields } from '../lib/specPrefill';
+import type { SpecContract } from '../../../models/spec-contract';
+import { useFeature } from '../context/FeaturesContext';
 
 // TODO(agentic-trigger-skip-ui): Suppress alerts for already-queued agentic runs.
 
@@ -610,7 +614,10 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
   const location = useLocation();
   const [draft, setDraft] = useState<Partial<ItemFormData>>(() => ({}));
   const [shouldUseAgenticForm, setShouldUseAgenticForm] = useState(false);
+  const agenticEnabled = useFeature('agentic');
+  const printingEnabled = useFeature('printing');
   const [creationStep, setCreationStep] = useState<CreationStep>('artikelLookup');
+  const [specContract, setSpecContract] = useState<SpecContract | null>(null);
   const [selectedRef, setSelectedRef] = useState<SimilarItem | null>(null);
   const [basicInfo, setBasicInfo] = useState<Partial<ItemFormData>>(() => ({}));
   const [manualDraft, setManualDraft] = useState<Partial<ItemFormData>>(() => ({}));
@@ -720,6 +727,11 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
 
   useEffect(() => {
     let cancelled = false;
+    // AI off in this deployment: stay on the manual flow and don't probe the (blocked) health API.
+    if (!agenticEnabled) {
+      setShouldUseAgenticForm(false);
+      return () => { cancelled = true; };
+    }
 
     async function checkAgenticHealth() {
       try {
@@ -763,7 +775,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [agenticEnabled]);
 
   const baseDraft = useMemo(
     () => ({
@@ -1273,7 +1285,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
       }
 
       // TODO(agent): Validate auto-print behavior against production printers once enabled.
-      if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled) {
+      if (AUTO_PRINT_ITEM_LABEL_CONFIG.enabled && printingEnabled) {
         const einheit = resolveAutoPrintEinheit(submissionData.Einheit);
         const autoPrintTargets = resolveAutoPrintTargets({
           createdItem,
@@ -1671,7 +1683,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
     }
   };
 
-  const handleSkipMatches = () => {
+  const handleSkipMatches = async () => {
     console.log('No duplicate selected, determining next creation step', { useAgenticFlow: shouldUseAgenticForm });
 
     if (shouldUseAgenticForm) {
@@ -1685,7 +1697,14 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
       return;
     }
 
-    setManualDraft((prev) => ({ ...prev, ...basicInfo }));
+    // Loaded before the form opens: the details form takes its initial values once.
+    const sub = typeof basicInfo.Unterkategorien_A === 'number' ? basicInfo.Unterkategorien_A : null;
+    const contract = sub !== null ? await fetchSpecContract(sub) : null;
+    setSpecContract(contract);
+    setManualDraft((prev) => {
+      const next = { ...prev, ...basicInfo };
+      return contract ? { ...next, Langtext: prefillSpecFields(next.Langtext, contract) as ItemFormData['Langtext'] } : next;
+    });
     setCreationStep('manualEdit');
   };
 
@@ -1694,6 +1713,17 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
     if (creating) {
       console.warn('Skipping manual submit; creation already running.');
       return;
+    }
+    const missingSpecs = specContract ? missingRequiredSpecs(data.Langtext ?? manualDraft.Langtext, specContract) : [];
+    if (missingSpecs.length > 0) {
+      // Warning only (plan E3): intake must not stall on a field nobody can read off the device.
+      const proceed = await dialog.confirm({
+        title: 'Spezifikationen unvollständig',
+        message: `Noch leer: ${missingSpecs.join(', ')}. Trotzdem speichern?`,
+        confirmLabel: 'Speichern',
+        cancelLabel: 'Zurück',
+      });
+      if (!proceed) return;
     }
     try {
       const merged = buildManualSubmissionPayload({
@@ -1782,7 +1812,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
   if (creationStep === 'basicInfo') {
     const ocrSection = (
       <div style={{ marginBottom: '1rem' }}>
-        <p style={{ fontSize: '0.85em', color: '#666', margin: '0 0 0.5rem 0' }}>
+        <p style={{ fontSize: '0.85em', color: 'var(--muted)', margin: '0 0 0.5rem 0' }}>
           Gerät fotografieren (optional) – Typenschild scannen für bessere KI-Suche
         </p>
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1815,7 +1845,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
               <img
                 src={ocrPhoto}
                 alt="Typenschild Vorschau"
-                style={{ height: 48, objectFit: 'contain', borderRadius: 4, border: '1px solid #ccc' }}
+                style={{ height: 48, objectFit: 'contain', borderRadius: 4, border: '1px solid var(--line)' }}
               />
               <button type="button" onClick={() => setOcrPhoto(null)} aria-label="Foto entfernen">
                 ✕
@@ -1857,6 +1887,7 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
               : undefined
           }
           layout={layout}
+          questionScope="create"
         />
       </>
     );
@@ -1904,6 +1935,12 @@ export default function ItemCreate({ layout = 'page', basicInfoHeader, onSaved, 
           <>
             <h2>Details ergänzen</h2>
             <p>Die Pflichtfelder wurden übernommen. Bitte ergänze bei Bedarf weitere Angaben.</p>
+            {specContract && specContract.fields.length > 0 && (
+              <p className="muted">
+                Die Spezifikationen der Kategorie sind unten unter Langtext vorbereitet
+                {specContract.fields.some((f) => f.required) ? ` — wichtig: ${specContract.fields.filter((f) => f.required).map((f) => f.key).join(', ')}` : ''}.
+              </p>
+            )}
           </>
         }
         lockedFields={manualLockedFields}

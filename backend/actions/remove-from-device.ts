@@ -1,8 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { execute, queryOne, withTransaction } from '../db-client';
-import { insertQualityAssessment, updateItemQualityAssessment, generateShopwareCorrelationId } from '../db';
+import { generateShopwareCorrelationId } from '../db';
+import { isIntegratedSlot, recordPartLeftParent } from '../lib/parent-slot';
+import { resolveEffectiveSubCategory } from '../lib/quality-score';
 import { graduateComponentInTx, needsGraduation, WriteOnceIdentityError } from '../lib/graduate-component';
+import { resolveActor } from '../utils/actor';
+import { guardWrite } from '../utils/write-guard';
+import { resolveTenant } from '../utils/tenant';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -10,17 +15,33 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 // Resolve the Artikelnummer to graduate into: an existing ref, or a freshly created one.
+// `slotSubCategory` is the subcategory the component was assessed with (its slot's target): a ref of
+// another subcategory would silently switch its contracts and orphan its answers, so that needs an
+// explicit `confirmSubCategoryChange` (R5); a new ref defaults to the slot's subcategory.
 async function resolveGraduationRef(
   ctx: any,
-  data: any
-): Promise<{ artikelNummer: string } | { error: string }> {
+  data: any,
+  slotSubCategory: number | null
+): Promise<{ artikelNummer: string } | { error: string; status?: number; slotSubCategory?: number; refSubCategory?: number }> {
+  const confirmed = data.confirmSubCategoryChange === true;
   const artikelNummer = typeof data.artikelNummer === 'string' ? data.artikelNummer.trim() : '';
   if (artikelNummer) {
-    const ref = await queryOne<{ Artikel_Nummer: string }>(
-      'SELECT "Artikel_Nummer" FROM item_refs WHERE "Artikel_Nummer" = $1 LIMIT 1',
+    const ref = await queryOne<{ Artikel_Nummer: string; Unterkategorien_A: unknown }>(
+      'SELECT "Artikel_Nummer", "Unterkategorien_A" FROM item_refs WHERE "Artikel_Nummer" = $1 LIMIT 1',
       [artikelNummer]
     );
     if (!ref) return { error: 'artikelNummer not found' };
+    const refSub = ref.Unterkategorien_A === null || ref.Unterkategorien_A === undefined || ref.Unterkategorien_A === ''
+      ? null
+      : Math.round(Number(ref.Unterkategorien_A));
+    if (!confirmed && slotSubCategory !== null && refSub !== null && Number.isFinite(refSub) && refSub !== slotSubCategory) {
+      return {
+        error: `Artikel ist Kategorie ${refSub}, der Steckplatz erwartet ${slotSubCategory} — mit confirmSubCategoryChange bestätigen`,
+        status: 409,
+        slotSubCategory,
+        refSubCategory: refSub
+      };
+    }
     return { artikelNummer };
   }
 
@@ -29,15 +50,27 @@ async function resolveGraduationRef(
 
   const artikelbeschreibung = typeof newRef.Artikelbeschreibung === 'string' ? newRef.Artikelbeschreibung.trim() : '';
   const hersteller = typeof newRef.Hersteller === 'string' ? newRef.Hersteller.trim() : '';
-  const subCategory = typeof newRef.Unterkategorien_A === 'number' ? newRef.Unterkategorien_A : null;
+  const subCategory = typeof newRef.Unterkategorien_A === 'number' ? newRef.Unterkategorien_A : slotSubCategory;
   if (!artikelbeschreibung) return { error: 'newRef.Artikelbeschreibung is required' };
+  if (!confirmed && slotSubCategory !== null && subCategory !== null && subCategory !== slotSubCategory) {
+    return {
+      error: `Neuer Artikel mit Kategorie ${subCategory}, der Steckplatz erwartet ${slotSubCategory} — mit confirmSubCategoryChange bestätigen`,
+      status: 409,
+      slotSubCategory,
+      refSubCategory: subCategory
+    };
+  }
 
+  // Optional specs for the new article, e.g. the part number (FRU) read off the part.
+  const langtext = newRef.Langtext && typeof newRef.Langtext === 'object' && !Array.isArray(newRef.Langtext)
+    ? Object.fromEntries(Object.entries(newRef.Langtext as Record<string, unknown>).filter(([, v]) => typeof v === 'string' && v.trim()))
+    : {};
   const maxStr: string | null = await ctx.getMaxArtikelNummer();
   const next = String((maxStr ? parseInt(maxStr, 10) : 0) + 1).padStart(6, '0');
   await execute(
-    `INSERT INTO item_refs ("Artikel_Nummer","Artikelbeschreibung","Hersteller","Unterkategorien_A")
-     VALUES ($1,$2,$3,$4)`,
-    [next, artikelbeschreibung, hersteller || null, subCategory]
+    `INSERT INTO item_refs ("Artikel_Nummer","Artikelbeschreibung","Hersteller","Unterkategorien_A","Langtext","ContributedByTenant")
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [next, artikelbeschreibung, hersteller || null, subCategory, Object.keys(langtext).length ? JSON.stringify(langtext) : null, resolveTenant(ctx)]
   );
   return { artikelNummer: next };
 }
@@ -54,6 +87,7 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/remove-from-device$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
+      if (!(await guardWrite(ctx, res, 'item', uuid))) return;
 
       const item = await ctx.getItem(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
@@ -63,25 +97,30 @@ const action = defineHttpAction({
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
 
-      const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
+      const actor = resolveActor(ctx, typeof data.actor === 'string' ? data.actor : '');
       const toBoxId = typeof data.toBoxId === 'string' ? data.toBoxId.trim() : '';
       // Contract signal: whether extracting this part turns the parent into a spare-part donor.
       // Decoupled from extraction — a drive pulled from a device sold whole must NOT mark it.
-      // Default true preserves the historical parting-out behavior when the caller is silent.
-      const markParentAsSpare = data.markParentAsSpare !== false;
+      // Silent caller → the contract decides (unweighted slot = historical "grade 1", weighted = score).
+      const markParentAsSpare: boolean | undefined = typeof data.markParentAsSpare === 'boolean' ? data.markParentAsSpare : undefined;
 
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       if (!toBoxId) return sendJson(res, 400, { error: 'toBoxId is required' });
+      if (!(await guardWrite(ctx, res, 'box', toBoxId))) return;
 
       // Verify the item has a Zerlegt_aus relation to get the parent device UUID
-      const relation = await queryOne<{ ParentItemUUID: string }>(
-        `SELECT "ParentItemUUID" FROM item_relations WHERE "ChildItemUUID" = $1 AND "RelationType" = 'Zerlegt_aus'`,
+      const relation = await queryOne<{ ParentItemUUID: string; SlotKey: string | null }>(
+        `SELECT "ParentItemUUID", "SlotKey" FROM item_relations WHERE "ChildItemUUID" = $1 AND "RelationType" = 'Zerlegt_aus'`,
         [uuid]
       );
       if (!relation) {
         return sendJson(res, 400, { error: 'Artikel ist kein katalogisiertes Ersatzteil (kein Zerlegt_aus-Link)' });
       }
       const parentUuid = relation.ParentItemUUID;
+      const slotKey = relation.SlotKey ?? null;
+      if (await isIntegratedSlot(parentUuid, slotKey)) {
+        return sendJson(res, 409, { error: 'Teil ist fest verbaut und kann nicht entnommen werden' });
+      }
 
       const dest = await ctx.getBox(toBoxId);
       if (!dest) {
@@ -93,28 +132,19 @@ const action = defineHttpAction({
       const normalizedLocation = rawLocationId || rawLocation || null;
       const now = new Date().toISOString();
 
-      // Effective UUID after this call — changes if the component graduates (C- → I-).
-      let effectiveUuid = uuid;
-
       if (needsGraduation(item)) {
-        // 1a. Set identity (write-once) and extract in one atomic swap.
-        const resolved = await resolveGraduationRef(ctx, data);
-        if ('error' in resolved) return sendJson(res, 400, resolved);
-        const artikelNummer = resolved.artikelNummer;
-
-        // Mint the new I- UUID, guarding against collision (matches catalog-spare-part).
-        let newUUID: string | null = null;
-        for (let i = 0; i < 5; i++) {
-          const candidate = await ctx.generateItemUUID(artikelNummer);
-          if (!(await ctx.getItem(candidate))) { newUUID = candidate; break; }
+        // 1a. Set identity (write-once) and extract in one transaction; the ItemUUID stays.
+        const resolved = await resolveGraduationRef(ctx, data, await resolveEffectiveSubCategory(uuid));
+        if ('error' in resolved) {
+          const { status, ...body } = resolved;
+          return sendJson(res, status ?? 400, body);
         }
-        if (!newUUID) return sendJson(res, 500, { error: 'Failed to generate item UUID' });
+        const artikelNummer = resolved.artikelNummer;
 
         try {
           await withTransaction(async (client) => {
             const { parentArtikelNummer } = await graduateComponentInTx(client, {
-              oldUUID: uuid,
-              newUUID: newUUID!,
+              itemUUID: uuid,
               artikelNummer,
               boxId: toBoxId,
               location: normalizedLocation,
@@ -136,14 +166,13 @@ const action = defineHttpAction({
           }
           throw err;
         }
-        effectiveUuid = newUUID;
 
         await ctx.logEvent({
           Actor: actor,
           EntityType: 'Item',
-          EntityId: effectiveUuid,
+          EntityId: uuid,
           Event: 'ComponentGraduated',
-          Meta: JSON.stringify({ parentUuid, artikelNummer, previousUuid: uuid, toBoxId }),
+          Meta: JSON.stringify({ parentUuid, artikelNummer, toBoxId }),
         });
       } else {
         // 1b. Legacy path: component already has a reference — just relocate it.
@@ -153,31 +182,26 @@ const action = defineHttpAction({
         );
       }
 
-      // 2. Mark the parent device as Ersatzteil — only when the contract parts it out.
+      // 2. Record the slot as missing on the parent; mark it as spare donor per contract (lib/parent-slot).
       let qualityAssessmentId: number | null = null;
-      if (markParentAsSpare) {
-        try {
-          qualityAssessmentId = await insertQualityAssessment({
-            tag: 'Ersatzteil',
-            value: 1,
-            is_complete: false,
-            has_defects: null,
-            is_functional: false,
-            notes: 'Ersatzteil entnommen',
-            reviewed_at: now,
-            reviewed_by: actor,
-          });
-          await updateItemQualityAssessment(parentUuid, qualityAssessmentId, 1);
-        } catch (qaErr) {
-          console.error('[remove-from-device] Failed to update parent device quality', { parentUuid, error: qaErr });
-        }
+      let markedSpare = false;
+      try {
+        const result = await recordPartLeftParent(parentUuid, slotKey, actor, {
+          ...(markParentAsSpare === undefined ? {} : { markParentAsSpare }),
+          actor,
+          logEvent: ctx.logEvent
+        });
+        qualityAssessmentId = result.assessmentId;
+        markedSpare = result.markedSpare;
+      } catch (qaErr) {
+        console.error('[remove-from-device] Failed to update parent device quality', { parentUuid, error: qaErr });
       }
 
       // Log events
       await ctx.logEvent({
         Actor: actor,
         EntityType: 'Item',
-        EntityId: effectiveUuid,
+        EntityId: uuid,
         Event: 'RemovedFromDevice',
         Meta: JSON.stringify({ parentUuid, toBoxId, location: normalizedLocation })
       });
@@ -186,11 +210,11 @@ const action = defineHttpAction({
         EntityType: 'Item',
         EntityId: parentUuid,
         Event: 'SparePartRemoved',
-        Meta: JSON.stringify({ childItemUUID: effectiveUuid, toBoxId, qualityAssessmentId, markedParentAsSpare: markParentAsSpare })
+        Meta: JSON.stringify({ childItemUUID: uuid, toBoxId, qualityAssessmentId, markedParentAsSpare: markedSpare })
       });
 
       // Enqueue Shopware sync for parent device quality change — only if we changed it.
-      if (markParentAsSpare) {
+      if (markedSpare) {
         try {
           const correlationId = generateShopwareCorrelationId('remove-from-device', parentUuid);
           await ctx.enqueueShopwareSyncJob({
@@ -203,8 +227,8 @@ const action = defineHttpAction({
         }
       }
 
-      console.info('[remove-from-device] Spare part relocated', { uuid: effectiveUuid, parentUuid, toBoxId, actor, graduated: effectiveUuid !== uuid });
-      return sendJson(res, 200, { ok: true, itemUUID: effectiveUuid, toBoxId, locationId: normalizedLocation });
+      console.info('[remove-from-device] Spare part relocated', { uuid, parentUuid, toBoxId, actor, graduated: needsGraduation(item) });
+      return sendJson(res, 200, { ok: true, itemUUID: uuid, toBoxId, locationId: normalizedLocation });
     } catch (err) {
       console.error('[remove-from-device] Unexpected error', err);
       return sendJson(res, 500, { error: (err as Error).message });

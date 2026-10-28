@@ -10,7 +10,7 @@ import {
   PRINTER_QUEUE_MARKETING,
 } from '../config';
 import { getAllSettings, setSetting, clearSetting, hasOverride } from '../utils/app-settings';
-import { requireAdminAuth } from '../utils/admin-auth';
+import { requireSuperAdminAuth } from '../utils/admin-auth';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -48,13 +48,14 @@ async function buildSettingsResponse() {
 }
 
 const action = defineHttpAction({
+  feature: 'printing',
   key: 'admin-printer-settings',
   label: 'Admin: printer settings',
   appliesTo: () => false,
   matches: (path, method) =>
     path === '/api/admin/printer-settings' && (method === 'GET' || method === 'PUT'),
   async handle(req: IncomingMessage, res: ServerResponse) {
-    if (!requireAdminAuth(req, res)) return;
+    if (!requireSuperAdminAuth(req, res)) return;
     try {
       if (req.method === 'GET') {
         sendJson(res, 200, await buildSettingsResponse());

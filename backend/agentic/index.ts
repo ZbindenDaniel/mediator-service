@@ -138,11 +138,12 @@ const AGENTIC_STATUS_UPDATE_FLAGS: AgenticRunStatusFlag[] = [
   'LastSearchLinksJsonIsSet'
 ];
 
+// Only 'running' runs: stale 'queued' ones are picked up by the dispatcher's claim (claim model, #913).
 const SELECT_STALE_AGENTIC_RUNS_SQL = `
   SELECT "Id", "Artikel_Nummer", "SearchQuery", "LastSearchLinksJson", "Status", "LastModified", "ReviewState", "ReviewedBy",
          "LastReviewDecision", "LastReviewNotes", "RetryCount", "NextRetryAt", "LastError", "LastAttemptAt"
     FROM agentic_runs
-   WHERE "Status" IN ('queued', 'running')
+   WHERE "Status" = 'running'
    ORDER BY "LastModified" ASC, "Id" ASC
 `;
 
@@ -2371,13 +2372,7 @@ export async function resumeStaleAgenticRuns(
     count: staleRuns.length
   });
 
-  // Respect concurrency cap: only schedule queued runs up to the number of available slots.
-  // Already-'running' runs (e.g. server crashed mid-run) get scheduled regardless because
-  // their slot was already counted — the atomic gate in runInBackground will re-verify.
-  const resumeRunningCount = await fetchRunningCount(deps, logger);
-  const availableSlots = Math.max(0, MAX_CONCURRENT_RUNNING_RUNS - resumeRunningCount);
-  let slotsUsed = 0;
-
+  // Running runs (server died mid-run) already hold their slot, so no cap check here.
   let resumed = 0;
   let skipped = 0;
   let failed = 0;
@@ -2391,20 +2386,6 @@ export async function resumeStaleAgenticRuns(
         status: run.Status
       });
       continue;
-    }
-
-    // Queued runs consume an available slot; skip if cap is already reached.
-    if (run.Status === AGENTIC_RUN_STATUS_QUEUED) {
-      if (slotsUsed >= availableSlots) {
-        skipped += 1;
-        logger.info?.('[agentic-service] Skipping queued stale run; no available slots at resume', {
-          artikelNummer: run.Artikel_Nummer,
-          slotsUsed,
-          availableSlots
-        });
-        continue;
-      }
-      slotsUsed += 1;
     }
 
     try {

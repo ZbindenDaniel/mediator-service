@@ -1,20 +1,30 @@
 {
-  "version": 1,
+  "version": 2,
   "subCategory": 401,
   "questions": [
     {
       "id": "screen_condition",
       "type": "select",
       "question": "Bildschirmzustand?",
-      "values": ["Keine Auffälligkeiten", "Geringe Kratzer", "Deutliche Mängel", "Pixelfehler vorhanden"],
+      "values": [
+        "Keine Auffälligkeiten",
+        "Geringe Kratzer",
+        "Deutliche Mängel",
+        "Pixelfehler vorhanden"
+      ],
       "specField": "Bildschirmzustand",
       "specValue": "%v",
-      "qualityImpact": {
-        "Keine Auffälligkeiten": 5,
-        "Geringe Kratzer": 3,
-        "Deutliche Mängel": 2,
-        "Pixelfehler vorhanden": 1
-      }
+      "knockout": {
+        "below": 0.25,
+        "cap": 0.19
+      },
+      "states": {
+        "Keine Auffälligkeiten": 1.0,
+        "Geringe Kratzer": 0.5,
+        "Deutliche Mängel": 0.25,
+        "Pixelfehler vorhanden": 0.0
+      },
+      "weight": 4
     },
     {
       "id": "stand_included",
@@ -22,7 +32,11 @@
       "question": "Standfuss / VESA-Halter vorhanden?",
       "specField": "Standfuss",
       "specValue": "%v",
-      "qualityImpact": { "true": 5, "false": 4 }
+      "states": {
+        "true": 1.0,
+        "false": 0.75
+      },
+      "weight": 1
     }
   ]
 }

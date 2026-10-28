@@ -18,6 +18,7 @@ function parseIntakeKey(key: string): { serial: string | null; mac: string | nul
 const ROUTE_RE = /^\/api\/intake\/([^/]+)\/complete$/;
 
 const action = defineHttpAction({
+  feature: 'intake',
   key: 'intake-complete',
   label: 'Intake complete',
   appliesTo: () => false,

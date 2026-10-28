@@ -95,7 +95,7 @@ describe('agentic direct dispatch', () => {
       LastAttemptAt: null
     };
 
-    const { deps, invokeModel, upsertAgenticRun, logEvent } = createDeps({ existing: null, queued: queuedRun });
+    const { deps, invokeModel, upsertAgenticRun, logEvent, getAgenticRun } = createDeps({ existing: null, queued: queuedRun });
 
     // startAgenticRun should queue the run but NOT immediately invoke model
     const result = await startAgenticRun(
@@ -116,11 +116,14 @@ describe('agentic direct dispatch', () => {
       expect.objectContaining({ Event: 'AgenticRunQueued', EntityId: queuedRun.Artikel_Nummer })
     );
 
-    // Now dispatch queued runs — return the run only for queued-status queries; idle-fill returns empty
+    // Now dispatch queued runs. The claim (UPDATE … RETURNING) moves the row to 'running' — the
+    // invocation only proceeds for a claimed run, so the re-read must see 'running' too.
+    const claimedRun: AgenticRun = { ...queuedRun, Status: 'running' };
     mockQuery.mockImplementation(async (sql: string) => {
-      if (typeof sql === 'string' && sql.includes("'queued'")) return [queuedRun];
+      if (typeof sql === 'string' && sql.includes("'queued'")) return [claimedRun];
       return [];
     });
+    getAgenticRun.mockImplementation(async () => claimedRun);
     await dispatchQueuedAgenticRuns(deps);
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -196,11 +199,13 @@ describe('agentic direct dispatch', () => {
       invokeMock: failingInvoke
     });
 
-    // Mock query to return the queued run for dispatch; idle-fill returns empty
+    // The claim moves the run to 'running' (see the first test); idle-fill returns empty.
+    const claimedRun: AgenticRun = { ...existingRun, Status: 'running' };
     mockQuery.mockImplementation(async (sql: string) => {
-      if (typeof sql === 'string' && sql.includes("'queued'")) return [existingRun];
+      if (typeof sql === 'string' && sql.includes("'queued'")) return [claimedRun];
       return [];
     });
+    getAgenticRun.mockImplementation(async () => claimedRun);
     await dispatchQueuedAgenticRuns(deps);
 
     await new Promise((resolve) => setImmediate(resolve));

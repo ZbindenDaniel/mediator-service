@@ -26,4 +26,8 @@ New runbooks can start from [`_template.md`](_template.md).
 | [intake.md](intake.md) | Device intake station: flow, endpoints, phases |
 | [intake-image-guide.md](intake-image-guide.md) | Writing the netboot intake script ([`intake-image.http`](intake-image.http) is the runnable contract) |
 | [item-detail-layout.md](item-detail-layout.md) | Item detail page: tabs and information hierarchy |
+| [taxonomy-and-contracts.md](taxonomy-and-contracts.md) | Categories + quality/spec/assembly contracts: how quality % and grade are calculated, recipes, rules |
+| [identity-provider.md](identity-provider.md) | Authentik/forward-auth crash course: request flow, groups→tenant/role, ordered setup, troubleshooting |
+| [feature-flags.md](feature-flags.md) | Deployment feature flags: switching features off per deployment, blocked vs. hidden, adding a flag |
+| [tenancy.md](tenancy.md) | Multi-tenancy: identity/stamping/scoping state, roles, why `tenant` is null, how to drive it |
 | [glossary.md](glossary.md) | Canonical terms (Use/Avoid pairs) |

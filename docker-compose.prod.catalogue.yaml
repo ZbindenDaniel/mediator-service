@@ -1,0 +1,16 @@
+# Production: run as the spare-part catalogue deployment, files from host folders next to this file.
+#   docker compose -f docker-compose.prod.yaml [-f docker-compose.prod.authentik.yaml] -f docker-compose.prod.catalogue.yaml up -d
+# ./catalogue      = copy of config/catalogue/ + features.json (from config/features.catalogue.example.json)
+# ./contracts-overlay = writable contract overlay (seed once from ./catalogue/contracts); Admin uploads land here.
+# Both folders must be readable (overlay: writable) by uid 33 = www-data on Debian/Ubuntu hosts.
+# Guide: docs/detailed/deployment.md
+services:
+  mediator:
+    volumes:
+      - ./catalogue:/srv/catalogue:ro
+      - ./contracts-overlay:/srv/contracts-overlay
+    # Set here rather than in .env so the paths can't drift from the mounts above (environment beats env_file).
+    environment:
+      TAXONOMY_SEED_FILE: /srv/catalogue/taxonomy.seed.json
+      FEATURES_FILE: /srv/catalogue/features.json
+      CONTRACTS_OVERLAY_DIR: /srv/contracts-overlay

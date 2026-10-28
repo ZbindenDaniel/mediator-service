@@ -23,7 +23,7 @@ All React UI components for the application — organized by feature area in sub
 - Item actions: `EditInstanceCard.tsx`, `ItemEdit.tsx`, `ItemForm.tsx`, `ItemBasicInfoForm.tsx`, `ItemMatchSelection.tsx`
 - Media: `ItemMediaGallery.tsx`, `PhotoCaptureModal.tsx`, `AttachmentsCard.tsx`, `AttachmentBindingModal.tsx`
 - Printing: `PrintLabelButton.tsx`
-- Spare parts: `SparepartSlotPopup.tsx`, `ZubehoerCard.tsx`, `ZubehoerBadge.tsx`
+- Spare parts: `einzelteile/` (Einzelteile page: `EinzelteilePage`, `PartsTreeView`, `PartNodePanel`), `SparepartSlotPopup.tsx`; accessories: `ZubehoerCard.tsx`, `ZubehoerBadge.tsx`
 - Badges: `QualityBadge.tsx`, `ShopBadge.tsx`, `LocationTag.tsx`
 - Bulk: `BulkItemActionBar.tsx`, `MultiItemSummary.tsx`
 - Search: `RefSearchInput.tsx`, `BoxSearchInput.tsx`

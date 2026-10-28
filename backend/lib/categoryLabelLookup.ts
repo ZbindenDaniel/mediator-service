@@ -1,5 +1,6 @@
 // TODO(agent): Extend category lookups to surface label names for numeric codes during export.
-import { getCategoryLabelLookups, itemCategories } from '../../models';
+import { getCategoryLabelLookups } from '../../models';
+import { getItemCategories } from './taxonomy';
 
 export type CategoryFieldType = 'haupt' | 'unter';
 
@@ -101,7 +102,7 @@ function buildCategoryLabelLookup(): CategoryLookupCache {
   let codeToLabel: CategoryNameLookup = { haupt: new Map<number, string>(), unter: new Map<number, string>() };
 
   try {
-    for (const category of itemCategories) {
+    for (const category of getItemCategories()) {
       registerLabel(labelToCode.haupt, category.label, category.code);
 
       for (const subCategory of category.subcategories) {
@@ -194,11 +195,11 @@ export function resolveCategoryCodeToLabel(value: number | string, type: Categor
 
 export function getKnownCategoryLabels(type: CategoryFieldType): string[] {
   if (type === 'haupt') {
-    return itemCategories.map((category) => category.label);
+    return getItemCategories().map((category) => category.label);
   }
 
   const labels: string[] = [];
-  for (const category of itemCategories) {
+  for (const category of getItemCategories()) {
     for (const subCategory of category.subcategories) {
       labels.push(subCategory.label);
     }

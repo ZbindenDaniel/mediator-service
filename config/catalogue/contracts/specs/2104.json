@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "subCategory": 2104,
+  "fields": [
+    {
+      "key": "Tastatur-Layout",
+      "required": true,
+      "description": "CH, DE, US, UK, FR …"
+    },
+    {
+      "key": "Beleuchtung",
+      "required": false,
+      "description": "Backlight: ja / nein"
+    },
+    {
+      "key": "Trackpoint",
+      "required": false,
+      "description": "ja / nein"
+    },
+    {
+      "key": "Farbe",
+      "required": false,
+      "description": ""
+    },
+    {
+      "key": "FRU",
+      "required": false,
+      "description": "Manufacturer part number (FRU / P/N / Spare part no.), e.g. 01YR564"
+    },
+    {
+      "key": "Kompatible Modelle",
+      "required": false,
+      "description": "Device models this part fits, comma-separated, e.g. ThinkPad T480, T480s"
+    }
+  ]
+}

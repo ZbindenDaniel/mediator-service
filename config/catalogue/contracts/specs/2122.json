@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "subCategory": 2122,
+  "fields": [
+    {
+      "key": "Bluetooth-Version",
+      "required": false,
+      "description": "e.g. 4.2"
+    },
+    {
+      "key": "Anschluss",
+      "required": false,
+      "description": ""
+    },
+    {
+      "key": "FRU",
+      "required": false,
+      "description": "Manufacturer part number (FRU / P/N / Spare part no.), e.g. 01YR564"
+    },
+    {
+      "key": "Kompatible Modelle",
+      "required": false,
+      "description": "Device models this part fits, comma-separated, e.g. ThinkPad T480, T480s"
+    }
+  ]
+}

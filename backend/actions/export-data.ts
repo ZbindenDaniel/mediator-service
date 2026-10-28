@@ -9,6 +9,7 @@ import { eventLabel } from '../../models/event-labels';
 import { defineHttpAction } from './index';
 import { stageItemsExport } from './export-items';
 import { query } from '../db-client';
+import { isUnrestricted } from '../lib/ownership';
 
 // TODO(export-data): Confirm default entity list and format expectations once API consumers are documented.
 
@@ -175,11 +176,16 @@ async function createZipArchive(options: ZipArchiveOptions): Promise<void> {
 }
 
 const action = defineHttpAction({
+  feature: 'import-export',
   key: 'export-data',
   label: 'Export data',
   appliesTo: () => false,
   matches: (pathName, method) => method === 'GET' && pathName === '/api/export/data',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
+    // Full dump across orgs (boxes, events, runs): no per-org cut yet, so only for unrestricted callers.
+    if (!isUnrestricted(ctx?.identity)) {
+      return sendJson(res, 403, { error: 'Der Gesamtexport ist nur für Plattform-Admins verfügbar.' });
+    }
     let requestUrl: URL;
     try {
       requestUrl = new URL(req.url || '/', PUBLIC_ORIGIN);

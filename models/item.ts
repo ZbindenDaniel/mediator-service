@@ -69,6 +69,19 @@ export interface ItemInstance {
   // TODO(item-create): Keep creation payload expectations for Quality/Auf_Lager aligned across frontend and import flows.
   Quality?: QualityValue;
   QualityAssessment?: QualityAssessment | null;
+  // Percentage quality range (fractions 0–1) incl. in-device parts; null = nothing weighted (models/quality-score.ts).
+  QualityScoreMin?: number | null;
+  QualityScoreMax?: number | null;
+  // Grade set by hand (instance edit / spare donor); derived again after the next assessment.
+  QualityManual?: boolean;
+  // Subcategory the item is assessed with: the reference's, else the slot it sits in (article-less parts).
+  EffectiveSubCategory?: number | null;
+  // Owning tenant for private-logistics isolation (docs/PLANNING_TENANCY.md Phase 2). Nullable:
+  // legacy rows and single-tenant deployments leave it null; stamped on create from ctx.tenant.
+  TenantId?: string | null;
+  // Set by the server when another org owns the item: Location/ShelfLabel hold the owner org's name,
+  // BoxID is empty (tenancy Phase 3b).
+  LocationRedacted?: boolean;
 }
 
 // TODO(langtext-contract): Remove legacy string fallback from ItemRef.Langtext once all callers consume structured payloads.

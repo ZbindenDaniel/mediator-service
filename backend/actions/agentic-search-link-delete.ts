@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { removeAgenticSearchLink } from '../agentic';
 import { resolveAgenticRequestContext } from './agentic-request-context';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -21,6 +22,7 @@ function parseAgenticSearchLinkRoute(path: string): { itemId: string; legacyRout
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-search-link-delete',
   label: 'Agentic search link delete',
   appliesTo: (entity) => entity.type === 'Item',
@@ -64,7 +66,7 @@ const action = defineHttpAction({
       }
     }
 
-    const actor = typeof payload.actor === 'string' ? payload.actor.trim() : '';
+    const actor = resolveActor(ctx, typeof payload.actor === 'string' ? payload.actor : '');
     const url = typeof payload.url === 'string' ? payload.url.trim() : '';
     if (!actor) {
       console.warn('Agentic search link delete missing actor');

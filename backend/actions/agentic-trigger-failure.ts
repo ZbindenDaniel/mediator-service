@@ -3,6 +3,7 @@ import { defineHttpAction } from './index';
 import { AGENTIC_RUN_STATUS_FAILED } from '../../models';
 import { normalizeAgenticStatusUpdate } from '../agentic';
 import type { AgenticRun } from '../../models';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -48,6 +49,7 @@ function resolveArtikelNummerForAgentic(itemId: string, legacyRoute: boolean): s
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-trigger-failure',
   label: 'Agentic trigger failure',
   appliesTo: (entity) => entity.type === 'Item',
@@ -90,7 +92,7 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'Invalid JSON body' });
       }
 
-      const actor = typeof parsedBody.actor === 'string' && parsedBody.actor.trim() ? parsedBody.actor.trim() : 'agentic';
+      const actor = resolveActor(ctx, typeof parsedBody.actor === 'string' ? parsedBody.actor : '') || 'agentic';
       const contextLabel = typeof parsedBody.context === 'string' && parsedBody.context.trim()
         ? parsedBody.context.trim()
         : null;

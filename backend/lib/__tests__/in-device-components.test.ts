@@ -7,14 +7,8 @@ const state = {
 
 const fakeClient = {
   query: jest.fn(async (sql: string, params: any[] = []) => {
-    if (sql.includes('FROM items WHERE "SerialNumber"')) {
-      const has = state.existingSerials.has(params[0]);
-      return { rows: has ? [{ ItemUUID: 'x' }] : [], rowCount: has ? 1 : 0 };
-    }
-    if (sql.includes('FROM items WHERE "ItemUUID"')) {
-      const has = state.existingUUIDs.has(params[0]);
-      return { rows: has ? [{ x: 1 }] : [], rowCount: has ? 1 : 0 };
-    }
+    // INSERTs first: they contain an owner subquery (FROM items WHERE "ItemUUID") that the lookup
+    // branches below would otherwise match.
     if (sql.startsWith('INSERT INTO items')) {
       state.existingUUIDs.add(params[0]);
       state.existingSerials.add(params[1]);
@@ -25,6 +19,23 @@ const fakeClient = {
       state.inserts.push({ sql, params });
       return { rows: [], rowCount: 1 };
     }
+    if (sql.includes('FROM items WHERE "SerialNumber"')) {
+      const has = state.existingSerials.has(params[0]);
+      return { rows: has ? [{ ItemUUID: 'x' }] : [], rowCount: has ? 1 : 0 };
+    }
+    // Part-ID minting (lib/part-ids): root walk-up, then the counter over this transaction's rows.
+    if (sql.includes('WITH RECURSIVE')) {
+      return { rows: [{ Artikel_Nummer: '104523' }], rowCount: 1 };
+    }
+    if (sql.includes('"ItemUUID" LIKE $1')) {
+      const stem = String(params[0]).replace(/%$/, '');
+      const latest = [...state.existingUUIDs].filter((u) => u.startsWith(stem)).sort().pop();
+      return { rows: latest ? [{ ItemUUID: latest }] : [], rowCount: latest ? 1 : 0 };
+    }
+    if (sql.includes('FROM items WHERE "ItemUUID"')) {
+      const has = state.existingUUIDs.has(params[0]);
+      return { rows: has ? [{ x: 1 }] : [], rowCount: has ? 1 : 0 };
+    }
     return { rows: [], rowCount: 0 };
   }),
 };
@@ -32,6 +43,8 @@ const fakeClient = {
 jest.mock('../../db-client', () => ({
   withTransaction: jest.fn(async (fn: (client: any) => Promise<any>) => fn(fakeClient)),
 }));
+// Scan slot keys (nvme0n1, sda) match no assembly slot, as in production.
+jest.mock('../quality-score', () => ({ resolveEffectiveSubCategory: jest.fn(async () => null) }));
 
 import { syncInDeviceComponents } from '../in-device-components';
 
@@ -53,7 +66,7 @@ describe('syncInDeviceComponents', () => {
         { kind: 'disk', slotKey: 'nvme0n1', sizeGb: 256, type: 'nvme', serial: 'SER-A', model: 'Samsung' },
         { kind: 'disk', slotKey: 'sda', sizeGb: 500, type: 'hdd', serial: 'SER-B' },
       ],
-      { logEvent, genUUID: (() => { let n = 0; return () => `C-test${n++}`; })() }
+      { logEvent, mintUUID: (() => { let n = 0; return async () => `C-test${n++}`; })() }
     );
 
     expect(res.created).toHaveLength(2);
@@ -63,6 +76,9 @@ describe('syncInDeviceComponents', () => {
     expect(itemInserts).toHaveLength(2);
     // No Artikel_Nummer, no BoxID for an in-device component.
     expect(itemInserts[0].params[1]).toBe('SER-A'); // SerialNumber slot
+    // The component inherits the device's owner (tenancy): parent UUID feeds the owner subquery.
+    expect(itemInserts[0].sql).toContain('"TenantId"');
+    expect(itemInserts[0].params[4]).toBe('I-100-0001');
     const relInserts = state.inserts.filter((i) => i.sql.startsWith('INSERT INTO item_relations'));
     expect(relInserts).toHaveLength(2);
     expect(relInserts[0].sql).toContain("'Zerlegt_aus'");
@@ -89,7 +105,7 @@ describe('syncInDeviceComponents', () => {
     const res = await syncInDeviceComponents(
       'I-100-0001',
       [{ kind: 'disk', slotKey: 'sda', sizeGb: 500, serial: null, wwn: '5000c500abc' }],
-      { genUUID: () => 'C-fromwwn' }
+      { mintUUID: async () => 'C-fromwwn' }
     );
     expect(res.created).toHaveLength(1);
     expect(res.created[0].serial).toBe('5000c500abc');
@@ -104,6 +120,17 @@ describe('syncInDeviceComponents', () => {
     expect(res.created).toHaveLength(0);
     expect(res.skipped[0].reason).toBe('exists');
     expect(state.inserts).toHaveLength(0);
+  });
+
+  test('default minting numbers parts per device within one scan transaction', async () => {
+    const res = await syncInDeviceComponents(
+      'I-104523-0001',
+      [
+        { kind: 'disk', slotKey: 'nvme0n1', sizeGb: 256, serial: 'SER-A' },
+        { kind: 'disk', slotKey: 'sda', sizeGb: 500, serial: 'SER-B' },
+      ]
+    );
+    expect(res.created.map((c) => c.itemUUID)).toEqual(['C-104523-0-0001', 'C-104523-0-0002']);
   });
 
   test('empty/absent component list is a no-op', async () => {

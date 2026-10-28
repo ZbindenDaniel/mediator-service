@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "subCategory": 301,
   "parts": [
     {
@@ -10,7 +10,15 @@
         "id": "has_toner",
         "type": "boolean",
         "question": "Toner / Tintenpatrone vorhanden?",
-        "qualityImpact": { "false": 2 }
+        "knockout": {
+          "below": 0.5,
+          "cap": 0.59
+        },
+        "states": {
+          "true": 1.0,
+          "false": 0.25
+        },
+        "weight": 1
       }
     },
     {

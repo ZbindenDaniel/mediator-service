@@ -1,0 +1,13 @@
+# Local/dev: run as the spare-part catalogue deployment (drafts in config/catalogue/).
+#   docker compose -f docker-compose.yml -f docker-compose.authentik.yml -f docker-compose.catalogue.yml up -d
+# The taxonomy seed only applies to an EMPTY database (first start). Contract overlay: seed it once,
+# see config/catalogue/README.md.
+services:
+  mediator:
+    volumes:
+      - ./config/catalogue:/srv/catalogue:ro
+    environment:
+      TAXONOMY_SEED_FILE: /srv/catalogue/taxonomy.seed.json
+      # Writable + persistent (admin uploads land here). Inside the mediator-data volume because the app
+      # runs as uid 33: a bind-mounted host folder or a fresh named volume would be root-owned.
+      CONTRACTS_OVERLAY_DIR: /var/lib/mediator/contracts-overlay

@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { query, queryOne, execute } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
+import { redactItemRows } from '../lib/redaction';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -34,13 +36,18 @@ const action = defineHttpAction({
     if (instanceMatch) {
       const parentUUID = decodeURIComponent(instanceMatch[1]);
       const childUUID = instanceMatch[2] ? decodeURIComponent(instanceMatch[2]) : null;
+      // Links between physical items: both ends must be the requester's own stock.
+      if (method !== 'GET') {
+        if (!(await guardWrite(ctx, res, 'item', parentUUID))) return;
+        if (childUUID && !(await guardWrite(ctx, res, 'item', childUUID))) return;
+      }
 
       if (method === 'GET') {
         const accessories = await query(`
           SELECT ir."Id", ir."ChildItemUUID" AS "ItemUUID", ir."RelationType", ir."Notes",
                  ir."CreatedAt" AS "RelationCreatedAt", ir."UpdatedAt",
                  i."Artikel_Nummer", r."Artikelbeschreibung", r."Kurzbeschreibung",
-                 i."BoxID", i."Location"
+                 i."BoxID", i."Location", i."TenantId"
           FROM item_relations ir
           JOIN items i ON i."ItemUUID" = ir."ChildItemUUID"
           LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
@@ -52,7 +59,7 @@ const action = defineHttpAction({
           SELECT ir."Id", ir."ParentItemUUID" AS "ItemUUID", ir."RelationType", ir."Notes",
                  ir."CreatedAt" AS "RelationCreatedAt", ir."UpdatedAt",
                  i."Artikel_Nummer", r."Artikelbeschreibung", r."Kurzbeschreibung",
-                 i."BoxID", i."Location"
+                 i."BoxID", i."Location", i."TenantId"
           FROM item_relations ir
           JOIN items i ON i."ItemUUID" = ir."ParentItemUUID"
           LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
@@ -60,7 +67,10 @@ const action = defineHttpAction({
           ORDER BY ir."CreatedAt"
         `, [parentUUID]);
 
-        return sendJson(res, 200, { connectedAccessories: accessories, connectedToDevices: devices });
+        return sendJson(res, 200, {
+          connectedAccessories: redactItemRows(accessories),
+          connectedToDevices: redactItemRows(devices)
+        });
       }
 
       if (method === 'POST' && !childUUID) {
@@ -68,6 +78,7 @@ const action = defineHttpAction({
         const child = typeof data.childItemUUID === 'string' ? data.childItemUUID.trim() : null;
         if (!child) return sendJson(res, 400, { error: 'childItemUUID is required' });
         if (child === parentUUID) return sendJson(res, 400, { error: 'cannot link item to itself' });
+        if (!(await guardWrite(ctx, res, 'item', child))) return;
 
         const parentExists = await queryOne('SELECT "ItemUUID" FROM items WHERE "ItemUUID" = $1', [parentUUID]);
         if (!parentExists) return sendJson(res, 404, { error: 'parent item not found' });
@@ -78,8 +89,8 @@ const action = defineHttpAction({
         const notes = typeof data.notes === 'string' ? data.notes.trim() || null : null;
         try {
           await execute(`
-            INSERT INTO item_relations ("ParentItemUUID", "ChildItemUUID", "RelationType", "Notes", "CreatedAt", "UpdatedAt")
-            VALUES ($1, $2, $3, $4, NOW(), NOW())
+            INSERT INTO item_relations ("ParentItemUUID", "ChildItemUUID", "RelationType", "Notes", "CreatedAt", "UpdatedAt", "TenantId")
+            VALUES ($1, $2, $3, $4, NOW(), NOW(), (SELECT "TenantId" FROM items WHERE "ItemUUID" = $1))
           `, [parentUUID, child, relationType, notes]);
           await ctx.logEvent({
             EntityType: 'Item',
@@ -134,6 +145,8 @@ const action = defineHttpAction({
     if (refMatch) {
       const parentNr = decodeURIComponent(refMatch[1]);
       const childNr = refMatch[2] ? decodeURIComponent(refMatch[2]) : null;
+      // Compatibility between catalogue entries is catalogue data: the parent entry's owner decides.
+      if (method !== 'GET' && !(await guardWrite(ctx, res, 'ref', parentNr))) return;
 
       if (method === 'GET') {
         // Compatible child accessory refs, with available (unconnected) instance stock

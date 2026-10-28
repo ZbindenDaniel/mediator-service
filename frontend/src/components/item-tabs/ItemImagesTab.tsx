@@ -7,9 +7,10 @@ interface Props {
   item: Item;
   mediaAssets: string[];
   mediaFileInputRef: React.RefObject<HTMLInputElement>;
-  onAdd: () => void;
+  // Omitted when the catalogue entry belongs to another org (tenancy 3a): the gallery hides its buttons.
+  onAdd?: () => void;
   onCapture?: (dataUrl: string) => void | Promise<void>;
-  onRemove: (asset: GalleryAsset) => void | Promise<void>;
+  onRemove?: (asset: GalleryAsset) => void | Promise<void>;
   onFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 

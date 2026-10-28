@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "subCategory": 2118,
+  "fields": [
+    {
+      "key": "Ausführung",
+      "required": false,
+      "description": "CPU / GPU / kombiniert"
+    },
+    {
+      "key": "Spannung",
+      "required": false,
+      "description": "e.g. 5 V"
+    },
+    {
+      "key": "Stecker",
+      "required": false,
+      "description": "Pins, e.g. 4-pin"
+    },
+    {
+      "key": "FRU",
+      "required": false,
+      "description": "Manufacturer part number (FRU / P/N / Spare part no.), e.g. 01YR564"
+    },
+    {
+      "key": "Kompatible Modelle",
+      "required": false,
+      "description": "Device models this part fits, comma-separated, e.g. ThinkPad T480, T480s"
+    }
+  ]
+}

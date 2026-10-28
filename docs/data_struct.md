@@ -23,6 +23,7 @@ Damit lassen sich auch Partner-Exporte, die statt der numerischen IDs die sprech
 - **106** – Workstation etc.
 - **107** – Exoten
 - **108** – Thin-Client
+- **109** – All-in-One
 
 ## 20 – Laptop_und_Zubehör
 

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "subCategory": 2115,
+  "parts": [
+    {
+      "key": "ribbon_cable",
+      "label": "Verbindungsflachbandkabel",
+      "targetSubcategory": 2126,
+      "weight": 1,
+      "question": {
+        "id": "part_ribbon_cable",
+        "type": "select",
+        "question": "Verbindungsflachbandkabel?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    }
+  ]
+}

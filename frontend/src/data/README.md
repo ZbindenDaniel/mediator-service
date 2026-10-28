@@ -5,7 +5,7 @@ Static lookup data used by the frontend — category trees, metadata key lists, 
 ## Files
 - `itemCategories.ts` — hierarchical category/subcategory tree (Hauptkategorie → Unterkategorie codes and labels)
 - `metaDataKeys.ts` — canonical field keys for item metadata display
-- `shelfLocations.ts` — known shelf location identifiers for autocomplete
+- `shelfLocations.ts` — warehouse site registry (`getShelfLocations()`): filled at boot from `GET /api/app-config` (org directory in the DB); the built-in list from `models/shelf-locations.ts` only bridges until then
 
 ## Relations
 - Used by: `frontend/src/components/` (forms, filters, display)

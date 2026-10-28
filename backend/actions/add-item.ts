@@ -1,8 +1,11 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
+import { resolveTenant } from '../utils/tenant';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
 import { queryOne, withTransaction } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
 
 // TODO(agent): Validate Artikel_Nummer requirements for instance creation during add-item flows.
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -28,13 +31,14 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/add$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
+      if (!(await guardWrite(ctx, res, 'item', uuid))) return;
       const item = await ctx.getItem(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
       let raw = '';
       for await (const c of req) raw += c;
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
-      const actor = (data.actor || '').trim();
+      const actor = resolveActor(ctx, (data.actor || '').trim());
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const currentQty = resolveCurrentQuantity(item.Auf_Lager);
       const isBulk = isBulkEinheit(item.Einheit);
@@ -128,6 +132,8 @@ const action = defineHttpAction({
             Auf_Lager: 1,
             Quality: item.Quality ?? null,
             ShopwareVariantId: item.ShopwareVariantId ?? null,
+            // Stamp the owning tenant on the new instance (Phase 2b). Null until forward-auth is live.
+            TenantId: resolveTenant(ctx),
             __skipReferencePersistence: true
           });
         } catch (createErr) {

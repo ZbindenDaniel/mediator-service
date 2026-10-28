@@ -46,15 +46,25 @@ The `proxy` service is the only exposed entry point; don't publish the mediator 
    `openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout secrets/tls/tls.key -out secrets/tls/tls.crt -subj "/CN=<ip>"`
 3. Open the port if a firewall is on (`sudo ufw allow 443`). Logs: `docker compose logs proxy`.
 
-### Authentik (not enforced yet)
+### Authentik (forward-auth, opt-in)
 
-The dev stack runs Authentik with its own Postgres and Redis so admins can set up users and groups.
-The app does not read Authentik identities yet; Basic Auth, `ADMIN_SECRET` and `INTAKE_TOKEN` remain
-the real gates (todo 33c).
+The dev stack runs Authentik with its own Postgres and Redis. With the Authentik override active, a
+reverse-proxy forward-auth injects `X-authentik-*` headers that the app resolves into
+`{ user, tenant, role }` — logins, the real event-log actor, role-gated admin, and tenant stamping +
+scoping all follow. Without the override the stack stays on Basic Auth, with `ADMIN_SECRET` and
+`INTAKE_TOKEN` as the gates (nothing changes for the existing deployment).
 
-1. In `.env`: `AUTHENTIK_SECRET_KEY` (`openssl rand -base64 60`), `AUTHENTIK_PG_PASSWORD`, `AUTHENTIK_BOOTSTRAP_PASSWORD`.
-2. `docker compose up -d`, then check that all `authentik-*` containers are healthy.
-3. Admin UI: `http://<host>:${AUTHENTIK_PORT:-9000}/if/admin/`, login `akadmin`.
+The full ordered setup, the clicks in Authentik, verification (`/api/whoami`, the spoof test) and
+troubleshooting live in the runbook: [`docs/detailed/identity-provider.md`](detailed/identity-provider.md).
+In short:
+
+1. In `.env`: `AUTHENTIK_SECRET_KEY` (`openssl rand -base64 60`), `AUTHENTIK_PG_PASSWORD`,
+   `AUTHENTIK_BOOTSTRAP_PASSWORD`, and `TENANT_GROUP_MAP` (group → tenant/role, see the runbook).
+2. Start **with the override**: `docker compose -f docker-compose.yml -f docker-compose.authentik.yml up -d --build`
+   (prod: `AUTHENTIK_ENABLED=true` + `docker-compose.prod.authentik.yaml`). Check all `authentik-*`
+   containers are healthy. Authentik's admin UI: `http://<host>:${AUTHENTIK_PORT:-9000}/if/admin/`, login `akadmin`.
+3. Open the app through the proxy (`https://<host>`), log in, and confirm `GET /api/whoami` shows your
+   user, tenant and role. Drop Basic Auth only once this is verified on the host.
 
 ## CI/CD (Gitea Actions)
 

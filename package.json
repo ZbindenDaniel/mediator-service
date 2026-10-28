@@ -1,6 +1,6 @@
 {
   "name": "mediator-service",
-  "version": "3.3.0",
+  "version": "4.0.0",
   "private": true,
   "scripts": {
     "prebuild": "node scripts/prebuild.js",
@@ -10,6 +10,9 @@
     "start": "node dist/backend/server.js",
     "test": "npm run prebuild && node scripts/run-tests.js",
     "smoke": "ts-node --transpile-only scripts/smoke-server.ts",
+    "contracts:check": "ts-node --transpile-only backend/cli/check-contracts.ts",
+    "quality:recompute": "ts-node --transpile-only backend/cli/recompute-quality-scores.ts",
+    "taxonomy:apply": "ts-node --transpile-only backend/cli/apply-taxonomy.ts",
     "migrate": "node scripts/migrate-sqlite-to-postgres.js"
   },
   "dependencies": {

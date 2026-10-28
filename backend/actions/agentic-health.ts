@@ -8,6 +8,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-health',
   label: 'Agentic health proxy',
   appliesTo: () => false,

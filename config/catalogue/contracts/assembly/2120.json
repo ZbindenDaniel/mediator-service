@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "subCategory": 2120,
+  "parts": [
+    {
+      "key": "drive_cable",
+      "label": "Verbindungskabel optisches Laufwerk",
+      "targetSubcategory": 2126,
+      "weight": 1,
+      "question": {
+        "id": "part_drive_cable",
+        "type": "select",
+        "question": "Verbindungskabel?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    }
+  ]
+}

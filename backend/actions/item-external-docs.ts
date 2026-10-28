@@ -13,6 +13,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'item-attachments',
   key: 'item-external-docs',
   label: 'Item external documents',
   appliesTo: () => false,

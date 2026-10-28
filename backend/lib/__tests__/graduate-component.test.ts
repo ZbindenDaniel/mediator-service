@@ -1,6 +1,6 @@
 import { graduateComponentInTx, needsGraduation, WriteOnceIdentityError } from '../graduate-component';
 
-// Programmable fake pg client that records UPDATEs and answers the two SELECTs the swap makes.
+// Programmable fake pg client that records UPDATEs and answers the two SELECTs graduation makes.
 function makeClient(opts: { existingRef?: string | null; parentArtikel?: string | null } = {}) {
   const calls: Array<{ sql: string; params: any[] }> = [];
   const client: any = {
@@ -19,8 +19,7 @@ function makeClient(opts: { existingRef?: string | null; parentArtikel?: string 
 }
 
 const baseParams = {
-  oldUUID: 'C-abc123',
-  newUUID: 'I-000042-0001',
+  itemUUID: 'C-000010-2132-0001',
   artikelNummer: '000042',
   boxId: 'B-01',
   location: 'Regal 1',
@@ -39,22 +38,15 @@ describe('needsGraduation', () => {
 });
 
 describe('graduateComponentInTx', () => {
-  test('re-keys every UUID-keyed table and sets identity/box', async () => {
+  test('sets identity/box on the same row and touches no other table', async () => {
     const { client, calls } = makeClient({ existingRef: null, parentArtikel: '000010' });
     const result = await graduateComponentInTx(client, baseParams);
 
     expect(result.parentArtikelNummer).toBe('000010');
-    const updates = calls.filter((c) => c.sql.startsWith('UPDATE'));
-    const targets = updates.map((c) => c.sql.match(/UPDATE (\w+)/)?.[1]);
-    // items PK+identity, both item_relations directions, events, item_attachments, label_queue.
-    expect(targets).toEqual(['items', 'item_relations', 'item_relations', 'events', 'item_attachments', 'label_queue']);
-
-    const itemsUpdate = updates[0];
-    expect(itemsUpdate.params).toEqual(['I-000042-0001', '000042', 'B-01', 'Regal 1', baseParams.now, 'C-abc123']);
-    // Every re-point maps old → new.
-    for (const u of updates.slice(1)) {
-      expect(u.params).toEqual(['I-000042-0001', 'C-abc123']);
-    }
+    const updates = calls.filter((c) => c.sql.trim().startsWith('UPDATE'));
+    // The ItemUUID is stable: no re-key of relations, events, attachments or labels.
+    expect(updates).toHaveLength(1);
+    expect(updates[0].params).toEqual(['000042', 'B-01', 'Regal 1', baseParams.now, 'C-000010-2132-0001']);
   });
 
   test('throws WriteOnceIdentityError when identity already set', async () => {

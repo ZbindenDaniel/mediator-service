@@ -3,7 +3,7 @@ import { defineHttpAction } from './index';
 import { SHOPWARE_CONFIG, SHOPWARE_SYNC_ENABLED, getShopwareConfigIssues } from '../config';
 import { createShopwareClient, type ShopwareConnectionResult } from '../shopware/client';
 import { getShopwareSyncQueueCounts, enqueueShopwareSyncForShopRefs, enqueueShopwareSyncForItems } from '../db';
-import { requireAdminAuth } from '../utils/admin-auth';
+import { requireSuperAdminAuth } from '../utils/admin-auth';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -35,6 +35,7 @@ function buildConfigSummary() {
 }
 
 const action = defineHttpAction({
+  feature: 'shopware',
   key: 'admin-shopware',
   label: 'Admin: Shopware status & connection check',
   appliesTo: () => false,
@@ -43,7 +44,7 @@ const action = defineHttpAction({
     (path === '/api/admin/shopware/check' && method === 'POST') ||
     (path === '/api/admin/shopware/sync' && method === 'POST'),
   async handle(req: IncomingMessage, res: ServerResponse) {
-    if (!requireAdminAuth(req, res)) return;
+    if (!requireSuperAdminAuth(req, res)) return;
 
     const url = req.url || '';
 

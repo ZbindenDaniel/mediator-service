@@ -1,0 +1,313 @@
+# Planning: Multi-Tenancy
+
+**Status:** Phased implementation plan (no code yet)
+**Parent (conceptual design):** [`docs/PLANNING_NEW_USE_CASE.md`](PLANNING_NEW_USE_CASE.md) §10.1 + §12.3
+**Goal:** Let multiple organisations, each with multiple users, work in one hosted
+deployment — a **shared spare-part catalogue** everyone benefits from, while each
+org's **logistics (warehouse/shelves/stock) stays private**.
+
+---
+
+## 1. Why this order — identity before `tenant_id`
+
+The branch exists for tenancy, so this is the right workstream. But it has a hard
+prerequisite that shapes the phasing:
+
+**Confirmed current state (greenfield):**
+- The backend does **not** know who is making a request. Auth is a shared secret
+  (`ADMIN_SECRET` bearer for `/api/admin/*`, `INTAKE_TOKEN` for intake) plus a
+  **free-text "actor"** name typed in the browser. No per-user identity.
+- **No** `tenant` / `mandant` / `org_id` anywhere in the schema or queries.
+- Authentik was **stood up** in the compose stack (#898) but **nothing consumes
+  it** — no forward-auth in `config/nginx/mediator.conf` (dev) or
+  `docker-compose.prod.yaml` (Traefik, prod), and the backend reads no identity
+  headers.
+- The per-request context object is built at the dispatch chokepoint
+  (`backend/server.ts:1027`, `action.handle(req, res, { … })`) — **the single
+  place to inject resolved identity**.
+
+You cannot scope data per tenant until the request carries an identity. So
+**Phase 1 is identity**, and it is independently valuable: "multiple users working
+together" needs real logins + audit regardless of tenancy.
+
+---
+
+## 2. Design recap (settled in the parent plan)
+
+- **Two-tier visibility on the reference↔instance seam:**
+  - **Shared catalogue** — `item_refs` (part descriptions/specs), `item_ref_relations`,
+    ref-level `agentic_runs`: **no `TenantId`**, read by all; writes guarded by an
+    optional `ContributedByTenant`.
+  - **Private logistics** — `items` (physical instances), `boxes` + shelves,
+    `box_stubs`, `item_relations`, per-instance `quality_assessments`, logistics
+    `events`: carry **`TenantId`**, hard-isolated (reads *and* writes filtered).
+- **Tenants + groups managed in Authentik**; the app stores a tenant reference and
+  resolves identity from forward-auth headers.
+- **Roles:** `normal` (contribute + own logistics), `super` (tenant admin: creates
+  the tenant's shelves, manages its users), `platform-admin` (users of a designated
+  **admin tenant** — cross-tenant, hosting ops).
+- **Resolved decisions (DL1–DL3):** keep global-unique minted `BoxID`/shelf IDs
+  (add `TenantId` as a *visibility* column, not part of the key); catalogue exposes
+  **global aggregate quantity** but private locations; QR/scan self-resolves via the
+  globally-unique id. Self-registration via org token = Authentik enrollment only,
+  no data-model impact. Taxonomy/contracts stay **deployment-wide** (not per-tenant).
+
+---
+
+## 2a. Revision — meeting of 2026-10-13 (supersedes parts of §2 and Phase 3)
+
+The cataloguing project (a smaller, separate deployment where other organisations catalogue
+items, POC stage) changed several assumptions:
+
+- **Visibility: shared reads with redaction, not hard isolation.** Everyone may read every item,
+  including *which org holds what* and quantity/availability. Hidden from other orgs: the
+  location (box/shelf, shown as the owning org's name instead:
+  `item.tenant == me.tenant ? box.label : tenant.name`) and the cataloguer ("Erfasser").
+  Other orgs' boxes/shelves stay invisible. Redaction must happen server-side in every response
+  carrying those fields (lists, detail, search, export, logs/events). Supersedes DL2's
+  "total only, never tenant rows".
+- **Edits: only the creating org**, for instances *and* catalogue references (the
+  `ContributedByTenant` guard).
+- **Ordering happens outside the tool**, maybe a mailto link, so an org needs a contact email.
+- **Org management (decided, option C) — ✅ built (#971):** orgs live in the app DB and are edited in an admin tab
+  (id, name, contact email, linked Authentik group, sites with floors). Authentik keeps only users
+  and groups; the link is the **group name**. `TENANT_GROUP_MAP` seeds the table on first start
+  (taxonomy pattern: seed → DB authoritative → admin edit, no restart). `platformAdminGroup` stays
+  in `.env` to avoid lock-out. Rejected: domain data in Authentik attributes (no validation, orgs
+  can't self-maintain, mixes identity and domain data) and two-way sync.
+- **Warehouses = per-org sites** (today's hardcoded `models/shelf-locations.ts`), stored with the
+  org; site IDs unique across orgs because shelf IDs are global. How orgs get their sites
+  (registration / revamp / CSV) is still open in the protocol; the admin tab covers "defined by
+  revamp".
+- **Feature flags first** (deployment-level, done in #970), then org admin tab, then the revised
+  Phase 3. **Role permissions** (e.g. who may delete) are a separate concept, defined later
+  together with the `super` role.
+
+## 3. Phases
+
+### Phase 1 — Identity into the backend (prerequisite; independently valuable)  ✅ CODE DONE (proxy needs host verification)
+
+**Shipped:** (1a) `backend/lib/identity.ts` resolves `X-authentik-*` headers → `{ authenticated,
+username, groups, tenant, role }` via a config-driven `group→{tenant,role}` map
+(`TENANT_GROUP_MAP`/`_FILE`); injected into the per-request `ctx` at the dispatch chokepoint;
+behaviour-neutral (nothing gates on it yet), `ADMIN_SECRET` stays break-glass. (1c) `resolveActor(ctx,
+requestActor)` prefers the authenticated username for the event-log `Actor`, applied to the item/box
+lifecycle write handlers (falls back to the typed actor until forward-auth is live). (1b) proxy
+config is **opt-in, not default** (#968): `docker-compose.authentik.yml` + full
+`config/nginx/mediator.authentik.conf` (local nginx) and `docker-compose.prod.authentik.yaml`
+(host Traefik: `ak-strip` → `ak-auth` middlewares, Authentik services, machine router for
+`/api/admin/` + `/api/intake/`; deploy workflow includes it when the host `.env` has
+`AUTHENTIK_ENABLED=true`), plus backend `AUTH_REQUIRED` fail-closed gate. Runbook:
+`docs/detailed/identity-provider.md`. **Needs local, then on-host verification before Basic Auth is
+dropped.** Tests: identity resolver + actor helper. **Follow-up ✅ done (#969):** `resolveActor`
+adopted in the remaining actor-bearing handlers (agentic, bulk, export, print, catalog, qr-scan,
+stubs, quality review, user marks); the frontend uses the login name (`getUser()` via
+`IdentityContext`) and the user settings show the Authentik identity read-only.
+
+#### Original plan
+
+- **Proxy forward-auth:** nginx `auth_request` against the Authentik outpost in
+  `config/nginx/mediator.conf` (dev); Traefik `forwardAuth` middleware in
+  `docker-compose.prod.yaml` (prod) — and add the Authentik services to the prod
+  compose (only dev has them today). Drop nginx Basic Auth once forward-auth works.
+- **Backend identity resolver:** a helper (generalising `backend/utils/admin-auth.ts`)
+  that reads `X-authentik-username` / `X-authentik-groups` and resolves
+  `{ username, groups, tenant, role }` via a **config-driven `group → {tenant, role}`
+  map** (not a hardcoded binary — extra tenants/roles are config lines). Inject the
+  result into the per-request `ctx` at `server.ts:1027`. Keep `ADMIN_SECRET` as a
+  **break-glass** fallback.
+- **Audit:** populate the free-text `Actor`/`Username` fields from the authenticated
+  user.
+- **Authentik config:** Proxy Provider + embedded outpost; groups (`mediator-admin`
+  for the admin tenant + one group per tenant); everyone-else = authenticated user.
+- **Acceptance:** every request carries `{ user, tenant, role }`; the event log shows
+  real users. **No data scoping yet** — behaviour unchanged.
+
+### Phase 2 — Additive tenant schema (behaviour-neutral)  ✅ 2a DONE (schema); 2b DONE (stamp-on-create + registry seed)
+
+**Shipped (2a):** additive `initDb` migration — a `tenants` registry table (`Id`, `Label`,
+`Active`, `CreatedAt`) + nullable `TenantId` on the private-logistics tables (`items`, `boxes`,
+`box_stubs`, `item_relations`, `quality_assessments`, `events`) + `ContributedByTenant` on
+`item_refs` (attribution; catalogue reads stay global), with tenant indexes. `db.ts` accessors
+`listTenants` / `getTenant` / `upsertTenant`. Fully behaviour-neutral: columns nullable, nothing
+stamped or filtered yet. Typecheck + 901 tests green (SQL exercised by the Postgres-gated suites).
+**Shipped (2b):** `GET /api/whoami` echoes the resolved `ctx.identity` (makes the forward-auth chain
+observable/verifiable). A `resolveTenant(ctx)` helper (mirrors `resolveActor`) stamps `TenantId` on
+create in `create-box` / `add-item` / `import-item`; domain types (`ItemInstance`/`Item`, `Box`)
+carry an optional `TenantId`, and the items/boxes upserts preserve an already-set owner on conflict
+(`COALESCE(<table>."TenantId", EXCLUDED."TenantId")` — set once at create, never reassigned).
+Startup seeds the `tenants` registry from the config group map via `configuredTenants()` (idempotent,
+non-fatal, no-op single-tenant). Null/no-op until forward-auth is live + a tenant is configured, so
+still behaviour-neutral. 912 tests pass.
+**Deferred to Phase 3:** the remaining create/write paths (agentic/bulk/intake/`box_stubs`/
+`item_relations`/`quality_assessments`) get stamped where their scoping lands; legacy-`NULL` backfill
+needs the default-tenant decision.
+
+#### Original plan
+
+- Add **nullable `TenantId`** to the logistics tables (`items`, `boxes`, `box_stubs`,
+  `item_relations`, `quality_assessments`, and logistics `events`) — additive
+  `ALTER TABLE … ADD COLUMN IF NOT EXISTS`, same pattern as recent migrations.
+- Add an optional `ContributedByTenant` to `item_refs` (attribution; reads stay global).
+- A small **`tenants`** table (id, label, active) as the local registry / FK target and
+  for display — populated from Authentik groups (synced or admin-managed). *(Decision
+  T1 below: local registry vs. bare id string.)*
+- **Stamp `TenantId` on create** from `ctx.tenant` (writes only) — but **no read
+  filtering yet**; legacy `NULL` rows stay readable. Behaviour-neutral.
+- **Acceptance:** schema in place, new logistics rows carry their tenant, nothing is
+  filtered or hidden yet.
+
+### Phase 3 — Class-aware scoping (the enforcement)  ⚠️ REVISED — read §2a first
+
+**Confirmed rules (2026-10-13):** the live system stays unchanged (no login = unrestricted); no
+backfill, `owner(row) = TenantId ?? defaultTenant`; logged in without an org = read-only; references
+read-only for other orgs (`ContributedByTenant ?? defaultTenant`), instances from another org's
+reference belong to the creator; grey zone (serial/MAC, intake data, photos, attachments) stays
+visible for now.
+
+**3a ✅ Writes (#976):** policy in `lib/ownership.ts`; DB safety net in the item/catalogue/box upserts
+(`ON CONFLICT … DO UPDATE … WHERE owner = requester`, request context via `AsyncLocalStorage`);
+handler guards (`utils/write-guard.ts`) on every write route; owners inherited on raw inserts
+(spare parts, in-device components, relations, stubs). **3b ✅ Reads (#979):** `lib/redaction.ts` +
+`canSeePrivate`; another org's item location shows the owner name, its boxes/shelves/Fundsachen are
+"not found", item/box logs and feeds show only own events, marks/reviewer hidden, search by box id
+blind to foreign boxes, item export own rows only, full export unrestricted-only. Applied in the
+shared `db.ts` reads + handlers with own SQL. **3c ✅ FE hiding (#983):** item detail returns
+`permissions { canEditItem, canEditReference }`; instance/reference/photo/attachment/accessory actions
+hidden when they would 403; a foreign location opens the org card, not a box.
+**Verified (#1011):** `backend/__tests__/tenancy-two-org-matrix.test.ts` — a two-org cross-product
+driving the real read (redaction/visibility/people) and write (guard) layers through `runWithIdentity`
+for org A, org B, platform-admin, no-login and no-org, asserting the full own/foreign/legacy outcome
+set in one place. **DL2 resolved (no code):** the "cross-org aggregate quantity" is *subsumed by the
+2a shared-reads pivot* — reads are not tenant-filtered (only event feeds + box visibility are), so
+redaction hides a foreign instance's location but never drops it, and any quantity grouped over the
+item list already sums across every org. The matrix pins this as an invariant ("no requester loses
+instances") so a later tenant WHERE-filter on list reads can't silently make totals org-local. DL2's
+old "total only, never tenant rows" was already superseded by §2a.
+**Remaining (operator):** local + on-host verification of the opt-in forward-auth proxy (Phase 1b)
+before Basic Auth is dropped — the one P3-adjacent step that can't be done from the repo; runbook in
+`docs/detailed/identity-provider.md`.
+- **Logistics:** reads *and* writes filtered by `ctx.tenant` with **no shared
+  fallback**, enforced in the `db.ts` logistics functions (not per handler) so it
+  can't be bypassed. Destructive ops assert ownership.
+- **Catalogue:** reads stay global; writes/deletes guarded by `ContributedByTenant`
+  (+ platform-admin override).
+- **Cross-tenant aggregate quantity (DL2):** a controlled `SUM(items) GROUP BY
+  Artikel_Nummer` for the catalogue view — total only, never tenant/location rows.
+- **Platform-admin bypass:** the admin tenant sees across tenants (support).
+- **Backfill:** assign legacy `NULL` logistics rows to a configured default tenant.
+- **Acceptance:** a tenant sees only its own warehouse; the catalogue (incl. global
+  stock totals) is shared; a platform admin sees everything.
+
+### Phase 4 — Tenant/user admin + onboarding
+**Shipped early (#969):** platform-admin gating of `/api/admin/*` (decision §5.5): `requireAdminAuth`
+admits role `platform-admin` or the `ADMIN_SECRET` bearer; `/api/admin/` is forward-authed so the
+bearer is break-glass from inside the host only; the FE shows the admin link/shop-sync by role.
+Pulled ahead of Phase 3 because it is small and independent. `super` powers still undefined.
+
+- **Role gating:** `super` creates its tenant's shelves + manages its users;
+  `platform-admin` manages tenants. Reuses the identity plumbing (and the same
+  gate mechanism a later feature-flag system would use).
+- **Self-registration via org token** — an Authentik enrollment flow that files a new
+  account under the right tenant group. No app data-model impact (per the parent
+  decision); only provisioning policy (who issues tokens, expiry, admin-tenant
+  bootstrap).
+- **Tenant management UI** (platform admin): list/activate tenants; per-tenant user
+  overview. Minimal first.
+- **Acceptance:** tenant admins run their warehouse; platform admins manage tenants;
+  users self-register into the correct tenant.
+
+---
+
+## 4. Risk & effort
+
+- **Largest workstream on the branch.** Phase 1 is **infra-heavy** (proxy +
+  Authentik config) but the backend change is small (header resolver + ctx
+  injection). Phase 3 is the **invasive** one — it touches every logistics query;
+  concentrating scoping in the `db.ts` layer is what keeps it tractable and safe.
+- **De-risked by phasing:** Phases 1–2 are behaviour-neutral (identity + additive
+  schema), so they can land and bake before Phase 3 flips isolation on.
+- **Blast radius:** Phase 3 changes what data users see — needs careful tests
+  (a tenant cannot read another's logistics; catalogue stays shared; platform-admin
+  bypass) before enabling in production.
+
+---
+
+## 5. Open decisions (need your input before/within the phases)
+
+1. **Auth mechanism — RESOLVED: forward-auth + Authentik as broker.** The proxy
+   authenticates and injects `X-authentik-*` headers; the app reads them (smallest
+   change for the frameworkless backend). Authentik is both the IdP (its own users,
+   to start) *and* an abstraction layer: LDAP, Nextcloud-shared-users, and SSO are
+   later **Authentik sources**, with **zero app change** (the app's contract stays
+   `headers → ctx`). **Security-critical:** the proxy MUST strip any client-supplied
+   `X-authentik-*` headers so only the outpost can set them (else identity spoofing).
+2. **T1 — `tenants` table:** keep a small local registry (id, label) synced from
+   Authentik for display/FK, or store only the tenant id string and treat Authentik
+   as the sole source? (Lean: a thin local registry.)
+3. **Default tenant** for legacy/`NULL` logistics rows at backfill (the existing
+   revamp-it deployment becomes tenant #1).
+4. **Where global aggregate quantity surfaces** (catalogue/search views) — which
+   screens show the network-wide total.
+5. **Admin endpoints — RESOLVED (#969): yes.** Role-gated (`platform-admin`);
+   `ADMIN_SECRET` kept as break-glass, reachable only from inside the host.
+
+---
+
+## 6. Relationship to the rest of the plan
+
+- **Depends on nothing already built** except that it *reuses* the runtime-config
+  patterns (e.g. `ctx` injection) established by the taxonomy work.
+- **Feature-flag system** is deferred and independent; its role-gating will reuse
+  Phase 1's identity + `group → role` map, so doing tenancy first is not wasted.
+- **Taxonomy/contracts** are deployment-wide, so tenancy does not touch them.
+
+---
+
+## 7. Phase 4 — role model (resolved 2026-10-27) + remaining mechanical decisions
+
+Answers received 2026-10-27 settle the shape. The role model and the no-work confirmations are
+recorded here; two mechanical sub-points still need a choice before the reference work is wired.
+
+### Role model (RESOLVED) — three cumulative tiers
+Maps onto the identity layer's existing roles (no rename needed in code; these are the UI/English names):
+
+| Tier (UI name) | Role in code | Adds, on top of the tier below |
+|---|---|---|
+| **Operator** | `normal` | Catalogue; create + **remove own instances** (no role limit on deletion, Q2); create boxes; quality review. |
+| **Tenant admin** | `super` | **Create shelves/sites**; **edit + delete catalogue references** (Q5/Q1); **access the admin panel**. |
+| **Super admin** | `platform-admin` | **Manage orgs**; **manage taxonomy**. (Already unrestricted for data.) |
+
+- **Q2 (RESOLVED):** no role gate on deletion — an operator removes its own org's instances directly.
+- **Q3 (RESOLVED):** onboarding is **by hand** for now (revamp-it creates users + sites). No
+  self-registration / enrollment flow to build.
+- **Q4 (RESOLVED):** the grey zone (serials/MACs, intake data, photos, attachments) **stays shared** —
+  the platform is for cooperation, most things are shared by design. No extra redaction.
+
+**Built (#1013):** `isTenantAdmin` / `isSuperAdmin` / `canManageShelves` in `ownership.ts`; shelf
+creation gated to tenant-admin+ in `create-box` (boxes stay open to operators; no-op for the live
+unrestricted system + platform admins).
+
+### Still to wire (mechanical, defined): admit `super` to the admin panel, gate taxonomy + org
+admin endpoints to `platform-admin` only (orgs already are; taxonomy endpoints need the `super-admin`
+gate added so a tenant admin in the panel can't reach them).
+
+### Resolved 2026-10-27 (both forks):
+
+**M1 — Admin panel split (RESOLVED + ✅ built #1015): all deployment-wide controls are
+super-admin-only.** `requireAdminAuth` now admits `super` (tenant admin); a new
+`requireSuperAdminAuth` (platform-admin / ADMIN_SECRET / local-dev) gates the deployment-wide
+endpoints — `admin-config`, `admin-contracts`, `admin-taxonomy`, `admin-tenants` (orgs),
+`admin-nightly-erp-sync`, `admin-shopware`, `admin-printer-queues`, `admin-printer-settings`; the
+operational ones (`admin-label-queue`, `admin-agentic-dispatch`, system status) stay at the
+tenant-admin tier. Feature flags are host config (`FEATURES`/`FEATURES_FILE`), no endpoint to gate.
+The admin page probes the new `GET /api/admin/access` (tenant-admin tier) for its `tier`, admits
+tenant admins, and shows the super-admin-only sections (orgs + taxonomy nav, printer config, ERP,
+Shopware) only when `tier === 'super-admin'`. The break-glass password path is unchanged (token =
+super-admin).
+
+**M2 — Reference edit/delete (RESOLVED + ✅ built #1014):** tenant admins edit/delete **any**
+reference (shared-catalogue curation); operators keep editing their **own org's** references;
+operators never delete references. Reference **deletion built now** with an in-use guard (409 while
+instances exist). Shop cleanup on delete deferred. The only remaining M2 piece is the FE
+delete-reference button placement (endpoint `POST /api/references/<nr>/delete` is ready).

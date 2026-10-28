@@ -17,6 +17,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
+- **In-device parts show a stale device name as Lagerort.** `catalog-spare-part.ts` (3 INSERTs) copies the parent's `Bezeichnung || Artikelbeschreibung` into `items."Location"`; `LocationTag` and `LOCATION_WITH_BOX_FALLBACK` prefer that string, so renaming the device leaves the old name on its parts (intake's `in-device-components.ts` already writes NULL). Plan: write NULL, derive `ParentItemUUID`/`ParentLabel` via the `Zerlegt_aus` join in the read queries, show "in ‹Gerät›" in `LocationTag`, clean up existing rows in the additive-migration batch. **Related, verify first:** `items."Location"` also caches the destination shelf at move time and `move-box.ts` never updates items, so items in a box that moved shelves likely show the old shelf — same cure (derive from `boxes."LocationId"`), but ERP export, Shopware payload and `itemGrouping` read the column.
+
 0z5. **Intake asks RAM / storage despite the scan — ROOT-CAUSED; backend done, image fix handed off.**
   Root cause (intake #915): the netboot image's `build_scan_payload` (in `common.sh`, separate repo) reads
   disk `sizeGb` from `smartctl` `.user_capacity.bytes` — an **ATA/SATA-only** field, **empty for NVMe** and
@@ -65,14 +67,13 @@
 
 0r. **Ersatzteile: "Hinzufügen" popup needs a close-on-backdrop-click escape for accessibility** — the new portal dialog closes on backdrop click already; verify with screen reader that `aria-modal` and focus-trap work correctly.
 
-0u. **Assembly contract: multipleAllowed full UI.** The `multipleAllowed` flag on assembly parts (RAM, storage) is supported in the data model and ZubehoerCard shows a "+ weiteres" button when one is cataloged, but the multi-instance slot list (showing each linked instance separately) is not yet implemented.
+0u. **Assembly contract: multipleAllowed full UI.** The `multipleAllowed` flag on assembly parts (RAM, storage) is supported in the data model and ZubehoerCard shows a "+ weiteres" button when one is cataloged, but the multi-instance slot list (showing each linked instance separately) is not yet implemented. *Folds into Phase 6 (Einzelteile rows list each in-device instance).*
 0v2. **Run `scripts/normalize-category-values.js` against production once (op step).** The read-side casts (agentic #906) now tolerate float-formatted category strings like `"201.0"`, but the legacy TEXT values are still non-canonical in the DB. Run the one-time cleanup on prod (`DATABASE_URL=… node scripts/normalize-category-values.js`) to canonicalize them; idempotent and safe to re-run.
-0v. **Specs/201.json: remove duplicate component fields.** `RAM`, `Speicher`, and `Akku` remain in `contracts/specs/201.json` even though assembly answers now drive these. Safe for now but should be cleaned up to avoid confusion in agentic extraction.
 0v3. **Seed category `guidance[]` for remaining subcategories.** The spec-contract `guidance[]` field (agentic #908) injects per-category prompt snippets into extraction + supervisor; only `201.json` (laptops) is seeded so far. Collect the recurring LLM mistakes per subcategory (e.g. HDD/monitor dimensions, server form factors) from operators/review history and add snippets to the other `contracts/specs/*.json`. No `version` bump needed (guidance is advisory). Consider promoting "do not mention X"-style suppression to a hard supervisor gate if prompt guidance proves leaky.
 0w. **keyboard_layout specQuestion in keyboard slot.** Architecture supports `specQuestion` wiring for inline answers (e.g., keyboard layout in the keyboard slot), but the frontend ZubehoerCard does not yet render `specQuestion` inline — only the primary `question` is shown.
 
 0m. **Ersatzteile Entnehmen: add "direkt verkaufen" path.** Currently Entnehmen always requires a Behälter-ID (storage location). When a spare part is sold immediately, no storage location is needed — instead the quantity should go to 0. UI change: show "Wird der Artikel eingelagert?" prompt in the Entnehmen flow; "Ja" → existing relocate flow; "Nein" → set Qty=0, no location required.
-0n. **Ersatzteile: instance reference re-linking.** When a spare part instance is created via Hinzufügen but linked to the wrong item reference (wrong Artikelnummer), there's no way to re-link the instance to the correct reference without deleting it. Implement a "Referenz ändern" option in the Zerlegen slot (visible post-cataloging, before/after removal).
+0n. **Ersatzteile: instance reference re-linking.** When a spare part instance is created via Hinzufügen but linked to the wrong item reference (wrong Artikelnummer), there's no way to re-link the instance to the correct reference without deleting it. Implement a "Referenz ändern" option in the Zerlegen slot (visible post-cataloging, before/after removal). *Folds into Phase 6 ("Artikel verknüpfen/ändern" on the Einzelteile right panel).*
 
 0p. **Known test coverage gaps (from doc/test comparison):**
   - `restart-review-metadata.test.ts` covers 3 of 4 restart truth-table cases from `review-flow.md`; case 3 (`review` provided + `replaceReviewMetadata=true`) is not tested.
@@ -82,8 +83,6 @@
   - No production telemetry yet confirms the pricing stage actually hits the same unrecognized-shape failure mode as the categorizer did — the hardening in #872/0y is defensive; revisit once pricing transcripts are reviewed to see how often it triggers.
 
 0j. **Set PRINTER_QUEUE_MARKETING env var for A4 marketing sheets.** Without it, marketing sheet print jobs fall back to `PRINTER_QUEUE`. Operators should configure this to target the A4 printer.
-
-0. **Eliminate duplicate `/api/items` fetch on item selection.** When switching items via the list, ItemDetail's neighbor-resolution `useEffect` (`[itemId, neighborContext]`) fetches `/api/items` independently from the list fetch in `ItemListPage`. Fix: `handleItemSelect` in `ItemListPage` should encode `prev=<prevId>&next=<nextId>` as URL params when calling `setEntity` so ItemDetail reads them from `searchParams` and skips its own fetch (the `prev`/`next` params are already supported by ItemDetail's `neighborContext` memoization).
 
 1c. **Investigate remaining tester-reported bugs (need runtime testing):**
    - "ki erfassung indefinite" — agentic capture stuck; stale-run recovery now reliably clears stuck RUNNING runs (fire-and-forget race fixed); auto-retry re-queues after backoff. If still stuck, check model service callback.
@@ -125,13 +124,22 @@
 - **Intake: scan.txt augmentation of agentic extraction.** When `/complete` fires, if `items.SerialNumber` is set, look for Phase 2 test result files in `{intake-scans mountPath}/{serial}/` and prepend a summarized block (≤2000 chars) to the extraction prompt. Requires modifying `backend/agentic/flow/item-flow-extraction.ts`.
 - **Intake: operator notification on completion.** Notify the operator (push notification or TUI display) when a device finishes the full pipeline (quality done + agentic run queued).
 - **Intake: InstanceSpecs sync.** When a quality answer drives a spec change on a ref-sharing instance, propagate to all instances sharing the same Artikelnummer (pre-existing open question for the quality review flow too). Note: operators can now manually correct/add/delete a single instance's specs via the "Instanz bearbeiten" card (`PATCH /api/items/:id/instance` `InstanceSpecs`, full-replace — item-lifecycle #911); this edit is per-instance only and does not propagate.
-
 ---
 
 ## Priority 2 — Feature Improvements
 
+- **Item list: spec filters per subcategory** (deferred from ui #1002). Once one subcategory is chosen, offer selects for its filterable spec fields (`registry.getFilterableSpecKeys()` / spec contracts) with the values present in the loaded items. Needs its own filter state, persistence and neighbor-navigation support; keep it to "select per field", no ranges.
+
+**Parts catalogue Phase 6 (planned 2026-10-20, [plan §11](docs/PLANNING_PARTS_CATALOGUE.md)):** steps 6a–6f — ✅ 6a stable part IDs `C-<root Art>-<sub>-<####>` (graduation without re-key, #991); ✅ 6b contract fields + validator + shared question selector + slot scoring (#993); ✅ 6c slot-answer PATCH + carry-over on full save (#994); ✅ 6d–6f Einzelteile page, specs at creation, catalogue content (#996) — **open: browser walkthrough with the testers**; `askOnCreate`/`steps`/`refinedBy` + validator + shared question selector, slot scoring change (unassessed slots excluded), answer-merge PATCH + slot carry-over on full save, article specs at creation (warning only), Einzelteile page + Zubehör split (retires Zerlegen card + modal level stack, refurbishment parity first), catalogue content drafts. Team: work steps (F1), `refinedBy` + weights (F2, part of C1).
+- **Intake disks → assembly slot.** Intake keys scanned components by device name (`nvme0n1`, `sda`), which matches no assembly slot key, so those parts get the `0` subcategory segment in their ID (`C-104523-0-0001`) and resolve no effective subcategory (no contracts). Map scan kind/bus to a slot (e.g. NVMe → `m2_1`, SATA → `drive_25_1`, refurbishment `storage`) at sync time. (#991)
+
+**Style update (975) — follow-ups:**
+- Check the new palette on the screens that looked bad (intake station, warehouse monitors); if wide-gamut screens still look loud, add a `@media (color-gamut: p3)` block lowering chroma further.
+- ✅ ~~Field density in item tabs~~ — `DetailRows` (977). Still old layout: ZubehoerCard tables, stock table, `AgenticSnapshotsPanel` diff (`.responsive-row` rules can go once that moves over).
+- `LoadingPage` rainbow emoji colours are still saturated hardcoded hex (left as-is: playful loader).
+- Inline `style={{}}` colours in `PrinterQueuesCard`, `ZubehoerCard`, `SparepartSlotPopup` etc. follow the theme via alias tokens (`--color-error`, `--border`, …); move them into classes when those files are touched.
+
 **Per-user item marking (step 779) — deferred items:**
-- CSS polish for `.mark-btn` added; amber accent color is hardcoded (`#f59e0b`) — wire to a CSS variable once a warning/accent token is established.
 - Bulk mark action in `BulkItemActionBar` not yet added.
 - Note text not shown as tooltip on the star icon in the list — keep as tab-only for now.
 
@@ -183,17 +191,13 @@
   extending `agentic_run_snapshots`; (3) reconcile step; (4) operator actions; (5) KI-Runs list; (6)
   automation. Open questions in the planning doc §13/§17.
 
-53b. **Doc-debt: the spec-contract restructure shipped undocumented.** The reference spec contracts were
+55b. **Doc-debt: the spec-contract restructure shipped undocumented.** The reference spec contracts were
   redefined around model capabilities (`102.json` gained `RAM-Slots`/`RAM-Kapazität`/`RAM-Typ`;
   `201.json` stripped to Prozessor/Display/Anschlüsse) with no changelog Why (commits "new pipeline" /
   "cleanup and minor contract updates"). They are also **inconsistent** across compute subcategories
   (201 lacks storage/RAM-capability fields 102 has). Document the intent + normalize the shape; note
   that `INTAKE_TO_SPEC` (`ram_gb→RAM`/`storage_gb→Speicher`) is now orphaned for subcats whose contract
   dropped those keys (silent no-op in `buildSpecContext`).
-
-52. **Tests failing in the local harness.** `test/agentic-direct-dispatch.test.ts` and `test/agentic-startup-resume.test.ts` fail in the local esbuild harness because the scheduled `invokeModel` isn't observed (`toHaveBeenCalledTimes(1)` → 0); verify against CI's Postgres/jest setup. Both fail identically on a clean tree.
-   - **Still failing locally (9):** esbuild harness can't resolve named exports from bundled `../../agentic` (`deleteAgenticRun`/`checkAgenticHealth is not a function`), plus mock/env gaps (`window is not defined`, missing `.env`/media fixtures, `ts-jest` preset not found). Suspected CI-green (jest+Postgres); needs verification against CI rather than product-code changes.
-   - **`intake-specs-assembly.test.ts` — "human-judgment condition questions" fails on a clean tree** (found during intake #912). `loadSubCategoryContract(201)` (the `lib/quality-contracts` loader) returns `null` under jest so `sub!.questions` throws, while the `contracts/registry` loader used by the same suite resolves fine — a path-resolution mismatch between the two contract loaders in the test env, not a product bug. Reconcile the loaders' base-dir resolution (or the test's expectation) so the subcategory contract loads under jest.
 
 42. **Quality search: `includeQuality` API param.** When set, search also matches against `derived_specs` in `quality_assessments` (Postgres JSON operators). Enables searching "16GB" to find matching Laptops.
 
@@ -236,6 +240,130 @@
 
 ## Priority 3 — Infrastructure & Platform
 
+53. **New use case: spare-part cataloging (separate, multi-tenant deployment).**
+   Feature-disposition plan + gap list in
+   [`docs/PLANNING_NEW_USE_CASE.md`](docs/PLANNING_NEW_USE_CASE.md). Use case =
+   thorough spare-part cataloging (catalogue every reusable part); disassembly/
+   component lifecycle is the centerpiece to strengthen. **Laptop parts catalogue (#973 plan, #980 Phases 1–3 ✅):**
+   [`docs/PLANNING_PARTS_CATALOGUE.md`](docs/PLANNING_PARTS_CATALOGUE.md) — percentage quality range,
+   `multi` type, validator, effective subcategory built; **one quality system for all deployments (#982)**;
+   catalogue taxonomy + part tree + specs drafted in `config/catalogue/`; **nested assessment built (#984)** —
+   browser walkthrough pending. **Before the live refurbishment system: calibrate grade bands (plan C1).**
+   Two greenfield
+   workstreams gate it:
+   - **G‑T1 Multi-tenancy (largest lift).** No `tenant`/`mandant`/`org_id`
+     concept exists anywhere. **Phased plan ready:**
+     [`docs/PLANNING_TENANCY.md`](docs/PLANNING_TENANCY.md) — identity-first:
+     (1) Authentik forward-auth → `ctx.{user,tenant,role}` **✅ code done** (#960:
+     `identity.ts` resolver + `ctx` injection + `resolveActor` on lifecycle
+     handlers; proxy config templated, needs on-host verification before dropping
+     Basic Auth); (2) **✅ 2a schema done** (#964: `tenants` table + nullable
+     `TenantId` on logistics tables + `ContributedByTenant` on `item_refs` +
+     `listTenants`/`getTenant`/`upsertTenant`; neutral) — **✅ 2b done** (#965:
+     `GET /api/whoami` for observable identity; `resolveTenant(ctx)` stamps
+     `TenantId` on create in `create-box`/`add-item`/`import-item`; upserts
+     `COALESCE`-preserve an already-set owner, never reassign; startup seeds the
+     `tenants` registry from the config map via `configuredTenants()`; still
+     neutral until forward-auth is live); (3) class-aware scoping in
+     `db.ts` **← next enforcement step** (needs the default-tenant decision +
+     host-verified forward-auth; best verified against Postgres;
+     before that, verify forward-auth locally then on the host per
+     `docs/detailed/identity-provider.md` Part A/B incl. the spoof test).
+     **Phase 1b ✅ built (#968, opt-in overrides; verified locally 2026-10-13, host pending).
+     Phase 1 audit + Phase 4 admin role gating ✅ (#969, browser check pending).
+     Deployment feature flags ✅ (#970, browser check pending).
+     Org admin page ✅ (#971, browser check pending).
+     Phase 3a writes ✅ (#976). Phase 3b reads ✅ (#979). Phase 3c item-detail
+     actions hidden for foreign items ✅ (#981/#983). Two-org matrix ✅ (#1011,
+     `tenancy-two-org-matrix.test.ts` — read+write layers across A/B/admin/no-login/
+     no-org). DL2 global stock total ✅ resolved without code (subsumed by §2a
+     shared-reads: reads aren't tenant-filtered, so grouped quantities already sum
+     across orgs; matrix pins the "no instance dropped" invariant). Bulk bar blocks
+     cross-org mass writes ✅ (#1012). Next (defined FE polish):** KI-tab action gating +
+     create buttons hidden for no-org users (backend already 403s both; deferred, touches
+     several components); per-org export (`/api/export/data` is unrestricted-only for now);
+     **host verification of the opt-in forward-auth proxy** (local ✅ 2026-10-13; on-host
+     pending) before Basic Auth is dropped, per `docs/detailed/identity-provider.md`
+     Part A/B incl. the spoof test. **Phase 4 role model resolved (2026-10-27, `PLANNING_TENANCY.md` §7):**
+     three cumulative tiers operator (`normal`) < tenant-admin (`super`) < super-admin
+     (`platform-admin`). Shelf creation gated to tenant-admin+ ✅ (#1013,
+     `canManageShelves`). No-work confirms: within-org deletion ungated (operators remove
+     own instances), onboarding manual, grey zone stays shared. Reference curation ✅ (#1014, §7 M2 resolved):
+     operators edit own-org refs, tenant-admins edit/delete any; `POST /api/references/<nr>/delete`
+     with 409 in-use guard. Admin-panel split ✅ (#1015, §7 M1):
+     `requireSuperAdminAuth` gates the deployment-wide endpoints (config, contracts, taxonomy, orgs,
+     nightly-erp, shopware, printer queues/settings); `requireAdminAuth` admits `super` for the
+     operational ones; `GET /api/admin/access` drives the page tier split. **Phase 4 essentially
+     done** (role model + shelf gate #1013, reference curation #1014, admin split #1015); `super`
+     user-management + self-registration ruled out for now (manual onboarding). **FE polish ✅ (#1016):**
+     "Referenz löschen" button on the reference tab (tenant-admin only, `canDeleteReference`, 409
+     in-use handling); shelf-create already operator-invisible via the M1 panel split. **Phase 4
+     complete.** Shop cleanup on ref-delete still deferred. **Operator action pending:** host-verify
+     the forward-auth proxy before dropping Basic Auth. Open: intake station
+     rows get `defaultTenant` (per-station tenant?); SPA has no graceful
+     session-expiry handling; (4) tenant/user
+     admin + self-registration. Auth mechanism decided
+     (forward-auth + Authentik broker). **Proposed
+     (plan §12.3) — two-tier visibility** on
+     the reference↔instance seam: `item_refs` = shared catalogue (no `TenantId`,
+     read by all, writes guarded by `ContributedByTenant`); `items`/`boxes`/
+     shelves/instance-quality/logistics-events = **`TenantId`, hard-isolated**
+     (reads+writes filtered by `ctx.tenant`). Tenants+groups (normal/super/
+     platform-admin) from Authentik; resolved once at the chokepoint; class-aware
+     scoping in `db.ts`; additive nullable migration on logistics tables only.
+     Super users create their tenant's shelves; nobody sees another warehouse.
+     Catalogue view = shared ref + **global aggregate quantity** + own-tenant
+     instances only (locations private). DL1/2/3 **resolved:** keep global-unique
+     minted IDs (`BoxID`/shelf) + `TenantId` as a visibility column (no composite
+     key); real follow-on = **per-tenant shelf locations** (`shelfLocations` is a
+     global hardcoded list today, folds into §6 config externalization). Self-
+     registration via org token = Authentik enrollment only, no data-model impact.
+     Own phased plan.
+   - **G‑FF1 Feature-flag / capability system.** No unified toggle exists (ad-hoc
+     `*_ENABLED` env vars + client-side "simple mode" CSS). **Proposed (plan
+     §12.2):** one capability manifest → backend hard-gate at the dispatch
+     chokepoint (`server.ts:971`, `feature?` tag on `Action`) + frontend soft-hide
+     via a served `GET /api/app-config` and a `useFeature` hook reusing the
+     `simpleMode` CSS-class pattern. Coarse (1 flag/subsystem); prerequisite for
+     opting out AI / printing / shopware / intake / stubs / kivitendo.
+   - **Opt out:** AI flow, printing, intake API, shopware, stubs (remove-by-config);
+     kivitendo, transport boxes, inventory (out). **Strengthen:** stock handling,
+     traceability/event log, media (videos/text/wiki links), search. **Decide:**
+     D1 scanning/QR (recommend keep), D2 CO₂ scoring (recommend drop).
+   Category/config gaps found:
+   - **G‑C1** Taxonomy lives in 4 hand‑synced copies (`models/item-categories.ts`,
+     `frontend/src/data/itemCategories.ts` re‑export, `docs/data_struct.md` LLM
+     reference, `INTAKE_CATEGORIES`) — no generator enforces consistency.
+     **Phased plan ready:** [`docs/PLANNING_TAXONOMY_EXTERNALIZATION.md`](docs/PLANNING_TAXONOMY_EXTERNALIZATION.md)
+     — **runtime, DB-backed data object** (loaded at startup, served via
+     `GET /api/taxonomy`, seeded into DB from a shipped default, editable via admin
+     CRUD). Build-time codegen rejected: we ship one image, so it would force one
+     image per taxonomy. Backend stays synchronous via a startup cache
+     (`getItemCategories()`); frontend moves to a boot-fetch provider.
+     **Phase 1 ✅** (#937): backend loader+cache+validation, `GET /api/taxonomy`,
+     categorizer/intake/lookup consumers rerouted, seed shipped to dist; fixed
+     All-in-One→302 (printer) bug via a new `109 All-in-One`. **Phase 2 ✅** (#938):
+     `TaxonomyProvider` fetches `/api/taxonomy` at boot; all FE consumers use
+     `useTaxonomy()`; static `frontend/src/data/itemCategories.ts` deleted — FE no
+     longer imports the taxonomy at build time. **Phase 3 ✅** (#957): DB tables
+     `taxonomy_categories`/`taxonomy_subcategories` + `initTaxonomy()` (seed-on-init
+     from the file, then DB is authoritative; sync seed-file fallback; never
+     throws); `reloadTaxonomyFromDb()` for edits. **Phase 4 ✅** (#958): `/admin/taxonomy`
+     editor + `/api/admin/taxonomy` CRUD (live via `reloadTaxonomyFromDb`; codes
+     immutable) + file-based **contract overlay** (`CONTRACTS_OVERLAY_DIR`,
+     `admin-contracts` PUT/DELETE, download→edit→re-upload UI). **Taxonomy
+     externalization workstream complete** (G‑C1 closed). Follow-ups: in-use count
+     display, in-browser contract editor, reparenting, a dedicated 109 quality
+     contract.
+   - **G‑C2 / G‑K2** Taxonomy and contract files are a flat global namespace — no
+     scoping, so two use cases cannot coexist on one instance without new design.
+   - **G‑F1 / G‑F2** No use‑case/domain/tenant dimension exists in config at all;
+     "change the config for a use case" is greenfield.
+   - **G‑K3** ✅ resolved on main (the `disassembly/`→`assembly/` doc drift was
+     fixed by the intake-image/contract-docs sync work).
+   - Domain hardcodes to revisit for a new use case: `models/shelf-locations.ts`
+     (revamp sites), ERP booking group `453` (`backend/config.ts:366`),
+     `ERP_IMPORT_FORM_*`, `contracts/impact/co2.json`.
 56. **Remove dead config.** `backend/config.ts` parses but nothing reads `ERP_IMPORT_FORM_*` (separator, charset, booking group, unit, part classification, date format, full preview), `ERP_IMPORT_PROFILE_ID`, `ERP_IMPORT_TMP_PROFILE_ID`, `ERP_IMPORT_REQUEST_CONTRACT`, `ERP_IMPORT_BROWSER_PARITY_MAPPINGS`, `ERP_IMPORT_AUTH_FIELD_PREFIX`, `ERP_IMPORT_POLL*`, `SHOPWARE_DEFAULT_TAX_ID`, `SHOPWARE_DEFAULT_CURRENCY_ID`. Delete them (already dropped from `.env.example` and `docs/ENVIRONMENT.md`).
 
 58. **Upgrade the Docker base image from Node 20 (EOL Apr 2026) to Node 22/24 LTS.** Both stages in `Dockerfile` (`node:20-bookworm*`). Rebuild native modules and run the full test suite. Also bump `engines`/CI if they pin 20.
@@ -262,7 +390,24 @@
 
 ### Still Open
 
+- **Public item list without login (parked 2026-10-21):** customers browsing what's available. Unauthenticated requests are currently *unrestricted* (`ownership.ts` `isUnrestricted`), so a login exception on existing routes would expose box/shelf and actors. If picked up: dedicated `/api/public/*` with a column allowlist, proxy route that blanks the identity headers (like `/api/intake/`), opt-in flag, public media route, server-side paging. Open: which deployments, which items, which fields (price, org), ordering by mailto vs stored requests.
+
+- **Startup path check (#989):** misconfigured `.env` paths surface one by one as stack traces (seed ENOENT is fatal, inbox EACCES isn't). A single startup summary of configured paths that are missing/unwritable would make container deploys easier to debug.
+- **Production host gets an expired 2023 cert for `gitea.revamp-it.ch` (#988):** the public server's cert is valid, so the host resolves/routes to another endpoint (split DNS, `/etc/hosts`, NAT loopback). Check with the commands in `docs/detailed/deployment.md` §4 and fix DNS or the internal cert. Also: the CI workflows (`docker-publish.yaml`, `deploy.yaml`) and the `docker-compose.prod.yaml` default image still target the internal Gitea / ghcr, not `gitea.revamp-it.ch/revamp-it`.
+- **Empty fields hidden by default (#977):** `DetailRows` folds empty fields behind a toggle. During cataloguing, seeing what's missing may matter more; should the toggle state be remembered, or default to "show" on some screens?
+- **Tab-action order (#975):** should the primary action (e.g. Bearbeiten) always come first in `.tab-actions`? Currently Etikett leads in the instance tab. Up for discussion.
+- **Admin cards don't validate API responses (#974 finding):** e.g. `SystemStatusCard` renders `/api/media/health` without checking `res.ok`/shape; an unexpected body (`imageProbe` missing) throws during render and, without an error boundary, blanks the whole page. Add response checks + an error boundary around admin cards.
+- **Refurbishment grade bands set, testers to fine-tune (#1004):** `contracts/quality/general.json` now 5 ≥ 95 %, 4 ≥ 85 %, 3 ≥ 60 %, 2 ≥ 40 %; grade-2 knock-out caps moved 0.39 → 0.59. Over all 1,728 non-knock-out laptop answer combinations, 84 % keep their old grade and none drops; the rest rise one band. Testers calibrate further (bands or weights), then `npm run quality:recompute` on deploy. The catalogue overlay (`config/catalogue/`) still has the old bands. **Also check:** keyboard `Top` scores 0.75 like `Gut` (`contracts/quality/201.json`), so no laptop reaches 100 % — intended, or a migration artefact from `qualityImpact`?
+- **Switch the test stack to the catalogue config (#985):** `docker compose -f docker-compose.yml -f docker-compose.catalogue.yml up -d --build`, then `npm run taxonomy:apply -- config/catalogue/taxonomy.seed.json` and restart the mediator (see `config/catalogue/README.md`).
+- **Walk the nested assessment through in a browser (#984):** on a disposable DB with the `config/catalogue/` overlay — Laptop → Displayassembly → Webcam, save/discard/reload mid-tree. Only component-tested so far.
+- **Low-score nudge after a quality review keys on the pessimistic own grade (#984):** with many unanswered questions it shows "Qualität 1/5 — Einzelteile katalogisieren?" for items that are merely unassessed; base it on the derived item grade (or drop it in the catalogue deployment).
+- **Item lists don't show the % range yet (#982/#983):** the instance tab does (#983); lists/badges still show only the grade. Show the range small next to it and sort by the lower bound (plan Q9).
+- **Item views prefer article quality over instance quality (#973):** `COALESCE(r."Quality", i."Quality")` in `db.ts` item select. Matters again since #982 derives instance grades — an article-level grade hides them. Investigate why the article wins before flipping.
+- **Feature-flag gaps (#970):** image upload in create/edit forms isn't covered by `item-images`; box notes stay editable in the box edit form with `box-notes` off; old `SHOPWARE_SYNC_ENABLED`/`ERP_SYNC_ENABLED` not folded into the manifest. Fine for the POC; decide if the catalogue deployment needs them.
+- **Platform-admin model:** `PLANNING_NEW_USE_CASE.md` §12.3 says platform admins are the `super` users of a designated admin tenant; the implementation (`identity.ts`) uses a separate `platformAdminGroup` (`mediator-admin`). Settle when defining `super` powers.
+
 - **Revive flag-based review metrics (deferred).** The review wizard makes one explicit approve/reject decision and, on reject, feeds a concrete before→after correction diff + notes into the next run (chosen over deriving flags — a diff is richer and unambiguous). Consequence: `bad_format` / `wrong_physical_dimensions` / `information_present` are sent at non-blocking defaults, so `AgenticReviewMetricsRows` (`% Schlecht formatiert / Falsche Dimensionen / Info unvollständig`) now reads all-positive. If those dashboards are still wanted, derive the flags **purely for metrics** (e.g. text edited ⇒ bad_format, dimension edited ⇒ wrong_physical_dimensions, required spec blanked ⇒ information_present=false), decoupled from the re-run path. Not needed for extraction quality.
+- For the **laptop parts catalogue** (plan §10, updated #983): calibrate grade bands (C1, later); "Fest verbaut" counted or excluded; Displayassembly sold whole?; rework the drafted weights, taxonomy and part specs in `config/catalogue/`.
 - For **spare parts `drive_type`**, should this question move to the disassembly contract storage slot (needs `qualityQuestion[]` array support on parts) or stay in quality/201.json as a follow-up spec question? Currently stays in quality/201.json (TBD).
 - For **spare parts bidirectional suggestions**, when a device's quality check says "PS missing", should the system surface matching PS units in inventory for the operator? Deferred to phase 2 — needs structured spec matching.
 - For **optional basic-form fields**, should contract changes be backend-first or can the frontend collect them before backend persistence is ready?

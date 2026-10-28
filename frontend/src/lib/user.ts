@@ -3,6 +3,18 @@ import { dialogService } from '../components/dialog/dialogService';
 
 const USERNAME_STORAGE_KEY = 'username';
 
+// Set once at boot by IdentityProvider when the request is logged in via Authentik. It wins over
+// the free-text name so every caller of getUser() records the real login without changes.
+let loginUser = '';
+
+export function setLoginUser(username: string): void {
+  loginUser = username.trim();
+}
+
+export function isLoginUser(): boolean {
+  return loginUser !== '';
+}
+
 export function setUser(username: string): void {
   try {
     localStorage.setItem(USERNAME_STORAGE_KEY, username);
@@ -14,6 +26,7 @@ export function setUser(username: string): void {
 }
 
 export function getUser(): string {
+  if (loginUser) return loginUser;
   try {
     return localStorage.getItem(USERNAME_STORAGE_KEY) || '';
   } catch (err) {

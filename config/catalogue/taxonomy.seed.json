@@ -1,0 +1,287 @@
+{
+  "version": 1,
+  "categories": [
+    {
+      "code": 20,
+      "labelExternal": "Laptop",
+      "labelInternal": "Laptop",
+      "sortOrder": 0,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 201,
+          "labelExternal": "Laptop",
+          "labelInternal": "Laptop",
+          "parentCode": 20,
+          "sortOrder": 0,
+          "active": true
+        }
+      ]
+    },
+    {
+      "code": 210,
+      "labelExternal": "Laptop-Komponenten",
+      "labelInternal": "Laptop_Komponenten",
+      "sortOrder": 1,
+      "active": true,
+      "subcategories": [
+        {
+          "code": 2101,
+          "labelExternal": "Displayassembly",
+          "labelInternal": "Displayassembly",
+          "parentCode": 210,
+          "sortOrder": 0,
+          "active": true
+        },
+        {
+          "code": 2102,
+          "labelExternal": "Handauflage (C-Cover)",
+          "labelInternal": "Handauflage_C_Cover",
+          "parentCode": 210,
+          "sortOrder": 1,
+          "active": true
+        },
+        {
+          "code": 2103,
+          "labelExternal": "Gehäuse-Boden (D-Cover)",
+          "labelInternal": "Gehäuse_Boden_D_Cover",
+          "parentCode": 210,
+          "sortOrder": 2,
+          "active": true
+        },
+        {
+          "code": 2104,
+          "labelExternal": "Laptop-Tastatur",
+          "labelInternal": "Laptop_Tastatur",
+          "parentCode": 210,
+          "sortOrder": 3,
+          "active": true
+        },
+        {
+          "code": 2105,
+          "labelExternal": "Displaypanel",
+          "labelInternal": "Displaypanel",
+          "parentCode": 210,
+          "sortOrder": 4,
+          "active": true
+        },
+        {
+          "code": 2106,
+          "labelExternal": "Display-Cover (A-Cover)",
+          "labelInternal": "Display_Cover_A_Cover",
+          "parentCode": 210,
+          "sortOrder": 5,
+          "active": true
+        },
+        {
+          "code": 2107,
+          "labelExternal": "Display-Rahmen (B-Cover)",
+          "labelInternal": "Display_Rahmen_B_Cover",
+          "parentCode": 210,
+          "sortOrder": 6,
+          "active": true
+        },
+        {
+          "code": 2108,
+          "labelExternal": "Scharnier",
+          "labelInternal": "Scharnier",
+          "parentCode": 210,
+          "sortOrder": 7,
+          "active": true
+        },
+        {
+          "code": 2109,
+          "labelExternal": "Laptop-Webcam",
+          "labelInternal": "Laptop_Webcam",
+          "parentCode": 210,
+          "sortOrder": 8,
+          "active": true
+        },
+        {
+          "code": 2110,
+          "labelExternal": "WLAN-Antenne",
+          "labelInternal": "WLAN_Antenne",
+          "parentCode": 210,
+          "sortOrder": 9,
+          "active": true
+        },
+        {
+          "code": 2111,
+          "labelExternal": "Inverterboard",
+          "labelInternal": "Inverterboard",
+          "parentCode": 210,
+          "sortOrder": 10,
+          "active": true
+        },
+        {
+          "code": 2112,
+          "labelExternal": "Touchpad",
+          "labelInternal": "Touchpad",
+          "parentCode": 210,
+          "sortOrder": 11,
+          "active": true
+        },
+        {
+          "code": 2113,
+          "labelExternal": "Fingerabdrucksensor",
+          "labelInternal": "Fingerabdrucksensor",
+          "parentCode": 210,
+          "sortOrder": 12,
+          "active": true
+        },
+        {
+          "code": 2114,
+          "labelExternal": "Einschaltknopf / Powerboard",
+          "labelInternal": "Einschaltknopf_Powerboard",
+          "parentCode": 210,
+          "sortOrder": 13,
+          "active": true
+        },
+        {
+          "code": 2115,
+          "labelExternal": "Daughterboard",
+          "labelInternal": "Daughterboard",
+          "parentCode": 210,
+          "sortOrder": 14,
+          "active": true
+        },
+        {
+          "code": 2116,
+          "labelExternal": "Strombuchse (DC-Jack)",
+          "labelInternal": "Strombuchse_DC_Jack",
+          "parentCode": 210,
+          "sortOrder": 15,
+          "active": true
+        },
+        {
+          "code": 2117,
+          "labelExternal": "Kühlkörper",
+          "labelInternal": "Kühlkörper",
+          "parentCode": 210,
+          "sortOrder": 16,
+          "active": true
+        },
+        {
+          "code": 2118,
+          "labelExternal": "Laptop-Lüfter",
+          "labelInternal": "Laptop_Lüfter",
+          "parentCode": 210,
+          "sortOrder": 17,
+          "active": true
+        },
+        {
+          "code": 2119,
+          "labelExternal": "Festplattenhalterung (Caddy)",
+          "labelInternal": "Festplattenhalterung_Caddy",
+          "parentCode": 210,
+          "sortOrder": 18,
+          "active": true
+        },
+        {
+          "code": 2120,
+          "labelExternal": "Optisches Laufwerk (Laptop)",
+          "labelInternal": "Optisches_Laufwerk_Laptop",
+          "parentCode": 210,
+          "sortOrder": 19,
+          "active": true
+        },
+        {
+          "code": 2121,
+          "labelExternal": "Laptop-Lautsprecher",
+          "labelInternal": "Laptop_Lautsprecher",
+          "parentCode": 210,
+          "sortOrder": 20,
+          "active": true
+        },
+        {
+          "code": 2122,
+          "labelExternal": "Bluetooth-Modul",
+          "labelInternal": "Bluetooth_Modul",
+          "parentCode": 210,
+          "sortOrder": 21,
+          "active": true
+        },
+        {
+          "code": 2123,
+          "labelExternal": "CMOS-Batterie",
+          "labelInternal": "CMOS_Batterie",
+          "parentCode": 210,
+          "sortOrder": 22,
+          "active": true
+        },
+        {
+          "code": 2124,
+          "labelExternal": "Mikrofon",
+          "labelInternal": "Mikrofon",
+          "parentCode": 210,
+          "sortOrder": 23,
+          "active": true
+        },
+        {
+          "code": 2125,
+          "labelExternal": "Abdeckung / Serviceklappe",
+          "labelInternal": "Abdeckung_Serviceklappe",
+          "parentCode": 210,
+          "sortOrder": 24,
+          "active": true
+        },
+        {
+          "code": 2126,
+          "labelExternal": "Interne Kabel",
+          "labelInternal": "Interne_Kabel",
+          "parentCode": 210,
+          "sortOrder": 25,
+          "active": true
+        },
+        {
+          "code": 2127,
+          "labelExternal": "Laptop-Mainboard",
+          "labelInternal": "Laptop_Mainboard",
+          "parentCode": 210,
+          "sortOrder": 26,
+          "active": true
+        },
+        {
+          "code": 2128,
+          "labelExternal": "Laptop-Prozessor",
+          "labelInternal": "Laptop_Prozessor",
+          "parentCode": 210,
+          "sortOrder": 27,
+          "active": true
+        },
+        {
+          "code": 2129,
+          "labelExternal": "Laptop-Arbeitsspeicher",
+          "labelInternal": "Laptop_Arbeitsspeicher",
+          "parentCode": 210,
+          "sortOrder": 28,
+          "active": true
+        },
+        {
+          "code": 2130,
+          "labelExternal": "Festplatte / SSD (Laptop)",
+          "labelInternal": "Festplatte_SSD_Laptop",
+          "parentCode": 210,
+          "sortOrder": 29,
+          "active": true
+        },
+        {
+          "code": 2131,
+          "labelExternal": "WLAN-Karte (Laptop)",
+          "labelInternal": "WLAN_Karte_Laptop",
+          "parentCode": 210,
+          "sortOrder": 30,
+          "active": true
+        },
+        {
+          "code": 2132,
+          "labelExternal": "Laptop-Akku",
+          "labelInternal": "Laptop_Akku",
+          "parentCode": 210,
+          "sortOrder": 31,
+          "active": true
+        }
+      ]
+    }
+  ]
+}

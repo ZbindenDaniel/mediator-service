@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import type { QualityContract, QualityQuestion } from '../../../models/quality-contract';
 import {
   deriveAiPriorityFromAssessment,
@@ -12,7 +12,14 @@ import {
   allRequiredAnswered,
   isQuestionVisible,
 } from '../lib/qualityContracts';
+import { useFeature } from '../context/FeaturesContext';
 import QualityBadge from './QualityBadge';
+import { parseMultiAnswer, computeQualityScore, scoreToRange, formatQualityScoreRange, gradeFromRange, gradingFrom, refinedQuestionIds } from '../../../models/quality-score';
+import type { QualityScoreChild } from '../../../models/quality-score';
+import type { AssemblyContract } from '../../../models/assembly-contract';
+import { assemblyToQualityContract } from '../../../models/assembly-contract';
+import type { AssemblyQuestionScope } from '../../../models/assembly-contract';
+import { readQualityDraft, writeQualityDraft, clearQualityDraft } from '../lib/qualityDraft';
 
 export interface QualityReviewResult {
   assessment: Omit<QualityAssessmentInsert, 'reviewed_at' | 'reviewed_by'>;
@@ -23,12 +30,29 @@ export interface QualityReviewResult {
 
 interface QualityReviewStepProps {
   onComplete: (result: QualityReviewResult) => void;
-  onSkip: () => void;
+  /** Omitted = no skip/cancel button (the Einzelteile page only saves). */
+  onSkip?: () => void;
   subCategory?: number;
   layout?: 'page' | 'embedded';
   initialAnswers?: Record<string, string>;
   disabled?: boolean;
+  /**
+   * The item's parts (slot, in device, stored range): the preview includes them, and device
+   * questions whose parts are all assessed are shown locked (S1). The caller already has them.
+   */
+  parts?: QualityScoreChild[];
+  /** Mirror unsaved answers to localStorage under this key (survives a reload or switching parts). */
+  draftKey?: string;
+  submitLabel?: string;
+  skipLabel?: string;
+  /** null = no header block (the caller shows its own title). */
+  heading?: string | null;
+  /** `create` = the device check at creation: only the slots in the contract's askOnCreate. */
+  questionScope?: AssemblyQuestionScope;
 }
+
+// Stable empty default for callers without parts.
+const NO_PARTS: QualityScoreChild[] = [];
 
 const AI_PRIORITY_LABELS: Record<AiPriority, string> = {
   high: 'Hoch',
@@ -63,15 +87,113 @@ function BooleanToggle({
   );
 }
 
-function QuestionRow({
+// Inline layout: styles.scss currently carries unrelated uncommitted work; move to SCSS later.
+const MULTI_STYLE: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: '0.4rem', alignItems: 'center' };
+const CHIP_STYLE: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: '0.25rem', padding: '0.1rem 0.5rem', borderRadius: '999px', border: '1px solid currentColor' };
+
+/**
+ * Multi-value input. Closed list (`values`) → checkboxes; open list → chips + free entry.
+ * Stores a JSON array; "Keine" stores "[]" so "checked, nothing found" differs from "not checked".
+ */
+function MultiInput({
   question,
   value,
   onChange,
 }: {
-  question: QualityQuestion;
+  question: Extract<QualityQuestion, { type: 'multi' }>;
   value: string | undefined;
   onChange: (v: string) => void;
 }) {
+  const entries = parseMultiAnswer(value) ?? [];
+  const checked = value !== undefined && value.trim() !== '';
+  const [draft, setDraft] = useState('');
+  const write = (next: string[]) => onChange(JSON.stringify(next));
+  const addEntry = (raw: string) => {
+    const entry = raw.trim();
+    if (!entry || entries.includes(entry)) return;
+    write([...entries, entry]);
+  };
+  const listId = question.suggestions?.length ? `datalist-${question.id}` : undefined;
+
+  if (question.values?.length) {
+    return (
+      <div className="quality-review-step__multi" style={MULTI_STYLE}>
+        {question.values.map((v) => (
+          <label key={v} className="quality-review-step__multi-option">
+            <input
+              type="checkbox"
+              checked={entries.includes(v)}
+              onChange={(e) => write(e.target.checked ? [...entries, v] : entries.filter((x) => x !== v))}
+            />
+            {v}
+          </label>
+        ))}
+        <button type="button" className={`quality-review-step__toggle${checked && entries.length === 0 ? ' quality-review-step__toggle--active' : ''}`} onClick={() => write([])}>
+          Keine
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="quality-review-step__multi" style={MULTI_STYLE}>
+      {entries.map((entry) => (
+        <span key={entry} className="quality-review-step__chip" style={CHIP_STYLE}>
+          {entry}
+          <button type="button" aria-label={`${entry} entfernen`} onClick={() => write(entries.filter((x) => x !== entry))}>×</button>
+        </span>
+      ))}
+      <input
+        type="text"
+        value={draft}
+        list={listId}
+        placeholder="Eintrag + Enter"
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            addEntry(draft);
+            setDraft('');
+          }
+        }}
+        onBlur={() => { if (draft.trim()) { addEntry(draft); setDraft(''); } }}
+      />
+      {listId && (
+        <datalist id={listId}>
+          {question.suggestions!.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
+      )}
+      <button type="button" className={`quality-review-step__toggle${checked && entries.length === 0 ? ' quality-review-step__toggle--active' : ''}`} onClick={() => write([])}>
+        Keine
+      </button>
+    </div>
+  );
+}
+
+function QuestionRow({
+  question,
+  value,
+  onChange,
+  lockedBy,
+}: {
+  question: QualityQuestion;
+  value: string | undefined;
+  onChange: (v: string) => void;
+  /** Set when the parts now speak for this question: shown, not editable. */
+  lockedBy?: string[];
+}) {
+  if (lockedBy) {
+    return (
+      <div className="row quality-review-step__locked">
+        <label>{question.question}</label>
+        <p className="muted">
+          {value ? <s>{question.type === 'boolean' ? (value === 'true' ? 'Ja' : 'Nein') : value}</s> : '–'} · ersetzt durch die Bewertung von {lockedBy.join(', ')}
+        </p>
+      </div>
+    );
+  }
   if (question.type === 'boolean') {
     return (
       <div className="row">
@@ -80,6 +202,18 @@ function QuestionRow({
           {question.required && ' *'}
         </label>
         <BooleanToggle value={value} onChange={onChange} />
+      </div>
+    );
+  }
+
+  if (question.type === 'multi') {
+    return (
+      <div className="row">
+        <label>
+          {question.question}
+          {question.required && ' *'}
+        </label>
+        <MultiInput question={question} value={value} onChange={onChange} />
       </div>
     );
   }
@@ -135,33 +269,65 @@ export default function QualityReviewStep({
   layout,
   initialAnswers,
   disabled,
+  parts,
+  draftKey,
+  submitLabel = 'Weiter →',
+  skipLabel = 'Überspringen',
+  heading = 'Qualitätsbewertung',
+  questionScope = 'all',
 }: QualityReviewStepProps) {
-  const [contracts, setContracts] = useState<{ general: QualityContract | null; assembly: QualityContract | null; subCat: QualityContract | null }>({
+  const [contracts, setContracts] = useState<{ general: QualityContract | null; assembly: QualityContract | null; subCat: QualityContract | null; assemblyRaw: AssemblyContract | null }>({
     general: null,
     assembly: null,
     subCat: null,
+    assemblyRaw: null,
   });
+  const agenticEnabled = useFeature('agentic');
+  const partScores = parts ?? NO_PARTS;
   const [contractsLoading, setContractsLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     setContractsLoading(true);
-    loadContractsAsync(subCategory).then((loaded) => {
+    loadContractsAsync(subCategory, questionScope).then((loaded) => {
       if (!cancelled) {
         setContracts(loaded);
         setContractsLoading(false);
       }
     });
     return () => { cancelled = true; };
-  }, [subCategory]);
+  }, [subCategory, questionScope]);
 
   const { general, assembly, subCat } = contracts;
   const questions = getAllQuestions(general, subCat, assembly);
 
-  const [answers, setAnswers] = useState<Record<string, string>>(initialAnswers ?? {});
-  const [notes, setNotes] = useState('');
+  // A stored draft wins over the saved answers: it is newer (unsaved work from this browser).
+  const restoredDraft = useMemo(() => (draftKey ? readQualityDraft(draftKey) : null), [draftKey]);
+  const [answers, setAnswers] = useState<Record<string, string>>(restoredDraft?.answers ?? initialAnswers ?? {});
+  const [notes, setNotesState] = useState(restoredDraft?.notes ?? '');
+  const [touched, setTouched] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(!!restoredDraft);
 
-  const setAnswer = (id: string, value: string) =>
+  useEffect(() => {
+    // Only real edits become a draft — merely opening a form must not shadow the saved answers.
+    if (draftKey && touched) writeQualityDraft(draftKey, answers, notes);
+  }, [draftKey, touched, answers, notes]);
+
+  const setNotes = (value: string) => {
+    setTouched(true);
+    setNotesState(value);
+  };
+
+  const discardDraft = () => {
+    if (draftKey) clearQualityDraft(draftKey);
+    setAnswers(initialAnswers ?? {});
+    setNotesState('');
+    setTouched(false);
+    setDraftRestored(false);
+  };
+
+  const setAnswer = (id: string, value: string) => {
+    setTouched(true);
     setAnswers((prev) => {
       const next = { ...prev, [id]: value };
       // Clear answers for questions that are now hidden due to this change
@@ -172,13 +338,29 @@ export default function QualityReviewStep({
       }
       return next;
     });
+  };
 
+  // Scored with every slot question, like the server — the scope only limits what is asked.
   const activeContracts = [
     ...(general ? [general] : []),
-    ...(assembly ? [assembly] : []),
+    ...(contracts.assemblyRaw ? [assemblyToQualityContract(contracts.assemblyRaw)] : []),
     ...(subCat ? [subCat] : [])
   ];
-  const qualityValue = deriveQualityFromAnswers(activeContracts, answers);
+  const qualityValue = deriveQualityFromAnswers(activeContracts, answers, contracts.assemblyRaw);
+  // Locked device questions name the parts that replaced them.
+  const locked = refinedQuestionIds({ contracts: activeContracts, answers, assembly: contracts.assemblyRaw, children: partScores });
+  const lockedBy = (q: QualityQuestion): string[] | undefined => (locked.has(q.id)
+    ? (q.refinedBy ?? []).map((key) => contracts.assemblyRaw?.parts.find((p) => p.key === key)?.label ?? key)
+    : undefined);
+  // Same function the server stores with, so the preview matches what gets saved.
+  const scoreRange = scoreToRange(computeQualityScore({
+    contracts: activeContracts,
+    answers,
+    assembly: contracts.assemblyRaw,
+    children: partScores,
+  }));
+  // What the item will show: pessimistic grade, or "?" when the range is too wide to mean anything (U4).
+  const displayGrade = gradeFromRange(scoreRange, gradingFrom(activeContracts));
   const aiPriority = deriveAiPriorityFromAssessment(qualityValue);
   // All questions are optional — users may skip any they don't know (e.g. RAM on a laptop).
   const canSubmit = true;
@@ -220,8 +402,18 @@ export default function QualityReviewStep({
   return (
     <div className="item-create__step">
       <div className="item-create__step-header">
-        <h2>Qualitätsbewertung</h2>
-        <p className="muted">Bitte den Zustand des Artikels bewerten.</p>
+        {heading !== null && (
+          <>
+            <h2>{heading}</h2>
+            <p className="muted">Bitte den Zustand des Artikels bewerten.</p>
+          </>
+        )}
+        {draftRestored && (
+          <p className="muted">
+            Ungespeicherter Entwurf wiederhergestellt ·{' '}
+            <button type="button" className="link-btn" onClick={discardDraft}>verwerfen</button>
+          </p>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="item-form">
@@ -230,6 +422,7 @@ export default function QualityReviewStep({
             <QuestionRow
               key={q.id}
               question={q}
+              lockedBy={lockedBy(q)}
               value={answers[q.id]}
               onChange={(v) => setAnswer(q.id, v)}
             />
@@ -245,12 +438,7 @@ export default function QualityReviewStep({
             </div>
             {assemblyQuestions.map((q) =>
               isQuestionVisible(q, answers) ? (
-                <QuestionRow
-                  key={q.id}
-                  question={q}
-                  value={answers[q.id]}
-                  onChange={(v) => setAnswer(q.id, v)}
-                />
+                <QuestionRow key={q.id} question={q} lockedBy={lockedBy(q)} value={answers[q.id]} onChange={(v) => setAnswer(q.id, v)} />
               ) : null
             )}
           </>
@@ -258,16 +446,20 @@ export default function QualityReviewStep({
 
         {subCatQuestions.length > 0 && (
           <>
-            <div className="row">
-              <p className="muted" style={{ margin: 0 }}>
-                <strong>{subCat!.subCategory && `Kategorie ${subCat!.subCategory}`}</strong>
-              </p>
-            </div>
+            {/* A bare category code says nothing where the caller already names the item (heading null). */}
+            {heading !== null && (
+              <div className="row">
+                <p className="muted" style={{ margin: 0 }}>
+                  <strong>{subCat!.subCategory && `Kategorie ${subCat!.subCategory}`}</strong>
+                </p>
+              </div>
+            )}
             {subCatQuestions.map((q) =>
               isQuestionVisible(q, answers) ? (
                 <QuestionRow
                   key={q.id}
                   question={q}
+                  lockedBy={lockedBy(q)}
                   value={answers[q.id]}
                   onChange={(v) => setAnswer(q.id, v)}
                 />
@@ -289,19 +481,28 @@ export default function QualityReviewStep({
         {canSubmit && (
           <div className="row quality-review-step__preview">
             <span className="muted">Vorschau:</span>
-            <QualityBadge value={qualityValue} />
-            <span className="muted quality-review-step__priority">
-              KI-Priorität: {AI_PRIORITY_LABELS[aiPriority]}
-            </span>
+            <QualityBadge value={displayGrade} />
+            {scoreRange && (
+              <span className="quality-review-step__score" title="Sicher erreicht – bestenfalls (ungeprüfte Teile als Unsicherheit)">
+                {formatQualityScoreRange(scoreRange)}
+              </span>
+            )}
+            {agenticEnabled && (
+              <span className="muted quality-review-step__priority">
+                KI-Priorität: {AI_PRIORITY_LABELS[aiPriority]}
+              </span>
+            )}
           </div>
         )}
 
         <div className="item-create__step-actions">
-          <button type="button" className="btn btn--secondary" onClick={onSkip} disabled={disabled}>
-            Überspringen
-          </button>
+          {onSkip && (
+            <button type="button" className="btn btn--secondary" onClick={onSkip} disabled={disabled}>
+              {skipLabel}
+            </button>
+          )}
           <button type="submit" className="btn btn--primary" disabled={!canSubmit || disabled}>
-            Weiter →
+            {submitLabel}
           </button>
         </div>
       </form>

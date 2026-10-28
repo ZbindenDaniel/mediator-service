@@ -1,0 +1,571 @@
+{
+  "version": 2,
+  "subCategory": 201,
+  "askOnCreate": [],
+  "steps": [
+    {
+      "key": "bottom",
+      "label": "Akku & Bodenabdeckung"
+    },
+    {
+      "key": "storage",
+      "label": "Speicher & Funk"
+    },
+    {
+      "key": "top",
+      "label": "Tastatur & Handauflage"
+    },
+    {
+      "key": "display",
+      "label": "Display abnehmen"
+    },
+    {
+      "key": "board",
+      "label": "Mainboard & Kühlung"
+    }
+  ],
+  "parts": [
+    {
+      "key": "display_assembly",
+      "label": "Displayassembly",
+      "targetSubcategory": 2101,
+      "weight": 10,
+      "question": {
+        "id": "part_display_assembly",
+        "type": "select",
+        "question": "Displayassembly?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "knockout": {
+        "below": 0.25,
+        "cap": 0.19
+      },
+      "step": "display"
+    },
+    {
+      "key": "palmrest",
+      "label": "Handauflage (C-Cover)",
+      "targetSubcategory": 2102,
+      "weight": 6,
+      "question": {
+        "id": "part_palmrest",
+        "type": "select",
+        "question": "Handauflage?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "top"
+    },
+    {
+      "key": "bottom_case",
+      "label": "Gehäuse-Boden (D-Cover)",
+      "targetSubcategory": 2103,
+      "weight": 3,
+      "question": {
+        "id": "part_bottom_case",
+        "type": "select",
+        "question": "Gehäuse-Boden?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "bottom"
+    },
+    {
+      "key": "mainboard",
+      "label": "Mainboard",
+      "targetSubcategory": 2127,
+      "weight": 10,
+      "question": {
+        "id": "part_mainboard",
+        "type": "select",
+        "question": "Mainboard?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "knockout": {
+        "below": 0.25,
+        "cap": 0.19
+      },
+      "step": "board"
+    },
+    {
+      "key": "daughterboard_1",
+      "label": "Daughterboard 1",
+      "targetSubcategory": 2115,
+      "weight": 1,
+      "question": {
+        "id": "part_daughterboard_1",
+        "type": "select",
+        "question": "Daughterboard 1?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "board"
+    },
+    {
+      "key": "daughterboard_2",
+      "label": "Daughterboard 2",
+      "targetSubcategory": 2115,
+      "weight": 1,
+      "question": {
+        "id": "part_daughterboard_2",
+        "type": "select",
+        "question": "Daughterboard 2?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "board",
+      "default": "Nicht vorgesehen"
+    },
+    {
+      "key": "daughterboard_3",
+      "label": "Daughterboard 3",
+      "targetSubcategory": 2115,
+      "weight": 1,
+      "question": {
+        "id": "part_daughterboard_3",
+        "type": "select",
+        "question": "Daughterboard 3?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "board",
+      "default": "Nicht vorgesehen"
+    },
+    {
+      "key": "dc_jack",
+      "label": "Strombuchse (falls separat)",
+      "targetSubcategory": 2116,
+      "weight": 1,
+      "question": {
+        "id": "part_dc_jack",
+        "type": "select",
+        "question": "Strombuchse?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "board"
+    },
+    {
+      "key": "cpu",
+      "label": "Prozessor",
+      "targetSubcategory": 2128,
+      "weight": 6,
+      "question": {
+        "id": "part_cpu",
+        "type": "select",
+        "question": "Prozessor?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "knockout": {
+        "below": 0.25,
+        "cap": 0.19
+      },
+      "step": "board"
+    },
+    {
+      "key": "heatsink",
+      "label": "Kühlkörper",
+      "targetSubcategory": 2117,
+      "weight": 2,
+      "question": {
+        "id": "part_heatsink",
+        "type": "select",
+        "question": "Kühlkörper?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "board"
+    },
+    {
+      "key": "fan_1",
+      "label": "Lüfter 1",
+      "targetSubcategory": 2118,
+      "weight": 2,
+      "question": {
+        "id": "part_fan_1",
+        "type": "select",
+        "question": "Lüfter 1?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "board"
+    },
+    {
+      "key": "fan_2",
+      "label": "Lüfter 2",
+      "targetSubcategory": 2118,
+      "weight": 2,
+      "question": {
+        "id": "part_fan_2",
+        "type": "select",
+        "question": "Lüfter 2?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "board",
+      "default": "Nicht vorgesehen"
+    },
+    {
+      "key": "ram",
+      "label": "Arbeitsspeicher",
+      "targetSubcategory": 2129,
+      "weight": 4,
+      "question": {
+        "id": "part_ram",
+        "type": "select",
+        "question": "Arbeitsspeicher?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "multipleAllowed": true,
+      "step": "storage"
+    },
+    {
+      "key": "caddy_1",
+      "label": "Festplattenhalterung 1",
+      "targetSubcategory": 2119,
+      "weight": 1,
+      "question": {
+        "id": "part_caddy_1",
+        "type": "select",
+        "question": "Festplattenhalterung 1?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "storage"
+    },
+    {
+      "key": "drive_cable_1",
+      "label": "Festplattenkabel 1",
+      "targetSubcategory": 2126,
+      "weight": 1,
+      "question": {
+        "id": "part_drive_cable_1",
+        "type": "select",
+        "question": "Festplattenkabel 1?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "storage"
+    },
+    {
+      "key": "drive_25_1",
+      "label": "Festplatte/SSD 2,5\" 1",
+      "targetSubcategory": 2130,
+      "weight": 2,
+      "question": {
+        "id": "part_drive_25_1",
+        "type": "select",
+        "question": "Festplatte/SSD 2,5\" 1?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "storage"
+    },
+    {
+      "key": "caddy_2",
+      "label": "Festplattenhalterung 2",
+      "targetSubcategory": 2119,
+      "weight": 1,
+      "question": {
+        "id": "part_caddy_2",
+        "type": "select",
+        "question": "Festplattenhalterung 2?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "storage",
+      "default": "Nicht vorgesehen"
+    },
+    {
+      "key": "drive_cable_2",
+      "label": "Festplattenkabel 2",
+      "targetSubcategory": 2126,
+      "weight": 1,
+      "question": {
+        "id": "part_drive_cable_2",
+        "type": "select",
+        "question": "Festplattenkabel 2?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "storage",
+      "default": "Nicht vorgesehen"
+    },
+    {
+      "key": "drive_25_2",
+      "label": "Festplatte/SSD 2,5\" 2",
+      "targetSubcategory": 2130,
+      "weight": 2,
+      "question": {
+        "id": "part_drive_25_2",
+        "type": "select",
+        "question": "Festplatte/SSD 2,5\" 2?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "storage",
+      "default": "Nicht vorgesehen"
+    },
+    {
+      "key": "m2_1",
+      "label": "M.2-SSD 1",
+      "targetSubcategory": 2130,
+      "weight": 2,
+      "question": {
+        "id": "part_m2_1",
+        "type": "select",
+        "question": "M.2-SSD 1?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "storage"
+    },
+    {
+      "key": "m2_2",
+      "label": "M.2-SSD 2",
+      "targetSubcategory": 2130,
+      "weight": 2,
+      "question": {
+        "id": "part_m2_2",
+        "type": "select",
+        "question": "M.2-SSD 2?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "storage",
+      "default": "Nicht vorgesehen"
+    },
+    {
+      "key": "optical_drive",
+      "label": "CD/DVD/Blu-ray-Laufwerk",
+      "targetSubcategory": 2120,
+      "weight": 1,
+      "question": {
+        "id": "part_optical_drive",
+        "type": "select",
+        "question": "Optisches Laufwerk?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "storage"
+    },
+    {
+      "key": "speaker_left",
+      "label": "Lautsprecher links",
+      "targetSubcategory": 2121,
+      "weight": 1,
+      "question": {
+        "id": "part_speaker_left",
+        "type": "select",
+        "question": "Lautsprecher links?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "top"
+    },
+    {
+      "key": "speaker_right",
+      "label": "Lautsprecher rechts",
+      "targetSubcategory": 2121,
+      "weight": 1,
+      "question": {
+        "id": "part_speaker_right",
+        "type": "select",
+        "question": "Lautsprecher rechts?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "top"
+    },
+    {
+      "key": "wlan",
+      "label": "WLAN-Karte",
+      "targetSubcategory": 2131,
+      "weight": 2,
+      "question": {
+        "id": "part_wlan",
+        "type": "select",
+        "question": "WLAN-Karte?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "storage"
+    },
+    {
+      "key": "bluetooth",
+      "label": "Bluetooth-Modul (falls separat)",
+      "targetSubcategory": 2122,
+      "weight": 1,
+      "question": {
+        "id": "part_bluetooth",
+        "type": "select",
+        "question": "Bluetooth-Modul?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "storage"
+    },
+    {
+      "key": "cmos_battery",
+      "label": "CMOS-Batterie",
+      "targetSubcategory": 2123,
+      "weight": 1,
+      "question": {
+        "id": "part_cmos_battery",
+        "type": "select",
+        "question": "CMOS-Batterie?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "bottom"
+    },
+    {
+      "key": "battery",
+      "label": "Akku",
+      "targetSubcategory": 2132,
+      "weight": 5,
+      "question": {
+        "id": "part_battery",
+        "type": "select",
+        "question": "Akku?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "bottom"
+    },
+    {
+      "key": "internal_cables",
+      "label": "Sonstige interne Kabel",
+      "targetSubcategory": 2126,
+      "weight": 1,
+      "question": {
+        "id": "part_internal_cables",
+        "type": "select",
+        "question": "Sonstige interne Kabel?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      },
+      "step": "board"
+    }
+  ]
+}

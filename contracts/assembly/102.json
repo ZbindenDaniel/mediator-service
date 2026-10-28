@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "subCategory": 102,
   "parts": [
     {
@@ -12,7 +12,17 @@
         "type": "select",
         "question": "Wie viel RAM ist verbaut?",
         "autoFill": "ram",
-        "values": ["?", "2", "4", "8", "16", "32", "64", "128"],
+        "values": [
+          "?",
+          "2",
+          "4",
+          "8",
+          "16",
+          "24",
+          "32",
+          "64",
+          "128"
+        ],
         "specField": "RAM",
         "specValue": "%v GB"
       }
@@ -28,7 +38,14 @@
         "type": "select",
         "question": "Speicher (SSD/HDD)?",
         "autoFill": "storageSize",
-        "values": ["?", "128", "256", "512", "1000", "2000"],
+        "values": [
+          "?",
+          "128",
+          "256",
+          "512",
+          "1000",
+          "2000"
+        ],
         "specField": "Speicher",
         "specValue": "%v GB"
       },
@@ -37,7 +54,14 @@
         "type": "select",
         "question": "Speichertyp?",
         "autoFill": "storageType",
-        "values": ["?", "SSD", "NVMe SSD", "HDD", "SSD + HDD", "eMMC"],
+        "values": [
+          "?",
+          "SSD",
+          "NVMe SSD",
+          "HDD",
+          "SSD + HDD",
+          "eMMC"
+        ],
         "specField": "Speichertyp",
         "specValue": "%v"
       }
@@ -51,7 +75,15 @@
         "type": "boolean",
         "question": "CPU vorhanden?",
         "skipAtIntake": true,
-        "qualityImpact": { "false": 1 }
+        "knockout": {
+          "below": 0.25,
+          "cap": 0.19
+        },
+        "states": {
+          "true": 1.0,
+          "false": 0.0
+        },
+        "weight": 2
       }
     },
     {
@@ -63,13 +95,21 @@
         "type": "boolean",
         "question": "Mainboard vorhanden?",
         "skipAtIntake": true,
-        "qualityImpact": { "false": 1 }
+        "knockout": {
+          "below": 0.25,
+          "cap": 0.19
+        },
+        "states": {
+          "true": 1.0,
+          "false": 0.0
+        },
+        "weight": 2
       }
     },
     {
       "key": "gpu",
       "label": "Grafikkarte (GPU)",
-      "targetSubcategory": 604,
+      "targetSubcategory": 701,
       "question": {
         "id": "has_gpu",
         "type": "boolean",

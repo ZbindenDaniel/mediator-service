@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "subCategory": 2120,
+  "fields": [
+    {
+      "key": "Typ",
+      "required": true,
+      "description": "CD-ROM, DVD-ROM, DVD-Brenner, Blu-ray …"
+    },
+    {
+      "key": "Schnittstelle",
+      "required": false,
+      "description": "SATA / IDE"
+    },
+    {
+      "key": "Bauhöhe",
+      "required": false,
+      "description": "9.5 mm / 12.7 mm"
+    },
+    {
+      "key": "FRU",
+      "required": false,
+      "description": "Manufacturer part number (FRU / P/N / Spare part no.), e.g. 01YR564"
+    },
+    {
+      "key": "Kompatible Modelle",
+      "required": false,
+      "description": "Device models this part fits, comma-separated, e.g. ThinkPad T480, T480s"
+    }
+  ]
+}

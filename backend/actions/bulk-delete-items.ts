@@ -4,6 +4,8 @@ import type { BulkRemoveResult } from '../db';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
 import { withTransaction } from '../db-client';
+import { resolveActor } from '../utils/actor';
+import { guardWrite, guardWriteMany } from '../utils/write-guard';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -51,7 +53,7 @@ const action = defineHttpAction({
         console.warn('[bulk-delete-items] Failed to parse request body', parseErr);
       }
 
-      const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
+      const actor = resolveActor(ctx, typeof data.actor === 'string' ? data.actor : '');
       const confirm = isConfirmed(data.confirm);
       const itemIdsInput: unknown[] = Array.isArray(data.itemIds) ? data.itemIds : [];
       const itemIds = Array.from(
@@ -63,6 +65,8 @@ const action = defineHttpAction({
       );
 
       if (!itemIds.length) return sendJson(res, 400, { error: 'itemIds is required' });
+      // All-or-nothing: one item of another org blocks the whole batch (the response lists it).
+      if (!(await guardWriteMany(ctx, res, 'item', itemIds))) return;
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       if (!confirm) return sendJson(res, 400, { error: 'confirm=true required' });
 

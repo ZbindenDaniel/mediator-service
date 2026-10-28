@@ -5,6 +5,7 @@ Shared TypeScript type definitions — the single source of truth for data shape
 
 ## Contents
 - `item.ts` — Item, ItemRef, ItemInstance, field definitions
+- `features.ts` — the list of deployment feature keys (shared by backend gate and frontend hiding)
 - `item-detail.ts` — ItemDetail view shape (joined query result)
 - `item-relation.ts` — accessory / spare-part relationships between items
 - `item-categories.ts` / `item-category-lookups.ts` — category taxonomy
@@ -14,7 +15,8 @@ Shared TypeScript type definitions — the single source of truth for data shape
 - `agentic-orchestrator.ts` — orchestration input/output contracts
 - `agentic-request-log.ts` / `agentic-run-review-history.ts` — audit log types
 - `quality.ts` / `quality-contract.ts` / `spec-contract.ts` — quality assessment and spec contract shapes
-- `disassembly-contract.ts` — spare-parts disassembly contract shape
+- `quality-score.ts` — percentage quality range (weights, uncertainty, roll-up of part ranges); shared by backend store and frontend preview
+- `assembly-contract.ts` — assembly (Zerlegen) contract shape + canonical slot presence values
 - `co2.ts` — CO₂ impact scoring types
 - `event-log.ts` / `event-labels.ts` / `event-resources.json` — event log display metadata
 - `intake.ts` — intake station state and step types
@@ -38,4 +40,5 @@ Type definitions and constants only. No business logic, no DB queries, no HTTP c
 - No imports from `backend/` or `frontend/`
 
 ## Decisions
+- **`quality-score.ts` is logic in `models/`** (exception to "types only"): the server stores the range and the quality form previews it live; one pure function on both sides guarantees the preview equals what gets saved
 - **Single shared models package**: avoids type drift between backend API responses and frontend consumption; a type change in one place breaks both sides at compile time

@@ -568,6 +568,7 @@ export function validateErpSyncScriptPath(
 }
 
 const action = defineHttpAction({
+  feature: 'erp-sync',
   key: 'sync-erp',
   label: 'Sync ERP',
   appliesTo: () => false,

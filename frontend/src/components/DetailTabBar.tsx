@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { GoDependabot, GoFileMedia, GoInfo, GoPaperclip, GoPencil, GoCpu, GoLog, GoTag, GoPlug, GoBookmark } from 'react-icons/go';
 import { usePanelContext } from '../context/PanelContext';
+import { useFeatures } from '../context/FeaturesContext';
+import { BOX_TAB_FEATURES, ITEM_TAB_FEATURES, isTabEnabled, resolveTab } from '../lib/tabFeatures';
 
 interface TabDef {
   id: string;
@@ -54,6 +56,10 @@ function isShelfId(boxId: string): boolean {
 
 export default function DetailTabBar({ agenticNeedsReview = false, isMarked = false }: Props) {
   const { entityType, entityId, activeTab, setTab } = usePanelContext();
+  const features = useFeatures();
+  const boxTabsFor = (id: string) =>
+    (isShelfId(id) ? [...BOX_BASE_TABS, STUBS_TAB] : BOX_BASE_TABS).filter((t) => isTabEnabled(t.id, BOX_TAB_FEATURES, features));
+  const itemTabs = ITEM_BASE_TABS.filter((t) => isTabEnabled(t.id, ITEM_TAB_FEATURES, features));
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -65,11 +71,11 @@ export default function DetailTabBar({ agenticNeedsReview = false, isMarked = fa
       let tabs: TabDef[];
       let effective: string;
       if (entityType === 'box' && entityId) {
-        tabs = isShelfId(entityId) ? [...BOX_BASE_TABS, STUBS_TAB] : BOX_BASE_TABS;
-        effective = activeTab ?? 'info';
+        tabs = boxTabsFor(entityId);
+        effective = resolveTab(activeTab, 'info', BOX_TAB_FEATURES, features);
       } else if (entityType === 'item') {
-        tabs = ITEM_BASE_TABS;
-        effective = (activeTab === 'review' ? 'ki' : activeTab) ?? 'instance';
+        tabs = itemTabs;
+        effective = resolveTab(activeTab === 'review' ? 'ki' : activeTab, 'instance', ITEM_TAB_FEATURES, features);
       } else {
         return;
       }
@@ -86,11 +92,12 @@ export default function DetailTabBar({ agenticNeedsReview = false, isMarked = fa
 
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [entityType, entityId, activeTab, setTab]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- tab lists derive from features, which never change after boot
+  }, [entityType, entityId, activeTab, setTab, features]);
 
   if (entityType === 'box' && entityId) {
-    const effective = activeTab ?? 'info';
-    const tabs = isShelfId(entityId) ? [...BOX_BASE_TABS, STUBS_TAB] : BOX_BASE_TABS;
+    const effective = resolveTab(activeTab, 'info', BOX_TAB_FEATURES, features);
+    const tabs = boxTabsFor(entityId);
     return (
       <nav className="detail-tab-bar" aria-label="Behälter-Tabs">
         {tabs.map((tab) => (
@@ -114,11 +121,11 @@ export default function DetailTabBar({ agenticNeedsReview = false, isMarked = fa
   if (entityType !== 'item') return null;
 
   // 'review' was a separate tab; it's merged into 'ki' so old URLs still work visually.
-  const effective = (activeTab === 'review' ? 'ki' : activeTab) ?? 'instance';
+  const effective = resolveTab(activeTab === 'review' ? 'ki' : activeTab, 'instance', ITEM_TAB_FEATURES, features);
 
   return (
     <nav className="detail-tab-bar" aria-label="Artikel-Tabs">
-      {ITEM_BASE_TABS.map((tab) => (
+      {itemTabs.map((tab) => (
         <button
           key={tab.id}
           type="button"

@@ -12,6 +12,8 @@ import { compareTwoStrings } from 'string-similarity';
 import { PUBLIC_ORIGIN } from '../config';
 import { defineHttpAction } from './index';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
+import { writeScopeParams } from '../lib/ownership';
+import { redactItemRows } from '../lib/redaction';
 
 function normalize(value: unknown): string {
   return typeof value === 'string' ? value.trim().toLowerCase() : '';
@@ -501,6 +503,12 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.end(JSON.stringify(body));
 }
 
+// Owner-check params in the `? OR COALESCE(<owner>, ?) = ?` order used by the queries here.
+function scopeForPositional(): [boolean, string | null, string | null] {
+  const [unrestricted, tenant, defaultTenant] = writeScopeParams();
+  return [unrestricted, defaultTenant, tenant];
+}
+
 // Convert SQLite-style ? placeholders to Postgres-style $1, $2, ... positional params
 function toPositional(sql: string): string {
   let n = 0;
@@ -556,6 +564,7 @@ export async function searchItemReferencesDetailed(
   const empty: ReferenceSearchResult = { refs: [], relaxed: false, topScore: 0 };
   const trimmed = (rawTerm ?? '').trim();
   if (!trimmed) return empty;
+  const ownerScope = scopeForPositional();
   const normalized = trimmed.toLowerCase();
   const tokens = normalized.split(/\s+/).filter(Boolean);
   if (!tokens.length) return empty;
@@ -569,7 +578,7 @@ export async function searchItemReferencesDetailed(
   let refTokenPresenceTerms = '';
   let refExactMatchExpr = '';
   let refSql = '';
-  let refParams: Array<string | number> = [];
+  let refParams: Array<string | number | boolean | null> = [];
   try {
     const like7 = (t: string) => {
       const p = `%${t}%`;
@@ -625,6 +634,7 @@ export async function searchItemReferencesDetailed(
           FROM items i
           WHERE i."Artikel_Nummer" = r."Artikel_Nummer"
           AND i."BoxID" IS NOT NULL
+          AND (? OR COALESCE(i."TenantId", ?) = ?)
           ORDER BY i."UpdatedAt" DESC
           LIMIT 1
         ) AS exemplar_box_id,
@@ -633,6 +643,7 @@ export async function searchItemReferencesDetailed(
           FROM items i
           LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
           WHERE i."Artikel_Nummer" = r."Artikel_Nummer"
+          AND (? OR COALESCE(i."TenantId", ?) = ?)
           ORDER BY i."UpdatedAt" DESC
           LIMIT 1
         ) AS exemplar_location
@@ -662,6 +673,9 @@ export async function searchItemReferencesDetailed(
       ...tokens.flatMap(like7),
       // divisor = tokens.length
       tokens.length,
+      // exemplar box + location subqueries: only the requester's own items (tenancy §2a)
+      ...ownerScope,
+      ...ownerScope,
       // WHERE threshold — any hit; the 50 % rule is applied in JS (see applyTokenThreshold)
       RELAXED_MIN_TOKEN_HITS
     ];
@@ -781,6 +795,7 @@ const action = defineHttpAction({
       const minTokenHits = Math.max(1, Math.ceil(tokens.length * 0.5));
       const suchbegriffFallbackExpr =
         `COALESCE(NULLIF(r."Suchbegriff", ''), r."Artikelbeschreibung", r."Artikel_Nummer", '')`;
+      const ownerScope = scopeForPositional();
 
       const scopeParam = url.searchParams.get("scope");
       const dedupeParam = url.searchParams.get("dedupe");
@@ -833,7 +848,7 @@ const action = defineHttpAction({
       let itemExactMatchExpr = '';
       let itemSql = '';
       let itemExactParams: string[] = [];
-      let itemParams: Array<string | number> = [];
+      let itemParams: Array<string | number | boolean | null> = [];
       try {
         itemTokenPresenceTerms = tokens.map(() => `
     CASE WHEN (
@@ -843,7 +858,7 @@ const action = defineHttpAction({
       OR lower(${suchbegriffFallbackExpr}) LIKE ?
       ${deepSearch ? `OR lower(COALESCE(r."Kurzbeschreibung", '')) LIKE ?\n      OR lower(COALESCE(r."Langtext", '')) LIKE ?` : ''}
       OR lower(COALESCE(r."Hersteller", '')) LIKE ?
-      OR lower(i."BoxID")            LIKE ?
+      OR lower(vis."VisibleBoxID")   LIKE ?
       OR lower(COALESCE(i."SerialNumber", '')) LIKE ?
       OR lower(COALESCE(i."MacAddress", ''))   LIKE ?
       OR lower(COALESCE(r."EAN", ''))          LIKE ?
@@ -859,7 +874,7 @@ const action = defineHttpAction({
       OR lower(${suchbegriffFallbackExpr}) = ?
       ${deepSearch ? `OR lower(COALESCE(r."Kurzbeschreibung", '')) = ?\n      OR lower(COALESCE(r."Langtext", '')) = ?` : ''}
       OR lower(COALESCE(r."Hersteller", '')) = ?
-      OR lower(i."BoxID")            = ?
+      OR lower(vis."VisibleBoxID")   = ?
       OR lower(COALESCE(i."SerialNumber", '')) = ?
       OR lower(COALESCE(i."MacAddress", ''))   = ?
       OR lower(COALESCE(r."EAN", ''))          = ?
@@ -900,6 +915,7 @@ const action = defineHttpAction({
         i."SerialNumber",
         i."MacAddress",
         r."EAN",
+        i."TenantId",
         (${itemTokenPresenceTerms}) AS token_hits,
         ${itemExactMatchExpr} AS exact_match,
         CASE
@@ -909,6 +925,10 @@ const action = defineHttpAction({
       FROM items i
       LEFT JOIN boxes b ON i."BoxID" = b."BoxID"
       LEFT JOIN item_refs r ON i."Artikel_Nummer" = r."Artikel_Nummer"
+      -- Another org's box id must not find its contents (tenancy §2a).
+      CROSS JOIN LATERAL (
+        SELECT CASE WHEN ? OR COALESCE(i."TenantId", ?) = ? THEN i."BoxID" END AS "VisibleBoxID"
+      ) vis
     )
     WHERE token_hits >= ?
     ORDER BY exact_match DESC, sql_score DESC
@@ -931,6 +951,8 @@ const action = defineHttpAction({
           ...tokens.flatMap(likeItem),
           // divisor = tokens.length
           tokens.length,
+          // visible-box lateral join
+          ...ownerScope,
           // WHERE threshold — any hit; the 50 % rule is applied in JS (see applyTokenThreshold)
           RELAXED_MIN_TOKEN_HITS,
           // LIMIT
@@ -1014,6 +1036,7 @@ const action = defineHttpAction({
           ELSE (CAST((${boxTokenPresenceTerms}) AS REAL) / ?) * 0.99
         END AS sql_score
       FROM boxes b
+      WHERE ? OR COALESCE(b."TenantId", ?) = ?
     )
     WHERE token_hits >= ?
     ORDER BY exact_match DESC, sql_score DESC
@@ -1031,6 +1054,8 @@ const action = defineHttpAction({
         ...tokens.flatMap(likeBox),
         // divisor = tokens.length
         tokens.length,
+        // other orgs' boxes
+        ...ownerScope,
         // WHERE threshold — any hit; the 50 % rule is applied in JS (see applyTokenThreshold)
         RELAXED_MIN_TOKEN_HITS,
       ];
@@ -1103,7 +1128,7 @@ const action = defineHttpAction({
       });
 
       sendJson(res, 200, {
-        items: scoredItems.map((entry: { item: any }) => entry.item),
+        items: redactItemRows(scoredItems.map((entry: { item: any }) => entry.item)),
         boxes: scoredBoxes.map((entry: { box: any }) => entry.box),
         relaxed,
       });

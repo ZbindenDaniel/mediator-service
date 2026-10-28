@@ -25,6 +25,7 @@ const QUEUE_LABELS: Array<{ label: string; settingKey: string; envFallback: stri
 ];
 
 const action = defineHttpAction({
+  feature: 'printing',
   key: 'printer-status',
   label: 'Printer status',
   appliesTo: () => false,

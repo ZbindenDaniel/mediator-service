@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=https://goauthentik.io/blueprints/schema.json
+#
+# Forward-auth setup for the mediator app — replaces the manual steps 4–6 of
+# docs/detailed/identity-provider.md. Authentik applies every file under /blueprints on start and
+# again whenever it changes, so a recreated stack comes up configured. Idempotent: objects are
+# matched by their identifiers and updated, never duplicated.
+#
+# Hosts come from the authentik containers' environment (see docker-compose.authentik.yml):
+#   MEDIATOR_EXTERNAL_URL   URL the browser uses for the app        (default https://localhost)
+#   AUTHENTIK_EXTERNAL_URL  URL the browser uses for the login page (default http://localhost:9000/)
+version: 1
+metadata:
+  name: Mediator - forward-auth application
+  labels:
+    blueprints.goauthentik.io/description: Proxy provider, application, embedded outpost and app groups for mediator
+entries:
+  # Custom blueprints can be discovered before the default flows and scope mappings exist.
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        path: default/flow-default-provider-authorization-implicit-consent.yaml
+      required: true
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        path: default/flow-default-provider-invalidation.yaml
+      required: true
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        path: system/providers-oauth2.yaml
+      required: true
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        path: system/providers-proxy.yaml
+      required: true
+
+  # Groups the app maps to roles/tenants (TENANT_GROUP_MAP). Further orgs' groups are created by
+  # hand or added here; the org itself lives in the app (Administration → Organisationen).
+  - model: authentik_core.group
+    id: group-mediator-admin
+    identifiers:
+      name: mediator-admin
+  - model: authentik_core.group
+    id: group-tenant-revamp
+    identifiers:
+      name: tenant-revamp
+  - model: authentik_core.group
+    id: group-tenant-revamp-admin
+    identifiers:
+      name: tenant-revamp-admin
+
+  - model: authentik_providers_proxy.proxyprovider
+    id: mediator-provider
+    identifiers:
+      name: mediator
+    attrs:
+      mode: forward_single
+      external_host: !Env [MEDIATOR_EXTERNAL_URL, "https://localhost"]
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
+      # The same scopes the admin UI assigns; "profile" carries the groups the app reads from X-authentik-groups.
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-entitlements]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/proxy/scope-proxy]]
+
+  - model: authentik_core.application
+    identifiers:
+      slug: mediator
+    attrs:
+      name: mediator
+      provider: !KeyOf mediator-provider
+
+  # The embedded outpost answers nginx/Traefik's auth requests; it must serve the provider and know
+  # where the browser reaches the login page. Only these keys are set — the rest keep their defaults.
+  - model: authentik_outposts.outpost
+    identifiers:
+      managed: goauthentik.io/outposts/embedded
+    attrs:
+      providers:
+        - !KeyOf mediator-provider
+      config:
+        authentik_host: !Env [AUTHENTIK_EXTERNAL_URL, "http://localhost:9000/"]

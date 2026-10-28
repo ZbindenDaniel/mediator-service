@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "questions": [
+    {
+      "id": "part_condition",
+      "type": "select",
+      "question": "Zustand des Teils?",
+      "values": [
+        "Neuwertig",
+        "Sehr gut",
+        "Gut",
+        "Leichte Mängel",
+        "Deutliche Mängel",
+        "Stark beschädigt",
+        "Defekt",
+        "Ungetestet"
+      ],
+      "weight": 3,
+      "specField": "Zustand",
+      "specValue": "%v"
+    },
+    {
+      "id": "part_fru",
+      "type": "text",
+      "question": "Teilenummer (FRU)?",
+      "specField": "FRU",
+      "specValue": "%v"
+    }
+  ]
+}

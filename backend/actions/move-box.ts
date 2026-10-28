@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
 import fs from 'fs';
 import path from 'path';
 import { defineHttpAction } from './index';
@@ -7,6 +8,7 @@ import { MEDIA_UPLOAD_STAGING_DIR, resolveUploadMediaPath } from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
 import { assertPathWithinRoot, resolvePathWithinRoot } from '../lib/path-guard';
 import { withTransaction } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
 
 const BOX_MEDIA_PREFIX = '/media/';
 const BOX_MEDIA_FOLDER = 'boxes';
@@ -251,13 +253,14 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/boxes\/([^/]+)\/move$/);
       const id = match ? decodeURIComponent(match[1]) : '';
       if (!id) return sendJson(res, 400, { error: 'invalid box id' });
+      if (!(await guardWrite(ctx, res, 'box', id))) return;
       const box = await ctx.getBox(id);
       if (!box) return sendJson(res, 404, { error: 'box not found' });
       let raw = '';
       for await (const c of req) raw += c;
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
-      const actor = (data.actor || '').trim();
+      const actor = resolveActor(ctx, (data.actor || '').trim());
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const rawLocationValue = typeof data.location === 'string' ? data.location : '';
       const rawLocationIdValue = typeof data.LocationId === 'string' ? data.LocationId : '';
@@ -282,6 +285,8 @@ const action = defineHttpAction({
           ? (box as any).Location.trim().toUpperCase()
           : '';
       const effectiveLocationId = hasLocation ? locationRaw : existingLocationId;
+      // Placing a box onto another org's shelf would put it into that org's warehouse.
+      if (hasLocation && locationRaw && !(await guardWrite(ctx, res, 'box', locationRaw))) return;
       const fallbackLabel = typeof box.Label === 'string' && box.Label.trim()
         ? box.Label.trim()
         : typeof (box as any).StandortLabel === 'string' && (box as any).StandortLabel.trim()

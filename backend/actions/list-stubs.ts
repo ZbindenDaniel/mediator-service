@@ -7,6 +7,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'stubs',
   key: 'list-stubs',
   label: 'List stubs',
   appliesTo: () => false,

@@ -1,0 +1,166 @@
+# Production: Authentik login (forward-auth via the host's Traefik) in front of the app.
+# Opt-in so a plain deploy can never reference an Authentik middleware that isn't running:
+#   docker compose -f docker-compose.prod.yaml -f docker-compose.prod.authentik.yaml up -d
+# The deploy workflow adds this file automatically when the host .env has AUTHENTIK_ENABLED=true.
+# Domains: MEDIATOR_DOMAIN (the app) and AUTHENTIK_DOMAIN (login UI); both default to nip.io names.
+# Guide: docs/detailed/identity-provider.md
+
+x-authentik-env: &authentik-env
+  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?set AUTHENTIK_SECRET_KEY in .env (openssl rand -base64 60)}
+  AUTHENTIK_REDIS__HOST: authentik-redis
+  AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+  AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER:-authentik}
+  AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB:-authentik}
+  AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASSWORD:?set AUTHENTIK_PG_PASSWORD in .env}
+  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+  AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
+  AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-}
+
+x-logging: &logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  mediator:
+    environment:
+      # Second line of defence: data routes refuse requests without a forward-auth identity.
+      AUTH_REQUIRED: "true"
+    labels:
+      # Main app router: strip client identity headers FIRST, then forward-auth. Traefik only
+      # overwrites X-authentik-* when the outpost returns them, so stripping makes spoofing impossible.
+      - "traefik.http.routers.erfassung.rule=Host(`${MEDIATOR_DOMAIN:-erfassung.${VM_IP}.nip.io}`)"
+      - "traefik.http.routers.erfassung.middlewares=ak-strip@docker,ak-auth@docker"
+      # Intake station (X-Intake-Token): a machine can't do a browser login, so no forward-auth,
+      # but still stripped, and the backend checks the token. /api/admin/ is NOT here: it goes
+      # through the login, and the ADMIN_SECRET bearer only works from inside the host.
+      - "traefik.http.routers.erfassung-machine.rule=Host(`${MEDIATOR_DOMAIN:-erfassung.${VM_IP}.nip.io}`) && PathPrefix(`/api/intake/`)"
+      - "traefik.http.routers.erfassung-machine.priority=100"
+      - "traefik.http.routers.erfassung-machine.tls=true"
+      - "traefik.http.routers.erfassung-machine.service=erfassung"
+      - "traefik.http.routers.erfassung-machine.middlewares=ak-strip@docker"
+      # An empty value makes Traefik delete the request header.
+      - "traefik.http.middlewares.ak-strip.headers.customrequestheaders.X-authentik-username="
+      - "traefik.http.middlewares.ak-strip.headers.customrequestheaders.X-authentik-groups="
+    depends_on:
+      authentik-server:
+        condition: service_healthy
+
+  authentik-postgresql:
+    image: postgres:16-alpine
+    container_name: authentik-postgresql
+    environment:
+      POSTGRES_USER: ${AUTHENTIK_PG_USER:-authentik}
+      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASSWORD:?set AUTHENTIK_PG_PASSWORD in .env}
+      POSTGRES_DB: ${AUTHENTIK_PG_DB:-authentik}
+    volumes:
+      - authentik-postgresql:/var/lib/postgresql/data
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTHENTIK_PG_USER:-authentik} -d ${AUTHENTIK_PG_DB:-authentik}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - erfassung_default
+
+  authentik-redis:
+    image: redis:7-alpine
+    container_name: authentik-redis
+    command: --save 60 1 --loglevel warning
+    volumes:
+      - authentik-redis:/data
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - erfassung_default
+
+  authentik-server:
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2024.12.3}
+    container_name: authentik-server
+    command: server
+    environment:
+      <<: *authentik-env
+    # No published ports: reachable only through Traefik (login UI) and the internal network.
+    volumes:
+      - authentik-media:/media
+      - authentik-templates:/templates
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      # On two networks: tell Traefik which one it shares with this container.
+      - "traefik.docker.network=traefik_proxy"
+      - "traefik.http.services.authentik.loadbalancer.server.port=9000"
+      # Login UI + admin UI
+      - "traefik.http.routers.authentik.rule=Host(`${AUTHENTIK_DOMAIN:-auth.${VM_IP}.nip.io}`)"
+      - "traefik.http.routers.authentik.tls=true"
+      - "traefik.http.routers.authentik.service=authentik"
+      # Outpost endpoints on the APP's domain (login callback sets the session cookie there)
+      - "traefik.http.routers.authentik-outpost.rule=Host(`${MEDIATOR_DOMAIN:-erfassung.${VM_IP}.nip.io}`) && PathPrefix(`/outpost.goauthentik.io/`)"
+      - "traefik.http.routers.authentik-outpost.priority=110"
+      - "traefik.http.routers.authentik-outpost.tls=true"
+      - "traefik.http.routers.authentik-outpost.service=authentik"
+      # Forward-auth middleware used by the app router (defined here, next to its target)
+      - "traefik.http.middlewares.ak-auth.forwardauth.address=http://authentik-server:9000/outpost.goauthentik.io/auth/traefik"
+      - "traefik.http.middlewares.ak-auth.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.ak-auth.forwardauth.authResponseHeaders=X-authentik-username,X-authentik-groups"
+    networks:
+      - erfassung_default
+      - traefik_proxy
+
+  authentik-worker:
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server}:${AUTHENTIK_TAG:-2024.12.3}
+    container_name: authentik-worker
+    command: worker
+    environment:
+      <<: *authentik-env
+    # Unlike docker-compose.yml: no root + Docker socket. That only lets Authentik spawn extra
+    # outpost containers; the embedded outpost doesn't need it, and on a public host the socket
+    # is root-equivalent.
+    volumes:
+      - authentik-media:/media
+      - authentik-templates:/templates
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 30s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+    networks:
+      - erfassung_default
+
+volumes:
+  authentik-postgresql:
+    name: authentik-postgresql
+  authentik-redis:
+    name: authentik-redis
+  authentik-media:
+    name: authentik-media
+  authentik-templates:
+    name: authentik-templates

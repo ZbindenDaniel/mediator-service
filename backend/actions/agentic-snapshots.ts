@@ -11,6 +11,7 @@ import {
   logEvent
 } from '../db';
 import { AGENTIC_SNAPSHOT_SCHEMA_VERSION, type ItemRef } from '../../models';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -26,6 +27,7 @@ function stripQuery(url: string): string {
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-snapshots',
   label: 'Agentic run snapshots',
   appliesTo: (entity) => entity.type === 'Item',
@@ -33,7 +35,7 @@ const action = defineHttpAction({
     const p = stripQuery(path);
     return (method === 'GET' && LIST_RE.test(p)) || (method === 'POST' && RESTORE_RE.test(p));
   },
-  async handle(req: IncomingMessage, res: ServerResponse, _ctx: unknown) {
+  async handle(req: IncomingMessage, res: ServerResponse, ctx: unknown) {
     if (!req.url) {
       return sendJson(res, 400, { error: 'Invalid request' });
     }
@@ -80,7 +82,7 @@ const action = defineHttpAction({
           return sendJson(res, 400, { error: 'Invalid JSON body' });
         }
       }
-      const actor = typeof payload.actor === 'string' && payload.actor.trim() ? payload.actor.trim() : null;
+      const actor = resolveActor(ctx as Parameters<typeof resolveActor>[0], typeof payload.actor === 'string' ? payload.actor : '') || null;
 
       try {
         const snapshot = await getAgenticRunSnapshotById(snapshotId, artikelNummer);

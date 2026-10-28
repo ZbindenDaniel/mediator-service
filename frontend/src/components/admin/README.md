@@ -7,6 +7,7 @@ Admin panel cards — each file is a self-contained card shown on `AdminPage.tsx
 - `AgenticDispatchCard.tsx` — kill switch for the agentic keep-busy auto-feeder (`/api/admin/agentic-dispatch`)
 - `AgenticOverviewCard.tsx` — agentic queue stats and bulk controls
 - `ExportCard.tsx` — manual CSV/ZIP export trigger
+- `OrganisationsAdminPage.tsx` — page (`/admin/organisationen`): orgs, contact email, linked Authentik groups, warehouse sites with floors (`/api/admin/tenants`, `/api/admin/sites`)
 - `NightlyErpSyncCard.tsx` — nightly ERP sync toggle and last-run status
 - `PrintQueueCard.tsx` — label print queue management
 - `PrinterQueuesCard.tsx` — CUPS printer queue list, sync, diagnostics
