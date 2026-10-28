@@ -53,16 +53,17 @@ const PIE_STATUS_ORDER: AgenticRunStatus[] = [
   AGENTIC_RUN_STATUS_NOT_STARTED
 ];
 
+// Same hues as before at reduced chroma to match the muted palette in styles.scss.
 const PIE_COLORS: Record<AgenticRunStatus, string> = {
-  running: '#4f46e5',
-  queued: '#60a5fa',
-  review: '#f59e0b',
-  approved: '#10b981',
-  auto_approved: '#34d399',
-  rejected: '#f97316',
-  failed: '#ef4444',
+  running: '#596199',
+  queued: '#7ca5da',
+  review: '#d9aa73',
+  approved: '#66af8c',
+  auto_approved: '#7dc8a5',
+  rejected: '#ce8f6e',
+  failed: '#bc756f',
   cancelled: '#6b7280',
-  notStarted: '#d1d5db'
+  notStarted: '#babec4'
 };
 
 function safeNumber(value: unknown): number {
@@ -92,7 +93,7 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
   const pieChartStyle = useMemo(() => {
     const total = pieSegments.reduce((sum, segment) => sum + segment.value, 0);
     if (total <= 0) {
-      return { background: '#e5e7eb' };
+      return { background: 'var(--surface-2)' };
     }
 
     let current = 0;
@@ -171,7 +172,7 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
               width: 10,
               height: 10,
               borderRadius: '50%',
-              background: printerOk == null ? '#999' : printerOk ? '#1cbc2c' : '#d22'
+              background: printerOk == null ? 'var(--muted)' : printerOk ? 'var(--ok)' : 'var(--danger)'
             }}
           ></span>
           {printerReason ? (
@@ -187,7 +188,7 @@ export default function StatsCard({ counts, printerOk, printerReason, health, ag
               width: 10,
               height: 10,
               borderRadius: '50%',
-              background: health == null ? '#999' : health === 'ok' ? '#1cbc2c' : '#d22'
+              background: health == null ? 'var(--muted)' : health === 'ok' ? 'var(--ok)' : 'var(--danger)'
             }}
           ></span>
         </div>

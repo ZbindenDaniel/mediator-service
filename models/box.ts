@@ -13,6 +13,8 @@ export interface Box {
   PlacedAt?: string | null;
   // TODO(agent): Evaluate whether multiple box photos should be supported once UX requirements expand beyond a single preview.
   PhotoPath?: string | null;
+  // Shelf marker colour as #rrggbb (null = default accent). Only set for S- shelves today.
+  Color?: string | null;
   UpdatedAt: string;
   // Optional aggregate count projected by list queries for box list summaries.
   ItemCount?: number | null;
@@ -20,4 +22,7 @@ export interface Box {
   TotalWeightKg?: number | null;
   // Count of child boxes (non-null only for shelf rows in list queries).
   BoxCount?: number | null;
+  // Owning tenant for private-logistics isolation (docs/PLANNING_TENANCY.md Phase 2). Nullable:
+  // legacy rows and single-tenant deployments leave it null; stamped on create from ctx.tenant.
+  TenantId?: string | null;
 }

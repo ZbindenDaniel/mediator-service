@@ -16,7 +16,8 @@ import type {
   AgenticRun,
   ItemDetailResponse,
   ItemInstanceSummary,
-  ItemDetailReviewAutomationSignal
+  ItemDetailReviewAutomationSignal,
+  ItemPermissions
 } from '../../../models';
 import type { AgenticSnapshotFields } from '../../../models';
 import type { Co2ImpactLabel } from '../../../models/co2';
@@ -33,10 +34,11 @@ import {
   normalizeAgenticRunStatus
 } from '../../../models';
 import { describeQuality } from '../../../models/quality';
+import { formatQualityScoreRange } from '../../../models/quality-score';
 import { formatDateTime } from '../lib/format';
 import { ensureUser } from '../lib/user';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
-import { buildItemCategoryLookups } from '../lib/categoryLookup';
+import { useTaxonomy } from '../context/TaxonomyContext';
 import {
   buildAgenticItemRefPath,
   buildAgenticRestartRequestPayload,
@@ -57,7 +59,7 @@ import {
 } from '../lib/itemListFiltersStorage';
 import { logger, logError } from '../utils/logger';
 import { mapReviewAnswersToInput, buildAgenticReviewSubmissionPayload, type AgenticReviewInput } from '../lib/agenticReviewMapping';
-import { filterAndSortItems } from './ItemListPage';
+import { buildSubcategoryNameLookup, filterAndSortItems } from './ItemListPage';
 
 // TODO(agentic-start-flow): Consolidate agentic start and restart handling into a shared helper once UI confirms the UX.
 // TODO(suchbegriff-override): Revisit Suchbegriff override logging once UI formalizes edit intent.
@@ -119,6 +121,9 @@ import {
   resolveDetailEinheit,
   resolveQuantityEinheit,
 } from '../lib/itemDetailFormatting';
+import { useFeatures } from '../context/FeaturesContext';
+import { openOrgInfo } from '../lib/orgInfo';
+import { ITEM_TAB_FEATURES, resolveTab } from '../lib/tabFeatures';
 import { fetchSpecContract } from '../lib/contractsApi';
 
 interface Props {
@@ -174,6 +179,10 @@ export default function ItemDetail({ itemId }: Props) {
   const [compatibleParentRefs, setCompatibleParentRefs] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
   const [co2Impact, setCo2Impact] = useState<{ label: Co2ImpactLabel; score?: number } | null>(null);
+  const features = useFeatures();
+  const statisticsEnabled = features.statistics;
+  // Missing (older backend) = everything allowed, as before tenancy.
+  const [permissions, setPermissions] = useState<ItemPermissions>({ canEditItem: true, canEditReference: true, canDeleteReference: false });
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [neighborIds, setNeighborIds] = useState<{ previousId: string | null; nextId: string | null }>({
@@ -203,7 +212,7 @@ export default function ItemDetail({ itemId }: Props) {
     setEntity('box', boxId);
   }, [setEntity]);
 
-  const categoryLookups = useMemo(() => buildItemCategoryLookups(), []);
+  const { lookups: categoryLookups, categories } = useTaxonomy();
 
   const qualitySummary = useMemo(() => describeQuality(item?.Quality ?? null), [item?.Quality]);
 
@@ -313,10 +322,13 @@ export default function ItemDetail({ itemId }: Props) {
           // TODO(shop-publication-neighbors): Revisit adjacent navigation semantics if detail page gets independent shop-status controls.
           shopPublicationFilter: effectiveFilters.shopPublicationFilter,
           imageFilter: effectiveFilters.imageFilter,
+          priceFilter: effectiveFilters.priceFilter,
           sortKey: effectiveFilters.sortKey,
           sortDirection: effectiveFilters.sortDirection,
           qualityThreshold: effectiveFilters.qualityThreshold,
-          qualityFilter: 'all'
+          qualityFilter: 'all',
+          // Same name matching as the list, so prev/next follows what the list shows.
+          subcategoryNames: buildSubcategoryNameLookup(categories)
         });
 
         const currentIndex = filtered.findIndex((entry) => entry.summary.representativeItemId === itemId);
@@ -582,8 +594,27 @@ export default function ItemDetail({ itemId }: Props) {
       }
     }
 
+    const scoreRange = item.QualityScoreMin != null && item.QualityScoreMax != null
+      ? { min: Number(item.QualityScoreMin), max: Number(item.QualityScoreMax) }
+      : null;
     const qualityBadge = (
-      <QualityBadge compact value={qualitySummary.value} labelPrefix="Qualität" />
+      <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.5rem' }}>
+        <QualityBadge compact value={qualitySummary.value} labelPrefix="Qualität" />
+        {scoreRange && (
+          <span
+            className="muted"
+            title="Anteil der ursprünglichen Qualität: sicher erreicht – bestenfalls (ungeprüfte Teile sind Unsicherheit)"
+          >
+            {formatQualityScoreRange(scoreRange)}
+          </span>
+        )}
+        {scoreRange && qualitySummary.value == null && (
+          <span className="muted">zu wenig bewertet für eine Note</span>
+        )}
+        {item.QualityManual && (
+          <span className="muted" title="Note von Hand gesetzt – die nächste Bewertung berechnet sie neu">manuell</span>
+        )}
+      </span>
     );
     const rows: [string, React.ReactNode][] = [
       // ['Erstellt von', creator],
@@ -592,7 +623,16 @@ export default function ItemDetail({ itemId }: Props) {
       ['Artikelnummer', item.Artikel_Nummer ?? null],
       [
         'Behälter',
-        item.BoxID ? (
+        item.LocationRedacted ? (
+          // Another org's item: its box is hidden, the owner org is shown instead (tenancy 3b).
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => { void openOrgInfo(item.TenantId, item.Location); }}
+          >
+            {item.Location ?? 'Andere Organisation'}
+          </button>
+        ) : item.BoxID ? (
           <button
             type="button"
             className="link-btn"
@@ -606,9 +646,11 @@ export default function ItemDetail({ itemId }: Props) {
       ['MAC-Adresse', item.MacAddress ?? null],
       ['Kurzbeschreibung', item.Kurzbeschreibung ?? null],
       ['Kategorie', resolveUnterkategorieLabel(item.Unterkategorien_A)],
-      ['Qualität', qualityBadge],
-      ['Ki Status', agenticStatusDisplay(agentic).label]
+      ['Qualität', qualityBadge]
     ];
+    if (features.agentic) {
+      rows.push(['Ki Status', agenticStatusDisplay(agentic).label]);
+    }
 
     const quantityEinheit = resolveQuantityEinheit(item.Einheit, item.ItemUUID);
     if (quantityEinheit === ItemEinheit.Menge) {
@@ -641,7 +683,7 @@ export default function ItemDetail({ itemId }: Props) {
       ['Verkaufspreis', item.Verkaufspreis ?? null]
     );
 
-    if (co2Impact && co2Impact.label !== 'irrelevant') {
+    if (statisticsEnabled && co2Impact && co2Impact.label !== 'irrelevant') {
       const co2Label = CO2_IMPACT_LABEL_DE[co2Impact.label];
       const co2Display = typeof co2Impact.score === 'number'
         ? `${co2Label} (~${Math.round(co2Impact.score)} kg CO₂)`
@@ -650,7 +692,7 @@ export default function ItemDetail({ itemId }: Props) {
     }
 
     return rows;
-  }, [agentic, co2Impact, events, item, langtextRows, qualitySummary.value, resolveUnterkategorieLabel]);
+  }, [agentic, co2Impact, events, features.agentic, item, langtextRows, qualitySummary.value, resolveUnterkategorieLabel, statisticsEnabled]);
 
   const { referenceDetailRows, instanceDetailRows } = useMemo(() => {
     const referenceRows: [string, React.ReactNode][] = [];
@@ -768,7 +810,15 @@ export default function ItemDetail({ itemId }: Props) {
         return {
           id: instance.ItemUUID,
           qualityValue,
-          boxId: rawBoxId ? (
+          boxId: instance.LocationRedacted ? (
+            <button
+              type="button"
+              className="link-btn"
+              onClick={(e) => { e.stopPropagation(); void openOrgInfo(instance.TenantId, instance.Location); }}
+            >
+              {instance.Location ?? 'Andere Organisation'}
+            </button>
+          ) : rawBoxId ? (
             <button
               type="button"
               className="link-btn"
@@ -1009,6 +1059,8 @@ export default function ItemDetail({ itemId }: Props) {
             Auf_Lager: normalizedStock,
             Location: (entry as ItemInstanceSummary)?.Location ?? null,
             BoxID: (entry as ItemInstanceSummary)?.BoxID ?? null,
+            TenantId: (entry as ItemInstanceSummary)?.TenantId ?? null,
+            LocationRedacted: (entry as ItemInstanceSummary)?.LocationRedacted === true,
             UpdatedAt: (entry as ItemInstanceSummary)?.UpdatedAt ?? null,
             Datum_erfasst: (entry as ItemInstanceSummary)?.Datum_erfasst ?? null
           });
@@ -1053,6 +1105,12 @@ export default function ItemDetail({ itemId }: Props) {
           : [];
         setMediaAssets(media);
         setInstances(normalizeInstanceList(data.instances));
+        setPermissions({
+          canEditItem: data.permissions?.canEditItem !== false,
+          canEditReference: data.permissions?.canEditReference !== false,
+          // Delete is opt-in (tenant-admin only): hidden unless the server explicitly grants it.
+          canDeleteReference: data.permissions?.canDeleteReference === true
+        });
         setConnectedAccessories(Array.isArray((data as any).connectedAccessories) ? (data as any).connectedAccessories : []);
         setConnectedToDevices(Array.isArray((data as any).connectedToDevices) ? (data as any).connectedToDevices : []);
         setCompatibleAccessoryRefs(Array.isArray((data as any).compatibleAccessoryRefs) ? (data as any).compatibleAccessoryRefs : []);
@@ -1347,6 +1405,36 @@ export default function ItemDetail({ itemId }: Props) {
       }
     },
     [itemId, persistMediaUpdate, readFileAsDataUrl]
+  );
+
+  // Camera captures already arrive as a data URL, so they skip the hidden file input entirely.
+  const handleMediaCapture = useCallback(
+    async (dataUrl: string) => {
+      if (isMediaSaving) {
+        logger.warn?.('ItemDetail: Media update already in progress; ignoring capture.', { itemId });
+        return;
+      }
+
+      const nextSlot = resolveNextMediaSlot();
+      if (nextSlot === null) {
+        try {
+          await dialogService.alert({
+            title: 'Keine freien Plätze',
+            message: 'Es sind bereits alle Medienplätze belegt.'
+          });
+        } catch (error) {
+          console.error('ItemDetail: Failed to alert about full media slots', error);
+        }
+        return;
+      }
+
+      try {
+        await persistMediaUpdate({ slotIndex: nextSlot, dataUrl, action: 'add' });
+      } catch (error) {
+        logError('ItemDetail: Failed to persist captured media', error, { itemId, slotIndex: nextSlot });
+      }
+    },
+    [isMediaSaving, itemId, persistMediaUpdate, resolveNextMediaSlot]
   );
 
   const handleMediaRemove = useCallback(
@@ -2414,6 +2502,50 @@ export default function ItemDetail({ itemId }: Props) {
     navigate(`/items/${encodeURIComponent(item.ItemUUID)}/edit`);
   }
 
+  // Delete the whole catalogue reference (tenant-admin only; the button is hidden otherwise). The
+  // backend refuses while any instance still exists (409), so the operator removes instances first.
+  async function handleDeleteReference() {
+    if (!item) return;
+    const artikelNummer = (item.Artikel_Nummer ?? '').trim();
+    if (!artikelNummer) {
+      await dialogService.alert({ title: 'Nicht möglich', message: 'Dieser Eintrag hat keine Artikelnummer.' }).catch(() => {});
+      return;
+    }
+    const actor = await ensureUser();
+    if (!actor) {
+      await dialogService.alert({ title: 'Aktion nicht möglich', message: 'Bitte zuerst oben den Benutzer setzen.' }).catch(() => {});
+      return;
+    }
+    const confirmed = await dialogService.confirm({
+      title: 'Referenz löschen',
+      message: `Die gesamte Katalog-Referenz ${artikelNummer} löschen? Das ist nur möglich, wenn keine Instanzen mehr existieren.`,
+      confirmLabel: 'Löschen',
+      cancelLabel: 'Zurück'
+    }).catch(() => false);
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/references/${encodeURIComponent(artikelNummer)}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actor, confirm: true })
+      });
+      if (res.ok) {
+        navigate('/items');
+        return;
+      }
+      const body = await res.json().catch(() => ({} as any));
+      const message = res.status === 409
+        ? `Referenz wird noch verwendet (${body.instanceCount ?? '?'} Instanz(en)). Bitte zuerst alle Instanzen entfernen.`
+        : res.status === 403
+          ? 'Referenzen löschen ist Organisations-Admins vorbehalten.'
+          : (body.error || `Löschen fehlgeschlagen (HTTP ${res.status}).`);
+      await dialogService.alert({ title: 'Referenz nicht gelöscht', message }).catch(() => {});
+    } catch (err) {
+      console.error('Delete reference failed', err);
+      await dialogService.alert({ title: 'Fehler', message: 'Netzwerkfehler beim Löschen der Referenz.' }).catch(() => {});
+    }
+  }
+
   async function handleShopStatus() {
     if (!item) return;
     let shopValues: ShopStatusValues = { shopartikel: null, veröffentlicht: null, verkaufspreis: null };
@@ -2625,7 +2757,7 @@ export default function ItemDetail({ itemId }: Props) {
     };
 
     let tabContent: React.ReactNode;
-    switch (activeTab ?? 'instance') {
+    switch (resolveTab(activeTab, 'instance', ITEM_TAB_FEATURES, features)) {
       case 'reference':
         tabContent = (
           <ItemReferenceTab
@@ -2633,8 +2765,9 @@ export default function ItemDetail({ itemId }: Props) {
             referenceDetailRows={referenceDetailRows}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
-            onEdit={() => void handleEdit()}
-            onShopStatus={() => void handleShopStatus()}
+            onEdit={permissions.canEditReference ? () => void handleEdit() : undefined}
+            onShopStatus={permissions.canEditReference ? () => void handleShopStatus() : undefined}
+            onDelete={permissions.canDeleteReference ? () => void handleDeleteReference() : undefined}
           />
         );
         break;
@@ -2673,6 +2806,7 @@ export default function ItemDetail({ itemId }: Props) {
             relocateCardRef={relocateCardRef}
             showEditInstance={showEditInstance}
             showQualityReview={showQualityReview}
+            canEdit={permissions.canEditItem}
             onAddItem={handleAddItem}
             onRemoveItem={handleRemoveItem}
             onRelocate={() => setShowRelocate(true)}
@@ -2691,8 +2825,9 @@ export default function ItemDetail({ itemId }: Props) {
             item={item}
             mediaAssets={mediaAssets}
             mediaFileInputRef={mediaFileInputRef}
-            onAdd={handleMediaAdd}
-            onRemove={handleMediaRemove}
+            onAdd={permissions.canEditReference ? handleMediaAdd : undefined}
+            onCapture={permissions.canEditReference ? handleMediaCapture : undefined}
+            onRemove={permissions.canEditReference ? handleMediaRemove : undefined}
             onFileChange={handleMediaFileChange}
           />
         );
@@ -2707,6 +2842,7 @@ export default function ItemDetail({ itemId }: Props) {
             serialNumber={item.SerialNumber ?? null}
             macAddress={item.MacAddress ?? null}
             ean={item.EAN ?? null}
+            readOnly={!permissions.canEditItem}
           />
         );
         break;
@@ -2719,6 +2855,8 @@ export default function ItemDetail({ itemId }: Props) {
             compatibleAccessoryRefs={compatibleAccessoryRefs}
             compatibleParentRefs={compatibleParentRefs}
             onRelationChanged={() => void handleRelationChanged()}
+            canEditItem={permissions.canEditItem}
+            canEditReference={permissions.canEditReference}
           />
         );
         break;
@@ -2735,8 +2873,8 @@ export default function ItemDetail({ itemId }: Props) {
             referenceDetailRows={referenceDetailRows}
             connectedToDevices={connectedToDevices}
             compatibleParentRefs={compatibleParentRefs}
-            onEdit={() => void handleEdit()}
-            onShopStatus={() => void handleShopStatus()}
+            onEdit={permissions.canEditReference ? () => void handleEdit() : undefined}
+            onShopStatus={permissions.canEditReference ? () => void handleShopStatus() : undefined}
           />
         );
     }

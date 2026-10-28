@@ -17,24 +17,8 @@ export interface QualityAssessment {
 
 export type QualityAssessmentInsert = Omit<QualityAssessment, 'id'>;
 
-export interface PhysicalConditionAnswers {
-  is_complete: boolean | null;
-  has_defects: boolean | null;
-  is_functional: boolean | null;
-}
-
-export function deriveQualityTagFromCondition(answers: PhysicalConditionAnswers): { tag: QualityTag; value: number } {
-  if (answers.is_functional === false) {
-    return { tag: 'Ersatzteil', value: 1 };
-  }
-  if (answers.has_defects === true && answers.is_complete === false) {
-    return { tag: 'Upcycling', value: 2 };
-  }
-  if (answers.has_defects === true || answers.is_complete === false) {
-    return { tag: 'Ok', value: 3 };
-  }
-  return { tag: 'Gut', value: 4 };
-}
+// Grades come from the contract calculation (models/quality-score.ts); the old is_functional/
+// has_defects/is_complete shortcut was unused outside tests and was retired with the unified model.
 
 export function deriveAiPriorityFromAssessment(value: number): AiPriority {
   if (value >= 4) return 'high';

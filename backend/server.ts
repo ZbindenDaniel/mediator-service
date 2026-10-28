@@ -52,6 +52,8 @@ import {
   boxesByLocation,
   getBox,
   getItemReference,
+  countInstancesForReference,
+  deleteItemReference,
   listBoxes,
   upsertAgenticRun,
   getAgenticRun,
@@ -109,12 +111,24 @@ import {
   listStubs,
   createStub,
   closeStub,
-  initDb
+  initDb,
+  seedTenant,
+  countTenantSites,
+  insertTenantSite
 } from './db';
 import { createShopwareAdminClient } from './shopware/adminClient';
 import { createShopwareSyncClient } from './shopware/syncClient';
 import { processShopwareQueue } from './workers/processShopwareQueue';
 import { AgenticModelInvoker } from './agentic/invoker';
+import { loadTaxonomy, initTaxonomy } from './lib/taxonomy';
+import { resolveIdentity, loadConfigTenantGroupMap } from './lib/identity';
+import { reloadTenantsFromDb, getTenantRows, getSites } from './lib/tenants';
+import { shelfLocations } from '../models/shelf-locations';
+import { loadFeatures, isFeatureEnabled, FEATURE_KEYS } from './lib/features';
+import { isRequestAllowed } from './utils/require-identity';
+import { sendAppShellFile } from './utils/app-shell';
+import { runWithIdentity } from './lib/ownership';
+import type { RequestIdentity } from './lib/identity';
 import type { Item, LabelJob } from './db';
 import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
 import { syncPrinterQueuesToCups, startPrinterQueueSyncInterval } from './utils/sync-printer-queues';
@@ -341,6 +355,17 @@ function parseAufLagerValue(value: unknown, itemId: string): number {
   return 0;
 }
 
+// Validate the feature manifest before any background job below reads it: a typo must stop the
+// app, not silently leave e.g. the AI dispatcher running (backend/lib/features.ts).
+try {
+  const features = loadFeatures();
+  const disabled = FEATURE_KEYS.filter((k) => !features[k]);
+  if (disabled.length) console.info('[features] Disabled in this deployment:', disabled.join(', '));
+} catch (err) {
+  console.error('[server] Invalid feature manifest — aborting startup.', err);
+  process.exit(1);
+}
+
 async function runPrintWorker(): Promise<void> {
   const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   await recoverStaleLabelJobs(staleThreshold);
@@ -439,7 +464,9 @@ async function runPrintWorker(): Promise<void> {
     void updateLabelJobStatus(job.Id, 'Error', (e as Error).message);
   }
 }
-setInterval(runPrintWorker, 750);
+if (isFeatureEnabled('printing')) {
+  setInterval(runPrintWorker, 750);
+}
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -458,6 +485,8 @@ type ActionContext = {
   boxesByLocation: typeof boxesByLocation;
   getBox: typeof getBox;
   getItemReference: typeof getItemReference;
+  countInstancesForReference: typeof countInstancesForReference;
+  deleteItemReference: typeof deleteItemReference;
   listBoxes: typeof listBoxes;
   getItem: typeof getItem;
   decrementItemStock: typeof decrementItemStock;
@@ -522,9 +551,11 @@ type ActionContext = {
     issues: string[];
     ready: boolean;
   };
+  // Forward-auth identity resolved per request (docs/PLANNING_TENANCY.md Phase 1).
+  identity: RequestIdentity;
 };
 
-const agenticServiceEnabled = true;
+const agenticServiceEnabled = isFeatureEnabled('agentic');
 
 const agenticInvoker = new AgenticModelInvoker({ logger: console });
 const boundAgenticInvokeModel = agenticInvoker.invoke.bind(agenticInvoker);
@@ -601,7 +632,7 @@ if (agenticServiceEnabled) {
 // was retired as dead in #936); revisit if it needs to be tunable per deployment.
 const SHOPWARE_SYNC_POLL_INTERVAL_MS = 10_000;
 
-if (SHOPWARE_SYNC_ENABLED) {
+if (SHOPWARE_SYNC_ENABLED && isFeatureEnabled('shopware')) {
   if (!shopwareConfigReady) {
     console.warn('[server] SHOPWARE_SYNC_ENABLED=true but Shopware config is incomplete; sync worker not started.', {
       issues: shopwareConfigIssues
@@ -639,8 +670,9 @@ if (SHOPWARE_SYNC_ENABLED) {
 
 // ERP_NIGHTLY_SYNC_ENABLED is the env-level default; the runtime toggle lives in system_settings
 // so it persists across restarts and can be flipped from the admin page without redeploying.
-// Seed only on first startup (existing !== null means the operator has already set it).
-void (async () => {
+// Seed only on first startup (existing !== null means the operator has already set it). Called after
+// initDb: on a fresh DB system_settings does not exist yet, and a failed seed left the sync off.
+async function seedNightlyErpSyncSetting(): Promise<void> {
   try {
     const existing = await getSystemSetting('erp_nightly_sync_enabled');
     if (existing === null) {
@@ -649,7 +681,7 @@ void (async () => {
   } catch (err) {
     console.error('[nightly-erp-sync] Failed to seed system setting', err);
   }
-})();
+}
 
 let lastErpNightlySyncDate: string | null = null;
 setInterval(() => {
@@ -661,6 +693,7 @@ setInterval(() => {
 
     const enabled = await getSystemSetting('erp_nightly_sync_enabled');
     if (enabled !== 'true') return;
+    if (!isFeatureEnabled('erp-sync')) return;
     if (!ERP_SYNC_ENABLED) {
       console.info('[nightly-erp-sync] Skipped: ERP_SYNC_ENABLED is false');
       return;
@@ -715,12 +748,14 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     }
 
     const url = new URL(req.url, resolveRequestBase(req));
+    if (!isRequestAllowed(req, url.pathname)) {
+      sendJson(res, 401, { error: 'Unauthorized' });
+      return;
+    }
     if (url.pathname === '/' && req.method === 'GET') {
       const p = path.join(PUBLIC_DIR, 'index.html');
       try {
-        const html = fs.readFileSync(p);
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        return res.end(html);
+        return sendAppShellFile(req, res, p, 'text/html; charset=utf-8');
       } catch (err) {
         console.error('Failed to serve index.html', err);
         res.writeHead(500); return res.end('Internal error');
@@ -730,9 +765,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     if (url.pathname === '/bundle.js' && req.method === 'GET') {
       const p = path.join(PUBLIC_DIR, 'bundle.js');
       try {
-        const js = fs.readFileSync(p);
-        res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8' });
-        return res.end(js);
+        return sendAppShellFile(req, res, p, 'text/javascript; charset=utf-8');
       } catch (err) {
         console.error('Bundle not found', err);
         res.writeHead(404); return res.end('Not found');
@@ -742,9 +775,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     if (url.pathname === '/bundle.css' && req.method === 'GET') {
       const p = path.join(PUBLIC_DIR, 'styles.css');
       try {
-        const css = fs.readFileSync(p);
-        res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
-        return res.end(css);
+        return sendAppShellFile(req, res, p, 'text/css; charset=utf-8');
       } catch {
         res.writeHead(404); return res.end('Not found');
       }
@@ -851,6 +882,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       }
     }
 
+    // Help docs live outside the action registry, so the `help` feature is gated here.
+    if (url.pathname.startsWith('/api/user-docs') && !isFeatureEnabled('help')) {
+      sendJson(res, 404, { error: 'Not found' });
+      return;
+    }
     if (url.pathname === '/api/user-docs' && req.method === 'GET') {
       const USER_DOCS_DIR = path.join(__dirname, '../../docs/user');
       try {
@@ -999,9 +1035,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     if (req.method === 'GET' && !url.pathname.startsWith('/api')) {
       const p = path.join(PUBLIC_DIR, 'index.html');
       try {
-        const html = fs.readFileSync(p);
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        return res.end(html);
+        return sendAppShellFile(req, res, p, 'text/html; charset=utf-8');
       } catch (err) {
         console.error('Failed to serve SPA fallback', err);
         res.writeHead(404); return res.end('Not found');
@@ -1011,6 +1045,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
     // Remaining request handling delegated to actions
     const action = actions.find((a) => a.matches?.(url.pathname, req.method || 'GET'));
+    // A disabled feature's API looks like it doesn't exist (404), so hidden UI can't be bypassed.
+    if (action?.feature && !isFeatureEnabled(action.feature)) {
+      sendJson(res, 404, { error: 'Not found' });
+      return;
+    }
     if (action) {
       try {
         // console.log('Handling action', action.key);
@@ -1023,7 +1062,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
             },
             now: () => new Date()
           });
-        await action.handle?.(req, res, {
+        const identity = resolveIdentity(req);
+        // Request context for the DB layer's tenancy safety net (lib/ownership.ts).
+        await runWithIdentity(identity, async () => action.handle?.(req, res, {
           upsertBox,
           runUpsertBox,
           persistItem,
@@ -1035,6 +1076,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           boxesByLocation,
           getBox,
           getItemReference,
+          countInstancesForReference,
+          deleteItemReference,
           listBoxes,
           upsertAgenticRun,
           getAgenticRun,
@@ -1104,8 +1147,9 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
             issues: [...shopwareConfigIssues],
             ready: shopwareConfigReady
           },
+          identity,
           generateItemUUID: generateItemId
-        });
+        }));
       } catch (err) {
         console.error('Action handler failed', err);
         sendJson(res, 500, { error: 'Internal error' });
@@ -1130,9 +1174,47 @@ function formatListenerUrl(protocol: 'http' | 'https', hostname: string, port: n
 }
 
 if (process.env.NODE_ENV !== 'test') {
+  // Fail fast on a malformed seed file before serving (also warms the fallback cache);
+  // DB seeding happens after initDb since it needs the taxonomy tables.
+  try {
+    loadTaxonomy();
+  } catch (err) {
+    console.error('[server] Failed to load category taxonomy seed — aborting startup.', err);
+    process.exit(1);
+  }
+
   initDb()
-    .then(() => {
+    .then(async () => {
       console.info('[server] Database schema initialized.');
+      await seedNightlyErpSyncSetting();
+      // Seed the taxonomy tables on first boot, then make the DB the authoritative source.
+      const taxonomy = await initTaxonomy(console);
+      console.info(`[server] Taxonomy ready (${taxonomy.length} categories).`);
+      // Seed the local tenants registry from the config group map (Phase 2b). Idempotent upsert; the
+      // registry is a display/FK target — it does not enforce isolation (that is Phase 3). No config
+      // tenants means a single-tenant deployment, so this is a no-op there.
+      try {
+        // Seed orgs from the config map (insert-if-missing; admin edits in the DB win), then the
+        // old hardcoded sites once, assigned to the default org if there is one.
+        const configMap = loadConfigTenantGroupMap();
+        for (const t of configMap.tenants) {
+          await seedTenant({ id: t.id, label: t.label ?? null, authentikGroup: t.group, authentikSuperGroup: t.superGroup ?? null });
+        }
+        const seededIds = new Set(configMap.tenants.map((t) => t.id));
+        if (configMap.defaultTenant && !seededIds.has(configMap.defaultTenant)) {
+          await seedTenant({ id: configMap.defaultTenant, label: null, authentikGroup: null, authentikSuperGroup: null });
+        }
+        if ((await countTenantSites()) === 0) {
+          for (const [i, loc] of shelfLocations.entries()) {
+            await insertTenantSite({ id: loc.id, tenantId: configMap.defaultTenant, label: loc.label, floors: [...loc.floors], sortOrder: i });
+          }
+          console.info(`[server] Seeded ${shelfLocations.length} sites from models/shelf-locations.ts.`);
+        }
+        await reloadTenantsFromDb();
+        console.info(`[server] Org directory loaded (${getTenantRows().length} orgs, ${getSites().length} sites).`);
+      } catch (err) {
+        console.warn('[server] Org directory seeding/loading failed (non-fatal; config map stays in use).', err);
+      }
       // Sync printer queues from DB to CUPS on startup, then keep in sync periodically
       syncPrinterQueuesToCups().catch((err) => {
         console.warn('[server] Initial printer queue sync failed (CUPS may not be ready yet)', err);

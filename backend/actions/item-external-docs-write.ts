@@ -7,6 +7,7 @@ import { resolveAltDocDirPath, resolveAltDocDirPaths, buildExternalDocUrl } from
 import { resolvePathWithinRoot } from '../lib/path-guard';
 import { emitMediaAudit } from '../lib/media-audit';
 import { queryOne } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
 
 // Matches both POST (no filename segment) and DELETE (with filename segment)
 const ROUTE_RE = /^\/api\/items\/([^/]+)\/external-docs\/([^/]+)(?:\/(.+))?$/;
@@ -18,6 +19,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'item-attachments',
   key: 'item-external-docs-write',
   label: 'Item external documents write/delete',
   appliesTo: () => false,
@@ -32,6 +34,8 @@ const action = defineHttpAction({
     const itemUUID = decodeURIComponent(match[1]);
     const dirName = decodeURIComponent(match[2]);
     const fileNameParam = match[3] ? decodeURIComponent(match[3]) : null;
+    // SN:/MAC: ids (intake before item creation) aren't rows yet, so the guard lets them through.
+    if (!(await guardWrite(ctx, res, 'item', itemUUID))) return;
 
     const dirConfig = ALT_DOC_DIRS.find(d => d.name === dirName);
     if (!dirConfig) return sendJson(res, 404, { error: 'directory not found' });

@@ -1,11 +1,5 @@
 # Agentic Basics
 
-> [!NOTE]
-> **Authoring rules**
-> - Prefer links over duplicated schema definitions.
-> - Keep each section short and contract-focused.
-> - Explicitly call out where data structures must stay synchronized across `models/`, `backend/src/models/`, and frontend types/usages.
-
 ## In short
 - Business goal: Provide one shared operational model for agentic orchestration so implementation docs can stay focused on flow-specific details instead of re-explaining core mechanics.
 - User value: Developers and operators can quickly answer “what stage is this run in, where is it persisted, and what do I inspect when it fails?” without searching across multiple modules.
@@ -88,9 +82,9 @@
 - Routes:
   - Item detail/status surfaces consume agentic status and review fields from backend action payloads.
 - Key components:
-  - `frontend/src/components/ItemForm_agentic.tsx`
-  - `frontend/src/components/AgenticSpecFieldReviewModal.tsx`
-  - `frontend/src/components/AgenticReviewMetricsRows.tsx`
+  - `frontend/src/components/AgenticStatusCard.tsx` — status and run controls in the KI tab
+  - `frontend/src/components/AgenticReviewWizard.tsx` — step-by-step review, decision at the end ([review-flow](review-flow.md))
+  - `frontend/src/components/AgenticSearchSources.tsx`, `AgenticSnapshotsPanel.tsx` — stored search evidence, run snapshots/restore
 - User flows:
   - Trigger run from item context -> monitor status labels -> perform manual review when required -> confirm final approved/rejected state.
 
@@ -171,6 +165,3 @@
 ## Specialized deep-dives
 - Item execution details: [`item-flow.md`](./item-flow.md)
 - Review/decision details: [`review-flow.md`](./review-flow.md)
-
-## Open questions / TODO
-- [ ] TODO(agentic-basics): Add explicit cross-reference once item/review deep-dives document full endpoint matrices and response examples.

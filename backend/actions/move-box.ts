@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
 import fs from 'fs';
 import path from 'path';
 import { defineHttpAction } from './index';
@@ -7,6 +8,7 @@ import { MEDIA_UPLOAD_STAGING_DIR, resolveUploadMediaPath } from '../lib/media';
 import { emitMediaAudit } from '../lib/media-audit';
 import { assertPathWithinRoot, resolvePathWithinRoot } from '../lib/path-guard';
 import { withTransaction } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
 
 const BOX_MEDIA_PREFIX = '/media/';
 const BOX_MEDIA_FOLDER = 'boxes';
@@ -251,13 +253,14 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/boxes\/([^/]+)\/move$/);
       const id = match ? decodeURIComponent(match[1]) : '';
       if (!id) return sendJson(res, 400, { error: 'invalid box id' });
+      if (!(await guardWrite(ctx, res, 'box', id))) return;
       const box = await ctx.getBox(id);
       if (!box) return sendJson(res, 404, { error: 'box not found' });
       let raw = '';
       for await (const c of req) raw += c;
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
-      const actor = (data.actor || '').trim();
+      const actor = resolveActor(ctx, (data.actor || '').trim());
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const rawLocationValue = typeof data.location === 'string' ? data.location : '';
       const rawLocationIdValue = typeof data.LocationId === 'string' ? data.LocationId : '';
@@ -282,6 +285,8 @@ const action = defineHttpAction({
           ? (box as any).Location.trim().toUpperCase()
           : '';
       const effectiveLocationId = hasLocation ? locationRaw : existingLocationId;
+      // Placing a box onto another org's shelf would put it into that org's warehouse.
+      if (hasLocation && locationRaw && !(await guardWrite(ctx, res, 'box', locationRaw))) return;
       const fallbackLabel = typeof box.Label === 'string' && box.Label.trim()
         ? box.Label.trim()
         : typeof (box as any).StandortLabel === 'string' && (box as any).StandortLabel.trim()
@@ -299,6 +304,16 @@ const action = defineHttpAction({
       }
       const notes = (data.notes ?? '').toString().trim();
       const hasNotesField = Object.prototype.hasOwnProperty.call(data, 'notes');
+      const hasColorField = Object.prototype.hasOwnProperty.call(data, 'color');
+      const rawColor = typeof data.color === 'string' ? data.color.trim() : '';
+      // Strict #rrggbb: the value lands in an inline style, so anything looser is a CSS-injection foothold.
+      if (hasColorField && rawColor && !/^#[0-9a-f]{6}$/i.test(rawColor)) {
+        console.warn('[move-box] Rejected invalid color', { boxId: id, color: data.color });
+        return sendJson(res, 400, { error: 'color must be #rrggbb' });
+      }
+      const nextColor: string | null = hasColorField
+        ? (rawColor ? rawColor.toLowerCase() : null)
+        : (typeof box.Color === 'string' && box.Color ? box.Color : null);
       const hasPhotoField = Object.prototype.hasOwnProperty.call(data, 'photo');
       const removePhoto = data.removePhoto === true;
       const incomingPhoto = hasPhotoField && typeof data.photo === 'string' ? data.photo : null;
@@ -322,19 +337,19 @@ const action = defineHttpAction({
         }
       }
 
-      if (!hasLocation && (hasNotesField || hasPhotoMutation || hasLabelField)) {
+      if (!hasLocation && (hasNotesField || hasPhotoMutation || hasLabelField || hasColorField)) {
         try {
           await withTransaction(async (client) => {
             await client.query(
-              `UPDATE boxes SET "Label"=$1, "Notes"=$2, "PhotoPath"=$3, "UpdatedAt"=$4 WHERE "BoxID"=$5`,
-              [nextLabel ?? null, notes, nextPhotoPath, new Date().toISOString(), id]
+              `UPDATE boxes SET "Label"=$1, "Notes"=$2, "PhotoPath"=$3, "Color"=$4, "UpdatedAt"=$5 WHERE "BoxID"=$6`,
+              [nextLabel ?? null, notes, nextPhotoPath, nextColor, new Date().toISOString(), id]
             );
             await ctx.logEvent({
               Actor: actor,
               EntityType: 'Box',
               EntityId: id,
               Event: 'Note',
-              Meta: JSON.stringify({ notes, photoPath: nextPhotoPath, label: nextLabel ?? null, locationId: effectiveLocationId || null })
+              Meta: JSON.stringify({ notes, photoPath: nextPhotoPath, label: nextLabel ?? null, color: nextColor, locationId: effectiveLocationId || null })
             });
           });
           console.info('[move-box] Processed note/photo update', {
@@ -342,13 +357,14 @@ const action = defineHttpAction({
             actor,
             photoChanged,
             hasNotesField,
-            hasLabelField
+            hasLabelField,
+            hasColorField
           });
         } catch (noteErr) {
           console.error('Note/photo update failed', noteErr);
           throw noteErr;
         }
-        sendJson(res, 200, { ok: true, photoPath: nextPhotoPath });
+        sendJson(res, 200, { ok: true, photoPath: nextPhotoPath, color: nextColor });
         return;
       }
 
@@ -359,8 +375,8 @@ const action = defineHttpAction({
       const effectiveLoc = hasLocation ? locationRaw : effectiveLocationId;
       await withTransaction(async (client) => {
         await client.query(
-          `UPDATE boxes SET "LocationId"=$1, "Label"=$2, "Notes"=$3, "PhotoPath"=$4, "PlacedBy"=$5, "PlacedAt"=$6, "UpdatedAt"=$7 WHERE "BoxID"=$8`,
-          [effectiveLoc, nextLabel ?? null, notes, nextPhotoPath, actor, new Date().toISOString(), new Date().toISOString(), id]
+          `UPDATE boxes SET "LocationId"=$1, "Label"=$2, "Notes"=$3, "PhotoPath"=$4, "Color"=$5, "PlacedBy"=$6, "PlacedAt"=$7, "UpdatedAt"=$8 WHERE "BoxID"=$9`,
+          [effectiveLoc, nextLabel ?? null, notes, nextPhotoPath, nextColor, actor, new Date().toISOString(), new Date().toISOString(), id]
         );
         await ctx.logEvent({
           Actor: actor,
@@ -378,7 +394,7 @@ const action = defineHttpAction({
         notesChanged: hasNotesField,
         hasLabelField
       });
-      sendJson(res, 200, { ok: true, photoPath: nextPhotoPath });
+      sendJson(res, 200, { ok: true, photoPath: nextPhotoPath, color: nextColor });
     } catch (err) {
       console.error('Move box failed', err);
       sendJson(res, 500, { error: (err as Error).message });

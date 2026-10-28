@@ -4,6 +4,9 @@ import Layout from './Layout';
 import { DialogProvider } from './dialog';
 import { PanelProvider, usePanelContext } from '../context/PanelContext';
 import { UserMarksProvider } from '../context/UserMarksContext';
+import { TaxonomyProvider } from '../context/TaxonomyContext';
+import { IdentityProvider } from '../context/IdentityContext';
+import { FeaturesProvider, useFeatures } from '../context/FeaturesContext';
 import BoxDetail from './BoxDetail';
 import ItemDetail from './ItemDetail';
 import ItemEdit from './ItemEdit';
@@ -16,9 +19,12 @@ import RecentActivitiesPage from './RecentActivitiesPage';
 import ChatPlaceholder from './ChatPlaceholder';
 import ShelfCreateForm from './ShelfCreateForm';
 import AdminPage from './AdminPage';
+import TaxonomyAdminPage from './admin/TaxonomyAdminPage';
+import OrganisationsAdminPage from './admin/OrganisationsAdminPage';
 import PlacementScanView from './PlacementScanView';
 import StubListPage from './StubListPage';
 import HilfePage from './HilfePage';
+import EinzelteilePage from './einzelteile/EinzelteilePage';
 import { createScanDetector } from '../utils/scannerDetection';
 import { applySimpleModeClass } from '../lib/simpleMode';
 
@@ -59,6 +65,9 @@ function BoxEditRoute() {
 }
 
 export function AppRoutes() {
+  const features = useFeatures();
+  // Disabled pages fall back to the start page, so old bookmarks don't open blocked features.
+  const gate = (enabled: boolean, element: React.ReactElement) => (enabled ? element : <Navigate to="/" replace />);
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/items?entity=item&tab=create" replace />} />
@@ -69,14 +78,17 @@ export function AppRoutes() {
       <Route path="/items/new" element={<ItemCreate />} />
       <Route path="/items/:itemId" element={<ItemRoute />} />
       <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />
-      <Route path="/scan" element={<QrScannerPage />} />
-      <Route path="/activities" element={<RecentActivitiesPage />} />
-      <Route path="/stubs" element={<StubListPage />} />
-      <Route path="/chat" element={<ChatPlaceholder />} />
-      <Route path="/placement/:targetId" element={<PlacementScanView />} />
+      <Route path="/items/:itemId/einzelteile" element={<EinzelteilePage />} />
+      <Route path="/scan" element={gate(features['qr-scan'], <QrScannerPage />)} />
+      <Route path="/activities" element={gate(features.logs, <RecentActivitiesPage />)} />
+      <Route path="/stubs" element={gate(features.stubs, <StubListPage />)} />
+      <Route path="/chat" element={gate(features.agentic, <ChatPlaceholder />)} />
+      <Route path="/placement/:targetId" element={gate(features['qr-scan'], <PlacementScanView />)} />
       <Route path="/admin" element={<AdminPage />} />
+      <Route path="/admin/organisationen" element={<OrganisationsAdminPage />} />
+      <Route path="/admin/taxonomy" element={gate(features['admin-taxonomy'], <TaxonomyAdminPage />)} />
       <Route path="/admin/shelves/new" element={<Navigate to="/admin" replace />} />
-      <Route path="/hilfe" element={<HilfePage />} />
+      <Route path="/hilfe" element={gate(features.help, <HilfePage />)} />
     </Routes>
   );
 }
@@ -103,16 +115,22 @@ export default function App() {
   }, []);
 
   return (
-    <Router>
-      <DialogProvider>
-        <PanelProvider>
-          <UserMarksProvider>
-            <Layout>
-              <AppRoutes />
-            </Layout>
-          </UserMarksProvider>
-        </PanelProvider>
-      </DialogProvider>
-    </Router>
+    <FeaturesProvider>
+    <IdentityProvider>
+      <Router>
+        <DialogProvider>
+          <PanelProvider>
+            <UserMarksProvider>
+              <TaxonomyProvider>
+                <Layout>
+                  <AppRoutes />
+                </Layout>
+              </TaxonomyProvider>
+            </UserMarksProvider>
+          </PanelProvider>
+        </DialogProvider>
+      </Router>
+    </IdentityProvider>
+    </FeaturesProvider>
   );
 }

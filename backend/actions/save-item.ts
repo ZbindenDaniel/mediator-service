@@ -1,5 +1,7 @@
 // TODO(agent): add action tests.
+import { resolveEffectiveSubCategory } from '../lib/quality-score';
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
 import fs from 'fs';
 import path from 'path';
 import { ItemEinheit, normalizeItemEinheit } from '../../models';
@@ -26,6 +28,10 @@ import { applySpecContract } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
 import { calculateCo2Impact } from '../lib/co2Calculator';
 import { query as dbQuery, withTransaction } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
+import { redactItemRows, redactPeople } from '../lib/redaction';
+import { canDeleteReference, canEditReference, canWrite, currentIdentity, isUnrestricted } from '../lib/ownership';
+import { getRowOwner } from '../db';
 
 const MEDIA_PREFIX = '/media/';
 // TODO(item-detail-reference): Confirm reference payload expectations once API consumers update.
@@ -598,6 +604,23 @@ function normalizeSearchTerm(
   }
 }
 
+// What the requester may change, so the UI can hide actions that would answer 403 (tenancy 3a rules).
+async function resolveItemPermissions(
+  itemTenant: string | null | undefined,
+  artikelNummer: string | null | undefined
+): Promise<{ canEditItem: boolean; canEditReference: boolean; canDeleteReference: boolean }> {
+  const identity = currentIdentity();
+  if (isUnrestricted(identity)) return { canEditItem: true, canEditReference: true, canDeleteReference: true };
+  const nr = (artikelNummer ?? '').trim();
+  const refOwner = nr ? await getRowOwner('ref', nr) : null;
+  // Operators edit their own org's references; tenant admins curate (edit any) and delete references (§7 M2).
+  return {
+    canEditItem: canWrite(identity, itemTenant),
+    canEditReference: canEditReference(identity, refOwner),
+    canDeleteReference: canDeleteReference(identity)
+  };
+}
+
 const action = defineHttpAction({
   key: 'save-item',
   label: 'Save item',
@@ -670,7 +693,8 @@ const action = defineHttpAction({
               agentic: null,
               agenticReviewAutomation: null,
               media: collectMediaAssets(itemId, fallbackReference.Grafikname, fallbackReference.Artikel_Nummer),
-              instances: []
+              instances: [],
+              permissions: await resolveItemPermissions(null, fallbackReference.Artikel_Nummer)
             });
           }
         }
@@ -712,12 +736,31 @@ const action = defineHttpAction({
           console.error('[save-item] Failed to load agentic run for item detail', { itemId, error });
           agentic = null;
         }
+        // The reviewer is a person: hidden on another org's catalogue entry (tenancy §2a).
+        if (agentic && !isUnrestricted(currentIdentity())) {
+          try {
+            agentic = redactPeople(agentic, await getRowOwner('ref', agenticArtikelNummer), ['ReviewedBy']);
+          } catch (error) {
+            console.error('[save-item] Failed to resolve reference owner; hiding reviewer', { itemId, error });
+            agentic = { ...agentic, ReviewedBy: null };
+          }
+        }
         const normalisedGrafikname = normaliseMediaReference(itemId, item.Artikel_Nummer, item.Grafikname);
         const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
+        // Only article-less parts need the slot lookup; everything else already carries its category.
+        let effectiveSubCategory: number | null = typeof item.Unterkategorien_A === 'number' ? item.Unterkategorien_A : null;
+        if (effectiveSubCategory === null) {
+          try {
+            effectiveSubCategory = await resolveEffectiveSubCategory(resolvedItemId);
+          } catch (error) {
+            console.error('[save-item] Failed to resolve effective subcategory', { itemId, error });
+          }
+        }
         const sanitizedItem = {
           ...item,
           Einheit: resolveItemEinheitValue(item.Einheit, 'fetchResponse'),
-          Quality: resolveItemQualityValue(item.Quality, 'fetchResponse')
+          Quality: resolveItemQualityValue(item.Quality, 'fetchResponse'),
+          EffectiveSubCategory: effectiveSubCategory
         };
         // TODO(stock-visibility): Verify Auf_Lager instance summary data feeds withdrawal availability.
         let instances: ItemInstanceSummary[] = [];
@@ -778,6 +821,8 @@ const action = defineHttpAction({
                   Auf_Lager: instance.Auf_Lager ?? undefined,
                   Location: instance.Location ?? null,
                   BoxID: instance.BoxID ?? null,
+                  TenantId: instance.TenantId ?? null,
+                  LocationRedacted: instance.LocationRedacted === true,
                   UpdatedAt: instance.UpdatedAt ? String(instance.UpdatedAt) : null,
                   Datum_erfasst: instance.Datum_erfasst ? String(instance.Datum_erfasst) : null
                 });
@@ -903,7 +948,7 @@ const action = defineHttpAction({
             SELECT ir."Id", ir."ChildItemUUID" AS "ItemUUID", ir."RelationType", ir."Notes",
                    ir."CreatedAt" AS "RelationCreatedAt", ir."UpdatedAt",
                    i."Artikel_Nummer", r."Artikelbeschreibung", r."Kurzbeschreibung",
-                   i."BoxID", i."Location"
+                   i."BoxID", i."Location", i."TenantId"
             FROM item_relations ir
             JOIN items i ON i."ItemUUID" = ir."ChildItemUUID"
             LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
@@ -915,7 +960,7 @@ const action = defineHttpAction({
             SELECT ir."Id", ir."ParentItemUUID" AS "ItemUUID", ir."RelationType", ir."Notes",
                    ir."CreatedAt" AS "RelationCreatedAt", ir."UpdatedAt",
                    i."Artikel_Nummer", r."Artikelbeschreibung", r."Kurzbeschreibung",
-                   i."BoxID", i."Location"
+                   i."BoxID", i."Location", i."TenantId"
             FROM item_relations ir
             JOIN items i ON i."ItemUUID" = ir."ParentItemUUID"
             LEFT JOIN item_refs r ON r."Artikel_Nummer" = i."Artikel_Nummer"
@@ -1002,7 +1047,9 @@ const action = defineHttpAction({
           attachments: unknown[];
           externalDocs: ExternalDocSummary[] | null;
           co2Impact: ItemDetailResponse['co2Impact'];
+          permissions: ItemDetailResponse['permissions'];
         };
+        const permissions = await resolveItemPermissions(item.TenantId, item.Artikel_Nummer);
         try {
           const responseItem =
             normalisedGrafikname && normalisedGrafikname !== sanitizedItem.Grafikname
@@ -1017,13 +1064,14 @@ const action = defineHttpAction({
             agenticReviewAutomation,
             media,
             instances,
-            connectedAccessories,
-            connectedToDevices,
+            connectedAccessories: redactItemRows(connectedAccessories as Record<string, any>[]),
+            connectedToDevices: redactItemRows(connectedToDevices as Record<string, any>[]),
             compatibleAccessoryRefs,
             compatibleParentRefs,
             attachments,
             externalDocs,
-            co2Impact
+            co2Impact,
+            permissions
           };
         } catch (error) {
           console.error('[save-item] Failed to construct item detail response payload', {
@@ -1052,7 +1100,7 @@ const action = defineHttpAction({
       let raw = '';
       for await (const chunk of req) raw += chunk;
       const data = raw ? JSON.parse(raw) : {};
-      const actor = (data.actor || '').trim();
+      const actor = resolveActor(ctx, (data.actor || '').trim());
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const existing = await ctx.getItem(itemId) || {};
       const mediaArtikelNummer = data.Artikel_Nummer || existing.Artikel_Nummer || null;
@@ -1240,6 +1288,9 @@ const action = defineHttpAction({
         console.error('[save-item] Missing Artikel_Nummer for reference update', { itemId });
         return sendJson(res, 400, { error: 'Artikel_Nummer is required for reference update' });
       }
+      // This PUT edits the catalogue entry, so the entry's owner decides (it may differ from the
+      // item's owner: an org may stock items of another org's entry, which stays read-only for it).
+      if (!(await guardWrite(ctx, res, 'ref', artikelNummer))) return;
       let existingReference: ItemRef | null = null;
       try {
         if (ctx.getItemReference) {

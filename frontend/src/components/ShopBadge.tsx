@@ -1,6 +1,7 @@
 // TODO(shop-badge-ui): Revisit ShopBadge copy and shape once shared status badge tokens are available.
 import React from 'react';
 import { logError, logger } from '../utils/logger';
+import { useFeature } from '../context/FeaturesContext';
 
 type PublicationBadgeState = 'published' | 'unpublished';
 type ShopBadgeState = 'shop' | 'no-shop';
@@ -68,6 +69,8 @@ function resolveShopState(value: Props['shopartikel']): ShopBadgeState {
 }
 
 export default function ShopBadge({ publishedStatus, shopartikel, compact, labelPrefix = '' }: Props) {
+  // Only hook in this component, so the early return below is safe.
+  if (!useFeature('shopware')) return null;
   const publicationState = resolvePublicationState(publishedStatus);
   const shopState = resolveShopState(shopartikel);
   const className = compact ? 'shop-badge shop-badge--compact' : 'shop-badge';

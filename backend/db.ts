@@ -7,6 +7,8 @@ import { getFilterableSpecKeys } from './contracts/registry';
 import { resolveShopwareImageInputs } from './lib/shopware-media';
 import type { ShopwareImageInput } from './shopware/adminClient';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
+import { writeScopeParams, refWriteScopeParams } from './lib/ownership';
+import { redactItemRows, visibleBoxRows, isBoxVisible } from './lib/redaction';
 import type {
   ShopwareSyncQueueEntry,
   ShopwareSyncQueueInsert,
@@ -33,6 +35,7 @@ import {
   resolveEventLogLevel
 } from '../models';
 import { normalizeQuality } from '../models/quality';
+import type { ItemCategoryDefinition } from '../models/item-categories';
 import type { QualityAssessment, QualityAssessmentInsert } from '../models/quality';
 import type { QualityCheckResponse } from '../models/quality-contract';
 import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
@@ -453,11 +456,38 @@ CREATE TABLE IF NOT EXISTS printer_queues (
   enabled     BOOLEAN NOT NULL DEFAULT TRUE,
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Category taxonomy as runtime data (seeded from config/taxonomy.seed.json on first
+-- boot; editable thereafter). See docs/PLANNING_TAXONOMY_EXTERNALIZATION.md (Phase 3).
+CREATE TABLE IF NOT EXISTS taxonomy_categories (
+  code           INTEGER PRIMARY KEY,
+  label_internal TEXT NOT NULL,
+  label_external TEXT NOT NULL,
+  sort_order     INTEGER NOT NULL DEFAULT 0,
+  active         BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS taxonomy_subcategories (
+  code                    INTEGER PRIMARY KEY,
+  parent_code             INTEGER NOT NULL REFERENCES taxonomy_categories(code) ON DELETE CASCADE ON UPDATE CASCADE,
+  label_internal          TEXT NOT NULL,
+  label_external          TEXT NOT NULL,
+  sort_order              INTEGER NOT NULL DEFAULT 0,
+  active                  BOOLEAN NOT NULL DEFAULT TRUE,
+  categorizer_description TEXT,
+  intake_enabled          BOOLEAN NOT NULL DEFAULT FALSE,
+  intake_label            TEXT,
+  intake_sort_order       INTEGER,
+  aliases                 TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_taxonomy_subcategories_parent ON taxonomy_subcategories(parent_code);
 `);
 
   // Additive column migrations — safe no-ops after first run
   await execBatch(`
 ALTER TABLE item_refs ADD COLUMN IF NOT EXISTS "LastSyncedAt" TEXT;
+-- Shelf marker colour (#rrggbb) picked in the shelf notes tab; drives the box-list row accent.
+ALTER TABLE boxes ADD COLUMN IF NOT EXISTS "Color" TEXT;
 ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedAt" TEXT;
 ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedBy" TEXT;
 ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "Confidence" FLOAT;
@@ -465,6 +495,11 @@ ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "SpecContractVersion" INTEGER;
 ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "FindingsJson" TEXT;
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Scope" TEXT NOT NULL DEFAULT 'instance';
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Artikel_Nummer" TEXT;
+-- Percentage quality range (fractions 0–1) incl. sub-assemblies; NULL = nothing weighted (models/quality-score.ts)
+ALTER TABLE items ADD COLUMN IF NOT EXISTS "QualityScoreMin" REAL;
+ALTER TABLE items ADD COLUMN IF NOT EXISTS "QualityScoreMax" REAL;
+-- Grade set by hand (instance edit / "mark as spare"): recompute leaves it alone until the next assessment
+ALTER TABLE items ADD COLUMN IF NOT EXISTS "QualityManual" BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
 -- Explicit slot key for assembly relations, so it stops being overloaded onto "Notes"
 -- ("Notes" stays for genuine Zubehör relation notes). All slot writes/reads target "SlotKey".
@@ -529,6 +564,44 @@ BEGIN
 END
 $do$;
 CREATE INDEX IF NOT EXISTS idx_events_meta_gin ON events USING GIN("Meta");
+
+-- Multi-tenancy (Phase 2 — docs/PLANNING_TENANCY.md). Additive + behaviour-neutral:
+-- a tenant registry + nullable TenantId on the PRIVATE LOGISTICS tables (items/boxes/
+-- shelves/stubs/instance-quality/instance-relations/events). The SHARED CATALOGUE
+-- (item_refs/item_ref_relations/agentic_runs) stays global; item_refs gets only an
+-- optional ContributedByTenant for attribution. Nothing filters on these yet.
+CREATE TABLE IF NOT EXISTS tenants (
+  "Id"        TEXT PRIMARY KEY,
+  "Label"     TEXT,
+  "Active"    BOOLEAN NOT NULL DEFAULT TRUE,
+  "CreatedAt" TEXT
+);
+ALTER TABLE items              ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE boxes              ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE box_stubs          ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE item_relations     ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE quality_assessments ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE events             ADD COLUMN IF NOT EXISTS "TenantId" TEXT;
+ALTER TABLE item_refs          ADD COLUMN IF NOT EXISTS "ContributedByTenant" TEXT;
+CREATE INDEX IF NOT EXISTS idx_items_tenant  ON items("TenantId");
+CREATE INDEX IF NOT EXISTS idx_boxes_tenant  ON boxes("TenantId");
+CREATE INDEX IF NOT EXISTS idx_events_tenant ON events("TenantId");
+
+-- Organisations admin (docs/PLANNING_TENANCY.md §2a): the app owns org data; Authentik only users +
+-- groups, linked by group name. Sites = an org's warehouse locations (were hardcoded in
+-- models/shelf-locations.ts). Site ids are global because they are encoded in shelf ids.
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS "ContactEmail"        TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS "AuthentikGroup"      TEXT;
+ALTER TABLE tenants ADD COLUMN IF NOT EXISTS "AuthentikSuperGroup" TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tenants_authentik_group ON tenants("AuthentikGroup") WHERE "AuthentikGroup" IS NOT NULL;
+CREATE TABLE IF NOT EXISTS tenant_sites (
+  "Id"        TEXT PRIMARY KEY,
+  "TenantId"  TEXT REFERENCES tenants("Id"),
+  "Label"     TEXT NOT NULL,
+  "Floors"    JSONB NOT NULL DEFAULT '[]'::jsonb,
+  "SortOrder" INTEGER NOT NULL DEFAULT 0,
+  "CreatedAt" TEXT
+);
 `);
 
   console.info('[db] Postgres schema ready');
@@ -669,6 +742,7 @@ type ItemInstanceRow = {
   ShopwareVariantId: string | null;
   SerialNumber: string | null;
   MacAddress: string | null;
+  TenantId: string | null;
 };
 
 type ItemRefRow = {
@@ -713,7 +787,8 @@ function prepareInstanceRow(instance: ItemInstance): ItemInstanceRow {
     Quality: resolvedQuality,
     ShopwareVariantId: asNullableTrimmedString((instance as ItemInstance & { ShopwareVariantId?: string | null }).ShopwareVariantId),
     SerialNumber: asNullableTrimmedString(instance.SerialNumber),
-    MacAddress: asNullableTrimmedString(instance.MacAddress)
+    MacAddress: asNullableTrimmedString(instance.MacAddress),
+    TenantId: asNullableTrimmedString(instance.TenantId)
   };
 }
 
@@ -826,6 +901,11 @@ export const IN_DEVICE_COMPONENT_SQL =
   `SELECT 1 FROM item_relations ir_indev ` +
   `WHERE ir_indev."ChildItemUUID" = i."ItemUUID" AND ir_indev."RelationType" = 'Zerlegt_aus'))`;
 
+// Lists show a part only once it has an article: an article-less in-device part lives in its
+// device's Einzelteile tree, and in a flat list it would be a row of dashes. Parts catalogued with
+// an article (refurbishment) stay listed while in the device, as before.
+const LISTABLE_ITEM_SQL = `NOT (NULLIF(i."Artikel_Nummer", '') IS NULL AND ${IN_DEVICE_COMPONENT_SQL})`;
+
 const ITEM_JOIN_BASE = `
   FROM items i
   LEFT JOIN item_refs r ON r."Artikel_Nummer" = ${ITEM_REFERENCE_JOIN_KEY}
@@ -849,10 +929,14 @@ SELECT
   i."Datum_erfasst" AS "Datum_erfasst",
   i."Auf_Lager" AS "Auf_Lager",
   CAST(COALESCE(r."Quality", i."Quality") AS INTEGER) AS "Quality",
+  i."QualityScoreMin" AS "QualityScoreMin",
+  i."QualityScoreMax" AS "QualityScoreMax",
+  i."QualityManual" AS "QualityManual",
   i."ShopwareVariantId" AS "ShopwareVariantId",
   i."SerialNumber" AS "SerialNumber",
   i."MacAddress" AS "MacAddress",
   i."InstanceSpecs" AS "InstanceSpecs",
+  i."TenantId" AS "TenantId",
   r."Suchbegriff" AS "Suchbegriff",
   r."Grafikname" AS "Grafikname",
   r."ImageNames" AS "ImageNames",
@@ -937,9 +1021,10 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     "Artikel_Nummer", "Suchbegriff", "Grafikname", "ImageNames", "Artikelbeschreibung", "Verkaufspreis", "Kurzbeschreibung",
     "Langtext", "Hersteller", "Länge_mm", "Breite_mm", "Höhe_mm", "Gewicht_kg",
     "Hauptkategorien_A", "Unterkategorien_A", "Hauptkategorien_B", "Unterkategorien_B",
-    "Veröffentlicht_Status", "Quality", "Shopartikel", "Artikeltyp", "Einheit", "EntityType", "EAN", "ShopwareProductId"
+    "Veröffentlicht_Status", "Quality", "Shopartikel", "Artikeltyp", "Einheit", "EntityType", "EAN", "ShopwareProductId",
+    "ContributedByTenant"
   )
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
   ON CONFLICT("Artikel_Nummer") DO UPDATE SET
     "Suchbegriff"=EXCLUDED."Suchbegriff",
     "Grafikname"=EXCLUDED."Grafikname",
@@ -964,14 +1049,18 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     "Einheit"=EXCLUDED."Einheit",
     "EntityType"=EXCLUDED."EntityType",
     "EAN"=EXCLUDED."EAN",
-    "ShopwareProductId"=EXCLUDED."ShopwareProductId"
+    "ShopwareProductId"=EXCLUDED."ShopwareProductId",
+    "ContributedByTenant"=COALESCE(item_refs."ContributedByTenant", EXCLUDED."ContributedByTenant")
+  -- Tenancy safety net (lib/ownership.ts): only the owning org may overwrite an existing catalogue
+  -- entry. $27 unrestricted, $28 requester org, $29 default org (owner of unstamped rows).
+  WHERE $27 OR COALESCE(item_refs."ContributedByTenant", $29) = $28
 `;
 
 const UPSERT_ITEM_INSTANCE_SQL = `
   INSERT INTO items (
-    "ItemUUID","Artikel_Nummer","BoxID","Location","UpdatedAt","Datum_erfasst","Auf_Lager","Quality","ShopwareVariantId","SerialNumber","MacAddress"
+    "ItemUUID","Artikel_Nummer","BoxID","Location","UpdatedAt","Datum_erfasst","Auf_Lager","Quality","ShopwareVariantId","SerialNumber","MacAddress","TenantId"
   )
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
   ON CONFLICT("ItemUUID") DO UPDATE SET
     "Artikel_Nummer"=EXCLUDED."Artikel_Nummer",
     "BoxID"=EXCLUDED."BoxID",
@@ -982,26 +1071,45 @@ const UPSERT_ITEM_INSTANCE_SQL = `
     "Quality"=EXCLUDED."Quality",
     "ShopwareVariantId"=EXCLUDED."ShopwareVariantId",
     "SerialNumber"=EXCLUDED."SerialNumber",
-    "MacAddress"=EXCLUDED."MacAddress"
+    "MacAddress"=EXCLUDED."MacAddress",
+    -- Preserve the existing owner on update: an upsert must never reassign a row to another tenant.
+    -- Only fills in when the row is still unassigned (legacy/null), so ownership is set once at create.
+    "TenantId"=COALESCE(items."TenantId", EXCLUDED."TenantId")
+  -- Tenancy safety net: only the owning org may overwrite an existing item ($13 unrestricted,
+  -- $14 requester org, $15 default org).
+  WHERE $13 OR COALESCE(items."TenantId", $15) = $14
 `;
 
+// A guarded upsert that matched an existing row of another org changes nothing (0 rows); log it so a
+// write that "succeeded" without effect is diagnosable. Handlers reject such writes earlier with 403.
+function warnIfBlocked(rowCount: number, kind: string, id: unknown): void {
+  if (rowCount === 0) console.warn(`[tenancy] Blocked overwrite of another organisation's ${kind}`, { id });
+}
+
 async function upsertItemReferenceRow(row: ItemRefRow): Promise<void> {
-  await execute(UPSERT_ITEM_REFERENCE_SQL, [
+  // Tenant admins may curate any reference (§7 M2), so the reference safety net uses the ref scope.
+  const [unrestricted, requesterTenant, defaultOrg] = refWriteScopeParams();
+  const n = await execute(UPSERT_ITEM_REFERENCE_SQL, [
     row.Artikel_Nummer, row.Suchbegriff, row.Grafikname, row.ImageNames, row.Artikelbeschreibung,
     row.Verkaufspreis, row.Kurzbeschreibung, row.Langtext, row.Hersteller,
     row.Länge_mm, row.Breite_mm, row.Höhe_mm, row.Gewicht_kg,
     row.Hauptkategorien_A, row.Unterkategorien_A, row.Hauptkategorien_B, row.Unterkategorien_B,
     row.Veröffentlicht_Status, row.Quality, row.Shopartikel, row.Artikeltyp,
-    row.Einheit, row.EntityType, row.EAN, row.ShopwareProductId
+    row.Einheit, row.EntityType, row.EAN, row.ShopwareProductId,
+    requesterTenant, unrestricted, requesterTenant, defaultOrg
   ]);
+  warnIfBlocked(n, 'catalogue entry', row.Artikel_Nummer);
 }
 
 async function upsertItemInstanceRow(row: ItemInstanceRow): Promise<void> {
-  await execute(UPSERT_ITEM_INSTANCE_SQL, [
+  const [unrestricted, requesterTenant, defaultOrg] = writeScopeParams();
+  const n = await execute(UPSERT_ITEM_INSTANCE_SQL, [
     row.ItemUUID, row.Artikel_Nummer, row.BoxID, row.Location,
     row.UpdatedAt, row.Datum_erfasst, row.Auf_Lager, row.Quality,
-    row.ShopwareVariantId, row.SerialNumber, row.MacAddress
+    row.ShopwareVariantId, row.SerialNumber, row.MacAddress, row.TenantId,
+    unrestricted, requesterTenant, defaultOrg
   ]);
+  warnIfBlocked(n, 'item', row.ItemUUID);
 }
 
 async function runItemPersistenceStatements(payload: ItemPersistencePayload): Promise<void> {
@@ -1017,6 +1125,23 @@ export async function persistItemReference(ref: ItemRef): Promise<void> {
     console.error('Failed to persist item reference', { artikelNummer: ref.Artikel_Nummer, error: err });
     throw err;
   }
+}
+
+/** Live instances of a reference — the in-use guard for reference deletion (§7 M2c). */
+export async function countInstancesForReference(artikelNummer: string): Promise<number> {
+  const row = await queryOne<{ c: string }>(
+    `SELECT COUNT(*) AS c FROM items WHERE "Artikel_Nummer" = $1`, [artikelNummer]
+  );
+  return row ? parseInt(row.c, 10) || 0 : 0;
+}
+
+/**
+ * Delete a catalogue reference. Caller must enforce the in-use guard (no instances) and the
+ * tenant-admin role first; this is the raw delete. FK cascades clean up the reference's own metadata
+ * (ref relations, agentic runs, ref-scoped quality/assembly); with no instances, nothing is orphaned.
+ */
+export async function deleteItemReference(artikelNummer: string): Promise<void> {
+  await execute(`DELETE FROM item_refs WHERE "Artikel_Nummer" = $1`, [artikelNummer]);
 }
 
 export async function persistItemInstance(instance: ItemInstance): Promise<void> {
@@ -1066,8 +1191,8 @@ export async function persistItem(item: Item): Promise<void> {
 // ---------------------------------------------------------------------------
 
 const UPSERT_BOX_SQL = `
-  INSERT INTO boxes ("BoxID","LocationId","Label","CreatedAt","Notes","PhotoPath","PlacedBy","PlacedAt","UpdatedAt")
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+  INSERT INTO boxes ("BoxID","LocationId","Label","CreatedAt","Notes","PhotoPath","PlacedBy","PlacedAt","UpdatedAt","TenantId")
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
   ON CONFLICT("BoxID") DO UPDATE SET
     "LocationId"=COALESCE(EXCLUDED."LocationId", boxes."LocationId"),
     "Label"=COALESCE(EXCLUDED."Label", boxes."Label"),
@@ -1076,17 +1201,26 @@ const UPSERT_BOX_SQL = `
     "PhotoPath"=COALESCE(EXCLUDED."PhotoPath", boxes."PhotoPath"),
     "PlacedBy"=COALESCE(EXCLUDED."PlacedBy", boxes."PlacedBy"),
     "PlacedAt"=COALESCE(EXCLUDED."PlacedAt", boxes."PlacedAt"),
-    "UpdatedAt"=EXCLUDED."UpdatedAt"
+    "UpdatedAt"=EXCLUDED."UpdatedAt",
+    -- Preserve the existing owner on update: an upsert must never reassign a box to another tenant.
+    -- Only fills in when the box is still unassigned (legacy/null), so ownership is set once at create.
+    "TenantId"=COALESCE(boxes."TenantId", EXCLUDED."TenantId")
+  -- Tenancy safety net: only the owning org may overwrite an existing box ($11 unrestricted,
+  -- $12 requester org, $13 default org).
+  WHERE $11 OR COALESCE(boxes."TenantId", $13) = $12
 `;
 
 // upsertBox kept for backward-compat import shape; callers should use runUpsertBox
 export const upsertBox = {
   async run(box: Box): Promise<void> {
-    await execute(UPSERT_BOX_SQL, [
+    const [unrestricted, requesterTenant, defaultOrg] = writeScopeParams();
+    const n = await execute(UPSERT_BOX_SQL, [
       box.BoxID, box.LocationId ?? null, box.Label ?? null, box.CreatedAt ?? null,
       box.Notes ?? null, box.PhotoPath ?? null, box.PlacedBy ?? null, box.PlacedAt ?? null,
-      box.UpdatedAt
+      box.UpdatedAt, box.TenantId ?? null,
+      unrestricted, requesterTenant, defaultOrg
     ]);
+    warnIfBlocked(n, 'box', box.BoxID);
   }
 };
 
@@ -1105,11 +1239,12 @@ export async function getBox(boxId: string): Promise<Record<string, unknown> | n
   if (!row) {
     console.warn('[db] getBox returned null', { boxId });
   }
-  return row;
+  // Another org's box reads as "not found" (scan, search, deep link alike) — tenancy §2a.
+  return row && isBoxVisible(row) ? row : null;
 }
 
 export async function boxesByLocation(locationId: string): Promise<Record<string, unknown>[]> {
-  return query(`SELECT * FROM boxes WHERE "LocationId" = $1 ORDER BY "BoxID"`, [locationId]);
+  return visibleBoxRows(await query(`SELECT * FROM boxes WHERE "LocationId" = $1 ORDER BY "BoxID"`, [locationId]));
 }
 
 export interface ListBoxesHelper {
@@ -1132,14 +1267,14 @@ const LIST_BOXES_SQL = `
 `;
 
 export const listBoxes: ListBoxesHelper = {
-  all: async () => query(LIST_BOXES_SQL),
+  all: async () => visibleBoxRows(await query(LIST_BOXES_SQL)),
   byType: async (type: string) => {
     const normalized = (type ?? '').toString().trim().toUpperCase();
     if (!normalized || !/^[A-Z0-9]$/.test(normalized)) {
       console.warn('[db:listBoxes] Invalid box type filter', { type });
       return [];
     }
-    return query(
+    return visibleBoxRows(await query(
       `SELECT b.*, shelf."Label" AS "ShelfLabel",
         COUNT(DISTINCT i."ItemUUID")::int AS "ItemCount",
         COALESCE(SUM(COALESCE(i."Auf_Lager", 0) * COALESCE(r."Gewicht_kg", 0)), 0) AS "TotalWeightKg",
@@ -1153,7 +1288,7 @@ export const listBoxes: ListBoxesHelper = {
        GROUP BY b."BoxID", shelf."Label"
        ORDER BY b."BoxID"`,
       [normalized]
-    );
+    ));
   }
 };
 
@@ -1165,7 +1300,7 @@ export async function getItem(uuid: string): Promise<any> {
   const rows = await query(`${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}${ITEM_JOIN_WITH_BOX}WHERE i."ItemUUID" = $1`, [uuid]);
   const row = rows[0] ?? null;
   if (!row) return null;
-  return parseLangtextForRow(row as Record<string, unknown>, 'db:getItem');
+  return redactItemRows([parseLangtextForRow(row as Record<string, unknown>, 'db:getItem')])[0];
 }
 
 export async function getItemReference(artikelNummer: string): Promise<any> {
@@ -1192,7 +1327,7 @@ export async function findByMaterial(artikelNummer: string): Promise<any[]> {
      ORDER BY i."UpdatedAt" DESC`,
     [artikelNummer]
   );
-  return parseLangtextRows(rows as Record<string, unknown>[], 'db:findByMaterial');
+  return redactItemRows(parseLangtextRows(rows as Record<string, unknown>[], 'db:findByMaterial'));
 }
 
 export async function itemsByBox(boxId: string): Promise<any[]> {
@@ -1200,7 +1335,7 @@ export async function itemsByBox(boxId: string): Promise<any[]> {
     `${itemSelectColumns(LOCATION_WITH_BOX_FALLBACK)}${ITEM_JOIN_WITH_BOX}WHERE i."BoxID" = $1 ORDER BY i."ItemUUID"`,
     [boxId]
   );
-  return parseLangtextRows(rows as Record<string, unknown>[], 'db:itemsByBox');
+  return redactItemRows(parseLangtextRows(rows as Record<string, unknown>[], 'db:itemsByBox'));
 }
 
 export async function getAdjacentItemIds(itemUUID: string): Promise<{ previousId: string | null; nextId: string | null }> {
@@ -1222,9 +1357,10 @@ export async function listItems(): Promise<any[]> {
     ])}${ITEM_JOIN_WITH_BOX}
      LEFT JOIN agentic_runs ar ON ar."Artikel_Nummer" = NULLIF(i."Artikel_Nummer", '')
      WHERE COALESCE(i."Auf_Lager", 0) > 0
+     AND ${LISTABLE_ITEM_SQL}
      ORDER BY i."ItemUUID"`
   );
-  return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItems');
+  return redactItemRows(parseLangtextRows(rows as Record<string, unknown>[], 'db:listItems'));
 }
 
 export async function listItemsWithFilters(filters: {
@@ -1249,10 +1385,13 @@ export async function listItemsWithFilters(filters: {
      AND ($3::TEXT IS NULL OR $3 = '' OR LOWER(COALESCE(i."BoxID",'')) LIKE $3)
      AND ($4::TEXT[] IS NULL OR COALESCE(ar."Status",'notStarted') = ANY($4))
      AND ($5::INTEGER IS NULL OR $5 = 0 OR i."BoxID" IS NULL)
+     AND ${LISTABLE_ITEM_SQL}
      ORDER BY i."ItemUUID"`,
     [filters.searchTerm, filters.subcategoryFilter, filters.boxFilter, filters.agenticStatuses, filters.unplacedOnly]
   );
-  return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsWithFilters');
+  const visible = redactItemRows(parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsWithFilters'));
+  // A box filter on another org's box would reveal what is in it — only own items match by box.
+  return filters.boxFilter ? visible.filter((row: any) => !row.LocationRedacted) : visible;
 }
 
 export async function listItemReferencesWithFilters(filters: {
@@ -1349,7 +1488,7 @@ export async function listItemsForExport(filters: Partial<ListItemsForExportFilt
 
   sql += ` ORDER BY COALESCE(NULLIF(i."Artikel_Nummer",''), i."ItemUUID"), i."ItemUUID"`;
   const rows = await query(sql, params);
-  return parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsForExport');
+  return redactItemRows(parseLangtextRows(rows as Record<string, unknown>[], 'db:listItemsForExport'));
 }
 
 // ---------------------------------------------------------------------------
@@ -1736,8 +1875,9 @@ export async function listEventsForBox(boxId: string): Promise<EventLog[]> {
   return query<EventLog>(
     `SELECT * FROM events WHERE "EntityType"='Box' AND "EntityId"=$1
      AND ${levelFilterExpression()} AND ${topicFilterExpression()}
+     AND ($2 OR COALESCE((SELECT "TenantId" FROM boxes WHERE "BoxID" = $1), $4) = $3)
      ORDER BY "Id" DESC LIMIT 200`,
-    [boxId]
+    [boxId, ...writeScopeParams()]
   );
 }
 
@@ -1749,20 +1889,38 @@ export async function listEventsForItem(itemId: string, artikelNummer?: string |
     `SELECT * FROM events WHERE "EntityType"='Item'
        AND ("EntityId"=$1 OR ($2 <> '' AND "EntityId"=$2))
      AND ${levelFilterExpression()} AND ${topicFilterExpression()}
+     -- Another org's item log stays hidden: actors are people, Meta carries box ids.
+     AND ($3 OR COALESCE((SELECT "TenantId" FROM items WHERE "ItemUUID" = $1), $5) = $4)
      ORDER BY "Id" DESC LIMIT 200`,
-    [itemId, ref]
+    [itemId, ref, ...writeScopeParams()]
   );
 }
 
+// Event feeds (overview, activities page): a logged-in org member sees only events about its own
+// items and boxes — an event's actor is a person and its Meta carries box ids, so redacting fields
+// would still leak. Unknown owner (deleted item, reference-level event) counts as the default org.
+const EVENT_OWNER_JOIN = `LEFT JOIN boxes bx ON e."EntityType"='Box' AND bx."BoxID"=e."EntityId"`;
+
+/** Appends the scope params to `params` and returns the matching WHERE fragment. */
+function eventScopeClause(params: unknown[]): string {
+  const base = params.length;
+  params.push(...writeScopeParams());
+  return `($${base + 1} OR COALESCE(i."TenantId", bx."TenantId", $${base + 3}) = $${base + 2})`;
+}
+
 export async function listRecentEvents(): Promise<any[]> {
+  const params: unknown[] = [];
+  const scope = eventScopeClause(params);
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
      FROM events e
      LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
-     ORDER BY e."Id" DESC LIMIT 3`
+     ${EVENT_OWNER_JOIN}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} AND ${scope}
+     ORDER BY e."Id" DESC LIMIT 3`,
+    params
   );
 }
 
@@ -1770,13 +1928,15 @@ export async function listRecentActivities(limit: number, actor?: string): Promi
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
   const actorClause = actor ? `AND e."Actor" ILIKE $2` : '';
   const params: unknown[] = actor ? [effectiveLimit, `%${actor}%`] : [effectiveLimit];
+  const scope = eventScopeClause(params);
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
      FROM events e
      LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} ${actorClause}
+     ${EVENT_OWNER_JOIN}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} AND ${scope} ${actorClause}
      ORDER BY e."CreatedAt" DESC LIMIT $1`,
     params
   );
@@ -1786,13 +1946,15 @@ export async function listRecentActivitiesByTerm(term: string, limit: number, ac
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
   const actorClause = actor ? `AND e."Actor" ILIKE $3` : '';
   const params: unknown[] = actor ? [term, effectiveLimit, `%${actor}%`] : [term, effectiveLimit];
+  const scope = eventScopeClause(params);
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
      FROM events e
      LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
+     ${EVENT_OWNER_JOIN}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} AND ${scope}
      AND (e."EntityId" LIKE $1 OR COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") LIKE $1 OR i."BoxID" LIKE $1)
      ${actorClause}
      ORDER BY e."CreatedAt" DESC LIMIT $2`,
@@ -1804,13 +1966,15 @@ export async function listRecentActivitiesByBoxId(boxId: string, limit: number, 
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
   const actorClause = actor ? `AND e."Actor" ILIKE $3` : '';
   const params: unknown[] = actor ? [boxId, effectiveLimit, `%${actor}%`] : [boxId, effectiveLimit];
+  const scope = eventScopeClause(params);
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
      FROM events e
      LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')}
+     ${EVENT_OWNER_JOIN}
+     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} AND ${scope}
      AND (
        e."Meta" @> jsonb_build_object('from', $1::text)
        OR e."Meta" @> jsonb_build_object('to', $1::text)
@@ -1920,9 +2084,328 @@ export async function setSystemSetting(key: string, value: string): Promise<void
   );
 }
 
+// --- Taxonomy (runtime category data; see docs/PLANNING_TAXONOMY_EXTERNALIZATION.md) ---
+
+interface TaxonomyCategoryRow {
+  code: number; label_internal: string; label_external: string; sort_order: number; active: boolean;
+}
+interface TaxonomySubcategoryRow {
+  code: number; parent_code: number; label_internal: string; label_external: string;
+  sort_order: number; active: boolean; categorizer_description: string | null;
+  intake_enabled: boolean; intake_label: string | null; intake_sort_order: number | null; aliases: string | null;
+}
+
+export async function countTaxonomyCategories(): Promise<number> {
+  const row = await queryOne<{ n: number }>(`SELECT COUNT(*)::int AS n FROM taxonomy_categories`);
+  return row ? Number(row.n) : 0;
+}
+
+/** Reads the taxonomy from the DB, assembled into the nested ItemCategoryDefinition[] shape. */
+export async function readTaxonomyFromDb(): Promise<ItemCategoryDefinition[]> {
+  const cats = await query<TaxonomyCategoryRow>(
+    `SELECT * FROM taxonomy_categories ORDER BY sort_order, code`
+  );
+  const subs = await query<TaxonomySubcategoryRow>(
+    `SELECT * FROM taxonomy_subcategories ORDER BY sort_order, code`
+  );
+  const byParent = new Map<number, ItemCategoryDefinition['subcategories']>();
+  for (const s of subs) {
+    let aliases: string[] | undefined;
+    try { aliases = s.aliases ? JSON.parse(s.aliases) : undefined; } catch { aliases = undefined; }
+    const list = byParent.get(s.parent_code) ?? [];
+    list.push({
+      code: s.code,
+      label: s.label_external, // compat: consumers read .label
+      labelExternal: s.label_external,
+      labelInternal: s.label_internal,
+      parentCode: s.parent_code,
+      sortOrder: s.sort_order,
+      active: s.active,
+      categorizerDescription: s.categorizer_description ?? undefined,
+      intakeEnabled: s.intake_enabled,
+      intakeLabel: s.intake_label ?? undefined,
+      intakeSortOrder: s.intake_sort_order ?? undefined,
+      aliases
+    });
+    byParent.set(s.parent_code, list);
+  }
+  return cats.map((c) => ({
+    code: c.code,
+    label: c.label_external,
+    labelExternal: c.label_external,
+    labelInternal: c.label_internal,
+    sortOrder: c.sort_order,
+    active: c.active,
+    subcategories: byParent.get(c.code) ?? []
+  }));
+}
+
+export async function taxonomyCategoryExists(code: number): Promise<boolean> {
+  return !!(await queryOne(`SELECT 1 FROM taxonomy_categories WHERE code=$1`, [code]));
+}
+export async function taxonomySubcategoryExists(code: number): Promise<boolean> {
+  return !!(await queryOne(`SELECT 1 FROM taxonomy_subcategories WHERE code=$1`, [code]));
+}
+
+/** Count of item instances referencing a subcategory code — used to guard hard deletes. */
+export async function countItemsForSubcategory(code: number): Promise<number> {
+  const row = await queryOne<{ n: number }>(
+    `SELECT COUNT(*)::int AS n FROM items WHERE "Unterkategorien_A" = $1`, [code]
+  );
+  return row ? Number(row.n) : 0;
+}
+
+export interface TaxonomyCategoryInput {
+  code: number; labelInternal: string; labelExternal: string; sortOrder?: number; active?: boolean;
+}
+export interface TaxonomySubcategoryInput extends TaxonomyCategoryInput {
+  parentCode: number;
+  categorizerDescription?: string | null;
+  intakeEnabled?: boolean;
+  intakeLabel?: string | null;
+  intakeSortOrder?: number | null;
+  aliases?: string[] | null;
+}
+
+export async function insertTaxonomyCategory(c: TaxonomyCategoryInput): Promise<void> {
+  await execute(
+    `INSERT INTO taxonomy_categories (code, label_internal, label_external, sort_order, active)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [c.code, c.labelInternal, c.labelExternal, c.sortOrder ?? 0, c.active ?? true]
+  );
+}
+
+export async function insertTaxonomySubcategory(s: TaxonomySubcategoryInput): Promise<void> {
+  await execute(
+    `INSERT INTO taxonomy_subcategories
+       (code, parent_code, label_internal, label_external, sort_order, active,
+        categorizer_description, intake_enabled, intake_label, intake_sort_order, aliases)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [
+      s.code, s.parentCode, s.labelInternal, s.labelExternal, s.sortOrder ?? 0, s.active ?? true,
+      s.categorizerDescription ?? null, s.intakeEnabled ?? false, s.intakeLabel ?? null,
+      s.intakeSortOrder ?? null, s.aliases ? JSON.stringify(s.aliases) : null
+    ]
+  );
+}
+
+// Partial updates — `code` is immutable and never updated (nor `parent_code`: reparenting is deferred).
+export async function updateTaxonomyCategory(
+  code: number,
+  patch: Partial<Pick<TaxonomyCategoryInput, 'labelInternal' | 'labelExternal' | 'sortOrder' | 'active'>>
+): Promise<number> {
+  const sets: string[] = []; const params: unknown[] = []; let i = 1;
+  const add = (col: string, val: unknown) => { sets.push(`${col}=$${i++}`); params.push(val); };
+  if (patch.labelInternal !== undefined) add('label_internal', patch.labelInternal);
+  if (patch.labelExternal !== undefined) add('label_external', patch.labelExternal);
+  if (patch.sortOrder !== undefined) add('sort_order', patch.sortOrder);
+  if (patch.active !== undefined) add('active', patch.active);
+  if (sets.length === 0) return 0;
+  params.push(code);
+  return execute(`UPDATE taxonomy_categories SET ${sets.join(', ')} WHERE code=$${i}`, params);
+}
+
+export async function updateTaxonomySubcategory(
+  code: number,
+  patch: Partial<Omit<TaxonomySubcategoryInput, 'code' | 'parentCode'>>
+): Promise<number> {
+  const sets: string[] = []; const params: unknown[] = []; let i = 1;
+  const add = (col: string, val: unknown) => { sets.push(`${col}=$${i++}`); params.push(val); };
+  if (patch.labelInternal !== undefined) add('label_internal', patch.labelInternal);
+  if (patch.labelExternal !== undefined) add('label_external', patch.labelExternal);
+  if (patch.sortOrder !== undefined) add('sort_order', patch.sortOrder);
+  if (patch.active !== undefined) add('active', patch.active);
+  if (patch.categorizerDescription !== undefined) add('categorizer_description', patch.categorizerDescription);
+  if (patch.intakeEnabled !== undefined) add('intake_enabled', patch.intakeEnabled);
+  if (patch.intakeLabel !== undefined) add('intake_label', patch.intakeLabel);
+  if (patch.intakeSortOrder !== undefined) add('intake_sort_order', patch.intakeSortOrder);
+  if (patch.aliases !== undefined) add('aliases', patch.aliases ? JSON.stringify(patch.aliases) : null);
+  if (sets.length === 0) return 0;
+  params.push(code);
+  return execute(`UPDATE taxonomy_subcategories SET ${sets.join(', ')} WHERE code=$${i}`, params);
+}
+
+/** Inserts the given taxonomy into the (assumed-empty) tables in one transaction. Idempotent via ON CONFLICT. */
+export async function seedTaxonomy(categories: ItemCategoryDefinition[]): Promise<void> {
+  await withTransaction(async (client) => {
+    for (const c of categories) {
+      await client.query(
+        `INSERT INTO taxonomy_categories (code, label_internal, label_external, sort_order, active)
+         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (code) DO NOTHING`,
+        [c.code, c.labelInternal ?? c.label, c.labelExternal ?? c.label, c.sortOrder ?? 0, c.active ?? true]
+      );
+      for (const s of c.subcategories) {
+        await client.query(
+          `INSERT INTO taxonomy_subcategories
+             (code, parent_code, label_internal, label_external, sort_order, active,
+              categorizer_description, intake_enabled, intake_label, intake_sort_order, aliases)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (code) DO NOTHING`,
+          [
+            s.code, c.code, s.labelInternal ?? s.label, s.labelExternal ?? s.label,
+            s.sortOrder ?? 0, s.active ?? true, s.categorizerDescription ?? null,
+            s.intakeEnabled ?? false, s.intakeLabel ?? null, s.intakeSortOrder ?? null,
+            s.aliases ? JSON.stringify(s.aliases) : null
+          ]
+        );
+      }
+    }
+  });
+}
+
+// --- Tenants registry (Phase 2 — docs/PLANNING_TENANCY.md) ---
+// The app owns org data (docs/PLANNING_TENANCY.md §2a): seeded from the config map, then edited in
+// the admin page. Authentik only holds users + groups; AuthentikGroup links the two.
+export interface TenantRow {
+  Id: string;
+  Label: string | null;
+  Active: boolean;
+  CreatedAt: string | null;
+}
+
+export async function listTenants(): Promise<TenantRow[]> {
+  return query<TenantRow>(`SELECT * FROM tenants ORDER BY "Id"`);
+}
+
+export async function getTenant(id: string): Promise<TenantRow | null> {
+  return queryOne<TenantRow>(`SELECT * FROM tenants WHERE "Id" = $1`, [id]);
+}
+
+// --- Organisations admin (docs/PLANNING_TENANCY.md §2a) ---
+export interface TenantAdminRow extends TenantRow {
+  ContactEmail: string | null;
+  AuthentikGroup: string | null;
+  AuthentikSuperGroup: string | null;
+}
+
+export interface TenantSiteRow {
+  Id: string;
+  TenantId: string | null;
+  Label: string;
+  Floors: string[];
+  SortOrder: number;
+}
+
+export async function listTenantsForAdmin(): Promise<TenantAdminRow[]> {
+  return query<TenantAdminRow>(`SELECT * FROM tenants ORDER BY "Label" NULLS LAST, "Id"`);
+}
+
+export async function listTenantSites(): Promise<TenantSiteRow[]> {
+  return query<TenantSiteRow>(
+    `SELECT "Id","TenantId","Label","Floors","SortOrder" FROM tenant_sites ORDER BY "SortOrder", "Id"`
+  );
+}
+
+export async function insertTenant(t: {
+  id: string; label: string; contactEmail: string | null;
+  authentikGroup: string | null; authentikSuperGroup: string | null;
+}): Promise<void> {
+  await execute(
+    `INSERT INTO tenants ("Id","Label","Active","CreatedAt","ContactEmail","AuthentikGroup","AuthentikSuperGroup")
+     VALUES ($1,$2,TRUE,$3,$4,$5,$6)`,
+    [t.id, t.label, new Date().toISOString(), t.contactEmail, t.authentikGroup, t.authentikSuperGroup]
+  );
+}
+
+export async function updateTenant(id: string, t: {
+  label: string; active: boolean; contactEmail: string | null;
+  authentikGroup: string | null; authentikSuperGroup: string | null;
+}): Promise<number> {
+  return execute(
+    `UPDATE tenants SET "Label"=$2, "Active"=$3, "ContactEmail"=$4, "AuthentikGroup"=$5, "AuthentikSuperGroup"=$6
+     WHERE "Id"=$1`,
+    [id, t.label, t.active, t.contactEmail, t.authentikGroup, t.authentikSuperGroup]
+  );
+}
+
+/**
+ * Seeds an org from the config group map without overwriting admin edits: inserts it if missing,
+ * otherwise only fills fields that are still empty (the DB is authoritative once edited).
+ */
+export async function seedTenant(t: {
+  id: string; label: string | null; authentikGroup: string | null; authentikSuperGroup: string | null;
+}): Promise<void> {
+  await execute(
+    `INSERT INTO tenants ("Id","Label","Active","CreatedAt","AuthentikGroup","AuthentikSuperGroup")
+     VALUES ($1,$2,TRUE,$3,$4,$5)
+     ON CONFLICT ("Id") DO UPDATE SET
+       "Label" = COALESCE(tenants."Label", EXCLUDED."Label"),
+       "AuthentikGroup" = COALESCE(tenants."AuthentikGroup", EXCLUDED."AuthentikGroup"),
+       "AuthentikSuperGroup" = COALESCE(tenants."AuthentikSuperGroup", EXCLUDED."AuthentikSuperGroup")`,
+    [t.id, t.label, new Date().toISOString(), t.authentikGroup, t.authentikSuperGroup]
+  );
+}
+
+export async function countTenantSites(): Promise<number> {
+  const row = await queryOne<{ n: string }>(`SELECT COUNT(*)::text AS n FROM tenant_sites`);
+  return Number(row?.n ?? 0);
+}
+
+export async function insertTenantSite(site: {
+  id: string; tenantId: string | null; label: string; floors: string[]; sortOrder?: number;
+}): Promise<void> {
+  await execute(
+    `INSERT INTO tenant_sites ("Id","TenantId","Label","Floors","SortOrder","CreatedAt") VALUES ($1,$2,$3,$4::jsonb,$5,$6)`,
+    [site.id, site.tenantId, site.label, JSON.stringify(site.floors), site.sortOrder ?? 0, new Date().toISOString()]
+  );
+}
+
+export async function updateTenantSite(id: string, site: {
+  tenantId: string | null; label: string; floors: string[]; sortOrder?: number;
+}): Promise<number> {
+  return execute(
+    `UPDATE tenant_sites SET "TenantId"=$2, "Label"=$3, "Floors"=$4::jsonb, "SortOrder"=COALESCE($5, "SortOrder") WHERE "Id"=$1`,
+    [id, site.tenantId, site.label, JSON.stringify(site.floors), site.sortOrder ?? null]
+  );
+}
+
+export async function deleteTenantSite(id: string): Promise<number> {
+  return execute(`DELETE FROM tenant_sites WHERE "Id"=$1`, [id]);
+}
+
+/** Shelves already minted on a site (optionally one floor). Shelf ids are S-<site>-<floor>-<n>. */
+export async function countShelvesOnSite(siteId: string, floor?: string): Promise<number> {
+  const prefix = floor ? `S-${siteId}-${floor}-` : `S-${siteId}-`;
+  const row = await queryOne<{ n: string }>(
+    `SELECT COUNT(*)::text AS n FROM boxes WHERE "BoxID" LIKE $1`,
+    [prefix.replace(/[\\%_]/g, (c) => `\\${c}`) + '%']
+  );
+  return Number(row?.n ?? 0);
+}
+
+// --- Ownership lookups for the tenancy write guards (utils/write-guard.ts) ---
+// `undefined` = row not found (the handler reports that itself); otherwise the raw owner column.
+export async function getRowOwner(kind: 'item' | 'box' | 'ref', id: string): Promise<string | null | undefined> {
+  const sql = kind === 'item'
+    ? `SELECT "TenantId" AS owner FROM items WHERE "ItemUUID" = $1`
+    : kind === 'box'
+      ? `SELECT "TenantId" AS owner FROM boxes WHERE "BoxID" = $1`
+      : `SELECT "ContributedByTenant" AS owner FROM item_refs WHERE "Artikel_Nummer" = $1`;
+  const row = await queryOne<{ owner: string | null }>(sql, [id]);
+  return row ? row.owner : undefined;
+}
+
+export async function getItemOwners(itemUUIDs: string[]): Promise<Map<string, string | null>> {
+  const rows = await query<{ id: string; owner: string | null }>(
+    `SELECT "ItemUUID" AS id, "TenantId" AS owner FROM items WHERE "ItemUUID" = ANY($1::text[])`,
+    [itemUUIDs]
+  );
+  return new Map(rows.map((r) => [r.id, r.owner]));
+}
+
+export async function getRefOwners(artikelNummern: string[]): Promise<Map<string, string | null>> {
+  const rows = await query<{ id: string; owner: string | null }>(
+    `SELECT "Artikel_Nummer" AS id, "ContributedByTenant" AS owner FROM item_refs WHERE "Artikel_Nummer" = ANY($1::text[])`,
+    [artikelNummern]
+  );
+  return new Map(rows.map((r) => [r.id, r.owner]));
+}
+
 export async function listRecentBoxes(): Promise<any[]> {
   return query(
-    `SELECT "BoxID","LocationId","Label","UpdatedAt" FROM boxes ORDER BY "UpdatedAt" DESC, "BoxID" DESC LIMIT 5`
+    `SELECT "BoxID","LocationId","Label","UpdatedAt" FROM boxes
+     WHERE $1 OR COALESCE("TenantId", $3) = $2
+     ORDER BY "UpdatedAt" DESC, "BoxID" DESC LIMIT 5`,
+    writeScopeParams()
   );
 }
 
@@ -3055,6 +3538,25 @@ export async function insertQualityAssessment(assessment: QualityAssessmentInser
   return Number(row.id);
 }
 
+/**
+ * Rewrites an assessment's answers (and what is derived from them) in place — for presence answers
+ * set on the Einzelteile page, which must not add a history row per click. Reviewer/date stay those
+ * of the assessment.
+ */
+export async function updateQualityAssessmentAnswers(id: number, tag: string, value: number, checkResponse: QualityCheckResponse): Promise<void> {
+  await execute(
+    `UPDATE quality_assessments SET "tag"=$2,"value"=$3,"responses"=$4,"contract_version"=$5,"derived_specs"=$6 WHERE id=$1`,
+    [
+      id,
+      tag,
+      value,
+      JSON.stringify(checkResponse.answers),
+      JSON.stringify({ general: checkResponse.generalContractVersion, ...(checkResponse.subCategoryContractVersion !== undefined ? { subCat: checkResponse.subCategoryContractVersion } : {}) }),
+      Object.keys(checkResponse.derivedSpecs).length > 0 ? JSON.stringify(checkResponse.derivedSpecs) : null
+    ]
+  );
+}
+
 export async function getQualityAssessment(id: number): Promise<QualityAssessment | null> {
   const row = await queryOne<Record<string, unknown>>(
     `SELECT id,tag,value,is_complete,has_defects,is_functional,notes,reviewed_at,reviewed_by FROM quality_assessments WHERE id=$1`,
@@ -3075,7 +3577,8 @@ export async function getQualityAssessment(id: number): Promise<QualityAssessmen
 }
 
 export async function updateItemQualityAssessment(itemUUID: string, qualityId: number, value: number): Promise<void> {
-  await execute(`UPDATE items SET "QualityId"=$2,"Quality"=$3 WHERE "ItemUUID"=$1`, [itemUUID, qualityId, value]);
+  // A new assessment ends a manual grade override (the grade is derived again from now on).
+  await execute(`UPDATE items SET "QualityId"=$2,"Quality"=$3,"QualityManual"=FALSE WHERE "ItemUUID"=$1`, [itemUUID, qualityId, value]);
 }
 
 export async function getItemQualityResponses(itemUUID: string): Promise<{ responses: Record<string, string>; notes: string | null }> {
@@ -3144,9 +3647,10 @@ export type BoxStub = {
 };
 
 export const listStubs = {
+  // Fundsachen sit on a shelf: another org's are invisible like its shelves.
   active: async (): Promise<BoxStub[]> =>
-    query<BoxStub>(`SELECT * FROM box_stubs WHERE "IsActive" = 1 ORDER BY "CreatedAt" DESC`),
-  all: async (): Promise<BoxStub[]> => query<BoxStub>(`SELECT * FROM box_stubs ORDER BY "CreatedAt" DESC`)
+    visibleBoxRows(await query<BoxStub>(`SELECT * FROM box_stubs WHERE "IsActive" = 1 ORDER BY "CreatedAt" DESC`)),
+  all: async (): Promise<BoxStub[]> => visibleBoxRows(await query<BoxStub>(`SELECT * FROM box_stubs ORDER BY "CreatedAt" DESC`))
 };
 
 export async function createStub(params: {
@@ -3159,8 +3663,9 @@ export async function createStub(params: {
   notes: string | null;
 }): Promise<void> {
   await execute(
-    `INSERT INTO box_stubs ("Id","ShelfId","Description","NumberLooseItems","NumberLooseBoxes","CreatedAt","CreatedBy","IsActive","Notes")
-     VALUES ($1,$2,$3,$4,0,$5,$6,1,$7)`,
+    // A stub belongs to its shelf's owner.
+    `INSERT INTO box_stubs ("Id","ShelfId","Description","NumberLooseItems","NumberLooseBoxes","CreatedAt","CreatedBy","IsActive","Notes","TenantId")
+     VALUES ($1,$2,$3,$4,0,$5,$6,1,$7,(SELECT "TenantId" FROM boxes WHERE "BoxID" = $2))`,
     [params.id, params.shelfId, params.description, params.numberLooseItems, params.createdAt, params.createdBy, params.notes ?? null]
   );
 }

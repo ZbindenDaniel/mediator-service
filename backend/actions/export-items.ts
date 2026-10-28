@@ -14,6 +14,8 @@ import { MEDIA_DIR } from '../lib/media';
 import { resolvePathWithinRoot } from '../lib/path-guard';
 import { defineHttpAction } from './index';
 import { collectMediaAssets, isAllowedMediaAsset } from './save-item';
+import { resolveActor } from '../utils/actor';
+import { canSeePrivate, isUnrestricted } from '../lib/ownership';
 
 // TODO(agent): Monitor ZIP export throughput once media directories grow to validate stream backpressure handling.
 // TODO(agent): Ensure export serializer stays reusable for ERP sync actions to avoid diverging payload formats.
@@ -1393,6 +1395,7 @@ export async function stageItemsExport(options: StageItemsExportOptions): Promis
 }
 
 const action = defineHttpAction({
+  feature: 'import-export',
   key: 'export-items',
   label: 'Export items',
   appliesTo: () => false,
@@ -1400,7 +1403,7 @@ const action = defineHttpAction({
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
       const url = new URL(req.url || '', PUBLIC_ORIGIN);
-      const actor = (url.searchParams.get('actor') || '').trim();
+      const actor = resolveActor(ctx, url.searchParams.get('actor'));
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       let exportMode: ExportMode;
       let modeSource: 'default' | 'explicit';
@@ -1437,10 +1440,14 @@ const action = defineHttpAction({
       }
       const createdAfter = url.searchParams.get('createdAfter');
       const updatedAfter = url.searchParams.get('updatedAfter');
-      const items = await ctx.listItemsForExport({
+      const allItems = await ctx.listItemsForExport({
         createdAfter: createdAfter || null,
         updatedAfter: updatedAfter || null
       });
+      // An org exports its own stock; other orgs' rows would only arrive with the location blanked.
+      const items = isUnrestricted(ctx.identity)
+        ? allItems
+        : allItems.filter((row: { TenantId?: string | null }) => canSeePrivate(ctx.identity, row.TenantId));
       // Log export events without a DB transaction — logEvent uses ctx helpers, not raw SQL
       for (const row of items) {
         await ctx.logEvent({

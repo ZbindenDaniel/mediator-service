@@ -1,36 +1,11 @@
 {
-  "version": 2,
+  "version": 3,
   "subCategory": 102,
   "questions": [
     {
-      "id": "drive_type",
-      "type": "select",
-      "question": "Speichertyp?",
-      "values": ["SSD", "NVMe SSD", "HDD", "SSD + HDD"],
-      "specField": "Speichertyp",
-      "specValue": "%v"
-    },
-     {
-      "id": "storage_gb",
-      "type": "select",
-      "question": "Festplatte(n) GB?",
-      "values": ["?", "128", "256", "512", "1000", "2000"],
-      "specField": "Speicher",
-      "specValue": "%v GB"
-    },
-    {
-      "id": "ram_gb",
-      "type": "select",
-      "question": "Wie viel RAM ist verbaut?",
-      "values": ["?", "2","4", "8", "16", "24", "32", "64"],
-      "specField": "RAM",
-      "specValue": "%v GB"
-    },
-    {
       "id": "has_os",
       "type": "boolean",
-      "question": "Betriebssystem installiert?",
-      "qualityImpact": { "true": 0, "false": 0 }
+      "question": "Betriebssystem installiert?"
     },
     {
       "id": "os_installed",
@@ -50,7 +25,10 @@
       ],
       "specField": "Betriebssystem",
       "specValue": "%v",
-      "showIf": { "questionId": "has_os", "value": "true" }
+      "showIf": {
+        "questionId": "has_os",
+        "value": "true"
+      }
     }
   ]
 }

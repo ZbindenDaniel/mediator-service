@@ -52,7 +52,7 @@ function createMockResponse() {
   };
 }
 
-function createMoveBoxContext(box: { BoxID: string; LocationId?: string | null; Notes?: string | null; Label?: string | null; PhotoPath?: string | null }) {
+function createMoveBoxContext(box: { BoxID: string; LocationId?: string | null; Notes?: string | null; Label?: string | null; PhotoPath?: string | null; Color?: string | null }) {
   const logEvent = jest.fn(async () => undefined);
   const ctx = {
     getBox: jest.fn(async (id: string) => id === box.BoxID ? { ...box, PhotoPath: box.PhotoPath ?? null } : null),
@@ -86,7 +86,7 @@ describe('move-box action note updates', () => {
     await moveBoxAction.handle?.(req, res, ctx as any);
 
     expect(getStatus()).toBe(200);
-    expect(JSON.parse(getBody())).toEqual({ ok: true, photoPath: null });
+    expect(JSON.parse(getBody())).toEqual({ ok: true, photoPath: null, color: null });
 
     // Notes UPDATE was executed with trimmed notes
     expect(capturedQueryArgs.length).toBeGreaterThan(0);
@@ -128,7 +128,7 @@ describe('move-box action note updates', () => {
     await moveBoxAction.handle?.(req, res, ctx as any);
 
     expect(getStatus()).toBe(200);
-    expect(JSON.parse(getBody())).toEqual({ ok: true, photoPath: null });
+    expect(JSON.parse(getBody())).toEqual({ ok: true, photoPath: null, color: null });
 
     // UPDATE was executed with uppercased locationId
     expect(capturedQueryArgs.length).toBeGreaterThan(0);
@@ -150,5 +150,71 @@ describe('move-box action note updates', () => {
       locationId: 'B-02-03',
       notes: 'Moved note'
     });
+  });
+});
+
+describe('move-box action shelf color', () => {
+  function captureQueries(): unknown[][] {
+    const captured: unknown[][] = [];
+    dbClient.withTransaction.mockImplementationOnce(async (fn: (client: { query: jest.Mock }) => Promise<void>) => {
+      const client = {
+        query: jest.fn(async (...args: unknown[]) => {
+          captured.push(args);
+          return { rows: [] };
+        })
+      };
+      await fn(client);
+    });
+    return captured;
+  }
+
+  test('persists a normalized color from the shelf details form', async () => {
+    const { ctx } = createMoveBoxContext({ BoxID: 'S-1-1-1', LocationId: null });
+    const req = createMockRequest('/api/boxes/S-1-1-1/move', { actor: 'Tester', Label: 'Regal', notes: '', color: '#AABBCC' });
+    const { res, getStatus, getBody } = createMockResponse();
+    const captured = captureQueries();
+
+    await moveBoxAction.handle?.(req, res, ctx as any);
+
+    expect(getStatus()).toBe(200);
+    expect(JSON.parse(getBody())).toMatchObject({ ok: true, color: '#aabbcc' });
+    const [sql, params] = captured[0] as [string, unknown[]];
+    expect(sql).toContain('"Color"=');
+    expect(params).toContain('#aabbcc');
+  });
+
+  test('keeps the existing color when the payload omits it', async () => {
+    const { ctx } = createMoveBoxContext({ BoxID: 'S-1-1-2', LocationId: null, Color: '#112233' });
+    const req = createMockRequest('/api/boxes/S-1-1-2/move', { actor: 'Tester', notes: 'only notes' });
+    const { res, getStatus } = createMockResponse();
+    const captured = captureQueries();
+
+    await moveBoxAction.handle?.(req, res, ctx as any);
+
+    expect(getStatus()).toBe(200);
+    expect((captured[0] as [string, unknown[]])[1]).toContain('#112233');
+  });
+
+  test('clears the color on empty string', async () => {
+    const { ctx } = createMoveBoxContext({ BoxID: 'S-1-1-3', LocationId: null, Color: '#112233' });
+    const req = createMockRequest('/api/boxes/S-1-1-3/move', { actor: 'Tester', notes: '', color: '' });
+    const { res, getBody } = createMockResponse();
+    const captured = captureQueries();
+
+    await moveBoxAction.handle?.(req, res, ctx as any);
+
+    expect(JSON.parse(getBody())).toMatchObject({ ok: true, color: null });
+    expect((captured[0] as [string, unknown[]])[1]).not.toContain('#112233');
+  });
+
+  test('rejects anything that is not #rrggbb', async () => {
+    const { ctx } = createMoveBoxContext({ BoxID: 'S-1-1-4', LocationId: null });
+    const req = createMockRequest('/api/boxes/S-1-1-4/move', { actor: 'Tester', color: 'red; background:url(x)' });
+    const { res, getStatus } = createMockResponse();
+
+    await moveBoxAction.handle?.(req, res, ctx as any);
+
+    expect(getStatus()).toBe(400);
+    expect(dbClient.withTransaction).not.toHaveBeenCalled();
   });
 });

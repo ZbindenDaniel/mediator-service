@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "subCategory": 2127,
+  "fields": [
+    {
+      "key": "Prozessor",
+      "required": true,
+      "description": "Prozessor"
+    },
+    {
+      "key": "Schnittstellen",
+      "required": true,
+      "description": "Bus interface (e.g. PCIe 4.0 x16)"
+    },
+    {
+      "key": "RAM-Slots",
+      "required": false,
+      "description": "number of Ram Slots (e.g. 1, 2, 4)"
+    },
+    {
+      "key": "RAM-Kapazität",
+      "required": false,
+      "description": "max. RAM (e.g. 16GB)"
+    },
+    {
+      "key": "RAM-Typ",
+      "required": false,
+      "description": "Type of RAM (DDR3, DDR4, DDR5)"
+    },
+    {
+      "key": "Karten-Slots",
+      "required": false,
+      "description": ""
+    },
+    {
+      "key": "CPU verlötet",
+      "required": false,
+      "description": "ja / nein (BGA)"
+    },
+    {
+      "key": "Grafik",
+      "required": false,
+      "description": "UMA / dediziert (Modell)"
+    },
+    {
+      "key": "FRU",
+      "required": false,
+      "description": "Manufacturer part number (FRU / P/N / Spare part no.), e.g. 01YR564"
+    },
+    {
+      "key": "Kompatible Modelle",
+      "required": false,
+      "description": "Device models this part fits, comma-separated, e.g. ThinkPad T480, T480s"
+    }
+  ]
+}

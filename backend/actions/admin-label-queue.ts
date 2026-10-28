@@ -9,6 +9,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'printing',
   key: 'admin-label-queue',
   label: 'Admin: label queue',
   appliesTo: () => false,

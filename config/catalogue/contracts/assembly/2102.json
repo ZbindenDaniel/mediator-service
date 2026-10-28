@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "subCategory": 2102,
+  "parts": [
+    {
+      "key": "keyboard",
+      "label": "Tastatur",
+      "targetSubcategory": 2104,
+      "weight": 5,
+      "question": {
+        "id": "part_keyboard",
+        "type": "select",
+        "question": "Tastatur?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "touchpad",
+      "label": "Touchpad",
+      "targetSubcategory": 2112,
+      "weight": 3,
+      "question": {
+        "id": "part_touchpad",
+        "type": "select",
+        "question": "Touchpad?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "fingerprint",
+      "label": "Fingerabdrucksensor",
+      "targetSubcategory": 2113,
+      "weight": 1,
+      "question": {
+        "id": "part_fingerprint",
+        "type": "select",
+        "question": "Fingerabdrucksensor?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    },
+    {
+      "key": "power_button",
+      "label": "Einschaltknopf",
+      "targetSubcategory": 2114,
+      "weight": 2,
+      "question": {
+        "id": "part_power_button",
+        "type": "select",
+        "question": "Einschaltknopf?",
+        "values": [
+          "Vorhanden",
+          "Nicht vorhanden",
+          "Nicht vorgesehen",
+          "Fest verbaut"
+        ]
+      }
+    }
+  ]
+}

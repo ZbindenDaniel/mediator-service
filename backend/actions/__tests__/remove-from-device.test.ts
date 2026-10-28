@@ -17,9 +17,17 @@ jest.mock('../../db', () => ({
   generateShopwareCorrelationId: jest.fn(() => 'corr-remove-123'),
 }));
 
+// The score is derived data with its own tests; here only the slot subcategory (R5 guard) matters.
+jest.mock('../../lib/quality-score', () => ({
+  resolveEffectiveSubCategory: jest.fn(async () => null),
+  recomputeQualityScoreSafely: jest.fn(async () => undefined),
+}));
+
 import action from '../remove-from-device';
+import * as qualityScore from '../../lib/quality-score';
 import * as dbClient from '../../db-client';
 import * as db from '../../db';
+import * as parentSlot from '../../lib/parent-slot';
 
 const mockQueryOne = dbClient.queryOne as jest.Mock;
 const mockExecute = dbClient.execute as jest.Mock;
@@ -143,7 +151,7 @@ describe('remove-from-device action', () => {
       expect(meta.childItemUUID).toBe('FAN-001');
     });
 
-    it('marks parent device as Ersatzteil via quality assessment', async () => {
+    it('marks parent device as Ersatzteil (manual grade 1) when the slot is unweighted', async () => {
       const ctx = makeCtx();
       const req = makeRequest('/api/items/FAN-001/remove-from-device', 'POST', {
         actor: 'alice',
@@ -153,13 +161,12 @@ describe('remove-from-device action', () => {
 
       await action.handle(req, res, ctx);
 
-      expect(mockInsertQA).toHaveBeenCalledWith(expect.objectContaining({
-        tag: 'Ersatzteil',
-        value: 1,
-        is_functional: false,
-        reviewed_by: 'alice',
-      }));
-      expect(mockUpdateQA).toHaveBeenCalledWith('P-001', 42, 1);
+      // Grade 1 is now a manual override, so the parent's previous answers are no longer wiped.
+      expect(mockExecute).toHaveBeenCalledWith(
+        expect.stringContaining('"QualityManual" = TRUE'),
+        ['P-001']
+      );
+      expect(mockInsertQA).not.toHaveBeenCalledWith(expect.objectContaining({ notes: 'Ersatzteil entnommen' }));
     });
 
     it('enqueues Shopware sync for parent device', async () => {
@@ -287,10 +294,8 @@ describe('remove-from-device action', () => {
     }
 
     function makeGradCtx(overrides: Record<string, any> = {}) {
-      // getItem returns the component for its own id, null for freshly minted candidates.
       return makeCtx({
         getItem: jest.fn(async (id: string) => (id === 'C-comp1' ? component : null)),
-        generateItemUUID: jest.fn(async () => 'I-000042-0001'),
         getMaxArtikelNummer: jest.fn(async () => '000041'),
         ...overrides,
       });
@@ -303,7 +308,7 @@ describe('remove-from-device action', () => {
       mockWithTransaction.mockImplementation(async (fn: any) => fn({}));
     });
 
-    it('sets identity, re-keys to the I- UUID, and returns the new id', async () => {
+    it('sets identity and keeps the component\'s ItemUUID', async () => {
       const ctx = makeGradCtx();
       const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', {
         actor: 'alice',
@@ -315,10 +320,11 @@ describe('remove-from-device action', () => {
       await action.handle(req, res, ctx);
 
       expect(getStatus()).toBe(200);
-      expect(getBody().itemUUID).toBe('I-000042-0001');
+      expect(getBody().itemUUID).toBe('C-comp1');
       const gradEvent = ctx.logEvent.mock.calls.find((c: any[]) => c[0].Event === 'ComponentGraduated');
       expect(gradEvent).toBeDefined();
-      expect(JSON.parse(gradEvent[0].Meta).previousUuid).toBe('C-comp1');
+      expect(gradEvent[0].EntityId).toBe('C-comp1');
+      expect(JSON.parse(gradEvent[0].Meta).artikelNummer).toBe('000042');
     });
 
     it('rejects graduation without an artikelNummer or newRef', async () => {
@@ -352,6 +358,72 @@ describe('remove-from-device action', () => {
         expect.stringContaining('INSERT INTO item_refs'),
         expect.arrayContaining(['000042', 'Samsung SSD 256GB'])
       );
+    });
+
+    it('stores specs given with a new reference (e.g. the FRU read off the part)', async () => {
+      const ctx = makeGradCtx();
+      const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', {
+        actor: 'alice',
+        toBoxId: 'B-042',
+        newRef: { Artikelbeschreibung: 'Akku · T480', Langtext: { FRU: '01AV431', Leer: ' ' } },
+      });
+      const { res, getStatus } = createMockResponse();
+      await action.handle(req, res, ctx);
+      expect(getStatus()).toBe(200);
+      const insert = mockExecute.mock.calls.find((c: any[]) => String(c[0]).includes('INSERT INTO item_refs'))!;
+      expect(insert[1]).toContain(JSON.stringify({ FRU: '01AV431' }));
+    });
+
+    it('refuses a built-in ("Fest verbaut") part', async () => {
+      const spy = jest.spyOn(parentSlot, 'isIntegratedSlot').mockResolvedValue(true);
+      const ctx = makeGradCtx();
+      const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', { actor: 'alice', toBoxId: 'B-042', artikelNummer: '000042' });
+      const { res, getStatus, getBody } = createMockResponse();
+      await action.handle(req, res, ctx);
+      expect(getStatus()).toBe(409);
+      expect(getBody().error).toMatch(/fest verbaut/);
+      spy.mockRestore();
+    });
+
+    describe('subcategory guard (R5)', () => {
+      const mockResolveSub = qualityScore.resolveEffectiveSubCategory as jest.Mock;
+      beforeEach(() => {
+        // The component sits in a webcam slot (target 2109); the chosen ref is a drive (901).
+        mockResolveSub.mockImplementation(async (id: string) => (id === 'C-comp1' ? 2109 : null));
+        mockQueryOne.mockImplementation(async (sql: string) =>
+          sql.includes('FROM item_refs') ? { Artikel_Nummer: '000042', Unterkategorien_A: '901' } : { ParentItemUUID: 'P-001' });
+      });
+      afterEach(() => { mockResolveSub.mockImplementation(async () => null); });
+
+      it('refuses a ref of another subcategory than the slot with 409', async () => {
+        const ctx = makeGradCtx();
+        const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', { actor: 'alice', toBoxId: 'B-042', artikelNummer: '000042' });
+        const { res, getStatus, getBody } = createMockResponse();
+        await action.handle(req, res, ctx);
+        expect(getStatus()).toBe(409);
+        expect(getBody()).toMatchObject({ slotSubCategory: 2109, refSubCategory: 901 });
+      });
+
+      it('accepts it with confirmSubCategoryChange', async () => {
+        const ctx = makeGradCtx();
+        const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', {
+          actor: 'alice', toBoxId: 'B-042', artikelNummer: '000042', confirmSubCategoryChange: true
+        });
+        const { res, getStatus } = createMockResponse();
+        await action.handle(req, res, ctx);
+        expect(getStatus()).toBe(200);
+      });
+
+      it('prefills a new ref with the slot subcategory', async () => {
+        const ctx = makeGradCtx();
+        const req = makeRequest('/api/items/C-comp1/remove-from-device', 'POST', {
+          actor: 'alice', toBoxId: 'B-042', newRef: { Artikelbeschreibung: 'Lenovo 720p Webcam' }
+        });
+        const { res, getStatus } = createMockResponse();
+        await action.handle(req, res, ctx);
+        expect(getStatus()).toBe(200);
+        expect(mockExecute).toHaveBeenCalledWith(expect.stringContaining('INSERT INTO item_refs'), expect.arrayContaining(['Lenovo 720p Webcam', 2109]));
+      });
     });
   });
 });

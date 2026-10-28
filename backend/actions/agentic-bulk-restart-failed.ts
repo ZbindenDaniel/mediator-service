@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { query } from '../db-client';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -8,6 +9,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-bulk-restart-failed',
   label: 'Agentic bulk restart failed',
   appliesTo: () => false,
@@ -29,6 +31,7 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'Invalid JSON body' });
       }
     }
+    actor = resolveActor(ctx, actor);
 
     if (!actor) {
       return sendJson(res, 400, { error: 'actor is required' });

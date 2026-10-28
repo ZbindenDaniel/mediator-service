@@ -3,7 +3,9 @@ import { Link, useNavigate } from 'react-router-dom';
 import { getUser, setUser as persistUser } from '../lib/user';
 import { getSimpleMode, setSimpleMode } from '../lib/simpleMode';
 import UserSettingsDialog from './UserSettingsDialog';
-import { GoArchive, GoListUnordered, GoPlus, GoLog, GoSearch, GoGift, GoHash, GoTools, GoQuestion } from 'react-icons/go';
+import { useIdentity } from '../context/IdentityContext';
+import { Feature } from '../context/FeaturesContext';
+import { GoArchive, GoListUnordered, GoPlus, GoLog, GoSearch, GoGift, GoHash, GoTools, GoQuestion, GoPerson, GoChevronDown } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 import type { Item } from '../../../models';
@@ -34,6 +36,9 @@ export default function Header() {
   const searchFormRef = useRef<HTMLFormElement | null>(null);
   const [user, setUserState] = useState(() => getUser().trim());
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const identity = useIdentity();
+  // Without a login (Basic Auth) the admin page keeps its own password gate, so the link stays.
+  const showAdminLink = !identity.authenticated || identity.isPlatformAdmin;
   const [navOpen, setNavOpen] = useState(false);
   const navRef = useRef<HTMLDivElement | null>(null);
 
@@ -138,7 +143,7 @@ export default function Header() {
     }
   }, [navigate, setEntity]);
 
-  const handleUserDoubleClick = useCallback(() => {
+  const handleUserClick = useCallback(() => {
     setSettingsOpen(true);
   }, []);
 
@@ -188,18 +193,26 @@ export default function Header() {
             <Link to="/boxes" className="simple-keep" aria-label="Behälter" title="Behälterliste" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
               <GoArchive aria-hidden="true" />
             </Link>
-            <Link to="/activities" className="simple-keep" aria-label="Aktivitäten" title="Aktivitäten" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
-              <GoLog aria-hidden="true" />
-            </Link>
-            <Link to="/stubs" aria-label="Fundsachen" title="Fundsachen" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
-              <GoGift aria-hidden="true" />
-            </Link>
-            <Link to="/admin" aria-label="Administration" title="Administration" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
-              <GoTools aria-hidden="true" />
-            </Link>
-            <Link to="/hilfe" className="simple-keep" aria-label="Hilfe" title="Hilfe" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
-              <GoQuestion aria-hidden="true" />
-            </Link>
+            <Feature name="logs">
+              <Link to="/activities" className="simple-keep" aria-label="Aktivitäten" title="Aktivitäten" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+                <GoLog aria-hidden="true" />
+              </Link>
+            </Feature>
+            <Feature name="stubs">
+              <Link to="/stubs" aria-label="Fundsachen" title="Fundsachen" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+                <GoGift aria-hidden="true" />
+              </Link>
+            </Feature>
+            {showAdminLink && (
+              <Link to="/admin" aria-label="Administration" title="Administration" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+                <GoTools aria-hidden="true" />
+              </Link>
+            )}
+            <Feature name="help">
+              <Link to="/hilfe" className="simple-keep" aria-label="Hilfe" title="Hilfe" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
+                <GoQuestion aria-hidden="true" />
+              </Link>
+            </Feature>
             <QrScanButton callback="NavigateToEntity" className="header-nav__icon-btn simple-keep" label="QR-Code scannen" />
           </div>
           <form
@@ -263,14 +276,20 @@ export default function Header() {
         </nav>
       </div>
       <div className="right">
-        <div
-          className="user"
-          onDoubleClick={handleUserDoubleClick}
-          title="Doppelklicken zum Bearbeiten des Benutzernamens"
-          aria-label="Benutzername, doppelklicken zum Bearbeiten"
+        {/* A real button on single click: the double-click <div> was invisible as a control and
+            unreachable by keyboard, but it's the only way to settings, theme and logout. */}
+        <button
+          type="button"
+          className="header-user"
+          onClick={handleUserClick}
+          aria-haspopup="dialog"
+          aria-expanded={settingsOpen}
+          title="Benutzereinstellungen"
         >
-          {user}
-        </div>
+          <GoPerson aria-hidden="true" />
+          <span className="header-user__name">{user || 'Benutzer'}</span>
+          <GoChevronDown aria-hidden="true" className="header-user__chevron" />
+        </button>
       </div>
       {settingsOpen && (
         <UserSettingsDialog

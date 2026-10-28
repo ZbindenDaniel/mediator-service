@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "subCategory": 2115,
+  "fields": [
+    {
+      "key": "Funktion",
+      "required": true,
+      "description": "USB, Audio, Kartenleser, LAN, Power …"
+    },
+    {
+      "key": "Anschlüsse",
+      "required": false,
+      "description": "Ports on the board"
+    },
+    {
+      "key": "FRU",
+      "required": false,
+      "description": "Manufacturer part number (FRU / P/N / Spare part no.), e.g. 01YR564"
+    },
+    {
+      "key": "Kompatible Modelle",
+      "required": false,
+      "description": "Device models this part fits, comma-separated, e.g. ThinkPad T480, T480s"
+    }
+  ]
+}

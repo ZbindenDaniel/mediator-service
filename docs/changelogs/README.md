@@ -20,9 +20,10 @@ Topic-based changelogs — one file per major domain. Each entry records what ch
 
 ## Entry format
 
+New entries go at the top (after the header). The number matches the `OVERVIEW.md` one-liner.
+
 ```
-## <entry number>. <one-line summary>
-**Date:** YYYY-MM-DD
+## <N>. ✅ <one-line summary>
 **Why:** reason for this approach — what problem it solves or what alternative was rejected
 **Deferred:** what was explicitly not done and why — or "nothing deferred"
 ```

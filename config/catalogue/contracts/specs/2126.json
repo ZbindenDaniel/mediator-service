@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "subCategory": 2126,
+  "fields": [
+    {
+      "key": "Kabeltyp",
+      "required": true,
+      "description": "Displaykabel, Festplattenkabel, Laufwerkskabel, Flachbandkabel …"
+    },
+    {
+      "key": "Anschluss",
+      "required": false,
+      "description": "Connector type / pins, e.g. eDP 30-pin"
+    },
+    {
+      "key": "FRU",
+      "required": false,
+      "description": "Manufacturer part number (FRU / P/N / Spare part no.), e.g. 01YR564"
+    },
+    {
+      "key": "Kompatible Modelle",
+      "required": false,
+      "description": "Device models this part fits, comma-separated, e.g. ThinkPad T480, T480s"
+    }
+  ]
+}

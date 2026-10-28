@@ -96,5 +96,62 @@ describe('search action', () => {
         exemplarLocation: 'Shelf-1'
       })
     );
+    expect(body.relaxed).toBe(false);
+  });
+
+  // The 50 % token rule lives in JS now (SQL only requires one hit) so that a term nobody
+  // clears still yields the best weaker matches instead of an empty list.
+  describe('token threshold relaxation', () => {
+    const ref = (num: string, desc: string, tokenHits: number) => ({
+      Artikel_Nummer: num, Artikelbeschreibung: desc, Kurzbeschreibung: desc, Langtext: '', Hersteller: 'Intel',
+      token_hits: tokenHits, exact_match: 0, sql_score: tokenHits / 5,
+      exemplar_item_uuid: null, exemplar_box_id: null, exemplar_location: null
+    });
+
+    it('asks SQL for any-hit rows and keeps only rows reaching 50 % when some do', async () => {
+      // 4 tokens → needs 2. One ref reaches it, one does not → strict set only.
+      mockQuery.mockResolvedValue([ref('A', 'Intel NUC 8', 2), ref('B', 'Intel Core i5 CPU', 1)]);
+      const req = createRequest('/api/search?term=intel%20nuc%20kit%20nuc8&scope=refs');
+      const { res, getBody } = createMockResponse();
+      await action.handle(req, res, {});
+      const body = getBody();
+      expect(body.items.map((r: any) => r.Artikel_Nummer)).toEqual(['A']);
+      expect(body.relaxed).toBe(false);
+      // The WHERE threshold is the last positional param of the refs query — always 1 now.
+      const params = mockQuery.mock.calls[0][1] as unknown[];
+      expect(params[params.length - 1]).toBe(1);
+    });
+
+    it('falls back to the best weaker matches and flags relaxed when nobody reaches 50 %', async () => {
+      // "Intel(R) Client Systems intel nuc" = 5 tokens → needs 3; both refs only hit 2 / 1.
+      mockQuery.mockResolvedValue([ref('A', 'Intel NUC 8', 2), ref('B', 'Intel Core i5 CPU', 1)]);
+      const req = createRequest('/api/search?term=Intel(R)%20Client%20Systems%20intel%20nuc&scope=refs');
+      const { res, getBody } = createMockResponse();
+      await action.handle(req, res, {});
+      const body = getBody();
+      expect(body.items.map((r: any) => r.Artikel_Nummer)).toEqual(['A', 'B']);
+      expect(body.relaxed).toBe(true);
+    });
+
+    it('relaxes item + box results the same way', async () => {
+      const item = { ItemUUID: 'I-1', Artikel_Nummer: 'A', Artikelbeschreibung: 'Intel NUC 8', Einheit: 'Stück', Auf_Lager: 1, token_hits: 1, exact_match: 0, sql_score: 0.2 };
+      const box = { BoxID: 'B-1', Label: 'NUC shelf', token_hits: 1, exact_match: 0, sql_score: 0.2 };
+      mockQuery.mockResolvedValueOnce([item]).mockResolvedValueOnce([box]);
+      const req = createRequest('/api/search?term=Intel(R)%20Client%20Systems%20intel%20nuc');
+      const { res, getBody } = createMockResponse();
+      await action.handle(req, res, {});
+      const body = getBody();
+      expect(body.items.map((r: any) => r.ItemUUID)).toEqual(['I-1']);
+      expect(body.boxes.map((b: any) => b.BoxID)).toEqual(['B-1']);
+      expect(body.relaxed).toBe(true);
+    });
+
+    it('still returns nothing when there is no hit at all', async () => {
+      const req = createRequest('/api/search?term=zzz&scope=refs');
+      const { res, getBody } = createMockResponse();
+      await action.handle(req, res, {});
+      expect(getBody().items).toEqual([]);
+      expect(getBody().relaxed).toBe(false);
+    });
   });
 });

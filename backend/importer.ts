@@ -891,7 +891,37 @@ function mintArtikelNummerFromState(state: ArtikelNummerMintState): string {
   return String(nextValue).padStart(ARTIKEL_NUMMER_WIDTH, '0');
 }
 
-function parseDatumErfasst(rawValue: string | null | undefined): Date | undefined {
+// Kivitendo exports wall-clock times without a zone; the ERP runs in Zurich. Parsing them as
+// server-local time made the result depend on the host (UTC container vs. CEST dev machine).
+const ERP_TIME_ZONE = 'Europe/Zurich';
+const erpZoneFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: ERP_TIME_ZONE,
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+});
+
+function erpZoneOffsetMs(utcMs: number): number {
+  const parts: Record<string, number> = {};
+  for (const part of erpZoneFormatter.formatToParts(new Date(utcMs))) {
+    if (part.type !== 'literal') parts[part.type] = Number.parseInt(part.value, 10);
+  }
+  const wall = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return wall - Math.floor(utcMs / 1000) * 1000;
+}
+
+function erpWallTimeToDate(year: number, month: number, day: number, hour: number, minute: number, second: number, ms = 0): Date {
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute, second, ms);
+  // Second pass settles the offset when the first guess lands on the other side of a DST switch.
+  const first = asUtc - erpZoneOffsetMs(asUtc);
+  return new Date(asUtc - erpZoneOffsetMs(first));
+}
+
+export function parseDatumErfasst(rawValue: string | null | undefined): Date | undefined {
   if (rawValue === null || rawValue === undefined) {
     return undefined;
   }
@@ -902,9 +932,12 @@ function parseDatumErfasst(rawValue: string | null | undefined): Date | undefine
   }
 
   try {
-    const isoCandidate = new Date(trimmed);
-    if (!Number.isNaN(isoCandidate.getTime())) {
-      return isoCandidate;
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?$/);
+    if (isoMatch) {
+      const [, y, mo, d, h, mi, sec, frac] = isoMatch;
+      const ms = frac ? Number.parseInt(frac.padEnd(3, '0'), 10) : 0;
+      const zoned = erpWallTimeToDate(Number(y), Number(mo), Number(d), Number(h), Number(mi), sec ? Number(sec) : 0, ms);
+      if (!Number.isNaN(zoned.getTime())) return zoned;
     }
 
     const localizedMatch = trimmed.match(
@@ -920,11 +953,21 @@ function parseDatumErfasst(rawValue: string | null | undefined): Date | undefine
       const minute = minuteStr ? Number.parseInt(minuteStr, 10) : 0;
       const second = secondStr ? Number.parseInt(secondStr, 10) : 0;
 
-      const normalized = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+      // A date without a time stays UTC midnight (like ISO "2024-01-31"): no time of day to place, and
+      // UTC midnight shows the same calendar day in UTC and in Zurich.
+      const normalized = hourStr
+        ? erpWallTimeToDate(year, month, day, hour, minute, second)
+        : new Date(Date.UTC(year, month - 1, day));
 
       if (!Number.isNaN(normalized.getTime())) {
         return normalized;
       }
+    }
+
+    // Zoned ISO strings ("…Z", "…+02:00") and plain dates.
+    const isoCandidate = new Date(trimmed);
+    if (!Number.isNaN(isoCandidate.getTime())) {
+      return isoCandidate;
     }
 
     console.warn('CSV ingestion: failed to normalize Datum erfasst value', { value: trimmed });

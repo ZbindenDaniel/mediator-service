@@ -1,6 +1,7 @@
 // TODO(agent): add action tests.
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -8,6 +9,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'qr-scan',
   key: 'qr-scan',
   label: 'QR scan audit log',
   appliesTo: () => false,
@@ -38,7 +40,7 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'payload.id is required' });
       }
 
-      const actor = typeof data.actor === 'string' ? data.actor.trim() : null;
+      const actor = resolveActor(ctx, typeof data.actor === 'string' ? data.actor : '') || null;
       const scannedAt = typeof data.scannedAt === 'string' && data.scannedAt
         ? data.scannedAt
         : new Date().toISOString();

@@ -7,15 +7,16 @@ import { ItemEinheit, normalizeItemEinheit } from '../../models';
 import {
   canonicalizeCategoryLabel,
   getCategoryLabelFromCode,
-  getSubcategoryLabelFromCode,
-  itemCategories
+  getSubcategoryLabelFromCode
 } from '../../models';
+import { getItemCategories } from '../lib/taxonomy';
 import type { BoxLabelPayload, ItemLabelPayload, MarketingSheetPayload, ShelfLabelPayload } from '../lib/labelHtml';
 import { htmlForMarketingSheet, htmlForSmallItem } from '../lib/labelHtml';
 import { calculateCo2Impact } from '../lib/co2Calculator';
 import type { PrintFileResult, PrintLabelType } from '../print';
 import { resolvePrinterQueue } from '../print';
 import { buildItemCategoryLookups } from '../../models/item-category-lookups';
+import { resolveActor } from '../utils/actor';
 
 const LABEL_TEMPLATES: Record<PrintLabelType, string> = {
   box: '62x100',
@@ -76,7 +77,7 @@ function logUnexpectedTemplateQuery(
 
 const shelfCategoryLookup = new Map<string, string>();
 try {
-  for (const category of itemCategories) {
+  for (const category of getItemCategories()) {
     const canonicalLabel = canonicalizeCategoryLabel(category.label).toUpperCase();
     if (!shelfCategoryLookup.has(canonicalLabel)) {
       shelfCategoryLookup.set(canonicalLabel, category.label);
@@ -359,10 +360,7 @@ export async function handleUnifiedPrintRequest(
           return sendJson(res, 400, { error: 'invalid label type' });
         }
       }
-      if (typeof payload.actor !== 'string') {
-        return sendJson(res, 400, { error: 'actor required' });
-      }
-      actor = payload.actor.trim();
+      actor = resolveActor(ctx, typeof payload.actor === 'string' ? payload.actor : '');
       if (!actor) {
         return sendJson(res, 400, { error: 'actor required' });
       }
@@ -520,6 +518,7 @@ export async function handleUnifiedPrintRequest(
 }
 
 const action = defineHttpAction({
+  feature: 'printing',
   key: 'print-unified',
   label: 'Print label (unified)',
   appliesTo: () => false,

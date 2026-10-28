@@ -1,11 +1,5 @@
 # Box Stubs
 
-> [!NOTE]
-> **Authoring rules**
-> - Prefer links over duplicated schema definitions.
-> - Keep each section short and contract-focused.
-> - See `docs/PLANNING_STUB_BOXES.md` for the original phase plan and roadmap context.
-
 ## In short
 - Business goal: Let warehouse workers record the existence of uncatalogued goods (boxes, loose items) on a shelf without requiring full cataloguing on the spot.
 - User value: Operators get a lightweight triage list — stub descriptions and shelf locations — to plan transport and prioritise intake.
@@ -15,9 +9,9 @@
   - `box_stubs` DB table and model.
   - List (`GET /api/boxes/stubs`) and create (`POST /api/boxes/stubs`) API endpoints.
   - Shelf detail "Stubs" tab: lists existing stubs + inline creation form.
+  - `/stubs` page (`StubListPage.tsx`) listing all open stubs; closing a stub via `close-stub`.
 - Out of scope / deferred:
-  - Stub resolution (marking a stub inactive at transport time) — tracked in planning doc.
-  - Dedicated stub management page grouped by shelf.
+  - Automatic stub resolution at transport completion — see [plans/transport-boxes.md](../plans/transport-boxes.md).
   - Transport creation pre-filled from stub (`SourceId = stub.ShelfId`) — see transport planning doc.
   - Photo thumbnails on stubs (`PhotoPath` column reserved in schema).
 
@@ -28,7 +22,7 @@
 - **LooseItemCount / BoxCount**: optional rough counts to help transport planning.
 
 ## Data contracts
-- Canonical model: `models/stub.ts` (or inlined in `backend/db.ts` stub helpers).
+- Canonical model: stub helpers in `backend/db.ts` (no shared model file).
 - DB table: `box_stubs` — columns include `Id`, `ShelfId`, `Description`, `LooseItemCount`, `BoxCount`, `CreatedAt`, `CreatedBy`, `PhotoPath` (reserved, nullable), `IsActive`.
 - Key fields:
   - `ShelfId`: FK reference to `boxes.BoxID` where the shelf `S-` prefix is enforced.
@@ -65,4 +59,3 @@
 ## Open questions / TODO
 - [ ] Stub resolution flow (mark `IsActive = 0` at transport completion — see transport planning doc).
 - [ ] `PhotoPath` attachment — deferred until shelf-photo requirements are clearer.
-- [ ] Dedicated stub management page grouped by shelf with color distinction.

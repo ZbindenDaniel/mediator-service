@@ -8,6 +8,7 @@ import QrScanButton from './QrScanButton';
 import RelocateBoxCard from './RelocateBoxCard';
 import AddItemToBoxDialog from './AddItemToBoxDialog';
 import type { Box, Item, EventLog, BoxDetailResponse } from '../../../models';
+import { BOX_COLORS } from '../../../models';
 import { formatDateTime } from '../lib/format';
 import { groupItemsForDisplay } from '../lib/itemGrouping';
 import { ensureUser } from '../lib/user';
@@ -18,6 +19,8 @@ import LocationTag from './LocationTag';
 import { dialogService } from './dialog';
 import LoadingPage from './LoadingPage';
 import QualityBadge from './QualityBadge';
+import { useFeatures } from '../context/FeaturesContext';
+import { BOX_TAB_FEATURES, resolveTab } from '../lib/tabFeatures';
 
 // TODO(agent): Verify the LocationTag rendering still aligns with the detailed box metadata layout.
 // TODO(agent): Confirm location tags remain navigable only when LocationId is valid and link targets are encoded correctly.
@@ -40,6 +43,11 @@ import QualityBadge from './QualityBadge';
 interface Props {
   boxId: string;
 }
+
+// Matches the .box-list-row--shelf fallback accent in styles.scss.
+const SHELF_DEFAULT_COLOR = '#3b82f6';
+// Reuse the Standort palette as picker suggestions; slice drops alpha (e.g. Pink's '#d8698eff') that <input type="color"> rejects.
+const SHELF_COLOR_SWATCHES = Array.from(new Set(BOX_COLORS.map((color) => color.hex.slice(0, 7).toLowerCase())));
 
 function resolveActorName(actor?: string | null): string {
   return actor && actor.trim() ? actor : 'System';
@@ -99,6 +107,8 @@ export default function BoxDetail({ boxId }: Props) {
 
   const [note, setNote] = useState('');
   const [label, setLabel] = useState('');
+  // '' = no custom colour (list falls back to the default shelf accent).
+  const [shelfColor, setShelfColor] = useState('');
   const [noteFeedback, setNoteFeedback] = useState<NoteFeedback>(null);
   const [shelfFeedback, setShelfFeedback] = useState<NoteFeedback>(null);
   const [isSavingNote, setIsSavingNote] = useState(false);
@@ -142,6 +152,7 @@ export default function BoxDetail({ boxId }: Props) {
   }, [box?.BoxID, box?.LocationId]);
   const shouldLinkLocation = Boolean(normalizedLocationId);
   const { activeTab, setEntity, setMainView, setPanelDetailLabel } = usePanelContext();
+  const features = useFeatures();
   const handleRowNavigate = useCallback((itemId: string | null | undefined, source: 'click' | 'keyboard') => {
     if (!itemId) {
       logger.warn('Attempted to navigate from box detail row without item id', { boxId, source });
@@ -391,6 +402,7 @@ export default function BoxDetail({ boxId }: Props) {
         setBox(data.box);
         setNote(data.box?.Notes || '');
         setLabel(typeof data.box?.Label === 'string' ? data.box.Label : '');
+        setShelfColor(typeof data.box?.Color === 'string' ? data.box.Color : '');
         setPanelDetailLabel(typeof data.box?.Label === 'string' && data.box.Label.trim() ? `${data.box.Label.trim()} – ${boxId}` : boxId);
         setNoteFeedback(null);
         setShelfFeedback(null);
@@ -501,10 +513,10 @@ export default function BoxDetail({ boxId }: Props) {
   }, [boxId]);
 
   useEffect(() => {
-    if ((activeTab ?? 'info') === 'stubs') {
+    if (resolveTab(activeTab, 'info', BOX_TAB_FEATURES, features) === 'stubs') {
       void loadStubs();
     }
-  }, [activeTab, loadStubs]);
+  }, [activeTab, features, loadStubs]);
 
   useEffect(() => {
     if (!isPhotoModalOpen) {
@@ -653,12 +665,14 @@ export default function BoxDetail({ boxId }: Props) {
       logger.info('[shelf-detail] Saving shelf label/notes', {
         boxId: box.BoxID,
         hasLabel: Boolean(trimmedLabel),
-        hasNotes: Boolean(trimmedNotes)
+        hasNotes: Boolean(trimmedNotes),
+        color: shelfColor || null
       });
       const payload = {
         actor,
         Label: trimmedLabel,
-        notes: trimmedNotes
+        notes: trimmedNotes,
+        color: shelfColor
       };
       const res = await fetch(`/api/boxes/${encodeURIComponent(box.BoxID)}/move`, {
         method: 'POST',
@@ -667,7 +681,7 @@ export default function BoxDetail({ boxId }: Props) {
       });
       const responseBody = await res.json().catch(() => ({}));
       if (res.ok) {
-        setBox((current) => current ? { ...current, Label: trimmedLabel || null, Notes: trimmedNotes } : current);
+        setBox((current) => current ? { ...current, Label: trimmedLabel || null, Notes: trimmedNotes, Color: shelfColor || null } : current);
         setShelfFeedback({ type: 'success', message: 'Regal gespeichert' });
         logger.info('[shelf-detail] Shelf label/notes saved', { boxId: box.BoxID, status: res.status });
       } else {
@@ -687,7 +701,7 @@ export default function BoxDetail({ boxId }: Props) {
     } finally {
       setIsSavingShelfDetails(false);
     }
-  }, [box, label, note]);
+  }, [box, label, note, shelfColor]);
 
   // TODO(box-detail-photo-autosave): Add retry/backoff support for repeated photo save failures.
   const handlePhotoFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -774,7 +788,7 @@ export default function BoxDetail({ boxId }: Props) {
     }
   }, [box?.BoxID]);
 
-  const effectiveTab = activeTab ?? 'info';
+  const effectiveTab = resolveTab(activeTab, 'info', BOX_TAB_FEATURES, features);
 
   if (isLoading) {
     return <LoadingPage message="Behälter wird geladen…" />;
@@ -808,19 +822,21 @@ export default function BoxDetail({ boxId }: Props) {
         {box && (
           <div className="tab-actions">
             <PrintLabelButton boxId={box.BoxID} inline />
-            <button
-              type="button"
-              className="btn mobile-only"
-              onClick={() => navigate(`/placement/${encodeURIComponent(box.BoxID)}?mode=items`)}
-            >
-              Einscannen
-            </button>
+            {features['qr-scan'] && (
+              <button
+                type="button"
+                className="btn mobile-only"
+                onClick={() => navigate(`/placement/${encodeURIComponent(box.BoxID)}?mode=items`)}
+              >
+                Einscannen
+              </button>
+            )}
             <QrScanButton
               searchTarget={box.BoxID}
               searchLabel={box.Label ?? box.BoxID}
               label="Finden"
             />
-            {isShelf && (
+            {isShelf && features['qr-scan'] && (
               <button
                 type="button"
                 className="btn mobile-only"
@@ -861,7 +877,7 @@ export default function BoxDetail({ boxId }: Props) {
             {effectiveTab === 'info' && (
               <div className="card">
                 <h2 className="mono">{box.BoxID}</h2>
-                <table className="details">
+                <table className="details details--kv">
                   <tbody>
                     <tr>
                       <th>Standort</th>
@@ -954,7 +970,7 @@ export default function BoxDetail({ boxId }: Props) {
                       </div>
                       {noteFeedback && (
                         <div className="row">
-                          <span className="muted" role={noteFeedback.type === 'error' ? 'alert' : 'status'} style={noteFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}>
+                          <span className="muted" role={noteFeedback.type === 'error' ? 'alert' : 'status'} style={noteFeedback.type === 'error' ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
                             {noteFeedback.message}
                           </span>
                         </div>
@@ -971,6 +987,27 @@ export default function BoxDetail({ boxId }: Props) {
                         <input id="shelf-label" type="text" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Regalname" disabled={isSavingShelfDetails} />
                       </div>
                       <div className="row">
+                        <label htmlFor="shelf-color">Farbe</label>
+                        <div className="shelf-color-picker">
+                          {/* Native picker can't be empty, so "no colour" is tracked separately and shown as the default accent. */}
+                          <input
+                            id="shelf-color"
+                            type="color"
+                            list="shelf-color-swatches"
+                            value={shelfColor || SHELF_DEFAULT_COLOR}
+                            onChange={(event) => { setShelfColor(event.target.value); if (shelfFeedback && shelfFeedback.type !== 'info') setShelfFeedback(null); }}
+                            disabled={isSavingShelfDetails}
+                          />
+                          <datalist id="shelf-color-swatches">
+                            {SHELF_COLOR_SWATCHES.map((hex) => <option key={hex} value={hex} />)}
+                          </datalist>
+                          <span className="muted">{shelfColor || 'Standard'}</span>
+                          {shelfColor ? (
+                            <button type="button" className="btn" onClick={() => setShelfColor('')} disabled={isSavingShelfDetails}>Zurücksetzen</button>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="row">
                         <label htmlFor="shelf-notes">Notizen</label>
                         <textarea id="shelf-notes" value={note} onChange={(event) => { setNote(event.target.value); if (shelfFeedback && shelfFeedback.type !== 'info') setShelfFeedback(null); }} rows={Math.max(3, note.split('\n').length)} disabled={isSavingShelfDetails} />
                       </div>
@@ -979,7 +1016,7 @@ export default function BoxDetail({ boxId }: Props) {
                       </div>
                       {shelfFeedback && (
                         <div className="row">
-                          <span className="muted" role={shelfFeedback.type === 'error' ? 'alert' : 'status'} style={shelfFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}>
+                          <span className="muted" role={shelfFeedback.type === 'error' ? 'alert' : 'status'} style={shelfFeedback.type === 'error' ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
                             {shelfFeedback.message}
                           </span>
                         </div>
@@ -1127,7 +1164,7 @@ export default function BoxDetail({ boxId }: Props) {
                 <h3>Gefundes</h3>
                 <h2>In den Lagern</h2>
                 {stubsLoading && <p className="muted">Wird geladen…</p>}
-                {stubsError && <p className="muted" role="alert" style={{ color: '#b3261e' }}>{stubsError}</p>}
+                {stubsError && <p className="muted" role="alert" style={{ color: 'var(--danger)' }}>{stubsError}</p>}
                 {!stubsLoading && stubs.length === 0 && !stubsError && (
                   <p className="muted">nüüt für dieses Regal.</p>
                 )}
@@ -1172,7 +1209,7 @@ export default function BoxDetail({ boxId }: Props) {
                   </div>
                   {addStubFeedback && (
                     <div className="row">
-                      <span className="muted" role={addStubFeedback.type === 'error' ? 'alert' : 'status'} style={addStubFeedback.type === 'error' ? { color: '#b3261e', fontWeight: 600 } : undefined}>
+                      <span className="muted" role={addStubFeedback.type === 'error' ? 'alert' : 'status'} style={addStubFeedback.type === 'error' ? { color: 'var(--danger)', fontWeight: 600 } : undefined}>
                         {addStubFeedback.message}
                       </span>
                     </div>

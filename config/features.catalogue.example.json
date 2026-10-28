@@ -1,0 +1,21 @@
+{
+  "agentic": false,
+  "printing": false,
+  "shopware": false,
+  "erp-sync": false,
+  "stubs": false,
+  "statistics": false,
+  "help": false,
+  "intake": false,
+  "box-notes": false,
+  "box-items": false,
+  "import-export": true,
+  "qr-scan": true,
+  "item-images": true,
+  "item-attachments": true,
+  "logs": true,
+  "item-marks": true,
+  "admin-taxonomy": true,
+  "admin-shelf-create": true,
+  "admin-system-status": true
+}

@@ -60,6 +60,7 @@ function normaliseLimit(value: unknown): number {
 }
 
 const action = defineHttpAction({
+  feature: 'shopware',
   key: 'search-shopware',
   label: 'Search Shopware',
   appliesTo: () => false,

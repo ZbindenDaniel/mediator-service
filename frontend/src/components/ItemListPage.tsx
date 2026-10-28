@@ -9,7 +9,6 @@ import {
   AGENTIC_RUN_STATUSES
 } from '../../../models';
 import { describeQuality, normalizeQuality, QUALITY_LABELS, QUALITY_MIN } from '../../../models/quality';
-import { itemCategories } from '../data/itemCategories';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import {
   clearItemListFilters,
@@ -25,11 +24,20 @@ import {
   loadItemListFilters,
   persistItemListFilters
 } from '../lib/itemListFiltersStorage';
-import { groupItemsForDisplay, GroupedItemDisplay } from '../lib/itemGrouping';
+import { groupItemsForDisplay, GroupedItemDisplay, resolveGroupPrice, resolveGroupUpdatedAt } from '../lib/itemGrouping';
+import {
+  ITEM_LIST_COLUMN_OPTIONS,
+  ItemListColumnKey,
+  loadItemListColumns,
+  saveItemListColumns
+} from '../lib/itemListColumns';
+import { buildSearchHaystack, matchesSearchTokens, normalizeSearchText, tokenizeSearch } from '../lib/itemSearch';
 import { logError, logger } from '../utils/logger';
 import { useUserMarks } from '../context/UserMarksContext';
+import { useTaxonomy } from '../context/TaxonomyContext';
 import ItemList from './ItemList';
 import LoadingPage from './LoadingPage';
+import { useFeatures } from '../context/FeaturesContext';
 
 // TODO(agentic): Extend item list page sorting and filtering controls for enriched inventory views.
 // TODO(agentic-status-ui): Replace single-select status filtering with quick filters once reviewer workflows expand.
@@ -127,10 +135,30 @@ export interface ItemListComputationOptions {
   normalizedAgenticFilter: AgenticRunStatus[] | null;
   shopPublicationFilter: ItemListFilters['shopPublicationFilter'];
   imageFilter: ItemListFilters['imageFilter'];
+  priceFilter: ItemListFilters['priceFilter'];
   sortKey: ItemListSortKey;
   sortDirection: 'asc' | 'desc';
   qualityThreshold: number;
   qualityFilter: ItemListFilters['qualityFilter'];
+  // Subcategory code → normalized "subcategory category" names, so the Unterkategorie filter also
+  // matches by name ("laptop"). Optional: without it only the code is matched.
+  subcategoryNames?: Map<string, string>;
+}
+
+/** Code → normalized names for the Unterkategorie filter (see ItemListComputationOptions). */
+export function buildSubcategoryNameLookup(
+  categories: { label: string; subcategories: { code: number; label: string }[] }[]
+): Map<string, string> {
+  const lookup = new Map<string, string>();
+  for (const category of categories) {
+    for (const subcategory of category.subcategories) {
+      lookup.set(
+        String(subcategory.code).padStart(4, '0'),
+        normalizeSearchText(`${subcategory.label} ${category.label}`)
+      );
+    }
+  }
+  return lookup;
 }
 
 function resolveBinaryFlag(value: unknown, context: { field: 'Shopartikel' | 'Veröffentlicht_Status'; itemId: string | null }): 0 | 1 | null {
@@ -210,6 +238,7 @@ function groupHasImages(group: GroupedItemDisplay): boolean {
   return hasImageNames || hasGrafikname;
 }
 
+// Positive price or null; 0/empty/garbage all mean "no price" (ERP exports 0 for unpriced refs).
 export function filterAndSortItems(options: ItemListComputationOptions): GroupedItemDisplay[] {
   const {
     items,
@@ -221,11 +250,15 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
     normalizedAgenticFilter,
     shopPublicationFilter,
     imageFilter,
+    priceFilter,
     sortKey,
     sortDirection,
     qualityThreshold,
-    qualityFilter
+    qualityFilter,
+    subcategoryNames
   } = options;
+  const searchTokens = tokenizeSearch(normalizedSearch);
+  const normalizedSubcategoryName = normalizeSearchText(normalizedSubcategoryFilter);
 
   const baseItems = placementFilter === 'unplaced'
     ? items.filter((it) => !it.BoxID)
@@ -235,12 +268,8 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
   const groupedItems = groupItemsForDisplay(baseItems, { logContext: 'item-list-grouping' });
   const searched = groupedItems.filter((group) => {
     const representative = group.representative;
-    const description = representative?.Artikelbeschreibung?.toLowerCase() ?? '';
-    const number = group.summary.Artikel_Nummer?.toLowerCase()
-      ?? representative?.Artikel_Nummer?.toLowerCase()
-      ?? '';
-    const matchesSearch = normalizedSearch
-      ? description.includes(normalizedSearch) || number.includes(normalizedSearch)
+    const matchesSearch = searchTokens.length
+      ? matchesSearchTokens(buildSearchHaystack(group.items), searchTokens)
       : true;
     const groupCategory = group.summary.Category
       ?? (typeof representative?.Unterkategorien_A === 'number'
@@ -251,10 +280,12 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       ?? '';
     const matchesSubcategory = normalizedSubcategoryFilter
       ? groupCategory.toLowerCase().includes(normalizedSubcategoryFilter)
+        || Boolean(subcategoryNames?.get(groupCategory)?.includes(normalizedSubcategoryName))
       : true;
-    const boxCandidate = group.summary.BoxID ?? group.summary.Location ?? representative?.BoxID ?? representative?.Location ?? '';
+    // Box, shelf and shelf label of every instance: a box ID used to hide the shelf from the match.
     const matchesBox = normalizedBoxFilter
-      ? boxCandidate.toLowerCase().includes(normalizedBoxFilter)
+      ? group.items.some((it) => [it.BoxID, it.Location, it.ShelfLabel]
+        .some((value) => typeof value === 'string' && value.toLowerCase().includes(normalizedBoxFilter)))
       : true;
     const stockValue = group.totalStock;
     const matchesStock =
@@ -280,6 +311,11 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       : imageFilter === 'noImages'
         ? !groupHasImages(group)
         : groupHasImages(group);
+    const matchesPriceFilter = priceFilter === 'all'
+      ? true
+      : priceFilter === 'noPrice'
+        ? resolveGroupPrice(group) === null
+        : resolveGroupPrice(group) !== null;
 
     return matchesSearch
       && matchesSubcategory
@@ -288,7 +324,8 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       && matchesAgenticStatus
       && matchesShopPublication
       && matchesQuality
-      && matchesImageFilter;
+      && matchesImageFilter
+      && matchesPriceFilter;
   });
 
   const sorted = [...searched].sort((a, b) => {
@@ -325,6 +362,18 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       return (aQuality - bQuality) * direction;
     }
 
+    if (sortKey === 'price') {
+      const aPrice = resolveGroupPrice(a);
+      const bPrice = resolveGroupPrice(b);
+      if (aPrice === bPrice) {
+        return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
+      }
+      // Unpriced rows always sink to the bottom: in asc they'd otherwise bury every real price under the 0s.
+      if (aPrice === null) return 1;
+      if (bPrice === null) return -1;
+      return (aPrice - bPrice) * direction;
+    }
+
     if (sortKey === 'entryDate') {
       const entryTimestampFor = (group: GroupedItemDisplay) => {
         const representative = group.representative;
@@ -348,6 +397,17 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
       }
       const aValue = aEntry ?? Number.NEGATIVE_INFINITY;
       const bValue = bEntry ?? Number.NEGATIVE_INFINITY;
+      return (aValue - bValue) * direction;
+    }
+
+    if (sortKey === 'lastModified') {
+      const aTime = Date.parse(resolveGroupUpdatedAt(a) ?? '');
+      const bTime = Date.parse(resolveGroupUpdatedAt(b) ?? '');
+      const aValue = Number.isNaN(aTime) ? Number.NEGATIVE_INFINITY : aTime;
+      const bValue = Number.isNaN(bTime) ? Number.NEGATIVE_INFINITY : bTime;
+      if (aValue === bValue) {
+        return (a.summary.representativeItemId ?? '').localeCompare(b.summary.representativeItemId ?? '') * direction;
+      }
       return (aValue - bValue) * direction;
     }
 
@@ -421,8 +481,9 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
 
 export default function ItemListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { setEntity, setMultiSelection, clearSelection, clearMultiSelection } = usePanelContext();
+  const { setEntity, setMultiSelection, clearSelection, clearMultiSelection, entityType, entityId } = usePanelContext();
   const setBulkSelection = useSetBulkSelection();
+  const features = useFeatures();
   const [items, setItems] = useState<Item[]>([]);
   const [placementFilter, setPlacementFilter] = useState<ItemListFilters['placementFilter']>(ITEM_LIST_DEFAULT_FILTERS.placementFilter);
   const [isLoading, setIsLoading] = useState(true);
@@ -447,11 +508,15 @@ export default function ItemListPage() {
   const [shopPublicationFilter, setShopPublicationFilter] = useState<ItemListFilters['shopPublicationFilter']>(ITEM_LIST_DEFAULT_FILTERS.shopPublicationFilter);
   const [entityFilter, setEntityFilter] = useState<ItemListFilters['entityFilter']>(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
   const [imageFilter, setImageFilter] = useState<ItemListFilters['imageFilter']>(ITEM_LIST_DEFAULT_FILTERS.imageFilter);
+  const [priceFilter, setPriceFilter] = useState<ItemListFilters['priceFilter']>(ITEM_LIST_DEFAULT_FILTERS.priceFilter);
   const [qualityThreshold, setQualityThreshold] = useState(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
   const [qualityFilter, setQualityFilter] = useState<ItemListFilters['qualityFilter']>(ITEM_LIST_DEFAULT_FILTERS.qualityFilter);
   const [myMarksOnly, setMyMarksOnly] = useState(ITEM_LIST_DEFAULT_FILTERS.myMarksOnly);
   const { allMarkedUUIDs } = useUserMarks();
+  const { categories } = useTaxonomy();
   const [filtersReady, setFiltersReady] = useState(false);
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<Set<ItemListColumnKey>>(() => loadItemListColumns());
   const latestFiltersRef = useRef<ItemListFilters>(ITEM_LIST_DEFAULT_FILTERS);
   const persistTimeoutRef = useRef<number | null>(null);
   const [isDeepLinkFilterSession, setIsDeepLinkFilterSession] = useState(false);
@@ -486,6 +551,7 @@ export default function ItemListPage() {
       setSortDirection(mergedFilters.sortDirection);
       setEntityFilter(mergedFilters.entityFilter);
       setImageFilter(mergedFilters.imageFilter);
+      setPriceFilter(mergedFilters.priceFilter);
       setQualityThreshold(mergedFilters.qualityThreshold);
       setQualityFilter(mergedFilters.qualityFilter);
       setMyMarksOnly(mergedFilters.myMarksOnly);
@@ -528,6 +594,7 @@ export default function ItemListPage() {
       setSortDirection(ITEM_LIST_DEFAULT_FILTERS.sortDirection);
       setEntityFilter(ITEM_LIST_DEFAULT_FILTERS.entityFilter);
       setImageFilter(ITEM_LIST_DEFAULT_FILTERS.imageFilter);
+      setPriceFilter(ITEM_LIST_DEFAULT_FILTERS.priceFilter);
       setQualityThreshold(ITEM_LIST_DEFAULT_FILTERS.qualityThreshold);
       setQualityFilter(ITEM_LIST_DEFAULT_FILTERS.qualityFilter);
       setMyMarksOnly(ITEM_LIST_DEFAULT_FILTERS.myMarksOnly);
@@ -552,6 +619,7 @@ export default function ItemListPage() {
     shopPublicationFilter,
     placementFilter,
     imageFilter,
+    priceFilter,
     entityFilter,
     sortKey,
     sortDirection,
@@ -566,6 +634,7 @@ export default function ItemListPage() {
     shopPublicationFilter,
     placementFilter,
     imageFilter,
+    priceFilter,
     entityFilter,
     sortKey,
     sortDirection,
@@ -580,6 +649,10 @@ export default function ItemListPage() {
 
   const handleSearchInputChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(event.target.value);
+    // Clearing (✕ or backspace) applies at once — waiting for Enter on an empty field felt broken.
+    if (!event.target.value.trim()) {
+      setSearchTerm('');
+    }
   }, []);
 
   const handleSearchInputKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -639,12 +712,14 @@ export default function ItemListPage() {
     }
   }, []);
 
+  // Reload only when a param the server filters on changes; everything else is filtered client-side.
+  const serverQueryKey = useMemo(() => buildItemListQueryParams(currentFilters).toString(), [currentFilters]);
   useEffect(() => {
     if (!filtersReady) {
       return;
     }
-    loadItems({ filters: currentFilters });
-  }, [currentFilters, filtersReady, loadItems]);
+    loadItems({ filters: latestFiltersRef.current });
+  }, [serverQueryKey, filtersReady, loadItems]);
 
   useEffect(() => {
     const validIds = new Set(items.map((item) => item.ItemUUID));
@@ -668,7 +743,7 @@ export default function ItemListPage() {
 
   const subcategoryOptions = useMemo<SubcategoryOption[]>(() => {
     try {
-      return itemCategories.flatMap((category) => (
+      return categories.flatMap((category) => (
         category.subcategories.map((subcategory) => ({
           value: subcategory.code.toString(),
           label: `${subcategory.code} · ${subcategory.label}`,
@@ -677,11 +752,13 @@ export default function ItemListPage() {
       ));
     } catch (error) {
       logError('Failed to build subcategory filter options', error, {
-        itemCategoriesCount: Array.isArray(itemCategories) ? itemCategories.length : 0
+        itemCategoriesCount: Array.isArray(categories) ? categories.length : 0
       });
       return [];
     }
-  }, []);
+  }, [categories]);
+
+  const subcategoryNames = useMemo(() => buildSubcategoryNameLookup(categories), [categories]);
 
   const subcategoryLookup = useMemo(() => {
     try {
@@ -801,15 +878,18 @@ export default function ItemListPage() {
       normalizedSubcategoryFilter,
       normalizedBoxFilter,
       stockFilter,
-      normalizedAgenticFilter,
-      shopPublicationFilter,
+      // Hidden filters must not keep filtering (e.g. a saved KI filter after AI was switched off).
+      normalizedAgenticFilter: features.agentic ? normalizedAgenticFilter : null,
+      shopPublicationFilter: features.shopware ? shopPublicationFilter : 'all',
       imageFilter,
+      priceFilter,
       sortKey,
       sortDirection,
       qualityThreshold,
-      qualityFilter
+      qualityFilter,
+      subcategoryNames
     });
-    if (!myMarksOnly) return sorted;
+    if (!myMarksOnly || !features['item-marks']) return sorted;
     return sorted.filter((group) =>
       group.items.some((item) => item.ItemUUID && allMarkedUUIDs.has(item.ItemUUID))
     );
@@ -821,12 +901,17 @@ export default function ItemListPage() {
     normalizedSubcategoryFilter,
     placementFilter,
     imageFilter,
+    priceFilter,
     sortDirection,
     sortKey,
     stockFilter,
     shopPublicationFilter,
     qualityThreshold,
     qualityFilter,
+    subcategoryNames,
+    features.agentic,
+    features.shopware,
+    features['item-marks'],
     myMarksOnly,
     allMarkedUUIDs
   ]);
@@ -899,18 +984,37 @@ export default function ItemListPage() {
     clearSelection();
   }, [clearSelection]);
 
-  const handleItemSelect = useCallback((id: string) => {
+  // Neighbours for ItemDetail as ids=prev,current,next (it skips its own /api/items fetch then). ItemDetail
+  // applies the sequence only when it contains the shown item, so — unlike the former prev/next params —
+  // it never hands stale neighbours to an item opened via arrow keys or from elsewhere; refreshed here
+  // for every selection, whatever made it.
+  const writeNeighborIds = useCallback((id: string) => {
     const index = filtered.findIndex((g) => g.summary.representativeItemId === id);
-    const prevId = index > 0 ? (filtered[index - 1].summary.representativeItemId ?? null) : null;
-    const nextId = index >= 0 && index < filtered.length - 1 ? (filtered[index + 1].summary.representativeItemId ?? null) : null;
+    if (index < 0) return;
+    const sequence = [
+      index > 0 ? filtered[index - 1].summary.representativeItemId : null,
+      id,
+      filtered[index + 1]?.summary.representativeItemId ?? null
+    ].filter(Boolean).join(',');
+    if (searchParams.get('ids') === sequence && !searchParams.has('prev') && !searchParams.has('next')) return;
     setSearchParams((p) => {
       const n = new URLSearchParams(p);
-      if (prevId) { n.set('prev', prevId); } else { n.delete('prev'); }
-      if (nextId) { n.set('next', nextId); } else { n.delete('next'); }
+      n.set('ids', sequence);
+      n.delete('prev');
+      n.delete('next');
       return n;
     }, { replace: true });
+  }, [filtered, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (entityType === 'item' && entityId) writeNeighborIds(entityId);
+  }, [entityType, entityId, writeNeighborIds]);
+
+  const handleItemSelect = useCallback((id: string) => {
+    // Written together with the selection (same render) so ItemDetail's first effect already sees it.
+    writeNeighborIds(id);
     setEntity('item', id);
-  }, [setEntity, setSearchParams, filtered]);
+  }, [setEntity, writeNeighborIds]);
 
   const selectedItems = useMemo(() => {
     const selectedLookup = new Set(selectedIds);
@@ -973,6 +1077,48 @@ export default function ItemListPage() {
   }, []);
 
   const hasActiveFilters = hasNonDefaultFilters(currentFilters, ITEM_LIST_DEFAULT_FILTERS);
+  const defaults = ITEM_LIST_DEFAULT_FILTERS;
+  const advancedFilterCount = [
+    entityFilter !== defaults.entityFilter,
+    placementFilter !== defaults.placementFilter,
+    qualityFilter !== defaults.qualityFilter,
+    imageFilter !== defaults.imageFilter,
+    priceFilter !== defaults.priceFilter,
+    features.agentic && normalizedAgenticFilter !== null,
+    features.shopware && shopPublicationFilter !== defaults.shopPublicationFilter,
+    features['item-marks'] && myMarksOnly
+  ].filter(Boolean).length;
+
+  // Open "Weitere Filter" when restored filters include one of them — once, so it never snaps shut while editing.
+  useEffect(() => {
+    if (filtersReady && advancedFilterCount > 0) setMoreFiltersOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersReady]);
+
+  const columnOptions = useMemo(
+    () => ITEM_LIST_COLUMN_OPTIONS.filter((option) => !option.feature || features[option.feature]),
+    [features]
+  );
+  // Header click: same column flips the direction; a new column starts with the newest/highest
+  // first for dates and numbers, A→Z for text.
+  const handleHeaderSort = useCallback((key: ItemListSortKey) => {
+    if (key === sortKey) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    const descFirst: ItemListSortKey[] = ['price', 'stock', 'quality', 'lastModified', 'entryDate', 'lastSynced', 'agenticLastRun'];
+    setSortKey(key);
+    setSortDirection(descFirst.includes(key) ? 'desc' : 'asc');
+  }, [sortKey]);
+
+  const handleColumnToggle = useCallback((key: ItemListColumnKey, visible: boolean) => {
+    setVisibleColumns((prev) => {
+      const next = new Set(prev);
+      if (visible) next.add(key); else next.delete(key);
+      saveItemListColumns(next);
+      return next;
+    });
+  }, []);
 
   if (isLoading) {
     return (
@@ -1000,247 +1146,246 @@ export default function ItemListPage() {
           </button>
         )}
       </div>
-      {/* TODO(filter-panel-layout): Confirm filter panel sizing in CSS after grid wrapper update. */}
-      <div className="filter-bar">
-        <div className="filter-grid row">
-          <div className="filter-panel filter-panel--primary col-12 col-lg-6">
-            <div className="filter-grid">
-              <div className="filter-grid__item">
-                <label className="sort-control sort-control--box">
-                  <span>Artikelname</span>
-                  <div className="sort-control__input">
-                    <GoSearch aria-hidden="true" />
-                    <input
-                      aria-label="Artikel suchen"
-                      id="item-list-search"
-                      onChange={handleSearchInputChange}
-                      onKeyDown={handleSearchInputKeyDown}
-                      placeholder="Beschreibung oder Nummer"
-                      type="search"
-                      value={searchInput}
-                      autoFocus
-                    />
-                  </div>
-                </label>
+      <div className="filter-bar filter-bar--stacked">
+        <div className="filter-panel filter-grid">
+          <div className="filter-grid__item">
+            <label className="sort-control sort-control--box">
+              <span>Suche</span>
+              <div className="sort-control__input">
+                <GoSearch aria-hidden="true" />
+                <input
+                  aria-label="Artikel suchen"
+                  id="item-list-search"
+                  onChange={handleSearchInputChange}
+                  onKeyDown={handleSearchInputKeyDown}
+                  placeholder="Name, Nummer, Hersteller, Seriennr., Spezifikation"
+                  type="search"
+                  value={searchInput}
+                  autoFocus
+                />
               </div>
-
-              <div className="filter-grid__item">
-                <label className="sort-control">
-                  <span>Sortieren nach</span>
-                  <select
-                    aria-label="Sortierkriterium wählen"
-                    onChange={(event) => setSortKey(event.target.value as ItemListSortKey)}
-                    value={sortKey}
-                  >
-                    <option value="artikelbeschreibung">Artikel</option>
-                    <option value="artikelnummer">Artikelnummer</option>
-                    <option value="box">Behälter</option>
-                    <option value="entryDate">Erfasst am</option>
-                    <option value="lastSynced">Zuletzt synchronisiert</option>
-                    <option value="agenticLastRun">KI-Datum</option>
-                    <option value="agenticStatus">Ki-Status</option>
-                    <option value="quality">Qualität</option>
-                    <option value="uuid">UUID</option>
-                    <option value="stock">Bestand</option>
-                    <option value="subcategory">Unterkategorie</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="sort-direction-control">
-                  <span>Reihenfolge</span>
-                  <select
-                    aria-label="Sortierreihenfolge"
-                    onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
-                    value={sortDirection}
-                  >
-                    <option value="desc">Absteigend</option>
-                    <option value="asc">Aufsteigend</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="sort-control sort-control--box">
-                  <span>Behälter</span>
-                  <div className="sort-control__input">
-                    <GoContainer aria-hidden="true" />
-                    <input
-                      aria-label="Behälter filtern"
-                      onBlur={() => setBoxFilter(boxInput)}
-                      onChange={(event) => setBoxInput(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          setBoxFilter(event.currentTarget.value);
-                        }
-                      }}
-                      placeholder="Box-ID oder Standort"
-                      type="search"
-                      value={boxInput}
-                    />
-                  </div>
-                </label>
-              </div>
-            </div>
+            </label>
           </div>
-
-          <div className="filter-panel filter-panel--secondary col-12 col-lg-6">
-            <div className="filter-grid">
-              <div className="filter-grid__item">
-                <label className="filter-control">
-                  <span>Unterkategorie</span>
-                  <input
-                    aria-label="Unterkategorie filtern"
-                    list="subcategory-filter-options"
-                    onBlur={handleSubcategoryInputBlur}
-                    onChange={handleSubcategoryInputChange}
-                    onKeyDown={handleSubcategoryInputKeyDown}
-                    placeholder="Alle"
-                    type="search"
-                    value={subcategoryInput}
-                  />
-                  <datalist id="subcategory-filter-options">
-                    {subcategorySelectOptions.map((option) => (
-                      <option
-                        key={`${option.categoryLabel}-${option.value}`}
-                        label={option.label}
-                        value={option.value}
-                      />
-                    ))}
-                  </datalist>
-                </label>
-              </div>
-              {/* <div className='row'>
+          <div className="filter-grid__item">
             <label className="filter-control">
-              <span>Bestand</span>
+              <span>Unterkategorie</span>
+              <input
+                aria-label="Unterkategorie filtern"
+                list="subcategory-filter-options"
+                onBlur={handleSubcategoryInputBlur}
+                onChange={handleSubcategoryInputChange}
+                onKeyDown={handleSubcategoryInputKeyDown}
+                placeholder="Name oder Nummer"
+                type="search"
+                value={subcategoryInput}
+              />
+              <datalist id="subcategory-filter-options">
+                {subcategorySelectOptions.map((option) => (
+                  <option
+                    key={`${option.categoryLabel}-${option.value}`}
+                    label={option.label}
+                    value={option.value}
+                  />
+                ))}
+              </datalist>
+            </label>
+          </div>
+          <div className="filter-grid__item">
+            <label className="sort-control sort-control--box">
+              <span>Behälter</span>
+              <div className="sort-control__input">
+                <GoContainer aria-hidden="true" />
+                <input
+                  aria-label="Behälter filtern"
+                  onBlur={() => setBoxFilter(boxInput)}
+                  onChange={(event) => setBoxInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      setBoxFilter(event.currentTarget.value);
+                    }
+                  }}
+                  placeholder="Box-ID oder Standort"
+                  type="search"
+                  value={boxInput}
+                />
+              </div>
+            </label>
+          </div>
+          <div className="filter-grid__item">
+            <label className="sort-control">
+              <span>Sortieren nach</span>
               <select
-                aria-label="Bestandsstatus filtern"
-                onChange={(event) => setStockFilter(event.target.value as typeof stockFilter)}
-                value={stockFilter}
+                aria-label="Sortierkriterium wählen"
+                onChange={(event) => setSortKey(event.target.value as ItemListSortKey)}
+                value={sortKey}
               >
-                <option value="any">Alle</option>
-                <option value="instock">Auf Lager</option>
-                <option value="outofstock">Nicht auf Lager</option>
+                <option value="artikelbeschreibung">Artikel</option>
+                <option value="artikelnummer">Artikelnummer</option>
+                <option value="box">Behälter</option>
+                <option value="entryDate">Erfasst am</option>
+                <option value="lastModified">Zuletzt geändert</option>
+                {features['erp-sync'] && <option value="lastSynced">Zuletzt synchronisiert</option>}
+                {features.agentic && <option value="agenticLastRun">KI-Datum</option>}
+                {features.agentic && <option value="agenticStatus">Ki-Status</option>}
+                <option value="quality">Qualität</option>
+                <option value="uuid">UUID</option>
+                <option value="stock">Bestand</option>
+                <option value="price">Preis</option>
+                <option value="subcategory">Unterkategorie</option>
               </select>
             </label>
-          </div> */}
-              <div className="filter-grid__item">
-                <div className="filter-control">
-                  <span>Ki-Status</span>
-                  <details className="filter-multiselect" onToggle={handleAgenticStatusDetailsToggle}>
-                    <summary aria-label="Ki-Status filtern">{agenticStatusSummaryLabel}</summary>
-                    <div className="filter-multiselect__panel" role="group" aria-label="Ki-Status Auswahl">
-                      <div className="filter-multiselect__actions">
-                        <button type="button" onClick={handleAgenticStatusSelectAll}>Alle</button>
-                        <button type="button" onClick={handleAgenticStatusSelectNone}>Keine</button>
-                      </div>
-                      {agenticStatusOptions.map((option) => (
-                        <label key={option.value} className="filter-multiselect__option">
-                          <input
-                            type="checkbox"
-                            checked={agenticStatusDraft.includes(option.value)}
-                            onChange={(event) => handleAgenticStatusToggle(option.value, event.target.checked)}
-                          />
-                          <span>{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </details>
-                </div>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="filter-control">
-                  <span>Shopstatus</span>
-                  <select
-                    aria-label="Shopstatus filtern"
-                    onChange={(event) => setShopPublicationFilter(event.target.value as ItemListFilters['shopPublicationFilter'])}
-                    value={shopPublicationFilter}
-                  >
-                    <option value="all">Alle</option>
-                    <option value="inShop">im Shop</option>
-                    <option value="notPublished">nicht veröffentlicht</option>
-                    <option value="noShopArticle">kein Shopartikel</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="filter-control">
-                  <span>Typ</span>
-                  <select
-                    aria-label="Instanzen oder Referenzen anzeigen"
-                    onChange={(event) => setEntityFilter(event.target.value as ItemListFilters['entityFilter'])}
-                    value={entityFilter}
-                  >
-                    <option value="all">Alle</option>
-                    <option value="instances">Instanzen</option>
-                    <option value="references">Referenzen</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="filter-control">
-                  <span>Platzierung</span>
-                  <select
-                    aria-label="Platzierung filtern"
-                    onChange={(event) => setPlacementFilter(event.target.value as ItemListFilters['placementFilter'])}
-                    value={placementFilter}
-                  >
-                    <option value="all">Alle</option>
-                    <option value="unplaced">unplatziert</option>
-                    <option value="placed">platziert</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="filter-control">
-                  <span>Bilder</span>
-                  <select
-                    aria-label="Bilderstatus filtern"
-                    onChange={(event) => setImageFilter(event.target.value as ItemListFilters['imageFilter'])}
-                    value={imageFilter}
-                  >
-                    <option value="all">Alle</option>
-                    <option value="noImages">Ohne Bilder</option>
-                    <option value="hasImages">Mit Bildern</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="filter-control">
-                  <span>Qualität</span>
-                  <select
-                    aria-label="Qualitätsbewertung filtern"
-                    value={qualityFilter}
-                    onChange={(e) => setQualityFilter(e.target.value as ItemListFilters['qualityFilter'])}
-                  >
-                    <option value="all">Alle</option>
-                    <option value="rated">Mit Bewertung</option>
-                    <option value="missing">Ohne Bewertung</option>
-                  </select>
-                </label>
-              </div>
-
-              <div className="filter-grid__item">
-                <label className="filter-control--checkbox">
-                  <input
-                    type="checkbox"
-                    aria-label="Nur markierte Artikel anzeigen"
-                    checked={myMarksOnly}
-                    onChange={(e) => setMyMarksOnly(e.target.checked)}
-                  />
-                  <span>Markiert</span>
-                </label>
-              </div>
-            </div>
+          </div>
+          <div className="filter-grid__item">
+            <label className="sort-direction-control">
+              <span>Reihenfolge</span>
+              <select
+                aria-label="Sortierreihenfolge"
+                onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')}
+                value={sortDirection}
+              >
+                <option value="desc">Absteigend</option>
+                <option value="asc">Aufsteigend</option>
+              </select>
+            </label>
           </div>
         </div>
+        {/* Rarely used / staff-internal filters stay collapsed; the count keeps active ones from being forgotten. */}
+        <details
+          className="filter-panel filter-more"
+          open={moreFiltersOpen}
+          onToggle={(event) => setMoreFiltersOpen(event.currentTarget.open)}
+        >
+          <summary>Weitere Filter{advancedFilterCount > 0 ? ` (${advancedFilterCount} aktiv)` : ''}</summary>
+          <div className="filter-grid">
+            <div className="filter-grid__item">
+              <label className="filter-control">
+                <span>Typ</span>
+                <select
+                  aria-label="Instanzen oder Referenzen anzeigen"
+                  onChange={(event) => setEntityFilter(event.target.value as ItemListFilters['entityFilter'])}
+                  value={entityFilter}
+                >
+                  <option value="all">Alle</option>
+                  <option value="instances">Instanzen</option>
+                  <option value="references">Referenzen</option>
+                </select>
+              </label>
+            </div>
+            <div className="filter-grid__item">
+              <label className="filter-control">
+                <span>Platzierung</span>
+                <select
+                  aria-label="Platzierung filtern"
+                  onChange={(event) => setPlacementFilter(event.target.value as ItemListFilters['placementFilter'])}
+                  value={placementFilter}
+                >
+                  <option value="all">Alle</option>
+                  <option value="unplaced">unplatziert</option>
+                  <option value="placed">platziert</option>
+                </select>
+              </label>
+            </div>
+            <div className="filter-grid__item">
+              <label className="filter-control">
+                <span>Qualität</span>
+                <select
+                  aria-label="Qualitätsbewertung filtern"
+                  value={qualityFilter}
+                  onChange={(e) => setQualityFilter(e.target.value as ItemListFilters['qualityFilter'])}
+                >
+                  <option value="all">Alle</option>
+                  <option value="rated">Mit Bewertung</option>
+                  <option value="missing">Ohne Bewertung</option>
+                </select>
+              </label>
+            </div>
+            <div className="filter-grid__item">
+              <label className="filter-control">
+                <span>Bilder</span>
+                <select
+                  aria-label="Bilderstatus filtern"
+                  onChange={(event) => setImageFilter(event.target.value as ItemListFilters['imageFilter'])}
+                  value={imageFilter}
+                >
+                  <option value="all">Alle</option>
+                  <option value="noImages">Ohne Bilder</option>
+                  <option value="hasImages">Mit Bildern</option>
+                </select>
+              </label>
+            </div>
+            <div className="filter-grid__item">
+              <label className="filter-control">
+                <span>Preis</span>
+                <select
+                  aria-label="Preisstatus filtern"
+                  onChange={(event) => setPriceFilter(event.target.value as ItemListFilters['priceFilter'])}
+                  value={priceFilter}
+                >
+                  <option value="all">Alle</option>
+                  <option value="noPrice">Ohne Preis</option>
+                  <option value="hasPrice">Mit Preis</option>
+                </select>
+              </label>
+            </div>
+            {features.agentic && (
+            <div className="filter-grid__item">
+              <div className="filter-control">
+                <span>Ki-Status</span>
+                <details className="filter-multiselect" onToggle={handleAgenticStatusDetailsToggle}>
+                  <summary aria-label="Ki-Status filtern">{agenticStatusSummaryLabel}</summary>
+                  <div className="filter-multiselect__panel" role="group" aria-label="Ki-Status Auswahl">
+                    <div className="filter-multiselect__actions">
+                      <button type="button" onClick={handleAgenticStatusSelectAll}>Alle</button>
+                      <button type="button" onClick={handleAgenticStatusSelectNone}>Keine</button>
+                    </div>
+                    {agenticStatusOptions.map((option) => (
+                      <label key={option.value} className="filter-multiselect__option">
+                        <input
+                          type="checkbox"
+                          checked={agenticStatusDraft.includes(option.value)}
+                          onChange={(event) => handleAgenticStatusToggle(option.value, event.target.checked)}
+                        />
+                        <span>{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </details>
+              </div>
+            </div>
+            )}
+            {features.shopware && (
+            <div className="filter-grid__item">
+              <label className="filter-control">
+                <span>Shopstatus</span>
+                <select
+                  aria-label="Shopstatus filtern"
+                  onChange={(event) => setShopPublicationFilter(event.target.value as ItemListFilters['shopPublicationFilter'])}
+                  value={shopPublicationFilter}
+                >
+                  <option value="all">Alle</option>
+                  <option value="inShop">im Shop</option>
+                  <option value="notPublished">nicht veröffentlicht</option>
+                  <option value="noShopArticle">kein Shopartikel</option>
+                </select>
+              </label>
+            </div>
+            )}
+            {features['item-marks'] && (
+            <div className="filter-grid__item">
+              <label className="filter-control--checkbox">
+                <input
+                  type="checkbox"
+                  aria-label="Nur markierte Artikel anzeigen"
+                  checked={myMarksOnly}
+                  onChange={(e) => setMyMarksOnly(e.target.checked)}
+                />
+                <span>Markiert</span>
+              </label>
+            </div>
+            )}
+          </div>
+        </details>
       </div>
       {error ? (
         <div aria-live="assertive" className="alert alert-error" role="alert">
@@ -1251,6 +1396,24 @@ export default function ItemListPage() {
         <p className="muted" data-testid="item-list-refresh-status">Aktualisiere Liste…</p>
       ) : null}
       {/* BulkItemActionBar moved to ActionPanel (right panel) when multi-selection is active */}
+      <div className="item-list-toolbar">
+        <details className="filter-multiselect column-picker">
+          <summary aria-label="Spalten auswählen">Spalten</summary>
+          <div className="filter-multiselect__panel" role="group" aria-label="Sichtbare Spalten">
+            {columnOptions.map((option) => (
+              <label key={option.key} className="filter-multiselect__option">
+                <input
+                  type="checkbox"
+                  checked={visibleColumns.has(option.key)}
+                  onChange={(event) => handleColumnToggle(option.key, event.target.checked)}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </details>
+        <span className="muted" data-testid="item-list-count">{filtered.length} Einträge</span>
+      </div>
       <ItemList
         allVisibleSelected={allVisibleSelected}
         items={filtered}
@@ -1260,6 +1423,9 @@ export default function ItemListPage() {
         selectedItemIds={selectedIds}
         someVisibleSelected={someVisibleSelected}
         sortKey={sortKey}
+        sortDirection={sortDirection}
+        onSort={handleHeaderSort}
+        visibleColumns={visibleColumns}
       />
     </div>
   );

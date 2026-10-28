@@ -132,18 +132,20 @@ Wenn die App dauerhaft nicht reagiert, ist wahrscheinlich der Server nicht errei
 
 ### Symptome
 - Im KI-Tab steht seit Minuten „Wird ausgeführt…" ohne Fortschritt.
-- Der Status wechselt nicht zu „Überprüfung erforderlich".
+- Der Lauf bleibt lange in der Warteschlange oder wechselt nicht zu **Review**.
 
 ### Was du tun kannst
 
 **Schritt 1 — Kurz warten**
-Die KI-Anreicherung kann je nach Artikel 1–3 Minuten dauern. Wart kurz ab, bevor du etwas unternimmst.
+Ein Lauf dauert je nach Artikel einige Minuten. Läufe warten ausserdem in einer Warteschlange, bis ein Platz frei ist — wenn viele Artikel gleichzeitig laufen, kann das dauern.
 
 **Schritt 2 — Seite neu laden**
 Lade die Seite neu (`F5`). Manchmal aktualisiert sich der Status nicht automatisch.
 
 **Schritt 3 — Lauf neu starten**
-Wenn der Lauf nach 5 Minuten noch läuft: Klick auf **Neu starten** (im KI-Tab, falls verfügbar) oder zuerst **Lauf löschen** und dann **KI-Anreicherung starten**.
+Wenn der Lauf nach 10 Minuten noch läuft: im KI-Tab **Abbrechen**, dann **Wiederholen**. Hängengebliebene Läufe werden nach einiger Zeit auch automatisch abgebrochen.
+
+**Ergebnis ist falsch statt hängig?** Nicht neu starten, sondern im **Review** korrigieren und **Ablehnen** mit Feedback — oder einzelne Felder mit **KI Überarbeitung** neu machen lassen. Hat ein Lauf gute Daten überschrieben, kannst du im KI-Tab unter **Verlauf** eine frühere Version wiederherstellen.
 
 **Schritt 4 — Sysadmin benachrichtigen**
 Wenn Neustarts nichts bringen, könnte ein Problem mit dem KI-Dienst vorliegen. Nenn Artikelnummer und seit wann der Lauf hängt.

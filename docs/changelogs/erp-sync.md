@@ -4,6 +4,20 @@ Covers: ERP import/export, CSV ingestion, Langtext formatting, nightly sync sche
 
 ---
 
+## 1006. ✅ ERP timestamps without a zone read as Zurich time; nightly-sync setting seeded after the schema exists
+**Why:** (1) `parseDatumErfasst` turned zone-less values with a time of day into server-local time ("05.05.2024 08:30" via `new Date()`), so the container (UTC) and a dev machine (CEST) were 2 h apart. Formats without a time already went through UTC midnight. Kivitendo runs in Zurich, so zone-less ISO and `dd.mm.yyyy hh:mm` values are now converted from Europe/Zurich via `Intl` (with a second pass for the DST switch). Date-only values stay UTC midnight, so they show the same calendar day in UTC and in Zurich. Zoned ISO strings are unchanged. `dd/mm/yyyy` is now always read as day/month; before, `new Date()` read e.g. `05/03/2024` as US month/day. (2) `erp_nightly_sync_enabled` was seeded in a fire-and-forget block at module load. On a fresh DB that ran before `system_settings` existed, so the nightly sync stayed off until the next restart. It is now seeded right after `initDb`.
+**Deferred:** existing `Datum_erfasst` values imported on the UTC container are 1–2 h late and are not corrected; re-importing the CSV fixes them if it matters.
+
+
+## 956. ✅ Shopware sync survives a shop DB reset (stale `ShopwareProductId` no longer breaks item-upsert)
+**Why:** After the Shopware dev DB was recreated without products (WMS is now the source of truth for items), every `item-upsert` job failed permanently with `PATCH /api/product/<id> … FRAMEWORK__WRITE_TYPE_INTEND_ERROR … Use POST method to create new entities`. `upsertProduct` trusted `snapshot.shopwareProductId` (persisted in `item_refs` from an earlier sync) blindly and PATCHed it; the id no longer existed in the shop, and the 400 is classified terminal, so nothing self-healed. Clearing the column by hand would fix it once but break again on the next reset.
+
+Changes:
+- **`backend/shopware/adminClient.ts`:** new `resolveExistingProductId` — when a cached id is present, check it via `POST /api/search-ids/product` (cheap, ids only); if gone, log a warning and fall back to `findProductIdByNumber`, so the product is re-created (or found by number) instead of PATCHed into a 400.
+- **`backend/shopware/syncClient.ts`:** persist the product id whenever the result id differs from the snapshot's cached id (not only on `created`), so a stale mapping is repaired after the first successful job.
+- **`test/shopware-admin-sync.test.ts`:** stale-id → create, valid cached id → no productNumber lookup, and re-persist-on-change coverage.
+
+**Deferred:** `ShopwareVariantId` on `items` is not verified the same way — variant children are already resolved by `productNumber` on every sync, so a stale variant id only affects the mediator-side mapping until the next sync repairs it. Previously failed queue jobs are not auto-requeued; re-run the manual shop sync.
 
 ## 950. ✅ Event-log export/import round-trip no longer corrupts `Meta` into `[object Object]`
 **Why:** Re-importing an events export (e.g. restoring a backup ZIP, changelog #931) failed on every event whose `Meta` was set, with Postgres `22P02 invalid input syntax for type json … Token "object" is invalid … JSON data, line 1: [object…`. Root cause is on the **export** side: `events.Meta` is a `jsonb` column, so `pg` hands it back to `export-data.ts` as a **parsed JS object**, but `toCsvValue` serialized every cell with `String(value)` — which turns an object into the literal string `"[object Object]"`. That garbage string was written to `events.csv` and then, on re-import, `insertEventLogEntry` bound it straight into the `jsonb` `Meta` column, which rejects it. Because `insertEventLogEntry` swallows the error and returns `false`, the whole event row was silently dropped from the restore.

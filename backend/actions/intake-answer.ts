@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { assemblyToQualityContract } from '../../models/assembly-contract';
 import { defineHttpAction } from './index';
 import { requireIntakeAuth } from '../utils/intake-auth';
 import {
@@ -14,8 +15,9 @@ import {
 import { queryOne, execute } from '../db-client';
 import { generateItemUUID } from '../lib/itemIds';
 import { syncInDeviceComponents } from '../lib/in-device-components';
-import { loadGeneralContract, loadSubCategoryContract, buildQualityCheckResponse, assemblyToQualityContract } from '../lib/quality-contracts';
+import { loadGeneralContract, loadSubCategoryContract, loadCreationQuestions, buildQualityCheckResponse } from '../lib/quality-contracts';
 import { getAssemblyContract } from '../contracts/registry';
+import { recomputeQualityScoreSafely } from '../lib/quality-score';
 import { resolveIntakeQuestions, deriveInstanceSpecsFromScan, normalizeScanComponents } from '../lib/intake-quality-map';
 import type { IntakeAnswerBody, IntakeAnswerResponse, IntakeScanPayload, IntakeQuestion, IntakeDetectedSpecView } from '../../models/intake';
 import { QUALITY_LABELS } from '../../models/quality';
@@ -179,14 +181,7 @@ function buildQualityQuestions(
   scan: IntakeScanPayload
 ): { ask: IntakeQuestion[]; detectedSpecs: IntakeDetectedSpecView[] } {
   try {
-    const general = loadGeneralContract();
-    const subCat = unterkategorienA ? loadSubCategoryContract(unterkategorienA) : null;
-    const assembly = unterkategorienA ? getAssemblyContract(unterkategorienA) : null;
-    const assemblyQ = assembly ? assemblyToQualityContract(assembly) : null;
-    const resolution = resolveIntakeQuestions(
-      [...general.questions, ...(subCat?.questions ?? []), ...(assemblyQ?.questions ?? [])],
-      scan
-    );
+    const resolution = resolveIntakeQuestions(loadCreationQuestions(unterkategorienA), scan);
     // Structured line: what the scan answered vs. what a scan-answerable field failed to answer
     // (non-empty unresolvedAutoFill = mis-scan, e.g. NVMe size=0, not an operator judgement).
     console.log('[intake] question resolution', {
@@ -204,19 +199,10 @@ function buildQualityQuestions(
   }
 }
 
-// Merged contract questions for a subcategory — used to compute the auto-answers at the
-// quality step (same set the questionnaire was built from).
-function mergedContractQuestions(unterkategorienA: number | null) {
-  const general = loadGeneralContract();
-  const subCat = unterkategorienA ? loadSubCategoryContract(unterkategorienA) : null;
-  const assembly = unterkategorienA ? getAssemblyContract(unterkategorienA) : null;
-  const assemblyQ = assembly ? assemblyToQualityContract(assembly) : null;
-  return [...general.questions, ...(subCat?.questions ?? []), ...(assemblyQ?.questions ?? [])];
-}
-
 const ROUTE_RE = /^\/api\/intake\/([^/]+)\/answer$/;
 
 const action = defineHttpAction({
+  feature: 'intake',
   key: 'intake-answer',
   label: 'Intake answer',
   appliesTo: () => false,
@@ -346,12 +332,12 @@ const action = defineHttpAction({
       // submitted answers win over them, so quality + specs are complete without the operator
       // re-entering scan-known data. Drop empty ("don't know") submitted answers first, so a
       // skipped question neither clobbers a scan-derived auto-answer nor scores as a real value.
-      const { autoAnswers } = resolveIntakeQuestions(mergedContractQuestions(itemRow.Unterkategorien_A), resolvedScan);
+      const { autoAnswers } = resolveIntakeQuestions(loadCreationQuestions(itemRow.Unterkategorien_A), resolvedScan);
       const submittedAnswers = Object.fromEntries(
         Object.entries(qualityAnswers).filter(([, v]) => typeof v === 'string' && v.trim() !== '')
       );
       const mergedAnswers = { ...autoAnswers, ...submittedAnswers };
-      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, mergedAnswers, assemblyQualityContract);
+      const checkResponse = buildQualityCheckResponse(generalContract, subCatContract, mergedAnswers, assemblyQualityContract, assemblyContract);
 
       const assessment = {
         tag: checkResponse.qualityTag as import('../../models/quality').QualityTag,
@@ -367,6 +353,8 @@ const action = defineHttpAction({
 
       const id = await insertQualityAssessment(assessment);
       await updateItemQualityAssessment(itemRow.ItemUUID, id, checkResponse.qualityValue);
+      // Same derivation as the operator review (U9): range + pessimistic grade, incl. in-device parts.
+      await recomputeQualityScoreSafely(itemRow.ItemUUID, { actor: 'intake-station', logEvent });
 
       await logEvent({
         Actor: 'intake-station',

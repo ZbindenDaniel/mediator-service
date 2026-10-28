@@ -1,7 +1,7 @@
 # backend/
 
 ## Purpose
-Express HTTP server — action handlers, database access, agentic pipeline, scheduled workers, and all server-side business logic.
+Node `http` server (no framework) — action handlers, database access, agentic pipeline, scheduled workers, and all server-side business logic.
 
 ## Contents
 - `server.ts` — HTTP/HTTPS server bootstrap, inbox watcher, worker startup

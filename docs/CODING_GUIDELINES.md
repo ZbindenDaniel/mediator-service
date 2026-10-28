@@ -13,7 +13,7 @@ These guidelines complement the short rules in [`../AGENTS.md`](../AGENTS.md).
 - Keep route/action behaviour aligned with current architecture docs.
 
 ## 3) Data contracts
-- Treat `models/` and `backend/src/models/` contracts as shared API surface.
+- Treat `models/` contracts as shared API surface.
 - When changing structures, verify frontend/backend compatibility in the same change.
 - Avoid silent schema drift; document any intentional contract changes.
 

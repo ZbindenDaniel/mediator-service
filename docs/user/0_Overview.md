@@ -1,26 +1,13 @@
-# Project Overview
+# Übersicht
 
-The mediator service coordinates warehouse inventory workflows by pairing a TypeScript/Node.js backend with a React frontend for managing boxes, items, and print assets. This overview gives a high-level snapshot of the system, plus references for architecture, planning, issues, and recent changes.
+Hier findest du die Anleitungen zum System. Fang mit **Erste Schritte** an, wenn du neu bist.
 
-## Mission & Scope
+| Seite | Worum geht's? |
+|---|---|
+| **Erste Schritte** | Navigation, Artikel anlegen und finden, scannen, umlagern, Etiketten drucken, KI, ERP |
+| **Fehlerbehebung** | Was tun, wenn etwas nicht klappt (Drucker, WebDAV, Bilder, KI, Fehlermeldungen) |
+| **Drucker einrichten** | Etikettendrucker (Brother QL) anschliessen und im System einrichten |
+| **Ersatzteile erfassen (Zerlegen)** | Geräte zerlegen und Teile als eigene Artikel erfassen |
+| **CO₂-Einsparung** | Wie der CO₂-Wert eines Artikels berechnet wird |
 
-- Provide API endpoints and background workers to manage boxes, items, QR scans, and CSV imports.
-- Deliver a responsive React UI that surfaces search, detail, and import tooling for logistics teams.
-- Maintain printable label templates and legacy scripts required for production operations.
-
-## Project Parts
-
-- **Backend services (`backend/`)** – API endpoints, background workflows, and integrations.
-- **Frontend UI (`frontend/`)** – React screens for inventory operations, search, and printing.
-- **Shared models (`models/`)** – TypeScript contracts shared across tiers.
-- **Printing assets (`frontend/public/print/`)** – Label templates rendered by frontend and backend.
-- **Data & media (`data/`, `media/`)** – CSV imports/exports, QR assets, and item imagery.
-- **Agentic flows (`backend/agentic/`)** – AI-assisted enrichment pipeline with human review.
-
-## Current Status (Broad)
-
-- Backend and frontend share aligned TypeScript models and rely on dynamic action loading for API routes.
-- CSV import/export, QR scanning, and print label flows are available and continue to receive incremental polish.
-- Shopware support currently covers read-only product search plus a queued sync pipeline awaiting a real dispatch client.
-- The legacy agentic runtime has been ported into the mediator under `backend/agentic/`; ongoing work focuses on stability and integration follow-through.
-- In progress: grouping helpers for list and box detail item payloads to support summarized responses.
+Fragen oder Fehler, die hier nicht beschrieben sind? Melde sie bei der Admin-Person.

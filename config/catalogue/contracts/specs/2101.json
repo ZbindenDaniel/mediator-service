@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "subCategory": 2101,
+  "fields": [
+    {
+      "key": "Diagonale",
+      "required": true,
+      "description": "Screen size in inches, e.g. 14\""
+    },
+    {
+      "key": "Auflösung",
+      "required": false,
+      "description": "e.g. 1920×1080"
+    },
+    {
+      "key": "Touchscreen",
+      "required": false,
+      "description": "ja / nein"
+    },
+    {
+      "key": "Farbe",
+      "required": false,
+      "description": "Lid colour"
+    },
+    {
+      "key": "FRU",
+      "required": false,
+      "description": "Manufacturer part number (FRU / P/N / Spare part no.), e.g. 01YR564"
+    },
+    {
+      "key": "Kompatible Modelle",
+      "required": false,
+      "description": "Device models this part fits, comma-separated, e.g. ThinkPad T480, T480s"
+    }
+  ]
+}

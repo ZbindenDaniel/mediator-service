@@ -1,27 +1,41 @@
 {
-  "version": 1,
+  "version": 2,
   "subCategory": 301,
   "questions": [
     {
       "id": "toner_ink_included",
       "type": "select",
       "question": "Toner / Tinte vorhanden?",
-      "values": ["Voll", "Teilweise", "Leer", "Nicht enthalten"],
+      "values": [
+        "Voll",
+        "Teilweise",
+        "Leer",
+        "Nicht enthalten"
+      ],
       "specField": "Verbrauchsmaterial",
       "specValue": "%v",
-      "qualityImpact": {
-        "Voll": 5,
-        "Teilweise": 4,
-        "Leer": 3,
-        "Nicht enthalten": 3
-      }
+      "states": {
+        "Voll": 1.0,
+        "Teilweise": 0.75,
+        "Leer": 0.5,
+        "Nicht enthalten": 0.5
+      },
+      "weight": 1
     },
     {
       "id": "print_test",
       "type": "boolean",
       "question": "Drucktest erfolgreich?",
       "required": true,
-      "qualityImpact": { "true": 5, "false": 1 }
+      "knockout": {
+        "below": 0.25,
+        "cap": 0.19
+      },
+      "states": {
+        "true": 1.0,
+        "false": 0.0
+      },
+      "weight": 4
     }
   ]
 }

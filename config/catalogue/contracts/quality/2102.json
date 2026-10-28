@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "subCategory": 2102,
+  "questions": [
+    {
+      "id": "keyboard_layout",
+      "type": "select",
+      "question": "Tastatur-Layout (fest verbaut)?",
+      "values": [
+        "CH",
+        "DE",
+        "US",
+        "UK",
+        "FR",
+        "Anderes"
+      ],
+      "specField": "Tastatur-Layout",
+      "specValue": "%v",
+      "showIf": {
+        "questionId": "part_keyboard",
+        "value": "Fest verbaut"
+      }
+    },
+    {
+      "id": "missing_keys",
+      "type": "multi",
+      "question": "Fehlende Tasten?",
+      "suggestions": [
+        "Esc",
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
+        "F11",
+        "F12",
+        "Entf",
+        "Rücktaste",
+        "Tab",
+        "Feststelltaste",
+        "Shift links",
+        "Shift rechts",
+        "Ctrl",
+        "Fn",
+        "Win",
+        "Alt",
+        "AltGr",
+        "Leertaste",
+        "Enter",
+        "Ä",
+        "Ö",
+        "Ü",
+        ",",
+        ".",
+        "-",
+        "Pfeil links",
+        "Pfeil rechts",
+        "Pfeil hoch",
+        "Pfeil runter"
+      ],
+      "states": {
+        "1": 0.75,
+        "3": 0.5,
+        "6": 0.25
+      },
+      "weight": 3,
+      "specField": "Fehlende Tasten",
+      "specValue": "%v",
+      "showIf": {
+        "questionId": "part_keyboard",
+        "value": "Fest verbaut"
+      }
+    }
+  ]
+}

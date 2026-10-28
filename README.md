@@ -1,106 +1,66 @@
 # Mediator Service
 
-Mediator Service is the warehouse operations backbone for inventory tracking, ERP handoff, and AI-assisted item enrichment. It combines a TypeScript/Node.js backend, a React frontend, and shared data contracts so inventory data stays consistent from scan to export.
+Inventory and cataloguing system for a refurbishing warehouse: every device and part gets a record, a
+label and a place on a shelf, is enriched by an AI pipeline with human review, and is handed off to the
+ERP (kivitendo) and the web shop (Shopware).
 
-## Why this project exists
+TypeScript throughout — a Node `http` backend with Postgres, a React SPA, and shared types in `models/`.
+Current version: see `package.json` (3.3.x). The UI and user help are in German.
 
-The system reduces manual work and inventory mismatches by keeping one operational source of truth across:
-- **Warehouse operations**: locate items quickly, scan boxes/shelves, move stock, and print labels.
-- **Backoffice workflows**: ingest and export CSV data for ERP-driven processes.
-- **Data quality workflows**: enrich partially known items with agentic assistance and human review before publication.
+## What it does
 
-## Core functionality
-
-### Inventory and storage management
-- Track item references (`ItemRef`) and concrete instances (`itemInstances`) with box assignments and stock signals.
-- Maintain box (Behälter) and location structures for physical retrieval.
-- Support bulk and single-item inventory operations through API actions and UI flows.
-
-### CSV import/export and ERP sync support
-- Import structured inventory data from CSV pipelines.
-- Export inventory in dedicated regimes (manual/operator-friendly vs ERP/automatic contracts).
-- Stage ERP sync flows from backend actions and scripts, including media-mirroring support used in sync operations.
-
-### Agentic enrichment and review workflow
-- Run AI-assisted extraction/categorization/pricing flows for incomplete item data.
-- Preserve review checkpoints so human reviewers can approve, reject, or refine results.
-- Keep prompt/output handling deterministic with schema validation and reliability guardrails tracked in project docs.
-
-### QR scanning and print workflows
-- Generate and consume QR payloads for box/location navigation.
-- Support scanner-driven routing in the frontend.
-- Integrate print template assets used for labels and warehouse handling.
-
-## Repository layout
-
-- `backend/` — API actions, persistence, integrations, and agentic orchestration.
-- `frontend/` — React UI for operations, scanning, and review tooling.
-- `models/` — shared TypeScript contracts used across backend and frontend.
-- `docs/` — architecture, setup, planning notes, known issues, and highlights.
-- `scripts/` — build/test/verification helpers and operational scripts.
-
-## Current product focus
-
-The active roadmap and progress tracking live in:
-- `OVERVIEW.md` (root task tracker)
-- `docs/OVERVIEW.md` (high-level project status + documentation map)
-
-Current priorities are:
-- deterministic ERP sync behavior
-- stable and reviewable agentic output contracts
-- incremental UX polish for operational inventory flows
+| Area | Summary | Runbook |
+|---|---|---|
+| Items | A **reference** (`item_refs`, one per Artikel-Nummer) holds product data; **instances** (`items`, one per physical unit) hold stock, location, serial/MAC, condition. | [items](docs/detailed/items.md) |
+| Storage | Boxes (`B-`) on shelves (`S-`), relocation, placement scanning, stubs for uncatalogued shelf content. | [boxes](docs/detailed/boxes.md), [stubs](docs/detailed/stubs.md) |
+| QR & labels | QR labels for items/boxes/shelves, printed through CUPS (Brother QL queues); camera and keyboard-wedge scanning. | [qr_codes](docs/detailed/qr_codes.md), [printing](docs/detailed/printing.md) |
+| Quality & specs | Per-subcategory JSON contracts in `contracts/` drive the condition questionnaire, required spec fields and CO₂ scoring. | [contracts/](contracts/README.md), [co2-impact](docs/detailed/co2-impact.md) |
+| Spare parts | Disassembly ("Zerlegen") of devices into tracked components via assembly contracts. | [spare-parts-catalog](docs/detailed/spare-parts-catalog.md) |
+| AI enrichment | Queued agentic runs (Ollama or OpenAI-compatible + Tavily search) fill descriptions, specs, dimensions and price; a review wizard approves or rejects with feedback. | [agentic-basics](docs/detailed/agentic-basics.md), [review-flow](docs/detailed/review-flow.md) |
+| Intake station | Netboot image scans a device and walks the operator through cataloguing via `/api/intake/*`. | [intake](docs/detailed/intake.md) |
+| ERP | CSV import/export, approval-gated push to kivitendo, optional nightly sync. | [import_export](docs/detailed/import_export.md), [nightly-erp-sync](docs/detailed/nightly-erp-sync.md) |
+| Shop | Queued Shopware sync: products, variants, stock, images, categories. | [shopware](docs/detailed/shopware.md) |
+| Media & docs | Item photos (local or WebDAV), attachments, and per-serial external documents (wipe reports, test results). | [media-storage](docs/detailed/media-storage.md) |
 
 ## Quick start (local)
 
-1. Install dependencies:
+Needs Node 20 and Docker.
 
 ```bash
 npm install
+cp .env.example .env            # set DATABASE_URL (Postgres is required, there is no SQLite fallback)
+docker compose up -d postgres   # or the full stack: postgres, cups, mediator, proxy, authentik
+npm start                       # builds, then serves UI + API on http://localhost:8080
 ```
-
-2. Create local environment file:
 
 ```bash
-cp .env.example .env
+npm test        # prebuild checks + jest suite
+npm run smoke   # HTTP/HTTPS smoke checks against a running server
 ```
 
-3. Start local services:
+Deployment, Docker/CI, printing and auth setup: [docs/setup.md](docs/setup.md). All environment
+variables: [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md).
 
-```bash
-docker compose up -d
-```
+## Repository layout
 
-4. Build and run:
+| Path | Contents |
+|---|---|
+| [backend/](backend/README.md) | Server, action handlers (one file per endpoint), DB access, agentic pipeline, workers |
+| [frontend/](frontend/README.md) | React SPA, print templates |
+| [models/](models/README.md) | Types shared by backend and frontend |
+| [contracts/](contracts/README.md) | Runtime JSON contracts: quality, specs, assembly, CO₂ |
+| [cups/](cups/README.md) | CUPS print-server image |
+| [scripts/](scripts/README.md) | Build, test and one-off migration scripts |
+| [docs/](docs/) | Architecture, setup, runbooks (`detailed/`), changelogs, plans, user help (`user/`) |
 
-```bash
-npm run build
-npm start
-```
+## Documentation
 
-The compiled backend serves frontend assets from `dist/frontend/public`.
+- [OVERVIEW.md](OVERVIEW.md) — current focus and the last 10 changes
+- [todo.md](todo.md) — open bugs, feature queue, decisions
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — how the pieces fit together
+- [docs/detailed/](docs/detailed/README.md) — per-domain runbooks
+- [docs/changelogs/](docs/changelogs/README.md) — change history by topic, with the reasoning behind each change
+- [docs/plans/](docs/plans/README.md) — designs for upcoming features
+- [docs/user/](docs/user/0_Overview.md) — operator help (German), also served in-app at `/hilfe`
 
-## Common commands
-
-```bash
-npm run build   # compile TypeScript, bundle frontend, copy public assets
-npm start       # run compiled server
-npm test        # run prebuild checks and the test harness
-npm run smoke   # run HTTP/HTTPS smoke checks
-```
-
-## Documentation map
-
-- Setup and environment: [`docs/setup.md`](docs/setup.md)
-- Architecture and data flow: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- Current plans: [`docs/PLANS.md`](docs/PLANS.md)
-- Known issues: [`docs/BUGS.md`](docs/BUGS.md)
-- Recent highlights: [`docs/RECENT_HIGHLIGHTS.md`](docs/RECENT_HIGHLIGHTS.md)
-
-## Contributor notes
-
-- Keep changes scoped and prefer existing mediator patterns over new abstractions.
-- If you modify shared contracts, verify alignment across `models/`, backend usage, and frontend usage.
-- Extend existing logging/error-handling paths for operationally relevant flow changes.
-
-<!-- TODO(agent): Keep this functionality overview aligned with docs/OVERVIEW.md when core workflows shift. -->
-<!-- TODO(agent): Revisit quick-start once multi-node/service-split deployment guidance is finalized. -->
+Contributors and coding agents: start with [AGENTS.md](AGENTS.md) and [CLAUDE.md](CLAUDE.md).

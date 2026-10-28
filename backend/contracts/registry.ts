@@ -4,8 +4,8 @@ import type { QualityContract } from '../../models/quality-contract';
 import type { SpecContract } from '../../models/spec-contract';
 import type { AssemblyContract } from '../../models/assembly-contract';
 import type { StandardsContract } from '../../models/agentic-findings';
-
-const CONTRACTS_DIR = path.resolve(__dirname, '../../contracts');
+import { resolveContractReadPath, listContractCodes } from './paths';
+import { parentCategoryCode } from '../lib/taxonomy';
 
 // Module-level caches — cleared on restart, populated lazily on first access.
 const qualityCache = new Map<string, QualityContract>();
@@ -24,7 +24,7 @@ function loadJsonFile<T>(filePath: string): T | null {
 
 function loadQualityContractByKey(key: string): QualityContract | null {
   if (qualityCache.has(key)) return qualityCache.get(key)!;
-  const contract = loadJsonFile<QualityContract>(path.join(CONTRACTS_DIR, 'quality', `${key}.json`));
+  const contract = loadJsonFile<QualityContract>(resolveContractReadPath(path.join('quality', `${key}.json`)));
   if (contract) qualityCache.set(key, contract);
   return contract;
 }
@@ -33,13 +33,35 @@ export function getGeneralQualityContract(): QualityContract | null {
   return loadQualityContractByKey('general');
 }
 
+/** Hauptkategorie of a subcategory by the taxonomy's numeric convention (201 → 20, 2101 → 210). */
+/**
+ * Key of the shared Hauptkategorie contract. The parent comes from the taxonomy; `floor(code / 10)`
+ * is only the fallback for codes outside it (it is wrong for 2110+ under main category 210).
+ */
+export function groupKeyFor(subcategory: number, parentCode: number | null = parentCategoryCode(subcategory)): string {
+  return `group-${parentCode ?? Math.floor(subcategory / 10)}`;
+}
+
+/**
+ * The quality contract an item of this subcategory is assessed with: the shared Hauptkategorie
+ * contract (`quality/group-<haupt>.json`, e.g. condition + part number for all laptop parts) followed
+ * by the subcategory's own file. Merged here so every caller (review, intake, score, HTTP) agrees.
+ */
 export function getQualityContract(subcategory: number): QualityContract | null {
-  return loadQualityContractByKey(String(subcategory));
+  const own = loadQualityContractByKey(String(subcategory));
+  const group = loadQualityContractByKey(groupKeyFor(subcategory));
+  if (!group) return own;
+  return {
+    ...(own ?? {}),
+    version: own?.version ?? group.version,
+    subCategory: subcategory,
+    questions: [...group.questions, ...(own?.questions ?? []).filter((q) => !group.questions.some((g) => g.id === q.id))]
+  };
 }
 
 export function getSpecContract(subcategory: number): SpecContract | null {
   if (specCache.has(subcategory)) return specCache.get(subcategory)!;
-  const contract = loadJsonFile<SpecContract>(path.join(CONTRACTS_DIR, 'specs', `${subcategory}.json`));
+  const contract = loadJsonFile<SpecContract>(resolveContractReadPath(path.join('specs', `${subcategory}.json`)));
   if (contract) specCache.set(subcategory, contract);
   return contract;
 }
@@ -51,30 +73,39 @@ let standardsCache: StandardsContract | null | undefined;
 
 export function getStandardsContract(): StandardsContract | null {
   if (standardsCache !== undefined) return standardsCache;
-  standardsCache = loadJsonFile<StandardsContract>(path.join(CONTRACTS_DIR, 'standards.json'));
+  standardsCache = loadJsonFile<StandardsContract>(resolveContractReadPath('standards.json'));
   return standardsCache;
 }
 
 export function getAssemblyContract(subCategory: number): AssemblyContract | null {
   if (assemblyCache.has(subCategory)) return assemblyCache.get(subCategory)!;
-  const contract = loadJsonFile<AssemblyContract>(path.join(CONTRACTS_DIR, 'assembly', `${subCategory}.json`));
+  const contract = loadJsonFile<AssemblyContract>(resolveContractReadPath(path.join('assembly', `${subCategory}.json`)));
   if (contract) assemblyCache.set(subCategory, contract);
   return contract;
 }
 
 export function listSpecContractSubcategories(): number[] {
   if (specSubcategoriesCache) return specSubcategoriesCache;
-  try {
-    const files = fs.readdirSync(path.join(CONTRACTS_DIR, 'specs'));
-    const codes = files
-      .filter(f => f.endsWith('.json'))
-      .map(f => parseInt(f.replace('.json', ''), 10))
-      .filter(n => !isNaN(n));
-    specSubcategoriesCache = codes;
-    return codes;
-  } catch {
-    return [];
-  }
+  const codes = listContractCodes('specs')
+    .map(k => parseInt(k, 10))
+    .filter(n => !isNaN(n));
+  specSubcategoriesCache = codes;
+  return codes;
+}
+
+/** Codes that have a contract of the given type (shipped ∪ overlay). Used for coverage display. */
+export function listContractSubcategories(type: 'quality' | 'specs' | 'assembly'): string[] {
+  return listContractCodes(type);
+}
+
+/** Clears all contract caches so a freshly uploaded/reverted contract is picked up immediately. */
+export function clearContractCaches(): void {
+  qualityCache.clear();
+  specCache.clear();
+  assemblyCache.clear();
+  specSubcategoriesCache = null;
+  filterableSpecKeysCache = null;
+  standardsCache = undefined;
 }
 
 let filterableSpecKeysCache: Set<string> | null = null;

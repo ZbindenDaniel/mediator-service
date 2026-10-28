@@ -1,5 +1,7 @@
 // TODO(agent): add action tests.
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
+import { resolveTenant } from '../utils/tenant';
 import fs from 'fs';
 import path from 'path';
 // TODO(agent): Capture structured Langtext ingestion telemetry to validate helper fallbacks before removing string pathways.
@@ -24,6 +26,7 @@ import { normalizeQuality, resolveQualityFromLabel } from '../../models/quality'
 import { getSpecContract } from '../contracts/registry';
 import { applySpecContract } from '../../models/spec-contract';
 import { queryOne, withTransaction } from '../db-client';
+import { guardCreate, guardWrite } from '../utils/write-guard';
 
 const DEFAULT_EINHEIT: ItemEinheit = ItemEinheit.Stk;
 
@@ -467,8 +470,10 @@ const action = defineHttpAction({
       let raw = '';
       for await (const chunk of req) raw += chunk;
       const p = new URLSearchParams(raw);
-      const actor = (p.get('actor') || '').trim();
+      const actor = resolveActor(ctx, (p.get('actor') || '').trim());
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
+      // Owning tenant for boxes/items born via import (Phase 2b). Null until forward-auth is live.
+      const tenant = resolveTenant(ctx);
       const nowDate = new Date();
       const providedBoxId = (p.get('BoxID') || '').trim();
       const BoxID = providedBoxId ? providedBoxId : null;
@@ -477,6 +482,12 @@ const action = defineHttpAction({
       }
       const incomingItemUUID = (p.get('ItemUUID') || '').trim();
       const incomingArtikelNummer = (p.get('Artikel_Nummer') || '').trim();
+      // New items belong to the requester's org; an existing item or target box must be its own.
+      // The catalogue entry is NOT checked here: an org may stock items of another org's entry. The
+      // entry upsert itself is owner-guarded in db.ts, so such an import leaves the entry untouched.
+      if (!guardCreate(ctx, res)) return;
+      if (BoxID && !(await guardWrite(ctx, res, 'box', BoxID))) return;
+      if (incomingItemUUID && !(await guardWrite(ctx, res, 'item', incomingItemUUID))) return;
       const requestPath = resolveRequestPath(req);
       const isUpdateRequest = false;
 
@@ -1493,7 +1504,9 @@ const action = defineHttpAction({
       const itemDataList = itemUUIDs.map((uuid) => ({
         ...data,
         ItemUUID: uuid,
-        Auf_Lager: creationPlan.quantityPerItem
+        Auf_Lager: creationPlan.quantityPerItem,
+        // Owning tenant (Phase 2b); null until forward-auth. Upsert COALESCE never reassigns an owner.
+        TenantId: tenant
       }));
       // withTransaction provides atomicity for multi-step item+box+agentic persistence
       try {
@@ -1528,7 +1541,8 @@ const action = defineHttpAction({
               PhotoPath: boxPhotoPath,
               PlacedBy: null,
               PlacedAt: null,
-              UpdatedAt: now
+              UpdatedAt: now,
+              TenantId: tenant
             });
             if (!boxExistedBeforeUpsert) {
               await ctx.logEvent({

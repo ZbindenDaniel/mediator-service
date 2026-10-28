@@ -1,4 +1,5 @@
-// TODO(agent): Validate shelf location configuration against warehouse layout once confirmed.
+// Seed only: copied into the tenant_sites table on first start (assigned to the default org). After
+// that, sites are edited on the Organisationen admin page and served via GET /api/app-config.
 export interface ShelfLocationDefinition {
   id: string;
   label: string;

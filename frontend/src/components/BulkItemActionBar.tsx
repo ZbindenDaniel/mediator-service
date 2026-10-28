@@ -10,6 +10,8 @@ import { dialogService } from './dialog';
 import { createBoxForRelocation, ensureActorOrAlert } from './relocation/relocationHelpers';
 import { ensureUser } from '../lib/user';
 import { logger } from '../utils/logger';
+import { useIdentity } from '../context/IdentityContext';
+import { useFeatures } from '../context/FeaturesContext';
 
 // TODO(agentic): Introduce bulk agentic trigger entry point alongside relocation actions.
 // TODO(agent): Fold ERP sync UX into shared bulk action helpers once backend status polling exists.
@@ -303,9 +305,23 @@ export default function BulkItemActionBar({
   const hasSelection = selectedCount > 0;
   // Admin-only actions (e.g. Shop-Sync) are shown only to operators logged into the admin page — i.e.
   // those who hold the admin token. Read once; the endpoint re-validates it anyway.
+  const identity = useIdentity();
+  const features = useFeatures();
   const [adminToken] = useState<string>(() => {
     try { return sessionStorage.getItem('adminSecret') ?? ''; } catch { return ''; }
   });
+
+  // Tenancy (Phase 3): the bulk write endpoints reject a mixed selection all-or-nothing
+  // (guardWriteMany), so one foreign item makes every bulk write 403. Foreign rows arrive already
+  // redacted from the server (LocationRedacted set), so block the mutating actions and say why
+  // rather than let the operator click into a guaranteed failure. Unrestricted requests (no login /
+  // platform admin) never see redacted rows, so this is a no-op for them; read-only export stays on.
+  const foreignCount = useMemo(
+    () => (selectedItems ?? []).filter((it) => it.LocationRedacted === true).length,
+    [selectedItems]
+  );
+  const hasForeign = foreignCount > 0;
+  const writeDisabled = isProcessing || !hasSelection || hasForeign;
 
   const selectionLabel = useMemo(() => {
     if (!hasSelection) {
@@ -1155,6 +1171,13 @@ export default function BulkItemActionBar({
       <div className="bulk-item-action-bar__summary">
         <strong>{selectionLabel}</strong>
         {isProcessing ? <span className="muted"> Verarbeitung…</span> : null}
+        {hasForeign ? (
+          <p className="bulk-item-action-bar__notice" role="note" data-testid="bulk-foreign-notice">
+            {foreignCount === selectedCount
+              ? 'Auswahl gehört anderen Organisationen – Massenaktionen sind nur für eigene Artikel möglich.'
+              : `${foreignCount} von ${selectedCount} Artikeln gehören anderen Organisationen – Massenaktionen sind deaktiviert, solange fremde Artikel ausgewählt sind.`}
+          </p>
+        ) : null}
       </div>
       <div className="bulk-item-action-bar__controls">
         <div className="bulk-item-action-bar__field row">
@@ -1171,7 +1194,7 @@ export default function BulkItemActionBar({
           />
           <button
             className="bulk-item-action-bar__button bulk-item-action-bar__button--primary"
-            disabled={isProcessing || !hasSelection}
+            disabled={writeDisabled}
             onClick={() => {
               void handleBulkMove();
             }}
@@ -1187,7 +1210,7 @@ export default function BulkItemActionBar({
 
         <button
           className="bulk-item-action-bar__button"
-          disabled={isProcessing || !hasSelection}
+          disabled={writeDisabled}
           onClick={() => {
             void handleCreateAndMove();
           }}
@@ -1197,34 +1220,38 @@ export default function BulkItemActionBar({
           <span>In neuen Behälter verschieben</span>
         </button>
 
-        <button
-          className="bulk-item-action-bar__button"
-          disabled={isProcessing || !hasSelection}
-          onClick={() => {
-            void handleBulkKi();
-          }}
-          type="button"
-        >
-          <GoCpu aria-hidden="true" />
-          <span>KI</span>
-        </button>
-
-        <button
-          className="bulk-item-action-bar__button"
-          disabled={isProcessing || !hasSelection}
-          onClick={() => {
-            void handleBulkSyncToErp();
-          }}
-          type="button"
-        >
-          <GoSync aria-hidden="true" />
-          <span>Kivi Sync 🥝</span>
-        </button>
-
-        {adminToken ? (
+        {features['agentic'] && (
           <button
             className="bulk-item-action-bar__button"
-            disabled={isProcessing || !hasSelection}
+            disabled={writeDisabled}
+            onClick={() => {
+              void handleBulkKi();
+            }}
+            type="button"
+          >
+            <GoCpu aria-hidden="true" />
+            <span>KI</span>
+          </button>
+        )}
+
+        {features['erp-sync'] && (
+          <button
+            className="bulk-item-action-bar__button"
+            disabled={writeDisabled}
+            onClick={() => {
+              void handleBulkSyncToErp();
+            }}
+            type="button"
+          >
+            <GoSync aria-hidden="true" />
+            <span>Kivi Sync 🥝</span>
+          </button>
+        )}
+
+        {features.shopware && (adminToken || identity.isPlatformAdmin) ? (
+          <button
+            className="bulk-item-action-bar__button"
+            disabled={writeDisabled}
             onClick={() => {
               void handleBulkSyncToShop();
             }}
@@ -1236,21 +1263,23 @@ export default function BulkItemActionBar({
           </button>
         ) : null}
 
-        <button
-          className="bulk-item-action-bar__button"
-          disabled={isProcessing || !hasSelection}
-          onClick={() => {
-            void handleBulkUpdateShopStatus();
-          }}
-          type="button"
-        >
-          <GoTag aria-hidden="true" />
-          <span>Shopstatus</span>
-        </button>
+        {features['shopware'] && (
+          <button
+            className="bulk-item-action-bar__button"
+            disabled={writeDisabled}
+            onClick={() => {
+              void handleBulkUpdateShopStatus();
+            }}
+            type="button"
+          >
+            <GoTag aria-hidden="true" />
+            <span>Shopstatus</span>
+          </button>
+        )}
 
         <button
           className="bulk-item-action-bar__button bulk-item-action-bar__button--danger"
-          disabled={isProcessing || !hasSelection}
+          disabled={writeDisabled}
           onClick={() => {
             void handleBulkDelete();
           }}
@@ -1260,15 +1289,17 @@ export default function BulkItemActionBar({
           <span>Bestand entfernen</span>
         </button>
 
-        <button
-          className="bulk-item-action-bar__button bulk-item-action-bar__button--export"
-          disabled={isProcessing || !hasSelection}
-          onClick={handleExportSelection}
-          type="button"
-        >
-          <GoDownload aria-hidden="true" />
-          <span>Export CSV</span>
-        </button>
+        {features['import-export'] && (
+          <button
+            className="bulk-item-action-bar__button bulk-item-action-bar__button--export"
+            disabled={isProcessing || !hasSelection}
+            onClick={handleExportSelection}
+            type="button"
+          >
+            <GoDownload aria-hidden="true" />
+            <span>Export CSV</span>
+          </button>
+        )}
 
         <button
           className="bulk-item-action-bar__button bulk-item-action-bar__button--ghost"

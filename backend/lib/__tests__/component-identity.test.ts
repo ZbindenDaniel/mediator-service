@@ -1,31 +1,36 @@
-import { generateComponentUUID, isComponentUUID, parseSequentialItemUUID } from '../itemIds';
+import { partItemUUIDStem, nextPartItemUUID, parseSequentialItemUUID } from '../itemIds';
 import { isUsableSerial } from '../component-serial';
 
-describe('component UUID scheme', () => {
-  test('mints a C- prefixed id', () => {
-    const uuid = generateComponentUUID(() => 0.5);
-    expect(uuid.startsWith('C-')).toBe(true);
-    expect(isComponentUUID(uuid)).toBe(true);
+describe('part ID scheme (C-<root>-<subcategory>-<####>)', () => {
+  test('stem names root device and subcategory', () => {
+    expect(partItemUUIDStem('104523', 2132)).toBe('C-104523-2132-');
+    expect(partItemUUIDStem(' 104523 ', 603)).toBe('C-104523-603-');
   });
 
-  test('successive mints are unique', () => {
-    const a = generateComponentUUID(() => 0.11);
-    const b = generateComponentUUID(() => 0.99);
-    expect(a).not.toBe(b);
+  test('unknown subcategory gets the 0 segment', () => {
+    expect(partItemUUIDStem('104523', null)).toBe('C-104523-0-');
+    expect(partItemUUIDStem('104523', Number.NaN)).toBe('C-104523-0-');
   });
 
-  test('isComponentUUID is false for normal and empty ids', () => {
-    expect(isComponentUUID('I-12345-0001')).toBe(false);
-    expect(isComponentUUID('')).toBe(false);
-    expect(isComponentUUID(null)).toBe(false);
-    expect(isComponentUUID(undefined)).toBe(false);
+  test('refuses a root that would make the stem ambiguous', () => {
+    expect(() => partItemUUIDStem('', 2132)).toThrow();
+    expect(() => partItemUUIDStem('10-45', 2132)).toThrow();
+    expect(() => partItemUUIDStem('10%45', 2132)).toThrow();
+    expect(() => partItemUUIDStem('10_45', 2132)).toThrow();
   });
 
-  test('parseSequentialItemUUID degrades to null for a component id (no mis-derived Artikelnummer)', () => {
-    const uuid = generateComponentUUID(() => 0.42);
-    expect(parseSequentialItemUUID(uuid)).toBeNull();
-    // Even if someone passes the component prefix explicitly, there is no Artikelnummer to read.
-    expect(parseSequentialItemUUID(uuid, 'C-')).toBeNull();
+  test('counts up from the latest ID of the same stem', () => {
+    const stem = 'C-104523-2132-';
+    expect(nextPartItemUUID(stem, null)).toBe('C-104523-2132-0001');
+    expect(nextPartItemUUID(stem, 'C-104523-2132-0007')).toBe('C-104523-2132-0008');
+    expect(nextPartItemUUID(stem, 'C-104523-2132-9999')).toBe('C-104523-2132-10000');
+    // A foreign or legacy random ID never feeds the counter.
+    expect(nextPartItemUUID(stem, 'C-mgx3k2a0f4z1q')).toBe('C-104523-2132-0001');
+  });
+
+  test('parseSequentialItemUUID does not read an Artikelnummer out of a part ID', () => {
+    expect(parseSequentialItemUUID('C-104523-2132-0003')).toBeNull();
+    expect(parseSequentialItemUUID('C-104523-2132-0003', null)).toBeNull();
   });
 });
 

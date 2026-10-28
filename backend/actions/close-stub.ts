@@ -1,5 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
+import { resolveActor } from '../utils/actor';
+import { guardWrite } from '../utils/write-guard';
+import { queryOne } from '../db-client';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -7,6 +10,7 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 }
 
 const action = defineHttpAction({
+  feature: 'stubs',
   key: 'close-stub',
   label: 'Close stub',
   appliesTo: () => false,
@@ -17,8 +21,11 @@ const action = defineHttpAction({
       const pathParts = url.pathname.split('/');
       const id = pathParts[pathParts.length - 1] ?? '';
       if (!id) return sendJson(res, 400, { error: 'id is required' });
+      // A stub belongs to its shelf's org.
+      const stub = await queryOne<{ ShelfId: string }>(`SELECT "ShelfId" FROM box_stubs WHERE "Id" = $1`, [id]);
+      if (stub && !(await guardWrite(ctx, res, 'box', stub.ShelfId))) return;
 
-      const closedBy = url.searchParams.get('closedBy') ?? 'unknown';
+      const closedBy = resolveActor(ctx, url.searchParams.get('closedBy')) || 'unknown';
       const closedAt = new Date().toISOString();
 
       const closed = await ctx.closeStub(id, closedBy, closedAt);

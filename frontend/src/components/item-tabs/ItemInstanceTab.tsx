@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
+import { Link } from 'react-router-dom';
+import { fetchAssemblyContract } from '../../lib/contractsApi';
 import RelocateItemCard from '../RelocateItemCard';
 import EditInstanceCard from '../EditInstanceCard';
 import QualityReviewModal from '../QualityReviewModal';
@@ -8,6 +10,7 @@ import PrintLabelButton from '../PrintLabelButton';
 import QrScanButton from '../QrScanButton';
 import { dialogService } from '../dialog';
 import { normalizeDetailValue } from '../../lib/itemDetailFormatting';
+import DetailRows from '../DetailRows';
 import type { Item } from '../../../../models';
 
 export interface InstanceRow {
@@ -31,6 +34,8 @@ interface Props {
   relocateCardRef: React.RefObject<HTMLDivElement>;
   showEditInstance: boolean;
   showQualityReview: boolean;
+  // False on another org's item (tenancy 3a): its actions would only answer 403, so they are hidden.
+  canEdit?: boolean;
   onAddItem: () => Promise<void>;
   onRemoveItem: () => Promise<void>;
   onRelocate: () => void;
@@ -54,6 +59,7 @@ export default function ItemInstanceTab({
   relocateCardRef,
   showEditInstance,
   showQualityReview,
+  canEdit = true,
   onAddItem,
   onRemoveItem,
   onRelocate,
@@ -79,6 +85,15 @@ export default function ItemInstanceTab({
     onQualityReview();
   }
 
+  const assemblySubCategory = item.EffectiveSubCategory ?? item.Unterkategorien_A ?? null;
+  const [hasAssembly, setHasAssembly] = useState(false);
+  useEffect(() => {
+    if (typeof assemblySubCategory !== 'number') { setHasAssembly(false); return; }
+    let cancelled = false;
+    void fetchAssemblyContract(assemblySubCategory).then((c) => { if (!cancelled) setHasAssembly(!!c && c.parts.length > 0); });
+    return () => { cancelled = true; };
+  }, [assemblySubCategory]);
+
   async function handleEntnehmen() {
     let confirmed = false;
     try {
@@ -98,10 +113,15 @@ export default function ItemInstanceTab({
 
   return (
     <>
-      <div className="tab-actions">
+      {canEdit && <div className="tab-actions">
         <PrintLabelButton itemId={item.ItemUUID} inline />
         <button type="button" className="btn" onClick={onEditInstance}>Bearbeiten</button>
-        <button type="button" className="btn" onClick={() => void handleOpenQualityReview()}>Neu bewerten</button>
+        {hasAssembly ? (
+          // Devices with an assembly are (re-)assessed on the Einzelteile page: Zustand + Aufbau in one place.
+          <Link className="btn" to={`/items/${encodeURIComponent(item.ItemUUID)}/einzelteile`}>Einzelteile</Link>
+        ) : (
+          <button type="button" className="btn" onClick={() => void handleOpenQualityReview()}>Neu bewerten</button>
+        )}
         {!isOutOfStock && (
           <QrScanButton
             searchTarget={item.ItemUUID}
@@ -144,11 +164,12 @@ export default function ItemInstanceTab({
             Hinzufügen
           </button>
         )}
-      </div>
+      </div>}
 
-      {item.Quality === null && (
+      {canEdit && item.Quality === null && (
         <div className="quality-missing-hint">
-          <span>Qualitätsbewertung fehlt</span>
+          {/* With a range but no grade, the assessment exists but leaves too much unchecked (U4). */}
+          <span>{item.QualityScoreMin != null ? 'Zu wenig bewertet für eine Note' : 'Qualitätsbewertung fehlt'}</span>
           <button type="button" className="btn btn--small" onClick={() => void handleOpenQualityReview()}>
             Jetzt bewerten
           </button>
@@ -158,42 +179,14 @@ export default function ItemInstanceTab({
       <div className="card">
         <h3>dieser Artikel</h3>
         {instanceDetailRows.length > 0 ? (
-          <table className="details">
-            <tbody>
-              {instanceDetailRows.map(([k, v], idx) => {
-                const cell = normalizeDetailValue(v);
-                return (
-                  <tr key={`${k}-${idx}`} className="responsive-row">
-                    <th className="responsive-th">{k}</th>
-                    <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                      {cell.content}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <DetailRows rows={instanceDetailRows} />
         ) : (
           <p className="muted">Keine Instanzdaten vorhanden.</p>
         )}
         {instanceSpecRows.length > 0 && (
           <>
             <h4 style={{ marginTop: '1rem', marginBottom: '0.25rem' }}>Spezifikationen</h4>
-            <table className="details">
-              <tbody>
-                {instanceSpecRows.map(([k, v], idx) => {
-                  const cell = normalizeDetailValue(v);
-                  return (
-                    <tr key={`spec-${k}-${idx}`} className="responsive-row">
-                      <th className="responsive-th">{k}</th>
-                      <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                        {cell.content}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <DetailRows rows={instanceSpecRows} keyPrefix="spec-" />
           </>
         )}
         {isOutOfStock && <p className="muted">Instanz nicht mehr eingelagert.</p>}
@@ -243,7 +236,7 @@ export default function ItemInstanceTab({
       {showQualityReview && (
         <QualityReviewModal
           itemId={item.ItemUUID}
-          subCategory={item.Unterkategorien_A}
+          subCategory={item.EffectiveSubCategory ?? item.Unterkategorien_A}
           onDone={onQualityReviewDone}
           onCancel={onQualityReviewDone}
           initialAnswers={existingAnswers}

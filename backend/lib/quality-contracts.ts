@@ -1,30 +1,37 @@
-import { readFileSync } from 'fs';
-import { join, resolve } from 'path';
 import type { QualityContract, QualityQuestion, QualityCheckResponse } from '../../models/quality-contract';
 import type { AssemblyContract } from '../../models/assembly-contract';
+import { assemblyToQualityContract } from '../../models/assembly-contract';
 import { QUALITY_DEFAULT, QUALITY_MIN, QUALITY_MAX, QUALITY_LABELS } from '../../models/quality';
 import type { QualityTag } from '../../models/quality';
+import { getAssemblyContract, getGeneralQualityContract, getQualityContract } from '../contracts/registry';
+import { parseMultiAnswer, computeQualityScore, scoreToRange, gradeFromRange, gradingFrom } from '../../models/quality-score';
+import type { QualityScoreRange } from '../../models/quality-score';
 
-// __dirname is reliable across dev and dist; process.cwd() varies by launch directory
-const CONTRACTS_DIR = resolve(__dirname, '../../contracts/quality');
-
-function loadContractFile(filename: string): QualityContract | null {
-  try {
-    const raw = readFileSync(join(CONTRACTS_DIR, filename), 'utf-8');
-    return JSON.parse(raw) as QualityContract;
-  } catch {
-    return null;
-  }
-}
-
+// One loader for every contract: the registry (overlay-first, cached, cleared on admin upload).
 export function loadGeneralContract(): QualityContract {
-  const contract = loadContractFile('general.json');
+  const contract = getGeneralQualityContract();
   if (!contract) throw new Error('General quality contract not found');
   return contract;
 }
 
+// Includes the shared Hauptkategorie contract (group-<haupt>.json), see registry.getQualityContract.
 export function loadSubCategoryContract(subCatCode: number): QualityContract | null {
-  return loadContractFile(`${subCatCode}.json`);
+  return getQualityContract(subCatCode);
+}
+
+/**
+ * The questions of the device check at creation (intake station): general + subcategory + the slots
+ * the assembly contract asks on create (`askOnCreate`, absent = all). Scoring still uses every slot.
+ */
+export function loadCreationQuestions(subCatCode: number | null): QualityQuestion[] {
+  const general = loadGeneralContract();
+  const subCat = subCatCode ? loadSubCategoryContract(subCatCode) : null;
+  const assembly = subCatCode ? getAssemblyContract(subCatCode) : null;
+  return [
+    ...general.questions,
+    ...(subCat?.questions ?? []),
+    ...(assembly ? assemblyToQualityContract(assembly, 'create').questions : [])
+  ];
 }
 
 function clamp(value: number): number {
@@ -42,28 +49,21 @@ function tagForValue(value: number): QualityTag {
   return label as QualityTag;
 }
 
-/** Derives quality value (1–5) from contract answers. Worst (min) impact score wins. */
+/**
+ * Quality of one assessment from its own answers (models/quality-score.ts). `value` is the
+ * pessimistic grade ("at least …") of the lower bound, so an assessment row always has one; whether
+ * the item shows a grade at all (narrow enough range) is decided when the item is recomputed.
+ */
 export function deriveQualityFromAnswers(
   contracts: QualityContract[],
-  answers: Record<string, string>
-): { value: number; tag: QualityTag } {
-  const scores: number[] = [];
-
-  for (const contract of contracts) {
-    for (const question of contract.questions) {
-      if (!isQuestionVisible(question, answers)) continue;
-      if (!question.qualityImpact) continue;
-      const answer = answers[question.id];
-      // An empty/whitespace answer means the operator skipped it ("don't know") — treat it as
-      // unanswered, not as a real value, so a skip never drives the quality score.
-      if (answer === undefined || answer.trim() === '') continue;
-      const impact = question.qualityImpact[answer as keyof typeof question.qualityImpact];
-      if (typeof impact === 'number') scores.push(impact);
-    }
-  }
-
-  const value = scores.length > 0 ? clamp(Math.min(...scores)) : QUALITY_DEFAULT;
-  return { value, tag: tagForValue(value) };
+  answers: Record<string, string>,
+  assembly?: AssemblyContract | null
+): { value: number; tag: QualityTag; range: QualityScoreRange | null } {
+  const range = scoreToRange(computeQualityScore({ contracts, answers, assembly }));
+  if (!range) return { value: QUALITY_DEFAULT, tag: tagForValue(QUALITY_DEFAULT), range: null };
+  const grading = gradingFrom(contracts);
+  const value = clamp(gradeFromRange({ min: range.min, max: range.min }, grading) ?? QUALITY_DEFAULT);
+  return { value, tag: tagForValue(value), range };
 }
 
 /** Builds the derived Spezifikationen entries from contract answers. */
@@ -81,7 +81,14 @@ export function deriveSpecsFromAnswers(
       // A skipped ("don't know") answer must not become a spec — otherwise specValue "%v GB"
       // renders as " GB". An empty/whitespace answer is treated as unanswered.
       if (answer === undefined || answer.trim() === '') continue;
-      const rendered = question.specValue ? question.specValue.replace('%v', answer) : answer;
+      let value = answer;
+      if (question.type === 'multi') {
+        const entries = parseMultiAnswer(answer);
+        // "[]" = checked, nothing found — no spec line ("Fehlende Tasten: " would read as a defect)
+        if (!entries || entries.length === 0) continue;
+        value = entries.join(', ');
+      }
+      const rendered = question.specValue ? question.specValue.replace('%v', value) : value;
       specs[question.specField] = rendered;
     }
   }
@@ -89,36 +96,39 @@ export function deriveSpecsFromAnswers(
   return specs;
 }
 
-/** Converts assembly contract part questions into a synthetic QualityContract for scoring/spec derivation. */
-export function assemblyToQualityContract(ac: AssemblyContract): QualityContract {
-  return {
-    version: ac.version,
-    subCategory: ac.subCategory,
-    // Include both primary question and secondary specQuestion so all specs are derived
-    questions: ac.parts.flatMap(p => {
-      const q = p.question; // support both field names
-      const sq = p.specQuestion;
-      return [
-        ...(q ? [q] : []),
-        ...(sq ? [sq] : [])
-      ];
-    })
-  };
+/**
+ * Specs that locked device questions (refinedQuestionIds) wrote while they were still open. Once the
+ * parts speak for themselves these lines would contradict them, so callers drop them. A spec field
+ * that an open question still renders is left alone.
+ */
+export function lockedSpecsFromAnswers(
+  contracts: QualityContract[],
+  answers: Record<string, string>,
+  locked: Set<string>
+): Record<string, string> {
+  if (locked.size === 0) return {};
+  const pick = (keep: (id: string) => boolean) =>
+    deriveSpecsFromAnswers(contracts.map((c) => ({ ...c, questions: c.questions.filter((q) => keep(q.id)) })), answers);
+  const open = pick((id) => !locked.has(id));
+  const specs = pick((id) => locked.has(id));
+  for (const key of Object.keys(open)) delete specs[key];
+  return specs;
 }
 
-
+/** Converts assembly contract part questions into a synthetic QualityContract for scoring/spec derivation. */
 export function buildQualityCheckResponse(
   generalContract: QualityContract,
   subCatContract: QualityContract | null,
   answers: Record<string, string>,
-  assemblyQualityContract?: QualityContract | null
+  assemblyQualityContract?: QualityContract | null,
+  assembly?: AssemblyContract | null
 ): QualityCheckResponse {
   const contracts = [
     generalContract,
     ...(assemblyQualityContract ? [assemblyQualityContract] : []),
     ...(subCatContract ? [subCatContract] : [])
   ];
-  const { value, tag } = deriveQualityFromAnswers(contracts, answers);
+  const { value, tag, range } = deriveQualityFromAnswers(contracts, answers, assembly);
   const derivedSpecs = deriveSpecsFromAnswers(contracts, answers);
 
   return {
@@ -129,5 +139,6 @@ export function buildQualityCheckResponse(
     derivedSpecs,
     qualityValue: value,
     qualityTag: tag,
+    qualityScore: range,
   };
 }

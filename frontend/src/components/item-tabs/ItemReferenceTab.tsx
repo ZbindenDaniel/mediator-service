@@ -1,16 +1,20 @@
 import React from 'react';
 import ShopBadge from '../ShopBadge';
 import ZubehoerBadge from '../ZubehoerBadge';
-import { normalizeDetailValue } from '../../lib/itemDetailFormatting';
 import type { Item } from '../../../../models';
+import DetailRows from '../DetailRows';
+import { useFeature } from '../../context/FeaturesContext';
 
 interface Props {
   item: Item;
   referenceDetailRows: [string, React.ReactNode][];
   connectedToDevices: any[];
   compatibleParentRefs: any[];
-  onEdit: () => void;
-  onShopStatus: () => void;
+  // Omitted when the requester may not change this catalogue entry (another org's, tenancy 3a).
+  onEdit?: () => void;
+  onShopStatus?: () => void;
+  // Omitted unless the requester may delete the reference (tenant admins only, §7 M2).
+  onDelete?: () => void;
 }
 
 export default function ItemReferenceTab({
@@ -19,13 +23,16 @@ export default function ItemReferenceTab({
   connectedToDevices,
   compatibleParentRefs,
   onEdit,
-  onShopStatus
+  onShopStatus,
+  onDelete
 }: Props) {
+  const shopwareEnabled = useFeature('shopware');
   return (
     <>
       <div className="tab-actions">
-        <button type="button" className="btn" onClick={onEdit}>Bearbeiten</button>
-        <button type="button" className="btn" onClick={onShopStatus}>Shopartikel</button>
+        {onEdit && <button type="button" className="btn" onClick={onEdit}>Bearbeiten</button>}
+        {shopwareEnabled && onShopStatus && <button type="button" className="btn" onClick={onShopStatus}>Shopartikel</button>}
+        {onDelete && <button type="button" className="btn btn--danger" onClick={onDelete}>Referenz löschen</button>}
       </div>
       <div className="card">
       <div className="item-reference-tab__badges">
@@ -48,21 +55,7 @@ export default function ItemReferenceTab({
       </div>
       <h3>Referenz</h3>
       {referenceDetailRows.length > 0 ? (
-        <table className="details">
-          <tbody>
-            {referenceDetailRows.map(([k, v], idx) => {
-              const cell = normalizeDetailValue(v);
-              return (
-                <tr key={`${k}-${idx}`} className="responsive-row">
-                  <th className="responsive-th">{k}</th>
-                  <td className={`responsive-td${cell.isPlaceholder ? ' is-placeholder' : ''}`}>
-                    {cell.content}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <DetailRows rows={referenceDetailRows} />
       ) : (
         <p className="muted">Keine Referenzdaten vorhanden.</p>
       )}

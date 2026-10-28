@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
+import { resolveActor } from '../utils/actor';
+import { guardWrite, guardWriteMany } from '../utils/write-guard';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -32,7 +34,7 @@ const action = defineHttpAction({
         console.warn('[bulk-update-ref-fields] Failed to parse request body', parseErr);
       }
 
-      const actor = typeof data.actor === 'string' ? data.actor.trim() : '';
+      const actor = resolveActor(ctx, typeof data.actor === 'string' ? data.actor : '');
       const confirm = isConfirmed(data.confirm);
       const itemIdsInput: unknown[] = Array.isArray(data.itemIds) ? data.itemIds : [];
       const itemIds = Array.from(
@@ -102,6 +104,9 @@ const action = defineHttpAction({
       if (missing.length) {
         return sendJson(res, 404, { error: 'items not found or missing Artikel_Nummer', itemIds: missing });
       }
+
+      // These fields live on the catalogue entry, so its owner decides, not the item's.
+      if (!(await guardWriteMany(ctx, res, 'ref', Array.from(groupMap.keys())))) return;
 
       const groups = Array.from(groupMap.entries()).map(([artikelNummer, ids]) => ({ artikelNummer, itemIds: ids }));
 

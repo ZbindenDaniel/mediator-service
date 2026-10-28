@@ -1,4 +1,4 @@
-import { shelfLocations } from '../data/shelfLocations';
+import { getShelfLocations } from '../data/shelfLocations';
 import { logError, logger } from '../utils/logger';
 
 // TODO(agent): Validate shelf label formatting against models/shelf-locations mappings before rollout.
@@ -37,7 +37,7 @@ export function formatShelfLabel(shelfId?: string | null): string | null {
       return null;
     }
 
-    const locationEntry = shelfLocations.find((location) => location.id === locationSegment);
+    const locationEntry = getShelfLocations().find((location) => location.id === locationSegment);
 
     if (!locationEntry) {
       logger.warn('Missing shelf location label for shelf display', {

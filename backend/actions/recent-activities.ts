@@ -15,6 +15,7 @@ const MAX_LIMIT = 200;
 // TODO(agent): Revisit recent activity search filtering once UI wiring is finalized.
 // TODO(agent): Include active topic allow list details in diagnostics metadata responses.
 const action = defineHttpAction({
+  feature: 'logs',
   key: 'recent-activities',
   label: 'Recent activities',
   appliesTo: () => false,

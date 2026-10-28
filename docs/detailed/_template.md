@@ -4,7 +4,7 @@
 > **Authoring rules**
 > - Prefer links over duplicated schema definitions.
 > - Keep each section short and contract-focused.
-> - Explicitly call out where data structures must stay synchronized across `models/`, `backend/src/models/`, and frontend types/usages.
+> - Explicitly call out where data structures must stay synchronized across `models/` and their backend/frontend consumers.
 > - Reuse canonical terminology from [`glossary.md`](./glossary.md) instead of redefining synonyms.
 
 ## In short

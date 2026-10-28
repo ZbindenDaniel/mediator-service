@@ -1,11 +1,5 @@
 # Items
 
-> [!NOTE]
-> **Authoring rules**
-> - Prefer links over duplicated schema definitions.
-> - Keep each section short and contract-focused.
-> - Explicitly call out where data structures must stay synchronized across `models/`, `backend/src/models/`, and frontend types/usages.
-
 ## In short
 - Business goal: Keep the item domain understandable as the central data object that connects storage, enrichment, import/export, and shop synchronization workflows.
 - In short: Items relate to most operational classes (boxes, media, events, agentic runs, export records) and are intentionally split into reference identity (`Artikel_Nummer`) and instance identity (`ItemUUID`).
@@ -101,7 +95,8 @@
 | Flow | Endpoint/action | File | Notes |
 |---|---|---|---|
 | Create item/import one file | `POST /api/import/item` (`import-item`) | `backend/actions/import-item.ts` | Handles uploaded CSV/image style ingestion for new item creation pathways. |
-| Create quality assessment | `POST /api/items/:uuid/quality-review` (`quality-review`) | `backend/actions/quality-review.ts` | Called immediately after item creation to persist physical-condition review answers; dual-writes `QualityId` + legacy `Quality` integer. |
+| Create quality assessment | `POST /api/items/:uuid/quality-review` (`quality-review`) | `backend/actions/quality-review.ts` | Called immediately after item creation to persist physical-condition review answers; dual-writes `QualityId` + legacy `Quality` integer. Stored slot answers the body does not send are kept (read at save time). |
+| Set slot answers | `PATCH /api/items/:uuid/quality-review/answers` (`quality-review`) | `backend/actions/quality-review.ts` | `{ reviewed_by, answers }` with slot-question ids only (400 otherwise; `""` clears). Merges into the latest assessment in place — no history row per click; creates a first one if none — then recomputes the score. Used by the Einzelteile page. |
 | Increment/add instance | `POST /api/items/:id/add` (`add-item`) | `backend/actions/add-item.ts` | Branches by `Einheit`: bulk stock increment vs new instance mint/persist; emits events + sync queue jobs. |
 | Read detail | `GET /api/items/:id` (`save-item` GET branch) | `backend/actions/save-item.ts` | Returns `ItemDetailResponse` payload (`item`, `reference`, `instances`, `media`, events, agentic info). |
 | Edit item | `PUT /api/items/:id` (`save-item` PUT branch) | `backend/actions/save-item.ts` | Applies instance-safe edits + reference update logic + media mutation paths. |

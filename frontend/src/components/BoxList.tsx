@@ -5,9 +5,8 @@ import { formatDate } from '../lib/format';
 import { logError, logger } from '../utils/logger';
 import LocationTag from './LocationTag';
 import type { BoxTypeFilter } from './boxListUtils';
-import { shelfLocations } from '../data/shelfLocations';
+import { getShelfLocations } from '../data/shelfLocations';
 
-// TODO(agent): Validate that the box list layout still reads clearly without color metadata.
 // TODO(agent): Confirm shelf label formatting stays aligned with box list expectations.
 // TODO(agent): Review LocationTag label override coverage if new box metadata fields are added.
 // TODO(agent): Revisit box list ARIA labels if location label formatting changes.
@@ -156,7 +155,7 @@ export default function BoxList({ boxes, searchValue, sortKey, typeFilter, locat
                 <span>Standort</span>
                 <select id="box-location-filter" value={locationFilter} onChange={handleLocationFilterChange}>
                   <option value="all">Alle Standorte</option>
-                  {shelfLocations.map((loc) => (
+                  {getShelfLocations().map((loc) => (
                     <option key={loc.id} value={loc.id}>{loc.label}</option>
                   ))}
                 </select>
@@ -194,6 +193,8 @@ export default function BoxList({ boxes, searchValue, sortKey, typeFilter, locat
               const normalizedLabel = normalizeLabelValue(box.Label, 'box label', box.BoxID);
               const normalizedShelfLabel = normalizeLabelValue(box.ShelfLabel, 'box shelf label', box.BoxID);
               const isShelf = box.BoxID.slice(0, 2).toUpperCase() === 'S-';
+              // Re-check the format client-side too: old/imported rows never went through move-box validation.
+              const shelfColor = typeof box.Color === 'string' && /^#[0-9a-f]{6}$/i.test(box.Color) ? box.Color : null;
               if (box.LocationId && !normalizedShelfLabel) {
                 logger.warn('Missing shelf label for box list row', {
                   boxId: box.BoxID,
@@ -209,6 +210,8 @@ export default function BoxList({ boxes, searchValue, sortKey, typeFilter, locat
                   key={box.BoxID}
                   data-box-id={box.BoxID}
                   className={['box-list-row', isShelf ? 'box-list-row--shelf' : ''].filter(Boolean).join(' ')}
+                  // Picked colour rides a CSS var so the stylesheet keeps owning the marker's shape.
+                  style={isShelf && shelfColor ? ({ '--shelf-color': shelfColor } as React.CSSProperties) : undefined}
                   role="button"
                   tabIndex={0}
                   aria-label={rowLabel}

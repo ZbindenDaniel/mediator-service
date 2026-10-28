@@ -11,13 +11,25 @@ export interface ItemCategoryLookups {
   unter: Map<number, ItemSubcategoryWithParent>;
 }
 
-export function buildItemCategoryLookups(): ItemCategoryLookups {
+// Accepts an explicit category array so the runtime/DB-backed loader can build
+// lookups over loaded data; defaults to the hardcoded const for existing callers.
+/**
+ * Subcategory → Hauptkategorie code. The parent is not derivable from the code: catalogue main
+ * category 210 has subcategories 2101–2132, so floor(2127 / 10) would be 212.
+ */
+export function parentCodeMap(categories: ItemCategoryDefinition[]): Map<number, number> {
+  const map = new Map<number, number>();
+  for (const category of categories) for (const sub of category.subcategories) map.set(sub.code, category.code);
+  return map;
+}
+
+export function buildItemCategoryLookups(categories: ItemCategoryDefinition[] = itemCategories): ItemCategoryLookups {
   const haupt = new Map<number, ItemCategoryDefinition>();
   const unter = new Map<number, ItemSubcategoryWithParent>();
 
   try {
     let previousCategoryCode = -Infinity;
-    for (const category of itemCategories) {
+    for (const category of categories) {
       if (category.code <= previousCategoryCode) {
         console.warn('Item categories are not strictly ascending by code', {
           current: category.code,
@@ -68,9 +80,9 @@ export function buildItemCategoryLookups(): ItemCategoryLookups {
       }
     }
 
-    if (haupt.size !== itemCategories.length) {
+    if (haupt.size !== categories.length) {
       console.error('Item category lookup size mismatch', {
-        expected: itemCategories.length,
+        expected: categories.length,
         actual: haupt.size
       });
     }

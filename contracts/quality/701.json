@@ -1,12 +1,22 @@
 {
-  "version": 1,
+  "version": 2,
   "subCategory": 701,
   "questions": [
     {
       "id": "vram_gb",
       "type": "select",
       "question": "Wie viel VRAM hat die Karte?",
-      "values": ["?", "1", "2", "4", "6", "8", "12", "16", "24"],
+      "values": [
+        "?",
+        "1",
+        "2",
+        "4",
+        "6",
+        "8",
+        "12",
+        "16",
+        "24"
+      ],
       "specField": "VRAM",
       "specValue": "%v GB"
     },
@@ -14,7 +24,13 @@
       "id": "display_outputs",
       "type": "select",
       "question": "Anzahl Displayausgänge?",
-      "values": ["1", "2", "3", "4", "6"],
+      "values": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "6"
+      ],
       "specField": "Displayausgänge",
       "specValue": "%v"
     },
@@ -22,15 +38,25 @@
       "id": "fan_condition",
       "type": "select",
       "question": "Lüfterzustand?",
-      "values": ["Einwandfrei", "Laut", "Defekt", "Passivkühlung"],
+      "values": [
+        "Einwandfrei",
+        "Laut",
+        "Defekt",
+        "Passivkühlung"
+      ],
       "specField": "Lüfter",
       "specValue": "%v",
-      "qualityImpact": {
-        "Einwandfrei": 5,
-        "Laut": 3,
-        "Passivkühlung": 5,
-        "Defekt": 1
-      }
+      "knockout": {
+        "below": 0.25,
+        "cap": 0.19
+      },
+      "states": {
+        "Einwandfrei": 1.0,
+        "Laut": 0.5,
+        "Passivkühlung": 1.0,
+        "Defekt": 0.0
+      },
+      "weight": 2
     }
   ]
 }

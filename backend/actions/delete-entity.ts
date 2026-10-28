@@ -1,7 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 import { withTransaction } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -19,11 +21,12 @@ const action = defineHttpAction({
       const type = match ? match[1] : '';
       const id = match ? decodeURIComponent(match[2]) : '';
       if (!type || !id) return sendJson(res, 400, { error: 'invalid path' });
+      if (!(await guardWrite(ctx, res, type === 'boxes' ? 'box' : 'item', id))) return;
       let raw = '';
       for await (const c of req) raw += c;
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
-      const actor = (data.actor || '').trim();
+      const actor = resolveActor(ctx, (data.actor || '').trim());
       const confirm = !!data.confirm;
       if (!actor || !confirm) return sendJson(res, 400, { error: 'actor and confirm=true required' });
       if (type === 'items') {

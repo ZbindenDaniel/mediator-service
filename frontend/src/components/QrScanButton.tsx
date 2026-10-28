@@ -2,6 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { logError, logger } from '../utils/logger';
 import qrIcon from '../assets/qrIcon.svg';
+import { useFeature } from '../context/FeaturesContext';
 
 // TODO(qr-scan-button): Validate QR icon sizing with the circular button in every card layout.
 // TODO(qr-scan-button): Confirm button contrast when rendered inside text inputs.
@@ -21,7 +22,7 @@ interface QrScanButtonProps {
   label?: string;
 }
 
-export default function QrScanButton({
+function QrScanButtonInner({
   returnTo,
   callback,
   scanIntent,
@@ -92,4 +93,9 @@ export default function QrScanButton({
       <span className="visually-hidden">{label}</span>
     </button>
   );
+}
+
+// Gate in a wrapper (not an early return inside) so the inner component's hooks always run in order.
+export default function QrScanButton(props: QrScanButtonProps) {
+  return useFeature('qr-scan') ? <QrScanButtonInner {...props} /> : null;
 }

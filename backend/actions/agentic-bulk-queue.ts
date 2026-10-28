@@ -3,6 +3,7 @@ import { PUBLIC_ORIGIN } from '../config';
 import { defineHttpAction } from './index';
 import { withTransaction } from '../db-client';
 import type { AgenticRun } from '../../models';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -23,6 +24,7 @@ type AgenticBulkQueueResult = {
 };
 
   const action = defineHttpAction({
+  feature: 'agentic',
   key: 'agentic-bulk-queue',
   label: 'Agentic bulk queue',
   appliesTo: () => false,
@@ -47,7 +49,7 @@ type AgenticBulkQueueResult = {
       return sendJson(res, 400, { error: 'mode must be "all" or "missing"' });
     }
 
-    const actor = (requestUrl.searchParams.get('actor') || '').trim();
+    const actor = resolveActor(ctx, requestUrl.searchParams.get('actor'));
     if (!actor) {
       console.warn('[agentic-bulk-queue] Missing actor for bulk queue request', { mode });
       return sendJson(res, 400, { error: 'actor is required' });

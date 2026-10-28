@@ -1,8 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
 import { defineHttpAction } from './index';
 import { generateShopwareCorrelationId } from '../db';
 import { ItemEinheit } from '../../models';
 import { withTransaction, query } from '../db-client';
+import { guardWrite } from '../utils/write-guard';
 // TODO(agent): Verify non-bulk removals keep grouping/list views consistent after zeroing stock.
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -28,13 +30,14 @@ const action = defineHttpAction({
       const match = req.url?.match(/^\/api\/items\/([^/]+)\/remove$/);
       const uuid = match ? decodeURIComponent(match[1]) : '';
       if (!uuid) return sendJson(res, 400, { error: 'invalid item id' });
+      if (!(await guardWrite(ctx, res, 'item', uuid))) return;
       const item = await ctx.getItem(uuid);
       if (!item) return sendJson(res, 404, { error: 'item not found' });
       let raw = '';
       for await (const c of req) raw += c;
       let data: any = {};
       try { data = JSON.parse(raw || '{}'); } catch {}
-      const actor = (data.actor || '').trim();
+      const actor = resolveActor(ctx, (data.actor || '').trim());
       if (!actor) return sendJson(res, 400, { error: 'actor is required' });
       const currentQty = resolveCurrentQuantity(item.Auf_Lager);
       const isBulk = isBulkEinheit(item.Einheit);

@@ -13,7 +13,6 @@ One-off maintenance, migration, and debugging scripts — not part of the produc
 - `smoke-server.ts` — production smoke test: starts server, checks key endpoints, exits
 - `build.js` / `prebuild.js` — frontend asset build helpers (run via `npm run build`)
 - `run-tests.js` — test runner wrapper
-- `reploy.sh` — redeploy helper script for the production server
 - `license-inventory.js` — audits third-party license usage
 
 ## Relations

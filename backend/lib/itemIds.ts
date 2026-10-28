@@ -4,27 +4,33 @@
 const ITEM_ID_PREFIX = 'I-';
 const ITEM_ID_SEQUENCE_WIDTH = 4;
 
-// In-device components have no Artikelnummer to embed until they graduate at Zerlegung,
-// so they carry a temporary component UUID under a distinct prefix. It is replaced by a
-// normal I-<Artikelnummer>-#### id at graduation (see component-lifecycle). The prefix is
-// deliberately outside the I-/date parsers' alphabet so parseSequentialItemUUID degrades
-// to null rather than mis-deriving an Artikelnummer for a reference-less component.
-const COMPONENT_ID_PREFIX = 'C-';
+// In-device parts are named after where they come from: the root device's Artikelnummer and the
+// part's subcategory, numbered per pair (C-104523-2132-0003). The ID is minted once and never
+// changes — graduation only sets the Artikelnummer — so printed labels and relations stay valid.
+// The C- prefix keeps parts out of their device's I-<Artikelnummer>-% counter; with I- the four
+// characters after the dash would read the subcategory and restart the device sequence.
+const PART_ID_PREFIX = 'C-';
+// Subcategory segment when the slot has no target (e.g. intake disks keyed by device name).
+const PART_ID_UNKNOWN_SUBCATEGORY = '0';
 
-/** True when an ItemUUID is a temporary in-device component id (no Artikelnummer yet). */
-export function isComponentUUID(value: string | null | undefined): boolean {
-  return typeof value === 'string' && value.startsWith(COMPONENT_ID_PREFIX);
+/** The `C-<root>-<subcategory>-` stem every part of that pair shares (the counter's LIKE prefix). */
+export function partItemUUIDStem(rootArtikelNummer: string, subCategory: number | null | undefined): string {
+  const root = typeof rootArtikelNummer === 'string' ? rootArtikelNummer.trim() : '';
+  // A dash or LIKE wildcard in the root would make the stem ambiguous or match foreign IDs.
+  if (!root || /[-%_]/.test(root)) {
+    throw new Error(`Invalid root Artikel_Nummer for a part ID: "${rootArtikelNummer}"`);
+  }
+  const sub = typeof subCategory === 'number' && Number.isInteger(subCategory) && subCategory > 0
+    ? String(subCategory)
+    : PART_ID_UNKNOWN_SUBCATEGORY;
+  return `${PART_ID_PREFIX}${root}-${sub}-`;
 }
 
-/**
- * Mint a temporary component UUID for an in-device component. Uniqueness comes from a
- * time+random token; callers still guard with an existence check (as add-item does) before
- * insert, so a collision retries rather than throwing.
- */
-export function generateComponentUUID(random: () => number = Math.random): string {
-  const time = Date.now().toString(36);
-  const rand = Math.floor(random() * 0x7fffffff).toString(36).padStart(6, '0');
-  return `${COMPONENT_ID_PREFIX}${time}${rand}`;
+/** Next part ID after `latest` (the highest existing ID with the same stem, if any). */
+export function nextPartItemUUID(stem: string, latest: string | null | undefined): string {
+  const tail = typeof latest === 'string' && latest.startsWith(stem) ? latest.slice(stem.length) : '';
+  const previous = /^\d+$/.test(tail) ? Number.parseInt(tail, 10) : 0;
+  return `${stem}${String(previous + 1).padStart(ITEM_ID_SEQUENCE_WIDTH, '0')}`;
 }
 
 type MaybePromise<T> = T | Promise<T>;
@@ -166,7 +172,7 @@ export async function generateItemUUID(
 export const __TESTING__ = {
   ITEM_ID_PREFIX,
   ITEM_ID_SEQUENCE_WIDTH,
-  COMPONENT_ID_PREFIX,
+  PART_ID_PREFIX,
   formatItemIdDateSegment,
   parseSequentialItemUUID
 };

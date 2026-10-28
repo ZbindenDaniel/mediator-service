@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=https://goauthentik.io/blueprints/schema.json
+#
+# LOCAL STACKS ONLY: two ready-to-use logins so a recreated stack can be tested at once.
+# Never mount this file on a server (staging/production mount mediator.yaml only).
+# The password is re-applied on every blueprint run, so a password changed in the UI is reset.
+#   dev-admin   platform admin + tenant revamp (sees Administration)
+#   dev-worker  ordinary worker of tenant revamp
+# Password: AUTHENTIK_DEV_PASSWORD, falling back to AUTHENTIK_BOOTSTRAP_PASSWORD (docker-compose.authentik.yml).
+version: 1
+metadata:
+  name: Mediator - local test users
+entries:
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        name: Mediator - forward-auth application
+      required: true
+
+  - model: authentik_core.user
+    identifiers:
+      username: dev-admin
+    attrs:
+      name: Dev Admin
+      email: dev-admin@localhost
+      password: !Env AUTHENTIK_DEV_PASSWORD
+      groups:
+        - !Find [authentik_core.group, [name, mediator-admin]]
+        - !Find [authentik_core.group, [name, tenant-revamp]]
+
+  - model: authentik_core.user
+    identifiers:
+      username: dev-worker
+    attrs:
+      name: Dev Worker
+      email: dev-worker@localhost
+      password: !Env AUTHENTIK_DEV_PASSWORD
+      groups:
+        - !Find [authentik_core.group, [name, tenant-revamp]]

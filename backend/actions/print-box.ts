@@ -5,6 +5,7 @@ import { handleUnifiedPrintRequest } from './print-unified';
 // TODO(unify-print): Remove print-box wrapper once /api/print/:labelType/:id is fully adopted.
 
 const action = defineHttpAction({
+  feature: 'printing',
   key: 'print-box',
   label: 'Print box label',
   appliesTo: () => false,

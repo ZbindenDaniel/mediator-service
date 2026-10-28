@@ -1,0 +1,30 @@
+# Local/dev: put Authentik forward-auth in front of the app instead of nginx Basic Auth.
+#   docker compose -f docker-compose.yml -f docker-compose.authentik.yml up -d
+# Without this file the stack keeps the Basic Auth proxy (config/nginx/mediator.conf).
+# Guide: docs/detailed/identity-provider.md
+services:
+  proxy:
+    volumes:
+      - ./config/nginx/mediator.authentik.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      authentik-server:
+        condition: service_healthy
+
+  mediator:
+    environment:
+      # Reject data requests that arrive without a forward-auth identity (defence in depth).
+      AUTH_REQUIRED: "true"
+
+  # Blueprints configure Authentik on every start (provider, app, outpost, groups, test users),
+  # so a recreated stack needs no clicks. Both containers mount them, as Authentik's own compose does.
+  authentik-server:
+    environment: &authentik-blueprint-env
+      MEDIATOR_EXTERNAL_URL: https://${PUBLIC_HOSTNAME:-localhost}
+      AUTHENTIK_EXTERNAL_URL: http://${PUBLIC_HOSTNAME:-localhost}:${AUTHENTIK_PORT:-9000}/
+      AUTHENTIK_DEV_PASSWORD: ${AUTHENTIK_DEV_PASSWORD:-${AUTHENTIK_BOOTSTRAP_PASSWORD:-}}
+    volumes:
+      - ./config/authentik/blueprints:/blueprints/custom/mediator:ro
+  authentik-worker:
+    environment: *authentik-blueprint-env
+    volumes:
+      - ./config/authentik/blueprints:/blueprints/custom/mediator:ro

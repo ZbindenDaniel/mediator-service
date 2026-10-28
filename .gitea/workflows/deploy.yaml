@@ -56,6 +56,8 @@ jobs:
 
           # Ship the current prod compose so the ${MEDIATOR_IMAGE} override is present on the host.
           scp $SSH_OPTS docker-compose.prod.yaml "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/docker-compose.prod.yaml"
+          scp $SSH_OPTS docker-compose.prod.authentik.yaml "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/docker-compose.prod.authentik.yaml"
+          scp $SSH_OPTS docker-compose.prod.printing.yaml "$SSH_USER@$SSH_HOST:$DEPLOY_DIR/docker-compose.prod.printing.yaml"
 
           # Unquoted heredoc: values expand on the runner and travel over the encrypted
           # SSH channel, so the registry token is never placed in the host's process args.
@@ -65,9 +67,20 @@ jobs:
           echo "Deploying image: $IMAGE_REF"
           echo "$REG_TOKEN" | docker login "$REGISTRY" -u "$REG_USER" --password-stdin
           export MEDIATOR_IMAGE="$IMAGE_REF"
-          docker compose -f docker-compose.prod.yaml pull mediator
-          docker compose -f docker-compose.prod.yaml up -d mediator
+          # Escaped \$: evaluated on the host. Once the host opts into Authentik, every deploy must
+          # keep the override, or the recreated container would lose its forward-auth labels.
+          COMPOSE_FILES="-f docker-compose.prod.yaml"
+          # CUPS is opt-out: hosts without printers set PRINTING_ENABLED=false (no ./cups needed there).
+          if ! grep -qiE '^PRINTING_ENABLED="?(0|false|no)"?[[:space:]]*$' .env; then
+            COMPOSE_FILES="\$COMPOSE_FILES -f docker-compose.prod.printing.yaml"
+          fi
+          if grep -qiE '^AUTHENTIK_ENABLED="?(1|true|yes)"?[[:space:]]*$' .env; then
+            COMPOSE_FILES="\$COMPOSE_FILES -f docker-compose.prod.authentik.yaml"
+          fi
+          echo "Compose files: \$COMPOSE_FILES"
+          docker compose \$COMPOSE_FILES pull mediator
+          docker compose \$COMPOSE_FILES up -d mediator
           docker logout "$REGISTRY" >/dev/null 2>&1 || true
           docker image prune -f >/dev/null 2>&1 || true
-          docker compose -f docker-compose.prod.yaml ps
+          docker compose \$COMPOSE_FILES ps
           REMOTE

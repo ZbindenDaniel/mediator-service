@@ -12,8 +12,8 @@ interface Props {
 }
 
 const COLORS: Record<NonNullable<ZubehoerMode>, { bg: string; fg: string; border: string; label: string }> = {
-  connected: { bg: '#2da44e', fg: '#ffffff', border: '#2da44e', label: 'Verbunden' },
-  available: { bg: 'transparent', fg: '#57606a', border: '#8c959f', label: 'Zubehör' }
+  connected: { bg: '#3c7847', fg: '#ffffff', border: '#3c7847', label: 'Verbunden' },
+  available: { bg: 'transparent', fg: 'var(--muted)', border: 'var(--acc)', label: 'Zubehör' }
 };
 
 export default function ZubehoerBadge({ mode, compact }: Props) {

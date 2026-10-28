@@ -1,8 +1,13 @@
 import type { IncomingMessage, ServerResponse } from 'http';
+import { resolveActor } from '../utils/actor';
+import { resolveTenant } from '../utils/tenant';
+import { canUseSite, getSite } from '../lib/tenants';
 import { defineHttpAction } from './index';
 // TODO(agent): Align shelf label text with printed shelf A4 template once the layout is finalized.
 import type { CreateBoxPayload, CreateShelfPayload } from '../../models';
 import { withTransaction } from '../db-client';
+import { guardCreate } from '../utils/write-guard';
+import { canManageShelves } from '../lib/ownership';
 
 // TODO(agent): Verify shelf ID padding once the label template specification is clarified.
 // TODO(agent): Remove category-based shelf label fallback assumptions from any remaining admin tooling.
@@ -72,14 +77,23 @@ const action = defineHttpAction({
         return sendJson(res, 400, { error: 'Invalid JSON body' });
       }
 
-      const actor = (data.actor || '').trim();
+      const actor = resolveActor(ctx, (data.actor || '').trim());
       if (!actor) {
         console.error('[create-box] Missing actor');
         return sendJson(res, 400, { error: 'actor is required' });
       }
+      // Stamp the owning tenant on new boxes (Phase 2b). Null until forward-auth is live, so neutral.
+      const tenant = resolveTenant(ctx);
+      if (!guardCreate(ctx, res)) return;
 
       const normalizedType = typeof data.type === 'string' ? data.type.trim().toLowerCase() : '';
       if (normalizedType === 'shelf') {
+        // Shelves are warehouse structure — a tenant-admin capability (§7 Q1). Operators catalogue
+        // into existing shelves; boxes below stay open to any org member. No-op for the live system
+        // (unrestricted) and platform admins.
+        if (!canManageShelves(ctx?.identity)) {
+          return sendJson(res, 403, { error: 'Regale anlegen ist Organisations-Admins vorbehalten.' });
+        }
         const shelfPayload = data as CreateShelfPayload;
         const missingFields: string[] = [];
         const invalidFields: string[] = [];
@@ -114,6 +128,14 @@ const action = defineHttpAction({
             messages.push(`Invalid fields: ${invalidFields.join(', ')}`);
           }
           return sendJson(res, 400, { error: messages.join('. ') });
+        }
+        // Sites come from the org directory now; before, any location string was accepted.
+        const site = getSite(location!);
+        if (!site || !site.floors.includes(floor!)) {
+          return sendJson(res, 400, { error: `Unknown site/floor: ${location}-${floor}` });
+        }
+        if (!canUseSite(site, ctx?.identity)) {
+          return sendJson(res, 403, { error: `Site ${location} belongs to another organisation` });
         }
         const rawLabel =
           typeof shelfPayload.label === 'string'
@@ -175,7 +197,8 @@ const action = defineHttpAction({
               PhotoPath: null,
               PlacedBy: payload.actor,
               PlacedAt: null,
-              UpdatedAt: payload.now
+              UpdatedAt: payload.now,
+              TenantId: tenant
             });
             await ctx.logEvent({
               Actor: payload.actor,
@@ -220,7 +243,8 @@ const action = defineHttpAction({
           PhotoPath: null,
           PlacedBy: actor,
           PlacedAt: null,
-          UpdatedAt: now
+          UpdatedAt: now,
+          TenantId: tenant
         });
         await ctx.logEvent({
           Actor: actor,
@@ -277,7 +301,8 @@ const action = defineHttpAction({
               PhotoPath: null,
               PlacedBy: payload.actor,
               PlacedAt: null,
-              UpdatedAt: payload.now
+              UpdatedAt: payload.now,
+              TenantId: tenant
             });
             await ctx.logEvent({
               Actor: payload.actor,

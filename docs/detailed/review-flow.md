@@ -1,11 +1,5 @@
 # Review Flow
 
-> [!NOTE]
-> **Authoring rules**
-> - Prefer links over duplicated schema definitions.
-> - Keep each section short and contract-focused.
-> - Explicitly call out where data structures must stay synchronized across `models/`, `backend/src/models/`, and frontend types/usages.
-
 ## In short
 - Business goal: keep reviewer outcomes deterministic so automation (restart, close, follow-up processing) behaves predictably for the same input.
 - User value: reviewers can see consistent states, and operators can audit what changed, who changed it, and why a transition failed.
@@ -116,7 +110,6 @@ Derived from the quality value and forwarded as `priority` in the `POST /api/age
 The `QualityReviewStep` component accepts a `questionSet` prop for per-category question sets (not implemented in Phase 1; framework is in place).
 
 ## Restart metadata preservation/replacement policy
-<!-- TODO(agentic-doc-sync): Keep this truth table aligned with restart action/service/result-handler lifecycle updates. -->
 
 Current restart semantics are intentionally explicit and deterministic:
 

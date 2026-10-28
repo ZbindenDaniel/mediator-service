@@ -15,13 +15,15 @@ export type ItemListSortKey =
   | 'artikelnummer'
   | 'box'
   | 'entryDate'
+  | 'lastModified'
   | 'lastSynced'
   | 'agenticLastRun'
   | 'uuid'
   | 'stock'
   | 'subcategory'
   | 'agenticStatus'
-  | 'quality';
+  | 'quality'
+  | 'price';
 
 export type ItemListFilters = {
   searchTerm: string;
@@ -32,6 +34,8 @@ export type ItemListFilters = {
   shopPublicationFilter: 'all' | 'inShop' | 'notPublished' | 'noShopArticle';
   placementFilter: 'all' | 'unplaced' | 'placed';
   imageFilter: 'all' | 'noImages' | 'hasImages';
+  // "Without price" = Verkaufspreis empty or 0 (ERP exports 0 for unpriced refs).
+  priceFilter: 'all' | 'noPrice' | 'hasPrice';
   sortKey: ItemListSortKey;
   sortDirection: 'asc' | 'desc';
   entityFilter: 'all' | 'instances' | 'references';
@@ -55,13 +59,15 @@ const SORT_KEYS: ItemListSortKey[] = [
   'artikelnummer',
   'box',
   'entryDate',
+  'lastModified',
   'lastSynced',
   'agenticLastRun',
   'uuid',
   'stock',
   'subcategory',
   'agenticStatus',
-  'quality'
+  'quality',
+  'price'
 ];
 
 const DEFAULT_FILTERS: ItemListFilters = {
@@ -74,6 +80,7 @@ const DEFAULT_FILTERS: ItemListFilters = {
   // TODO(placement-filter): Revisit placement filter states if shelf-level placement state is introduced.
   placementFilter: 'all',
   imageFilter: 'all',
+  priceFilter: 'all',
   sortKey: 'artikelbeschreibung',
   sortDirection: 'asc',
   entityFilter: 'instances',
@@ -111,6 +118,7 @@ export function hasNonDefaultFilters(
     || filters.shopPublicationFilter !== defaults.shopPublicationFilter
     || filters.placementFilter !== defaults.placementFilter
     || filters.imageFilter !== defaults.imageFilter
+    || filters.priceFilter !== defaults.priceFilter
     || filters.sortKey !== defaults.sortKey
     || filters.sortDirection !== defaults.sortDirection
     || filters.entityFilter !== defaults.entityFilter
@@ -179,6 +187,14 @@ export function getActiveFilterDescriptions(
     };
     active.push(`Bilder: ${imageFilterLabels[filters.imageFilter]}`);
   }
+  if (filters.priceFilter !== defaults.priceFilter) {
+    const priceFilterLabels: Record<ItemListFilters['priceFilter'], string> = {
+      all: 'Alle',
+      noPrice: 'Ohne Preis',
+      hasPrice: 'Mit Preis'
+    };
+    active.push(`Preis: ${priceFilterLabels[filters.priceFilter]}`);
+  }
   if (filters.entityFilter !== defaults.entityFilter) {
     const filterLabels: Record<ItemListFilters['entityFilter'], string> = {
       all: 'Alle Einträge',
@@ -198,18 +214,13 @@ export function getActiveFilterDescriptions(
   return active;
 }
 
+// Only the params /api/items actually filters on. Text filters (search, Unterkategorie, Behälter),
+// sorting and the remaining selects run client-side in filterAndSortItems: the server's LIKE
+// pre-filter was narrower than the client match (e.g. Behälter only on BoxID, not the shelf), and
+// every extra param here turned a keystroke or sort change into a full list reload.
 export function buildItemListQueryParams(filters: ItemListFilters): URLSearchParams {
   const query = new URLSearchParams();
   try {
-    if (filters.searchTerm.trim()) {
-      query.set('search', filters.searchTerm.trim());
-    }
-    if (filters.subcategoryFilter.trim()) {
-      query.set('subcategory', filters.subcategoryFilter.trim());
-    }
-    if (filters.boxFilter.trim()) {
-      query.set('box', filters.boxFilter.trim());
-    }
     // All statuses selected = no filter (omit param). Empty selection = match nothing
     // (explicit sentinel). Otherwise send one param per selected status.
     if (filters.agenticStatusFilter.length !== AGENTIC_RUN_STATUSES.length) {
@@ -221,22 +232,11 @@ export function buildItemListQueryParams(filters: ItemListFilters): URLSearchPar
         }
       }
     }
-    if (filters.shopPublicationFilter !== 'all') {
-      query.set('shopPublicationFilter', filters.shopPublicationFilter);
-    }
     if (filters.placementFilter === 'unplaced') {
       query.set('showUnplaced', 'true');
     }
     if (filters.entityFilter !== 'all') {
       query.set('entityFilter', filters.entityFilter);
-    }
-    query.set('sortKey', filters.sortKey);
-    query.set('sortDirection', filters.sortDirection);
-    if (filters.qualityThreshold > QUALITY_MIN) {
-      query.set('qualityAtLeast', filters.qualityThreshold.toString());
-    }
-    if (filters.qualityFilter !== 'all') {
-      query.set('qualityFilter', filters.qualityFilter);
     }
   } catch (error) {
     logError('Failed to build item list query params', error, { filters });
@@ -327,6 +327,12 @@ export function loadItemListFilters(
       merged.imageFilter = parsed.imageFilter;
     } else if (parsed.imageFilter !== undefined) {
       logger.warn?.('Ignoring invalid stored image filter', parsed.imageFilter);
+    }
+
+    if (parsed.priceFilter === 'all' || parsed.priceFilter === 'noPrice' || parsed.priceFilter === 'hasPrice') {
+      merged.priceFilter = parsed.priceFilter;
+    } else if (parsed.priceFilter !== undefined) {
+      logger.warn?.('Ignoring invalid stored price filter', parsed.priceFilter);
     }
 
     if (typeof parsed.sortKey === 'string' && SORT_KEYS.includes(parsed.sortKey as ItemListSortKey)) {

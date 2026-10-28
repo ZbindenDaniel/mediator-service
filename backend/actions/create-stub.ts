@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { randomBytes } from 'crypto';
+import { resolveActor } from '../utils/actor';
+import { guardWrite } from '../utils/write-guard';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -17,6 +19,7 @@ async function readBody(req: IncomingMessage): Promise<string> {
 }
 
 const action = defineHttpAction({
+  feature: 'stubs',
   key: 'create-stub',
   label: 'Create stub',
   appliesTo: () => false,
@@ -28,11 +31,12 @@ const action = defineHttpAction({
 
       const shelfId = (body.shelfId ?? '').trim();
       const description = (body.description ?? '').trim();
-      const createdBy = (body.createdBy ?? 'unknown').trim();
+      const createdBy = resolveActor(ctx, body.createdBy ?? 'unknown');
       const numberLooseItems = Math.max(0, parseInt(body.numberLooseItems ?? '0', 10) || 0);
       const notes = (body.notes ?? '').trim() || null;
 
       if (!shelfId) return sendJson(res, 400, { error: 'shelfId is required' });
+      if (!(await guardWrite(ctx, res, 'box', shelfId))) return;
       if (!description) return sendJson(res, 400, { error: 'description is required' });
 
       const id = randomBytes(16).toString('hex');

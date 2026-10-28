@@ -19,7 +19,7 @@ jest.mock('../backend/db', () => ({
 }));
 
 import path from 'path';
-import { ingestCsvFile } from '../backend/importer';
+import { ingestCsvFile, parseDatumErfasst } from '../backend/importer';
 import * as db from '../backend/db';
 
 // TODO(agent): Extend insertdateset coverage when additional partner aliases surface.
@@ -43,8 +43,32 @@ describe('CSV ingestion insertdateset alias mapping', () => {
     expect(db.persistItem).toHaveBeenCalledWith(
       expect.objectContaining({
         ItemUUID: 'kivitendo-9876',
-        Datum_erfasst: new Date('2024-05-05T08:30:45.000Z'),
+        // 08:30:45 Zurich wall time (CEST, UTC+2)
+        Datum_erfasst: new Date('2024-05-05T06:30:45.000Z'),
       })
     );
+  });
+});
+
+describe('parseDatumErfasst', () => {
+  test('reads zone-less timestamps as Zurich wall time (summer and winter)', () => {
+    expect(parseDatumErfasst('2024-07-01 10:00:00')?.toISOString()).toBe('2024-07-01T08:00:00.000Z');
+    expect(parseDatumErfasst('2024-01-15T10:00')?.toISOString()).toBe('2024-01-15T09:00:00.000Z');
+    expect(parseDatumErfasst('18.04.2024 14:15:16')?.toISOString()).toBe('2024-04-18T12:15:16.000Z');
+  });
+
+  test('settles the offset across the DST switch', () => {
+    // 2024-03-31 02:00 CET → 03:00 CEST; 03:30 is already summer time
+    expect(parseDatumErfasst('2024-03-31 03:30:00')?.toISOString()).toBe('2024-03-31T01:30:00.000Z');
+    expect(parseDatumErfasst('2024-03-31 01:30:00')?.toISOString()).toBe('2024-03-31T00:30:00.000Z');
+  });
+
+  test('keeps zoned timestamps and date-only values as they are', () => {
+    expect(parseDatumErfasst('2024-01-31T12:34:56.000Z')?.toISOString()).toBe('2024-01-31T12:34:56.000Z');
+    expect(parseDatumErfasst('2024-01-31T12:34:56+01:00')?.toISOString()).toBe('2024-01-31T11:34:56.000Z');
+    expect(parseDatumErfasst('13.02.2024')?.toISOString()).toBe('2024-02-13T00:00:00.000Z');
+    expect(parseDatumErfasst('2024-01-31')?.toISOString()).toBe('2024-01-31T00:00:00.000Z');
+    expect(parseDatumErfasst('05/03/2024')?.toISOString()).toBe('2024-03-05T00:00:00.000Z');
+    expect(parseDatumErfasst('not a date')).toBeUndefined();
   });
 });

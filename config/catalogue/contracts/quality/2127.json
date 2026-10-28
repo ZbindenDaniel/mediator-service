@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "subCategory": 2127,
+  "questions": [
+    {
+      "id": "board_post",
+      "type": "select",
+      "question": "Startet das Board (POST)?",
+      "values": [
+        "Ja",
+        "Nein",
+        "Ungetestet"
+      ],
+      "states": {
+        "Ja": 1,
+        "Nein": 0
+      },
+      "weight": 5,
+      "knockout": {
+        "below": 0.25,
+        "cap": 0.19
+      },
+      "specField": "Funktionstest",
+      "specValue": "%v"
+    },
+    {
+      "id": "board_damage",
+      "type": "multi",
+      "question": "Schäden am Board?",
+      "suggestions": [
+        "Korrosion",
+        "Verbrannte Stelle",
+        "Buchse gebrochen",
+        "Bauteil fehlt",
+        "Riss",
+        "Lötstelle defekt"
+      ],
+      "states": {
+        "1": 0.5,
+        "2": 0.25
+      },
+      "weight": 3,
+      "specField": "Schäden",
+      "specValue": "%v"
+    }
+  ]
+}

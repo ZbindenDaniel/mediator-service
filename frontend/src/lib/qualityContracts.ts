@@ -1,52 +1,44 @@
 import type { QualityContract, QualityQuestion } from '../../../models/quality-contract';
-import type { AssemblyContract } from '../../../models/assembly-contract';
+import type { AssemblyContract, AssemblyQuestionScope } from '../../../models/assembly-contract';
+import { assemblyToQualityContract } from '../../../models/assembly-contract';
 import { fetchQualityContract, fetchAssemblyContract } from './contractsApi';
+import { computeQualityScore, scoreToRange, gradeFromRange, gradingFrom } from '../../../models/quality-score';
 
 export function isQuestionVisible(question: QualityQuestion, answers: Record<string, string>): boolean {
   if (!question.showIf) return true;
   return answers[question.showIf.questionId] === question.showIf.value;
 }
 
-/** Converts assembly contract part questions into a synthetic QualityContract for rendering/scoring. */
-function assemblyToQualityContract(ac: AssemblyContract): QualityContract {
-  return {
-    version: ac.version,
-    subCategory: ac.subCategory,
-    questions: ac.parts.flatMap(p => p.question ? [p.question] : [])
-  };
-}
-
-export async function loadContractsAsync(subCategory?: number): Promise<{
+/** `scope` limits which slot questions are asked (`create` = askOnCreate); scoring uses `assemblyRaw`. */
+export async function loadContractsAsync(subCategory?: number, scope: AssemblyQuestionScope = 'all'): Promise<{
   general: QualityContract | null;
+  /** The slot questions to ask in this scope. */
   assembly: QualityContract | null;
   subCat: QualityContract | null;
+  /** The assembly contract as-is (slots + weights), for the percentage score preview. */
+  assemblyRaw: AssemblyContract | null;
 }> {
   const [general, assemblyRaw, subCat] = await Promise.all([
     fetchQualityContract('general'),
     subCategory !== undefined ? fetchAssemblyContract(subCategory) : Promise.resolve(null),
     subCategory !== undefined ? fetchQualityContract(subCategory) : Promise.resolve(null)
   ]);
-  const assembly = assemblyRaw ? assemblyToQualityContract(assemblyRaw) : null;
-  return { general, assembly, subCat };
+  const assembly = assemblyRaw ? assemblyToQualityContract(assemblyRaw, scope) : null;
+  return { general, assembly, subCat, assemblyRaw: assemblyRaw ?? null };
 }
 
-/** Derives quality value (1–5) from answers across all provided contracts. */
+/**
+ * Pessimistic 1–5 grade of the answers alone (same as the server's assessment value): the band of
+ * the lower bound, 3 when nothing is scored. The item's displayed grade also checks the range width.
+ */
 export function deriveQualityFromAnswers(
   contracts: QualityContract[],
-  answers: Record<string, string>
+  answers: Record<string, string>,
+  assembly?: AssemblyContract | null
 ): number {
-  const scores: number[] = [];
-  for (const contract of contracts) {
-    for (const question of contract.questions) {
-      if (!isQuestionVisible(question, answers)) continue;
-      if (!question.qualityImpact) continue;
-      const answer = answers[question.id];
-      if (answer === undefined) continue;
-      const impact = (question.qualityImpact as Record<string, number>)[answer];
-      if (typeof impact === 'number') scores.push(impact);
-    }
-  }
-  return scores.length > 0 ? Math.min(...scores) : 3;
+  const range = scoreToRange(computeQualityScore({ contracts, answers, assembly }));
+  if (!range) return 3;
+  return gradeFromRange({ min: range.min, max: range.min }, gradingFrom(contracts)) ?? 3;
 }
 
 /** Returns all questions from all contracts in order: general → assembly → subcategory. */
