@@ -34,7 +34,7 @@ Reusable domain logic only. HTTP request/response handling belongs in `../action
 
 ## Rules
 - Functions here are stateless where possible — take inputs, return outputs
-- No direct Express `req`/`res` imports — this layer is HTTP-agnostic
+- No `req`/`res` (HTTP) imports — this layer is HTTP-agnostic
 
 ## Decisions
 - **Request context via `AsyncLocalStorage` (`ownership.ts`)** — new pattern, deliberately narrow. Catalogue entries, items and boxes are written from over a dozen paths (save, import, intake, AI results, snapshots), some outside requests. Instead of threading an identity parameter through every persistence function, the dispatcher runs each action inside `runWithIdentity()`, and the three central upserts in `db.ts` read it for their owner guard. Only these owner guards and the read redaction in `db.ts` (3b) use it; everything else still gets its data through `ctx`. No context = background job = unrestricted (same as before tenancy).

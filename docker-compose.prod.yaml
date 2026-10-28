@@ -27,8 +27,8 @@ services:
       - erfassung_default
 
   mediator:
-    # Overridable so the deploy workflow can point at a CI-built image (e.g. the
-    # Gitea registry) without editing this file; defaults to the pinned ghcr image.
+    # The deploy workflow sets MEDIATOR_IMAGE to the Gitea-registry image; the ghcr default
+    # only applies to a manual `docker compose up` without it.
     image: ${MEDIATOR_IMAGE:-ghcr.io/zbindendaniel/mediator-service:3.0}
     env_file: .env
     environment:
@@ -76,10 +76,8 @@ volumes:
     name: mediator-postgres
   nginx-logs:
     name: nginx-logs
-
-secrets:
-  mediator_htpasswd:
-    file: ./secrets/htpasswd
+  cups-socket:
+    name: mediator-cups-socket
 
 networks:
   erfassung_default:

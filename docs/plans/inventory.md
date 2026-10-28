@@ -4,7 +4,7 @@
 
 This document covers the design for periodic physical inventory verification — checking that items are actually in the boxes they are recorded in, and flagging discrepancies. Two complementary modes are supported: a **passive cycle** (items are checked opportunistically as boxes are scanned) and an **active inventory day** (dedicated process where employees work through all boxes systematically).
 
-Uncatalogued goods (physical items and boxes on shelves that have no QR code and are not yet in the system) are handled as a separate logistics process documented in [PLANNING_STUB_BOXES.md](./PLANNING_STUB_BOXES.md). The inventory feature only concerns itself with items that are already in the system.
+Uncatalogued goods (physical items and boxes on shelves that have no QR code and are not yet in the system) are handled as a separate logistics process documented in [detailed/stubs.md](../detailed/stubs.md). The inventory feature only concerns itself with items that are already in the system.
 
 ---
 

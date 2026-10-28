@@ -4,7 +4,7 @@
 ############################
 # Builder stage
 ############################
-# Debian 12: bullseye (11) left LTS on 2026-08-31 and its security pool is being removed (apt 404s).
+# Builder and runtime must share a Debian release so native modules (better-sqlite3) match the runtime glibc; bullseye is EOL and its security mirror 404s.
 FROM node:20-bookworm AS builder
 
 WORKDIR /app

@@ -1,73 +1,17 @@
 # Todo
 
 ## Confirmed Decisions
-- **Shopware integration (P0 + P1 done; see `docs/PLANNING_shopware_integration.md`).** Direction decided:
-  **direct-to-Shopware**, create-if-missing, absolute stock. Read/search path live; **stock sync live** (#937) —
-  Admin-API write client + dispatch client + worker started under `SHOPWARE_SYNC_ENABLED`. P0 (#935–936):
-  unified config, API-key **or** client-credentials auth, `SHOPWARE_SALES_CHANNEL_ACCESS_KEY` rename, dead vars
-  removed, enqueue-leak fixed, admin connection check + status/queue card.
-  **P1 follow-ups:** queue **retention/trim** (succeeded rows accumulate); **sales-channel visibility** on
-  created products (today invisible until published via the shop flow); **max-retry ceiling** for transient
-  failures; dedup the product normaliser shared by store `client.ts` / admin `adminClient.ts` / agentic
-  `tools/shopware.ts`.
-  **P2a done (#938):** Langtext/Spezifikationen → Shopware properties (native storefront filters).
-  **P2b done (#948):** push **all** Langtext as properties, but a group is `filterable` only when its key is a spec-contract field (`registry.getFilterableSpecKeys()` = union of `contracts/specs/*.json` keys) — stops the filter sidebar flooding. `ensurePropertyGroup` heals existing over-/under-filtered groups. Note (#942's earlier "contracts dropped") applied to *badges*; contracts are now used to curate filterability. Not expressible: per-category filterability of a shared field (Shopware's flag is global per group).
-  **Policy+data fixes (#940):** shop-eligibility gate (`Shopartikel=1 AND approved` — ineligible items deactivated/skipped, never published), `Veröffentlicht_Status`→`active`, full product data (name/description/price/active) on create AND update, sales-channel visibility on create.
-  **Open follow-ups:** (a) items **without agentic approval never sync** — decide if manual shop items need a path / make approval configurable like `ERP_SYNC_REQUIRE_APPROVAL`; (b) **backfill** pre-existing skeleton products (they self-correct only on next enqueue; visibility is create-only) — a bulk re-sync of shop refs; (c) name/description field mapping is a heuristic.
-  **Variants done (#941):** ref → parent product, distinct InstanceSpecs combos → variant children (configurator + child products, per-variant summed stock, `ShopwareVariantId` persisted). Single-product fallback when <2 combos or any spec-less instance.
-  **Variant follow-ups:** validate `configuratorSettings`/child-`options` write semantics on a live Shopware (as with P2a m2n); ragged specs (instance missing an axis) fall back to single-product; a lone combo's InstanceSpecs aren't surfaced as parent properties; no per-variant price.
-  **#944/#946 (variant re-sync 1062 fixed):** #944 gave `configuratorSettings` entries a deterministic id; #946 completed it — `syncVariants` now searches existing `product-configurator-setting` rows and **reuses their ids** (a fresh id for an option that already has a row INSERTs → 1062), deterministic id only for new options, stale axes deleted. The `mkdir Permission denied` on image upload is a dockware container fs-permission issue (env, not code); storefront axis grouping is a Shopware presentation setting.
-  **#942:** quality → variant axis (`Zustand`); admin **Shop-Sync** button + `POST /api/admin/shopware/sync` (enqueues all shop refs, also backfills). Contracts + CO₂ badges **dropped** (all properties come from items; no benefit).
-  **Open — reverse/stock-back sync:** orders in Shopware must book out mediator stock. Recommended: `checkout.order.placed` webhook → map ordered variant → decrement a matching instance's `Auf_Lager`; poll fallback. Design in the runbook ("Reverse sync"); not built. Open: which instance to book out when a variant groups several (FIFO?), Shopware-side corrections.
-  **#943 (P3 images done):** product images uploaded as binary (`lib/shopware-media.ts` + `adminClient.syncProductImages`), cover = Grafikname. Validate the `media` m2n + `coverId` write on a live shop; stale-image removal deferred.
-  **#945 (image previews + itemUUID axis):** (a) media is now created in the **Product Media** default folder (`mediaFolderId` resolved via `/api/search/media-folder`) so Shopware generates thumbnails — fixes blank previews. (b) `itemUUID` is now a **variant axis** → one variant = one instance (no merging); any ref with ≥2 instances is a variant parent. Follow-ups: prune stale itemUUID property options; consider a non-filterable itemUUID group; live-validate thumbnails + the itemUUID configurator switch. The image `mkdir Permission denied` is a dockware host fs-permission issue, not code.
-  **#947 (categories done):** product↔category links from the ref's `Hauptkategorien_A/Unterkategorien_A` (+ `_B`) codes → Shopware category names (`db.resolveShopwareCategoryNames` + `adminClient.syncProductCategories`). Per operator decision: **link-only to existing categories (never create)**, both A+B, additive (never removes a link). Follow-ups: stale-link reconciliation behind a flag; an explicit code→category-id mapping override for shops whose category names differ from the mediator labels (today unmatched names are skipped+logged — check the worker logs for `No Shopware category named "…"` to see misses).
-  **Documents (decision pending):** (a) Shopware product downloads (customer-facing manuals), (b) media + custom-field link list, or (c) don't upload — external links in a custom field (internal docs). Not built.
-  **Next (P4+):** accessory cross-selling → reverse stock-back sync.
-
+- **Shopware:** direct-to-Shopware via the Admin API, create-if-missing, absolute stock. Only refs with `Shopartikel=1` **and** an approved run are published. Ref → parent product; each instance (`itemUUID` axis, plus `Zustand`) → variant. Langtext → properties, `filterable` only for spec-contract keys. Categories are linked to existing shop categories, never created. Runbook: `docs/detailed/shopware.md`; open work: item 54.
 - **ERP export approval gate:** Only approved items may be exported/synced to the ERP — exporting unreviewed items is too dangerous. Enforced as a single choke point in `stageItemsExport` for `erp` mode (covers `/api/sync/erp`, `/api/export/items?mode=erp`, `/api/export/data?mode=erp`) plus an early filter in `sync-erp`. Configurable via `ERP_SYNC_REQUIRE_APPROVAL` (default `true`); backup-mode exports are unaffected.
 - **Nightly ERP sync scope:** Syncs only `item_refs` where any instance `UpdatedAt > LastSyncedAt` (or never synced). `LastSyncedAt` lives on `item_refs` (Artikel_Nummer level). Relocation-only instance changes will trigger a sync in v1 — accepted trade-off.
 - **Item list conditional column:** A single date column slot appears only when sorting by `entryDate`, `lastSynced`, or `agenticLastRun`, showing the relevant date. Other sort keys show no date column.
-- **Database:** PostgreSQL via `pg` (node-postgres). `DATABASE_URL` is required — no SQLite fallback. Local dev: Docker Compose Postgres service. Production: existing Postgres server, add a `mediator` database. Data migration from SQLite: `scripts/migrate-sqlite-to-postgres.ts`.
-- **Multi-instance agentic safety (Phase 2, implemented):** `claimQueuedAgenticRuns` in `backend/db.ts` uses a CTE with `FOR UPDATE SKIP LOCKED` + immediate UPDATE in one atomic statement. Call site in `backend/agentic/index.ts` updated; redundant QUEUED→RUNNING re-check removed. See agentic changelog entry 858.
-
+- **Database:** PostgreSQL via `pg` (node-postgres). `DATABASE_URL` is required — no SQLite fallback. Local dev: Docker Compose Postgres service. Production: existing Postgres server, add a `mediator` database.
+- **Multi-instance safety:** every queue is claimed with `FOR UPDATE SKIP LOCKED` (caveats in `docs/ARCHITECTURE.md`).
 - **CO₂ recovery potential:** Label-based scoring (`irrelevant / low / medium / high`) replaces the old ADEME kg estimate. Formula: `score = E_new × (quality / 5)`; thresholds in `contracts/impact/co2.json` (v2). Quality assessment will be refined with longevity questions to sharpen the signal.
-
 - **Batch run conflicts:** when an agentic run is already in progress, new start requests should be ignored (no parallel start via repeated triggers).
 - **Qty=0 item visibility:** items with zero quantity should remain accessible only through explicit navigation (e.g., direct/scan/detail path), not broad default lists. A clear distinction between removed and deleted items has yet to be made.
 - **Shop export rule:** `shop=true` is part of review outcome and only valid for approved reviews. When accepting 'in den Shop stellen?' during review, both `shopartikel` and `veröffentlicht_status` must be set.
-- **Search-query tracking scope:** track/accumulate query count per run to answer: *"How many searches did it take to complete the run?"*
-- **Transcript goal:** transcript should be complete, distinguishable by step/source, and collapsible for readability. Persistence should change to JSON first (saved to a new location); UI restructuring follows.
-- **Dual-format field names:** `*_json` and `*_html`, e.g. `langtext_json`.
-
----
-
-## Priority 2 — Intake station (deferred v2 items)
-
-- **Components: manual "add unidentified" UI.** Backend deletion/graduation paths exist and
-  intake auto-creates in-device components, but there is no explicit operator entry point in
-  Zerlegen to add an unidentified (reference-less) component by hand. See
-  [`docs/detailed/component-lifecycle.md`](docs/detailed/component-lifecycle.md).
-- **Components: sever `Zerlegt_aus` link on sale/stock-removal.** The provenance link is kept
-  after graduation; severing it when the extracted item is sold + stock-removed is deferred.
-- **Components: verify intake image can read per-drive serials.** The serial (with `wwn`/`model`
-  fallback) is the identity/report key; confirm the netboot image reads it for every drive type
-  on the bench (some USB bridges hide it). Contract: [`intake-image.http`](docs/detailed/intake-image.http).
-  Note: MAC-keyed uploads work as the serial-less fallback and now surface in the UI/serve too
-  (media #915 upload, #916 fallback-chain listing) — a drive with no readable serial and
-  machine-level/orphan wipe reports upload under `MAC:<mac>` and appear on the machine item.
-- ✅ **External docs: surface MAC-keyed reports on the machine item.** Resolved via the fallback-chain
-  model (media #916): `wipe-reports` is now `identifierTypes: ["serialNumber","macAddress"]`; the list,
-  item-detail, and serve paths union files across accepted types via the shared `lib/external-docs.ts`.
-  **Follow-ups:** (a) `intake-scans` has the same serial-less exposure for machine-level scans
-  (memtest/battery) — opt it into the chain (config-only, no code) once confirmed the image keys those
-  by MAC for serial-less devices; (b) filename collision across the serial and MAC folder lists both
-  rows but serve returns the first type-order match — annotate the file URL with its identifier to fully
-  disambiguate if it ever bites; (c) the list section header shows one identifier value even when files
-  span both folders.
-- **Intake: scan.txt augmentation of agentic extraction.** When `/complete` fires, if `items.SerialNumber` is set, look for Phase 2 test result files in `{intake-scans mountPath}/{serial}/` and prepend a summarized block (≤2000 chars) to the extraction prompt. Requires modifying `backend/agentic/flow/item-flow-extraction.ts`.
-- **Intake: operator notification on completion.** Notify the operator (push notification or TUI display) when a device finishes the full pipeline (quality done + agentic run queued).
-- **Intake: InstanceSpecs sync.** When a quality answer drives a spec change on a ref-sharing instance, propagate to all instances sharing the same Artikelnummer (pre-existing open question for the quality review flow too). Note: operators can now manually correct/add/delete a single instance's specs via the "Instanz bearbeiten" card (`PATCH /api/items/:id/instance` `InstanceSpecs`, full-replace — item-lifecycle #911); this edit is per-instance only and does not propagate.
+- **Transcripts** are stored as JSON (`agentic-transcript.json`); the viewer should be complete, separated by step/source, and collapsible.
 
 ---
 
@@ -81,20 +25,9 @@
   on smartctl open-fail — so `sizeGb:0` on modern NVMe laptops → `storageSize` signal null → `storage_gb`
   asked. The backend resolver and `phase1.sh` are both correct for a well-formed scan (verified). RAM
   (`/proc/meminfo`) already resolved; storage was the visible offender.
-  - ✅ **In-repo (shipped):** `resolveIntakeQuestions` returns `detected` + `unresolvedAutoFill`; quality-step
-    responses carry `detectedSpecs` (omit-but-inform); both build paths log `[intake] question resolution`
-    (asked/detected/unresolvedAutoFill) so a mis-scan is diagnosable. Contract (`intake-image.http` + guide)
-    now requires `lsblk`-sourced disk size.
   - ⏳ **Image repo (handed off):** patch `build_scan_payload` to source `sizeGb` from `lsblk -bdno SIZE`
     (bytes → GB); keep smartctl for identity only. This is the change that actually stops the storage prompt.
   - ⏳ **Optional image-side:** render the response's `detectedSpecs` as a read-only banner in `phase1.sh`.
-  - ✅ **Operator-typed Artikelbeschreibung honoured (intake #916).** Was dropped due to a field-name
-    mismatch (`findOrCreateRef` read `Kurzbeschreibung`, station sends `Artikelbeschreibung`) so the
-    garbage scanned model always won; operator text is now authoritative.
-  - ✅ **Every question skippable / "don't know" (intake #916).** Empty answers are treated as unanswered
-    in the derive functions (no junk `RAM: " GB"`) and dropped from the intake merge. ⏳ **Image-side:** a
-    small `phase1.sh` patch to let the operator press Enter to skip a select/boolean/text prompt (backend
-    already accepts an omitted/empty answer).
   - **Follow-ups:** broaden `driveTypeLabel` tolerance for exotic `type` strings (`sata`/`""`); a per-run
     scan-quality metric off `unresolvedAutoFill`.
 
@@ -120,13 +53,15 @@
   invisible because both contract loaders swallow parse errors and return `null`. A cheap `node -e JSON.parse`
   (or `jq empty`) sweep over `contracts/**/*.json` in CI would catch the next one at commit time.
 
-0z4. **AI runs optimization — phased implementation** (design: `docs/PLANNING_ai_runs_optimization.md`).
-  - ✅ **Phase 1a (shipped, agentic #915).** (5) Ollama `UND_ERR_HEADERS_TIMEOUT` fixed at the root — global undici dispatcher raises `headersTimeout`/`bodyTimeout` (`ensureModelHttpTimeouts`, env `MODEL_HTTP_HEADERS_TIMEOUT_MS`/`_BODY_TIMEOUT_MS`, default 10 min); retry demoted to genuine-drop fallback. (4B) The three queue→`failed` paths now emit a structured `from→to/reason` log + an `AgenticRunFailed` item event with a `category` tag (`recordQueueTerminalTransition`).
-  - ✅ **Phase 1b (shipped, agentic #916, Thread 2A).** Stored search evidence (`LastSearchLinksJson`) now surfaced in the KI tab via `AgenticSearchSources` + a `Suchergebnisse (N)` row in `ItemDetail`. Source **removal** now shipped (agentic #923 — delete a bad link so it stops feeding reuse+grounding); pin/reorder + add-manual-link curation and a true per-run **query count** (needs schema, todo #24) remain follow-ups (#21/#22).
-  - ✅ **Phase 3 (shipped, agentic #917, Thread 1/3).** Identity grounding: no new schema — reuses the run's `SearchQuery` anchor + known subcategory label to inject a "stay in the known device class" fragment into extraction + supervisor prompts, and reworded `extract.md` so it no longer licenses changing the device class. Stops the "PC → Pokémon card set" drift. Deferred: post-search relevance gate.
-  - ✅ **Phase 4 (shipped, agentic #918, Thread 4).** Run history: `agentic_run_snapshots` (snapshot-before-run, retention keep-4 + always-last-approved), KI-tab "KI-Verlauf" timeline + field-level `computeSnapshotDiff` (Langtext key-by-key), and non-destructive manual restore (`GET/POST …/agentic/snapshots[/:id/restore]`). **Follow-up:** extend the same history to instance/intake fields (`InstanceSpecs`, serial/MAC) — operator confirmed this will be needed.
-  - **Then — Phase 2 (state-machine, decision still open):** failure-aware queue (classify infra/transient/permanent + health window + throttle + bounded re-queue). Decide first-cut scope (full breaker vs bounded-requeue-only vs keep-terminal) when starting it.
-  - **Open questions** (from the doc) still to brainstorm before their phases: grounding-anchor precedence, relevance-gate outcome, over-cap re-queue semantics, transition-trail storage, rework pre-state memory.
+0z4. **AI runs: failure-aware queue** (last open phase of the AI-runs optimization; phases 1a/1b/3/4 shipped as agentic #915–918).
+  Goal: when runs start failing, the queue slows down and re-queues instead of failing terminally; unchanged while healthy.
+  Draft mechanism: classify failures (`infra`/`transient`/`permanent`), a DB-computed health window, a CLOSED/HALF-OPEN/OPEN
+  throttle, bounded re-queue (RetryCount ceiling + `NextRetryAt` backoff, already honoured by the claim query) and a global
+  re-queue rate cap (what the #913 incident lacked). Today three queue paths fail runs with only a `LastError` code and no item
+  event: `missing-search-query`, `stale-run-auto-cancelled`, `over-cap-cancelled` — infra decisions that look like real failures.
+  **Decide first:** full breaker vs bounded-requeue-only vs keep-terminal with infra re-queue only; should over-cap runs re-queue
+  instead of failing; where to keep a transition trail (events vs table vs transcript).
+  Full design history: `docs/PLANNING_ai_runs_optimization.md` in git history (removed 2026-10-27).
 
 0z3. **Intake netboot image / station TUI emits a duplicated brand in `model`.** The scan reports `vendor="HP"` with the brand also embedded (sometimes doubled) inside `model` (e.g. `model="HP HP ProBook 470 G4"`), and the external station TUI further combines the echoed `vendor`+`model` when pre-filling the new-ref form. The backend deliberately no longer masks this (see 0z2) — fix it at the source: the netboot intake image should emit a clean `model` (brand once, or brand-free with `vendor` separate), and the TUI should stop concatenating `vendor` into the pre-filled `Kurzbeschreibung`. Contract: [`intake-image.http`](docs/detailed/intake-image.http).
 
@@ -146,12 +81,10 @@
   - Categorizer `__locked` field behavior (`item-flow.md`: "Locked fields are preserved and not overwritten") is asserted nowhere in the test suite; only appears as fixture setup data.
   - `backend/actions/agentic-delete.ts` HTTP handler still has no direct test; the underlying `deleteAgenticRun` service is now covered by `test/agentic-delete-reset.test.ts` (reset clears SearchQuery; not-started decline).
   - No production telemetry yet confirms the pricing stage actually hits the same unrecognized-shape failure mode as the categorizer did — the hardening in #872/0y is defensive; revisit once pricing transcripts are reviewed to see how often it triggers.
-  - ✅ Follow-up `__searchQueries` under `skipSearch`: confirmed hard-blocked at `item-flow-extraction.ts:891` (converts to retry); `item-flow.md` corrected (was stale). `skipSearch` now also downgrades to a live search when no stored search exists (see agentic changelog #890).
 
 0j. **Set PRINTER_QUEUE_MARKETING env var for A4 marketing sheets.** Without it, marketing sheet print jobs fall back to `PRINTER_QUEUE`. Operators should configure this to target the A4 printer.
 
 1c. **Investigate remaining tester-reported bugs (need runtime testing):**
-   - ✅ "KI lauf kann nicht geloescht werden" — root cause: `deleteAgenticRun` reset the run to `notStarted` but kept its `SearchQuery`, so the idle-fill dispatcher re-promoted it within ~5s. Fixed by clearing `SearchQuery`/`LastSearchLinksJson` on reset (OVERVIEW 876). Also fixed: Abschliessen never reached the backend (numeric-only Artikel_Nummer guard) and now always finalizes as Freigegeben.
    - "ki erfassung indefinite" — agentic capture stuck; stale-run recovery now reliably clears stuck RUNNING runs (fire-and-forget race fixed); auto-retry re-queues after backoff. If still stuck, check model service callback.
    - "bearbeiten fehler, KI-Status nicht angezeigt" — `save-item.ts` silently sets `agentic = null` on fetch error; check if `getAgenticRun` errors after migration
    - "list button broken" — unclear; may self-resolve now that box-detail is fixed
@@ -160,16 +93,37 @@
 2. **Fix agentic runs for references.** Agentic runs are broken for reference items. Runs can be started and run but immediately fall back to not started
    - **Investigation (needs runtime repro):** Traced start (`startAgenticRun` → `hasAgenticReference`), dispatch (`claimQueuedAgenticRuns` — no `items` JOIN, so reference-only rows *are* claimable), status read (`getAgenticStatus` → `getAgenticRun` by `Artikel_Nummer`), and list display (`listItemReferencesWithFilters`, `LEFT JOIN agentic_runs ... COALESCE(i."Artikel_Nummer", r."Artikel_Nummer")`). All handle a **numeric** `Artikel_Nummer` reference correctly on static reading — the "fall back to notStarted" is a display artifact of `COALESCE(ar."Status",'notStarted')` when the run-row JOIN misses. Suspected residual cases: (a) references with a **non-numeric / specially-formatted** `Artikel_Nummer` (e.g. created via `catalog-spare-part`/`remove-from-device`), or (b) already largely resolved by the #876 SearchQuery-reset / numeric-guard fixes and this entry is stale. Next step: reproduce against a real reference item and capture the exact id passed by the frontend + the `agentic_runs."Artikel_Nummer"` actually written.
 
-3. **Ensure waiting agentic runs restart on application restart.** All runs in a waiting state should automatically resume when the app restarts. Waiting runs should wait (max. parallel runs has to be respected)
-
 <!-- Not clarified:
  5. **Refine QR relocation flow.** Relocation still has edge-case issues in scan handoff/navigation. Moving an item to a box should behave consistently from both the box and item perspectives. Multi-scan and scan-until will be added in future iterations. **Goal:** stabilize intent and return-flow boundaries with targeted fixes, strong validation, and meaningful try/catch + logging at transition points. 
 
 6. **Fix multi-scan item relocation bug.** Scanning multiple items during relocation causes state conflicts or navigation problems. **Goal:** ensure reliable scan-based workflows with proper state management and error recovery.
  -->
 
-7. **Transform transcript persistence from HTML to JSON.** Store transcripts in a new location. UI restructuring of the transcript viewer (collapsible, step-separated) follows after persistence is changed. **Goal:** improve debuggability and enable structured transcript rendering.
+7. **Transcript viewer UI.** Persistence is JSON now (`backend/agentic/flow/transcript.ts`); restructure the viewer to be collapsible and separated by step/source.
 
+---
+
+## Priority 2 — Intake station (deferred v2 items)
+
+- **Components: manual "add unidentified" UI.** Backend deletion/graduation paths exist and
+  intake auto-creates in-device components, but there is no explicit operator entry point in
+  Zerlegen to add an unidentified (reference-less) component by hand. See
+  [`docs/detailed/component-lifecycle.md`](docs/detailed/component-lifecycle.md).
+- **Components: contract signal for parent→Ersatzteil.** `remove-from-device` honors
+  `markParentAsSpare` but nothing yet supplies it from a contract/Auftrag — decide whether it is
+  a parent field or an operator toggle at Zerlegung and wire it. The API never auto-marks without
+  the flag.
+- **Components: sever `Zerlegt_aus` link on sale/stock-removal.** The provenance link is kept
+  after graduation; severing it when the extracted item is sold + stock-removed is deferred.
+- **Components: verify intake image can read per-drive serials.** The serial (with `wwn`/`model`
+  fallback) is the identity/report key; confirm the netboot image reads it for every drive type
+  on the bench (some USB bridges hide it). Contract: [`intake-image.http`](docs/detailed/intake-image.http).
+  Note: MAC-keyed uploads work as the serial-less fallback and now surface in the UI/serve too
+  (media #915 upload, #916 fallback-chain listing) — a drive with no readable serial and
+  machine-level/orphan wipe reports upload under `MAC:<mac>` and appear on the machine item.
+- **Intake: scan.txt augmentation of agentic extraction.** When `/complete` fires, if `items.SerialNumber` is set, look for Phase 2 test result files in `{intake-scans mountPath}/{serial}/` and prepend a summarized block (≤2000 chars) to the extraction prompt. Requires modifying `backend/agentic/flow/item-flow-extraction.ts`.
+- **Intake: operator notification on completion.** Notify the operator (push notification or TUI display) when a device finishes the full pipeline (quality done + agentic run queued).
+- **Intake: InstanceSpecs sync.** When a quality answer drives a spec change on a ref-sharing instance, propagate to all instances sharing the same Artikelnummer (pre-existing open question for the quality review flow too). Note: operators can now manually correct/add/delete a single instance's specs via the "Instanz bearbeiten" card (`PATCH /api/items/:id/instance` `InstanceSpecs`, full-replace — item-lifecycle #911); this edit is per-instance only and does not propagate.
 ---
 
 ## Priority 2 — Feature Improvements
@@ -189,10 +143,6 @@
 - Bulk mark action in `BulkItemActionBar` not yet added.
 - Note text not shown as tooltip on the star icon in the list — keep as tab-only for now.
 
-19. ~~**Wire `item × attachments` action panel slot.**~~ Superseded — ActionPanel deleted; inline button in AttachmentsCard already covers the use case.
-
-20. ~~**Wire `item × accessories` action panel slot.**~~ Superseded — ActionPanel deleted; inline RefSearchInput fields cover the use case.
-
 21. **Box images tab empty for shelves.** Shelf boxes (`S-*`) are not `isBoxRelocatable`, so the images tab renders nothing. Revisit when shelf photo support is defined.
 
 8. **Ensure shelf weight and item count are calculated correctly.** Current totals are incomplete or inaccurate. Aggregation should cover both nested boxes and loose items. **Goal:** align aggregation logic across backend/frontend models while reusing existing summary helpers.
@@ -211,11 +161,9 @@
 
 17. **Add neighboring box navigation (prev/next).** Mirror existing item navigation patterns using existing sort order. **Goal:** reduce repeated return-to-list navigation during review flows.
 
-18. **Implement transport boxes (T-).** Planning document at `docs/PLANNING_transport_boxes.md`. Phase 1: DB schema (`transports` + `transport_items` tables), models, CRUD + complete/cancel actions, TransportListPage + TransportDetail. Phase 2: creation entry points in BoxDetail/ShelfDetail/StubDetail/BulkActionBar + "Transport ausstehend" badges; pending transport surfaced on item instance view (§8.6). Phase 3: ERP/shop API + reference search + audit export. Note: `complete-transport` must also auto-resolve active `box_stubs` for the source shelf.
+18. **Implement transport boxes (T-).** Planning document at `docs/plans/transport-boxes.md`. Phase 1: DB schema (`transports` + `transport_items` tables), models, CRUD + complete/cancel actions, TransportListPage + TransportDetail. Phase 2: creation entry points in BoxDetail/ShelfDetail/StubDetail/BulkActionBar + "Transport ausstehend" badges; pending transport surfaced on item instance view (§8.6). Phase 3: ERP/shop API + reference search + audit export. Note: `complete-transport` must also auto-resolve active `box_stubs` for the source shelf.
 
-19a. **Implement stub boxes.** Planning document at `docs/PLANNING_STUB_BOXES.md`. Phase 1: `box_stubs` DB table + migration (incl. `PhotoPath` column), create/list/patch API actions, ShelfDetail `HasActiveStubs` badge + stub list section. Phase 2: dedicated Stub Management nav page (grouped by shelf with color distinction, photo thumbnail); stub detail includes "Transport erstellen" button pre-filling `SourceId = stub.ShelfId` (identical to shelf detail flow). Stub auto-resolve is handled by transport completion (item #18), not a separate action.
-
-19b. **Implement inventory feature (passive cycle).** Planning document at `docs/PLANNING_INVENTORY.md`. Phase 1: `LastInventoryDate` on boxes, `MissingAt` on items, `inventory_sessions` table, `INVENTORY_CYCLE_DAYS` config, `inventoryPending` filter on box list. Phase 2: `/api/inventory/start|scan|complete|cancel`, `InventoryCheckView` with checklist + scan zone + Menge count inputs + acoustic feedback. Phase 3: passive trigger hook in `qr-scan` + interstitial prompt. Phase 4: missing items view, `InventoryFound` flow, session export. Active Inventory Day (UC-1) is deferred — not part of current scope.
+19b. **Implement inventory feature (passive cycle).** Planning document at `docs/plans/inventory.md`. Phase 1: `LastInventoryDate` on boxes, `MissingAt` on items, `inventory_sessions` table, `INVENTORY_CYCLE_DAYS` config, `inventoryPending` filter on box list. Phase 2: `/api/inventory/start|scan|complete|cancel`, `InventoryCheckView` with checklist + scan zone + Menge count inputs + acoustic feedback. Phase 3: passive trigger hook in `qr-scan` + interstitial prompt. Phase 4: missing items view, `InventoryFound` flow, session export. Active Inventory Day (UC-1) is deferred — not part of current scope.
    - **Note (storage #885):** A lightweight reconciliation *exit route* now exists on the placement scan flow (`PlacementScanView`): finishing a box scan surfaces unscanned recorded items and lets the operator remove their stock or clear their location. This is distinct from the full passive-cycle verification feature above (no sessions/`MissingAt`/passive triggers) but covers the "remove items that no longer exist" need for the scan-into-box workflow.
 
 45. **Spec contracts: targeted enrich button in ItemKiTab.** When an item has missing required spec fields (visible as empty Langtext rows), add a "Gezielt anreichern" button in the KI tab that starts an agentic run pre-seeded with the missing field names as missingSpecFields. Requires fetching the spec contract client-side and computing the gap against the current Langtext.
@@ -225,15 +173,13 @@
 49. **Persist skipSearch (and future rework mode) on `agentic_runs`.** The flag currently rides an in-memory `pendingSkipSearch` Set (`backend/agentic/index.ts`), lost on server restart and not restored by stale-resume/idle-fill. Add a `SkipSearch` column written at enqueue and read at dispatch so it survives restart; this column also becomes the backbone for the rework mechanism (#50). Deferred from agentic changelog #890 to keep that change reviewable.
 
 50. **Rework mechanism.**
-  - ✅ **Phase 1 — manual targeted rework (shipped).** "KI Überarbeitung" reuses the main pipeline to regenerate only operator-selected fields; `applyReworkPartialUpdate` preserves all other fields deterministically; categorizer/pricing skipped; UI is a field-picker + instruction modal in `ItemKiTab`. See agentic changelog #893.
-  - ✅ **Phase 2a — deterministic idle contract-audit sweeper (shipped).** `sweepContractRework` in `dispatchQueuedAgenticRuns` runs only while idle and only when `AUTO_REWORK` is on (default off): stale items (stored `SpecContractVersion < current`) are re-stamped if complete, else a targeted rework is enqueued for the missing required fields (decision in `decideContractAuditAction`, no LLM). Self-limiting via the version stamp. See agentic changelog #894.
   - **Phase 2b — LLM standards auditor (planned, not built).** Add the language/style/wording audit as a one-shot LLM call guided by a runtime-editable `contracts/guidelines/standards.json` (read fresh, no redeploy); add a `LastAuditedAt` cursor for periodic re-checks (oldest-first, stamp every audit), a per-window budget cap, and an anti-thrash cap on consecutive auto-reworks per item.
   - **Deferred behavior:** on a rework **failure**, discard the changes and keep the prior `approved` state (today a failed rework lands in `failed` like any run). Resolved policy: reworked items otherwise follow the normal review/auto_approve path, no special-casing.
   - Row-level click-select + right-click on spec rows (nicer selection than the modal checkboxes) remain a follow-up.
 
 51. **Auto-approve follow-ups.** `AUTO_APPROVE` (default off) + `AUTO_APPROVE_MIN_CONFIDENCE` (default 0.8) added (agentic changelog #892). Follow-ups: per-subcategory confidence threshold instead of one global value; optional auto-reject counterpart; a bulk "promote auto_approved → approved" action (currently uses per-item Abschliessen); and extend the KI-queue state filter to select `auto_approved` (aligns with #12 multiselect agent states).
 
-55. **Instance agentic flow (design in progress — `docs/PLANNING_instance_flow.md`).** A per-`ItemUUID`
+53. **Instance agentic flow (design in progress — `docs/plans/instance-flow.md`).** A per-`ItemUUID`
   flow that consumes intake evidence + `InstanceSpecs` and reconciles the device against its reference,
   emitting an operator-gated **reconciliation object** (never writes `item_refs`; ref changes only via
   operator-approved `rework`). **Re-validated after the "new pipeline" contract work (plan §17):** the
@@ -259,10 +205,6 @@
 
 20. **Enhance partial imports functionality.** Large imports currently fail completely on a single item error. Add granular error reporting and selective retry. **Goal:** make bulk import workflows resilient with clear per-item failure reporting.
 
-21. **Make search links available in item UI.** Surface agentic search result links in item detail views and enable manual link management for references. **Goal:** improve agentic result transparency and allow manual curation.
-   - ✅ **Surface (agentic #916):** stored `LastSearchLinksJson` shown in the KI tab as `Suchergebnisse (N)` via `AgenticSearchSources`.
-   - ✅ **Remove (agentic #923):** operators can delete a bad search-result link so it stops feeding the reuse/grounding pipeline — `POST /api/item-refs/:id/agentic/search-links/delete` + `removeAgenticSearchLink` (targeted prune, does not reset the run). **Still deferred:** pin/reorder and **adding** a manual link (feeds the structured `WebLinks` field, #22); no URL normalization/dedupe on match.
-
 22. **Add WebLinks field to ItemRef structure.** Extend ItemRef with structured WebLinks (Manual, Heise, Dell, etc.). **Goal:** standardize reference link storage with clear categorization and UI management.
 
 23. **Normalize badly formatted search queries.** Enforce one canonical normalization boundary; emit concise telemetry. **Goal:** reduce result degradation and retries from malformed queries.
@@ -270,14 +212,11 @@
 24. **Track total search queries per run.** Persist or compute a per-run count with minimal schema impact and clear log fields.
 
 25. **Improve event log.** Make event log more useful and easier to navigate.
-   - ✅ **Coverage gap fixed:** items/boxes often had zero events because device intake and the CSV importer (the two biggest creation sources) never called `logEvent`, and boxes created via `import-item`'s `runUpsertBox` + stubs logged nothing. Intake now logs Item `Created` + `QualityAssessed`; CSV import logs `Created`/`Updated` per instance; import-time box upsert logs Box `Created`; `create-stub` logs `StubCreated`; `quality-review` logs `QualityAssessed`. Reference-level agentic events (keyed by Artikel_Nummer) now surface on item history via `listEventsForItem(itemId, artikelNummer)`. Also fixed `bulk-move-items` calling async `bulkMoveItems` without `await`. See item-lifecycle changelog #888.
    - **Still unlogged (deferred):** successful prints (only `PrintFailed` logs), ERP sync, stub close, a distinct reference-created event. No history backfill for pre-existing items/boxes.
 
 26. **Inconsistent locationTag display.** Audit and fix locationTag rendering across views so it is displayed consistently. Note: box links in ItemDetail now navigate via the panel shell (Steps 8–9) rather than hard-navigating; other views may still use plain `<Link>` to `/boxes/:id`.
 
 27. **Improve pie chart.** The current chart is visually poor; redesign for clarity.
-
-28. **Add price and image fields to itemList.** Show whether an item has a price and an image set; shrink the 'Artikel' column to create space.
 
 29. **Declutter "Vorrat" area.** High information density increases user error and navigation time. **Goal:** simplify high-traffic screens incrementally by reusing existing components.
 
@@ -292,6 +231,10 @@
 34. **Round-trip shelf `Color` through box backup export/import.** Shelf colours (storage #960) live in `boxes."Color"` but aren't in `export-items.ts` `boxColumns` / `importer.ts` box field handling / `UPSERT_BOX_SQL`, so a restore into a fresh DB loses them (same-DB re-import keeps them via `COALESCE`).
 
 35. **Revive commented-out item list tests.** `test/item-list-quality.test.ts` and `test/item-list-columns.test.ts` were disabled because jest couldn't resolve the bare `models` alias; the mapper now exists (ui #961), so they only need updating to the current `ItemListComputationOptions` shape.
+
+54. **Shopware follow-ups.** (a) Reverse sync: orders must book out mediator stock (`checkout.order.placed` webhook → decrement a matching instance; which instance when a variant has several?). Design in the runbook. (b) Items without agentic approval never sync — decide whether manual shop items need a path. (c) Bulk re-sync to backfill pre-existing skeleton products. (d) Queue retention/trim and a max-retry ceiling. (e) Documents: product downloads vs. link list vs. none — undecided. (f) Accessory cross-selling. (g) Live-validate variant configurator, image `media`/`coverId` and thumbnail writes; prune stale itemUUID property options; stale category-link reconciliation. (h) Dedup the product normaliser in `shopware/client.ts`, `shopware/adminClient.ts`, `agentic/tools/shopware.ts`.
+
+55. **Unverified UI notes (from a 2026-04-28 tester pass; check each, fix or drop).** Exclude the current instance from the Vorrat list; remove the Detail-Liste link and the Behälter column in the box item list; show "erfasst von"; print modal transparent (overridden by `.app-shell__right .card`) and "Label drucken" closes without showing the PDF; KI status above the button group in the AI tab; box info tab summary (count + weight); browser back doesn't restore the detail tab; first/last button in a group need border-radius; header search vs. the old search card; landing page should be `/items?entity=item&tab=create`.
 
 ---
 
@@ -421,6 +364,10 @@
    - Domain hardcodes to revisit for a new use case: `models/shelf-locations.ts`
      (revamp sites), ERP booking group `453` (`backend/config.ts:366`),
      `ERP_IMPORT_FORM_*`, `contracts/impact/co2.json`.
+56. **Remove dead config.** `backend/config.ts` parses but nothing reads `ERP_IMPORT_FORM_*` (separator, charset, booking group, unit, part classification, date format, full preview), `ERP_IMPORT_PROFILE_ID`, `ERP_IMPORT_TMP_PROFILE_ID`, `ERP_IMPORT_REQUEST_CONTRACT`, `ERP_IMPORT_BROWSER_PARITY_MAPPINGS`, `ERP_IMPORT_AUTH_FIELD_PREFIX`, `ERP_IMPORT_POLL*`, `SHOPWARE_DEFAULT_TAX_ID`, `SHOPWARE_DEFAULT_CURRENCY_ID`. Delete them (already dropped from `.env.example` and `docs/ENVIRONMENT.md`).
+
+58. **Upgrade the Docker base image from Node 20 (EOL Apr 2026) to Node 22/24 LTS.** Both stages in `Dockerfile` (`node:20-bookworm*`). Rebuild native modules and run the full test suite. Also bump `engines`/CI if they pin 20.
+57. **Production compose follow-ups (`docker-compose.prod.yaml`).** (a) Postgres is published on all interfaces (`5432:5432`) with the default `mediator`/`mediator` credentials — bind to `127.0.0.1` or drop the port unless something external needs it. (b) Without `MEDIATOR_IMAGE` it still falls back to `ghcr.io/…:3.0`; point the default at the Gitea registry or make the variable required. (c) Unlike the dev stack it has no `alt-doc-dirs.json` / `mediator-scans` mounts, so external documents (wipe reports, intake scans) aren't available in prod — intended?
 
 33c. **Wire Authentik forward-auth enforcement (follow-up to stack add, OVERVIEW 898).** Authentik now runs in the `docker-compose.yml` stack but nothing consumes it yet. Next: (1) proxy forward-auth — nginx `auth_request` against the Authentik outpost in `config/nginx/mediator.conf` (dev), Traefik `forwardAuth` middleware label in `docker-compose.prod.yaml` (prod), plus adding the Authentik services to the prod compose; drop nginx Basic Auth once it works. (2) Backend: a helper generalizing `backend/utils/admin-auth.ts` that resolves `{username, groups, role}` from `X-authentik-username`/`X-authentik-groups` into `ActionContext`; replace the `/api/admin/*` check with a `mediator-admin` group check (keep `ADMIN_SECRET` as break-glass fallback). Design the role check as a **config-driven group→capability map**, not a hardcoded binary, so extra roles (`intake`, `erp`, `readonly`, …) are a config line + an Authentik group. (3) Populate the free-text `Actor`/`Username` fields from the authenticated user. (4) In Authentik itself: create the Proxy Provider, the `mediator-admin` group (everyone-else authenticated = user), and the embedded outpost. Note the deploy workflow only rolls `mediator`, so bringing the Authentik services up on the host needs a manual `docker compose up -d` or a workflow change.
 
@@ -463,8 +410,6 @@
 - For the **laptop parts catalogue** (plan §10, updated #983): calibrate grade bands (C1, later); "Fest verbaut" counted or excluded; Displayassembly sold whole?; rework the drafted weights, taxonomy and part specs in `config/catalogue/`.
 - For **spare parts `drive_type`**, should this question move to the disassembly contract storage slot (needs `qualityQuestion[]` array support on parts) or stay in quality/201.json as a follow-up spec question? Currently stays in quality/201.json (TBD).
 - For **spare parts bidirectional suggestions**, when a device's quality check says "PS missing", should the system surface matching PS units in inventory for the operator? Deferred to phase 2 — needs structured spec matching.
-- For **shelf totals**, should weight/item count include nested boxes only, loose items only, or both?
-> Actually, the weight of a shelf is not interesting. 
 - For **optional basic-form fields**, should contract changes be backend-first or can the frontend collect them before backend persistence is ready?
 - For **text-search relocation fallback**, should label search be exact-first, fuzzy-first, or reuse current global search behavior as-is?
 - For **search-query normalization**, where should canonical normalization live — frontend, backend, or both with backend as final authority?
@@ -476,7 +421,7 @@
 
 ### Answered
 
+- **Shelf totals:** shelf weight is not interesting; item count is what matters.
 - **QR relocation failure cases:** moving an item to a box should work the same from the perspective of a box and an item. Multi-scan and scan-until will be added in future iterations.
 - **Dual-format field names:** `*_json` and `*_html`, e.g. `langtext_json`.
-- **Transcript persistence:** change persistence first (save as JSON to a new location); UI restructuring follows.
 - **Relocation/QR logging:** it is about usability, not compliance. Noisy logs can be demoted to `debug` level or removed.

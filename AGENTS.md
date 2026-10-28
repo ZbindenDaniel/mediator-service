@@ -1,39 +1,27 @@
 # AGENTS.md
 
-This file is the **quick-start guide** for both human contributors and coding agents.
+How to work in this repo — for human contributors and coding agents. The mandatory documentation
+rules and completion checklist live in [`CLAUDE.md`](CLAUDE.md).
 
-For deep implementation instructions, use [`docs/AGENT.md`](docs/AGENT.md).
+## Orientation
 
-## Repository overview
-- `backend/` — Express server, action handlers, agentic pipeline, persistence. See [backend/README.md](backend/README.md).
-- `frontend/` — React SPA, components, API clients. See [frontend/README.md](frontend/README.md).
-- `models/` — shared TypeScript types used by both backend and frontend. See [models/README.md](models/README.md).
-- `contracts/` — runtime JSON contracts (quality questions, specs, disassembly). See [contracts/README.md](contracts/README.md).
-- `cups/` — CUPS print server Docker image. See [cups/README.md](cups/README.md).
-- `docs/` — architecture, runbooks, changelogs, planning.
-- `OVERVIEW.md` — current focus, system map, and last 10 changes.
+1. [`OVERVIEW.md`](OVERVIEW.md) — current focus, system map, last 10 changes.
+2. [`todo.md`](todo.md) — open bugs, feature queue, confirmed decisions.
+3. The folder `README.md` of each area you touch (purpose, rules, decisions), then its topic
+   changelog in [`docs/changelogs/`](docs/changelogs/README.md) and runbook in
+   [`docs/detailed/`](docs/detailed/README.md).
+4. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for cross-cutting structure;
+   [`docs/CODING_GUIDELINES.md`](docs/CODING_GUIDELINES.md) for coding rules.
 
-Each folder has a README.md describing its purpose, contents, relations, scope, rules, and key decisions.
+## Coding
 
-## Documentation is mandatory
+- Smallest change that solves the task; follow existing action/lib/model patterns before adding abstractions.
+- Types shared between backend and frontend live in `models/`; check both sides when you change one.
+- Log at state transitions and failure boundaries with structured context; `try/catch` only where you can handle, translate or enrich the error.
+- Keep diffs reviewable; remove TODOs and notes that your change makes stale.
 
-Every completed task must update `OVERVIEW.md` and the relevant topic changelog before the response ends. See [`CLAUDE.md`](CLAUDE.md) for the required format and completion checklist.
+## Planning (when asked for a plan, not code)
 
-## Read these first
-1. [`OVERVIEW.md`](OVERVIEW.md) — current focus and system map.
-2. [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — system boundaries and responsibilities.
-3. [`docs/AGENT.md`](docs/AGENT.md) — detailed agent workflow and guardrails.
-4. [`docs/CODING_GUIDELINES.md`](docs/CODING_GUIDELINES.md) — complete coding standards.
-
-## Basic coding guidelines (summary)
-- Keep changes minimal and scoped to the task.
-- Reuse existing patterns before introducing new abstractions.
-- Preserve shared data contracts in `models/`.
-- Add or update logging where failures are actionable.
-
-## Documentation map
-- Current focus: [`OVERVIEW.md`](OVERVIEW.md)
-- Runbooks: [`docs/detailed/README.md`](docs/detailed/README.md)
-- Changelogs: [`docs/changelogs/README.md`](docs/changelogs/README.md)
-- Architecture: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
-- Planning backlog: [`docs/PLANS.md`](docs/PLANS.md)
+- State the goal and the value; target current behaviour (no legacy compatibility unless asked).
+- Write the plan into the repo (`docs/plans/<topic>.md`, indexed in [`docs/plans/README.md`](docs/plans/README.md)) with file-level steps.
+- Prefer the minimal design; call out changes that would add technical debt.

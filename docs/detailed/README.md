@@ -1,48 +1,33 @@
-# Detailed Documentation Index
+# docs/detailed/
 
-Use this directory as the single navigation root for deep-dive operational and implementation guides.
+Per-domain runbooks: how a feature works, which code owns it, and how to troubleshoot it. Change
+history lives in [`../changelogs/`](../changelogs/README.md); terminology in [`glossary.md`](glossary.md).
+New runbooks can start from [`_template.md`](_template.md).
 
-## Audience
-- Operators: runbooks and incident/triage playbooks.
-- Developers: architecture-adjacent implementation details and contracts.
-- Agents: task execution context and deep-dive references.
-
-## Canonical references
-- [`docs/detailed/traceability-matrix.md`](./traceability-matrix.md) (canonical doc-to-code path mapping for all detailed domains)
-- [`docs/detailed/diagrams/README.md`](./diagrams/README.md) (text-first placeholders for future flow diagrams)
-- [`docs/ARCHITECTURE.md`](../ARCHITECTURE.md)
-- [`docs/AGENT.md`](../AGENT.md)
-- [`OVERVIEW.md`](../../OVERVIEW.md)
-
-## Domain runbooks
 | Doc | Domain |
 |---|---|
-| [`items.md`](./items.md) | Item/instance lifecycle, fields, actions, quality assessment flow |
-| [`boxes.md`](./boxes.md) | Box/shelf hierarchy, relocation, printing, import touchpoints |
-| [`stubs.md`](./stubs.md) | Box stubs — uncatalogued shelf content triage tool |
-| [`media-storage.md`](./media-storage.md) | File storage: item photos, per-unit attachments, identifier-keyed external docs |
-| [`qr_codes.md`](./qr_codes.md) | QR generation, scan lifecycle, search-scan mode, audit logging |
-| [`printing.md`](./printing.md) | Label printing, preview/dispatch, template/route mapping |
-| [`deployment.md`](./deployment.md) | Release + deploy: build/push to gitea.revamp-it.ch, pull/up on the host, rollback, troubleshooting (x509, unauthorized, compose warnings) |
-| [`printer-server-setup.md`](./printer-server-setup.md) | Raspberry Pi CUPS print server: install, configure, connect to mediator |
-| [`import_export.md`](./import_export.md) | CSV/ZIP ingestion, export regimes, alias mapping |
-| [`agentic-basics.md`](./agentic-basics.md) | Agentic orchestration overview, lifecycle, guardrails |
-| [`item-flow.md`](./item-flow.md) | Agentic extraction/categorization/pricing stage contracts |
-| [`review-flow.md`](./review-flow.md) | Review lifecycle, quality assessment creation flow |
-| [`nightly-erp-sync.md`](./nightly-erp-sync.md) | Nightly ERP sync scheduler: opt-in model, timing, toggle, troubleshooting |
-| [`co2-impact.md`](./co2-impact.md) | CO₂ recovery potential: formula, label thresholds, contract, display |
-| [`intake.md`](./intake.md) | Device intake station: cataloguing flow, netboot, Phase 1/2 |
-| [`agentic-search-events.md`](./agentic-search-events.md) | Agentic search event inspection and analysis |
-| [`item-detail-layout.md`](./item-detail-layout.md) | Item detail UX hierarchy, persona-based design |
-| [`spare-parts-catalog.md`](./spare-parts-catalog.md) | Spare parts: assembly contracts, quality integration, Einzelteile page |
-| [`taxonomy-and-contracts.md`](./taxonomy-and-contracts.md) | Practical guide: categories + quality/spec/assembly contracts, how quality % and grade are calculated, recipes, rules, troubleshooting |
-| [`Shopware integration.md`](./Shopware%20integration.md) | Shopware product discovery, sync queue architecture |
-| [`glossary.md`](./glossary.md) | Canonical terminology: Item/ItemRef/ItemInstance, Box/Shelf/Location |
-| [`traceability-matrix.md`](./traceability-matrix.md) | Doc-to-code mapping: domain → backend actions → frontend components |
-| [`identity-provider.md`](./identity-provider.md) | Plain-language crash course: what Authentik/forward-auth are, request flow, groups→tenant/role, ordered setup with checks, troubleshooting |
-| [`feature-flags.md`](./feature-flags.md) | Deployment feature flags: the feature list, how to switch features off per deployment, what is blocked vs. hidden, how to add a new flag |
-| [`tenancy.md`](./tenancy.md) | Multi-tenancy: current identity/stamping state, why `tenant` is null, how to drive it (whoami, group map, Authentik) |
-
-## Topic changelogs
-
-Change history is distributed by topic. See [`docs/changelogs/`](../changelogs/README.md) for the full index.
+| [items.md](items.md) | References vs instances, fields, item actions |
+| [boxes.md](boxes.md) | Box/shelf hierarchy, relocation, box labels |
+| [stubs.md](stubs.md) | Stubs: markers for uncatalogued shelf content |
+| [qr_codes.md](qr_codes.md) | QR payloads, scan routing, search-scan and placement modes |
+| [printing.md](printing.md) | Label rendering, preview, dispatch to CUPS queues |
+| [printer-server-setup.md](printer-server-setup.md) | Raspberry Pi CUPS server install and connection |
+| [media-storage.md](media-storage.md) | Photos, attachments, identifier-keyed external docs |
+| [import_export.md](import_export.md) | CSV/ZIP import, export regimes (backup vs ERP), column aliases |
+| [nightly-erp-sync.md](nightly-erp-sync.md) | Nightly kivitendo sync: opt-in model, toggle, troubleshooting |
+| [shopware.md](shopware.md) | Shopware search and the queued product/stock sync |
+| [agentic-basics.md](agentic-basics.md) | Agentic run lifecycle, queue, guardrails |
+| [item-flow.md](item-flow.md) | Search → categorize → extract → price stage contracts |
+| [review-flow.md](review-flow.md) | Review wizard, decisions, restart semantics |
+| [agentic-search-events.md](agentic-search-events.md) | Inspecting stored agentic search events |
+| [co2-impact.md](co2-impact.md) | CO₂ recovery label: formula, thresholds, contract |
+| [spare-parts-catalog.md](spare-parts-catalog.md) | Assembly contracts and the Zerlegen UI |
+| [component-lifecycle.md](component-lifecycle.md) | In-device components (disks) from intake to standalone item |
+| [intake.md](intake.md) | Device intake station: flow, endpoints, phases |
+| [intake-image-guide.md](intake-image-guide.md) | Writing the netboot intake script ([`intake-image.http`](intake-image.http) is the runnable contract) |
+| [item-detail-layout.md](item-detail-layout.md) | Item detail page: tabs and information hierarchy |
+| [taxonomy-and-contracts.md](taxonomy-and-contracts.md) | Categories + quality/spec/assembly contracts: how quality % and grade are calculated, recipes, rules |
+| [identity-provider.md](identity-provider.md) | Authentik/forward-auth crash course: request flow, groups→tenant/role, ordered setup, troubleshooting |
+| [feature-flags.md](feature-flags.md) | Deployment feature flags: switching features off per deployment, blocked vs. hidden, adding a flag |
+| [tenancy.md](tenancy.md) | Multi-tenancy: identity/stamping/scoping state, roles, why `tenant` is null, how to drive it |
+| [glossary.md](glossary.md) | Canonical terms (Use/Avoid pairs) |

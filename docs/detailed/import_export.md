@@ -1,11 +1,5 @@
 # Import & Export
 
-> [!NOTE]
-> **Authoring rules**
-> - Prefer links over duplicated schema definitions.
-> - Keep each section short and contract-focused.
-> - Explicitly call out where data structures must stay synchronized across `models/`, importer/exporter mapping logic, and frontend API consumers.
-
 ## In short
 - Business goal: protect data integrity by making import/export contracts explicit for operators, developers, and agents.
 - User value: fewer silent mapping regressions and faster diagnosis when CSV/ZIP payloads fail validation or partially import.
@@ -209,9 +203,6 @@ Concrete examples:
 - Contract sync verification:
   - Update importer alias map and export header contract together.
   - Re-check shared model fields after any import/export field rename.
-
-## Open questions / TODO
-- [ ] TODO: If importer/exporter contracts change, update this doc and `docs/OVERVIEW.md` in the same patch.
 
 ## Recommendations (minimal, current-behavior focused)
 - Keep import/export field changes paired: update serializer headers, importer aliases, and shared model fields together.

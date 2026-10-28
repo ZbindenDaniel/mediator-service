@@ -111,7 +111,6 @@ services:
       cups:
         condition: service_healthy
 
-# TODO(ingress-auth): Keep the proxy configuration aligned with docs/setup.md and secrets rotation steps.
   proxy:
     image: nginx:1.25-alpine
     container_name: mediator-proxy
@@ -247,8 +246,6 @@ volumes:
     name: mediator-media
   mediator-postgres:
     name: mediator-postgres
-  nginx-logs:
-    name: nginx-logs
   cups-socket:
     name: mediator-cups-socket
   mediator-scans:
@@ -261,7 +258,3 @@ volumes:
     name: authentik-media
   authentik-templates:
     name: authentik-templates
-
-secrets:
-  mediator_htpasswd:
-    file: ./secrets/htpasswd

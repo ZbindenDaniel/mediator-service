@@ -1,11 +1,6 @@
 # Spare Parts Catalog (Einzelteile)
 
-> [!NOTE]
-> **Authoring rules**
-> - Prefer links over duplicated schema definitions.
-> - Keep each section short and contract-focused.
-> - Related: [component-lifecycle.md](component-lifecycle.md) (deferred-identity components),
->   [intake-image-guide.md](intake-image-guide.md) (contracts at intake).
+Related: [component-lifecycle.md](component-lifecycle.md) (deferred-identity components), [intake-image-guide.md](intake-image-guide.md) (contracts at intake).
 
 ## In short
 

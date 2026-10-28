@@ -13,4 +13,4 @@ Frontend utility modules — event log display, print helpers, logging.
 
 ## Relations
 - Used by: `frontend/src/components/` (event log cards, print buttons)
-- See also: [`docs/changelogs/printing.md`](../../../../docs/changelogs/printing.md)
+- See also: [`docs/changelogs/printing.md`](../../../docs/changelogs/printing.md)

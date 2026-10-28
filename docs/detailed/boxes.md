@@ -1,11 +1,5 @@
 # Boxes
 
-> [!NOTE]
-> **Authoring rules**
-> - Prefer links over duplicated schema definitions.
-> - Keep each section short and contract-focused.
-> - Explicitly call out where data structures must stay synchronized across `models/`, `backend/`, and frontend types/usages.
-
 ## In short
 - Business goal: Keep physical storage mapping (box ↔ shelf ↔ location) deterministic so relocation, import/export, and printing act on the same identifiers.
 - User value: Operators can move boxes/items, print labels, and import data without ambiguous placement semantics.

@@ -1,11 +1,5 @@
 # Items
 
-> [!NOTE]
-> **Authoring rules**
-> - Prefer links over duplicated schema definitions.
-> - Keep each section short and contract-focused.
-> - Explicitly call out where data structures must stay synchronized across `models/`, `backend/src/models/`, and frontend types/usages.
-
 ## In short
 - Business goal: Keep the item domain understandable as the central data object that connects storage, enrichment, import/export, and shop synchronization workflows.
 - In short: Items relate to most operational classes (boxes, media, events, agentic runs, export records) and are intentionally split into reference identity (`Artikel_Nummer`) and instance identity (`ItemUUID`).

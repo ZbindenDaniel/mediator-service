@@ -37,7 +37,7 @@ let cachedReference: string | null = null;
 const CATEGORY_HEADING_RE = /^##\s*(\d+)\s*[–—-]\s*(.+)$/;
 const SUBCATEGORY_BULLET_RE = /^-\s*\*\*(\d+)\*\*\s*[–—-]\s*(.+)$/;
 
-// docs/data_struct.md doubles as human-facing documentation (linked from docs/OVERVIEW.md) and as
+// docs/data_struct.md doubles as human-facing documentation (linked from README.md) and as
 // the categorizer's taxonomy reference, so we don't trim the source file. Instead this strips it
 // down to just what the categorization task needs: the numbering-convention sentence plus every
 // code/name pair, dropping the CSV-import normalization section (irrelevant to picking a category

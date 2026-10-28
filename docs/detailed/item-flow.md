@@ -1,11 +1,5 @@
 # Item Flow
 
-> [!NOTE]
-> **Authoring rules**
-> - Prefer links over duplicated schema definitions.
-> - Keep each section short and contract-focused.
-> - Explicitly call out where data structures must stay synchronized across `models/`, `backend/src/models/`, and frontend types/usages.
-
 ## In short
 - Business goal: make the agentic item enrichment path predictable and safe by documenting explicit stage transitions and stage-owned mutations.
 - User value: operators can trace why an item lands in `completed` vs `needs_review`, and developers can change prompts/validators without silently breaking contracts.
@@ -68,7 +62,6 @@
 
 
 ## Trigger-to-prompt injection matrix
-<!-- TODO(agentic-doc-sync): Keep trigger mapping aligned with `item-flow-extraction.ts` placeholder injection logic. -->
 
 | Trigger | Extraction prompt fragment | Supervisor prompt fragment | User/reviewer instruction note |
 | --- | --- | --- | --- |
@@ -176,6 +169,3 @@
   - Logs persistence/dispatch/notification failure points and always attempts failure marking on dispatch exceptions.
 - **Review transition (`actions/agentic-status.ts`)**
   - Logs attempted state transitions, fallback price/spec-pruning side effects, and persistence errors for reviewer actions.
-
-## Open questions / TODO
-- [ ] TODO: add direct links to concrete API endpoints once agentic route docs are split out from review-flow.

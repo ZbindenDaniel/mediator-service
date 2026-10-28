@@ -31,4 +31,4 @@ Shopware-specific HTTP and queue logic only. Item DB persistence belongs in `../
 - **Postgres-backed queue**: allows concurrent safe reads without SQLite lock contention
 
 ## See also
-- [docs/detailed/Shopware integration.md](../../docs/detailed/Shopware%20integration.md)
+- [docs/detailed/shopware.md](../../docs/detailed/shopware.md)

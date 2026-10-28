@@ -33,7 +33,7 @@ Presentation layer only. Data fetching through `data/` API clients. No business 
 - Components in `components/` are named by what they render, not what action triggers them
 
 ## Decisions
-- **React SPA (no SSR)**: the app is operator-facing on a LAN; SEO irrelevant; full SPA gives simpler deployment alongside the Express backend
+- **React SPA (no SSR)**: the app is operator-facing on a LAN; SEO irrelevant; full SPA gives simpler deployment alongside the Node backend
 - **Muted OKLCH palette, written as hex**: screens disagree on colour (unmanaged wide-gamut panels oversaturate sRGB); low-chroma colours stay calm when stretched and lightness carries structure. Hex output keeps older kiosk browsers working. Dark mode follows the device unless the user picks Hell/Dunkel (`lib/theme.ts`, `data-theme` on `<html>`)
 - **Pill buttons everywhere** (from the admin pages); the organic-corner tab-action group was dropped because its per-button radii broke on wrap and conditional buttons
 - **No component framework (no MUI/Shadcn)**: custom CSS for precise control over label-printing and mobile-first layout without fighting framework defaults
