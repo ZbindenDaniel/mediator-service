@@ -218,8 +218,12 @@ pre-fills that path from the finding. Finding → action:
    short instruction derived from the finding. The standalone button is **demoted** — relabelled
    "Feld manuell überarbeiten…", secondary-styled — kept only as the manual fallback for the
    no-findings case. Wired in the KI tab (persistent panel); the wizard's panel stays read-only.
-2. **L5b:** verified-collapse in the review **wizard** — hide fields with no finding, keep the summary/
-   decision step; wire `onFix` there too.
+2. **L5b (shipped):** review by exception in the **wizard** — a clickable stepper marks which steps carry
+   a finding (jump straight to them), and verified spec rows (filled, unflagged, not required/conflict)
+   collapse behind a "✓ N geprüfte Felder anzeigen" toggle; the summary step is unchanged. **Decision:**
+   `onFix` (model rework) is deliberately NOT wired in the wizard — mid-review it would clobber the
+   reviewer's unsaved edits; in the wizard the fix *is* the inline edit, and verified-collapse surfaces
+   what to edit. Nothing is lost (toggle + summary still show every field).
 3. **L5c:** `choose` (A/B) inline resolution for intake_conflict + one-click `drop`, via a direct
    value-set path (not a regenerate). Then the manual button can retire fully.
 

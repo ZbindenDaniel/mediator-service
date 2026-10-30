@@ -1626,6 +1626,47 @@ div {
 }
 
 // Review wizard summary + shop step.
+.review-wizard__steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 8px 0 12px;
+}
+.review-wizard__step {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border: 1px solid var(--border, #d0d5dd);
+    border-radius: 999px;
+    background: transparent;
+    font-size: 0.8rem;
+    cursor: pointer;
+    color: inherit;
+}
+.review-wizard__step.is-current {
+    border-color: var(--accent, #2563eb);
+    font-weight: 600;
+}
+.review-wizard__step-num {
+    opacity: 0.6;
+    font-variant-numeric: tabular-nums;
+}
+.review-wizard__step-dot {
+    color: #c77700;
+    font-size: 0.7rem;
+    line-height: 1;
+}
+.review-wizard__step.is-flagged {
+    border-color: #e0a640;
+}
+.review-wizard__verified-toggle {
+    align-self: flex-start;
+    margin-top: 4px;
+    font-size: 0.8rem;
+    padding: 2px 10px;
+}
+
 .review-wizard__summary {
     display: flex;
     flex-direction: column;
