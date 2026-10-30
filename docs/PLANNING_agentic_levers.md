@@ -192,6 +192,39 @@ data before persisting.
 
 ---
 
+## 2c. L5 in detail (findings become the interaction; retire "KI Überarbeitung")
+
+**Problem it fixes.** Today the KI tab has a standalone **"KI Überarbeitung"** button that opens a blind
+field-picker + freeform-instruction modal. It (a) overlaps with Starten/Wiederholen/Review, (b) makes
+the operator micromanage the AI, and (c) is a scattered rework entry point — the "shadow process" smell
+this whole effort set out to kill. With findings now surfaced (L0c) and each `Finding` already carrying
+`field` + `ask` + `suggestion`, rework should be something you do **to a surfaced problem**, not a
+freeform console.
+
+**The mapping (why the existing machinery is enough).** `reworkFieldOptions` already covers prose
+(Artikelbeschreibung/Kurzbeschreibung) *and* every Langtext spec key, and `handleReworkSubmit` already
+does a targeted, search-skipping regenerate of a chosen field subset. So a per-finding action just
+pre-fills that path from the finding. Finding → action:
+
+| Finding | `ask` | L5 action | Path |
+|---|---|---|---|
+| banned_phrase | `fix` | **Beheben** — regenerate that prose field (wording step re-cleans it) | existing rework |
+| missing_required | `fix` | **Beheben** — regenerate that field to fill it | existing rework |
+| intake_conflict | `choose` | **A/B** — set the measured or extracted value (no model call) | new value-set path (L5c) |
+
+**Slices:**
+1. **L5a (this build):** `FindingsPanel` gains an optional `onFix(finding)`; findings with `ask === 'fix'`
+   render a **Beheben** button that fires a field-scoped rework via the existing path, seeded with a
+   short instruction derived from the finding. The standalone button is **demoted** — relabelled
+   "Feld manuell überarbeiten…", secondary-styled — kept only as the manual fallback for the
+   no-findings case. Wired in the KI tab (persistent panel); the wizard's panel stays read-only.
+2. **L5b:** verified-collapse in the review **wizard** — hide fields with no finding, keep the summary/
+   decision step; wire `onFix` there too.
+3. **L5c:** `choose` (A/B) inline resolution for intake_conflict + one-click `drop`, via a direct
+   value-set path (not a regenerate). Then the manual button can retire fully.
+
+---
+
 ## 3. Explicitly NOT now (target-state, reached by accumulation)
 
 Building any of these up front is the redesign trap. We revisit each only when the levers below it are

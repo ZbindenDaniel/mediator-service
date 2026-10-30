@@ -1884,6 +1884,20 @@ export default function ItemDetail({ itemId }: Props) {
     }
   }
 
+  // L5a: resolve a surfaced finding by regenerating exactly its field, reusing the targeted-rework path.
+  // The field + a short reason come from the finding, so the operator acts on the problem instead of
+  // hand-picking fields. Only 'fix' findings reach here (the panel shows "Beheben" only for those).
+  function handleFixFinding(finding: Finding) {
+    const field = (finding.field ?? '').trim();
+    if (!field) return;
+    const instruction = finding.type === 'banned_phrase'
+      ? `Entferne „${finding.evidence ?? ''}“ aus „${field}“ und formuliere im Hausstil (gebrauchte Ware).`.trim()
+      : finding.type === 'missing_required'
+        ? `Ergänze das fehlende Pflichtfeld „${field}“.`
+        : (finding.message ?? '');
+    void handleReworkSubmit({ selectedFields: [field], additionalInput: instruction });
+  }
+
   async function handleReworkSubmit(result: AgenticSpecFieldReviewResult) {
     if (!item) return;
     const referenceId = item.Artikel_Nummer?.trim() || '';
@@ -2781,6 +2795,7 @@ export default function ItemDetail({ itemId }: Props) {
           <ItemKiTab
             agenticCardProps={agenticCardProps}
             findings={agenticFindings}
+            onFixFinding={handleFixFinding}
             dataQuality={agenticDataQuality}
             reviewWizardState={reviewWizardModalState?.data ?? null}
             onReviewWizardResolve={handleReviewWizardResolve}

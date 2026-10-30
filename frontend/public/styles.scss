@@ -1410,6 +1410,13 @@ div {
     flex-wrap: wrap;
     gap: 4px 8px;
     align-items: baseline;
+    flex: 1 1 auto;
+}
+.review-findings__fix {
+    flex: 0 0 auto;
+    align-self: center;
+    padding: 2px 10px;
+    font-size: 0.8rem;
 }
 .review-findings__field {
     font-weight: 600;
