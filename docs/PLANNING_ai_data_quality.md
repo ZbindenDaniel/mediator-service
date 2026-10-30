@@ -254,6 +254,27 @@ for findings-adjacency largely exists. `FindingsJson` is an additive column mirr
 
 ---
 
+## 7b. Direction: agentic input will grow and diversify
+
+A note to steer by, not a spec. Today the system has a few fixed agentic behaviours; over time the
+operator will want to **give it instructions** — and those instructions won't all be the same shape.
+Three illustrative wishes (not scoped, just to show the spread):
+
+- *"Texte für alte Artikel in der Vergangenheitsform schreiben"* — a **standing rule** that steers wording.
+- *"neues Spec-Feld 'Material' für Laptops"* — a **schema change** to a contract.
+- *"suche eine KI-fähige Grafikkarte"* — a **one-off task / query**, not a rule at all.
+
+So the eventual control surface (a form first, a chat later) is really **one front door for several kinds
+of instruction**, differing by *scope* (global … one item, or conditional), *what they change*
+(generation, schema, or just run a search), and *when they act* (next run, sweep now, or now). The design
+principle: keep whatever the operator expresses **typed, scoped, legible and reversible**, so the space of
+agentic actions can diversify without becoming a black box — the same legibility that lets us hand the
+system more autonomy. Much of the storage already exists (standards, contracts, reject-feedback, the
+sweeper); what's new is a unified place to hold instructions and route them. Parked as north-star — the
+current levers (standards, grade, findings) are already building toward it.
+
+---
+
 ## 8. Provenance of this plan (what it absorbs)
 
 - `PLANNING_rework_feature.md` → Pillar D (L1–L5) + the contract-smell diagnosis (§2). **Superseded.**
