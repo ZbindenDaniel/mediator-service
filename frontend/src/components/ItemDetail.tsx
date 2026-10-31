@@ -93,6 +93,7 @@ import DetailTabBar from './DetailTabBar';
 import ItemReferenceTab from './item-tabs/ItemReferenceTab';
 import ItemKiTab from './item-tabs/ItemKiTab';
 import { type AgenticReviewWizardData, type AgenticReviewWizardResult, type ReviewWizardSpecField } from './AgenticReviewWizard';
+import type { Finding } from '../../../models/agentic-findings';
 import ItemInstanceTab from './item-tabs/ItemInstanceTab';
 import ItemImagesTab from './item-tabs/ItemImagesTab';
 import ItemAttachmentsTab from './item-tabs/ItemAttachmentsTab';
@@ -1524,6 +1525,17 @@ export default function ItemDetail({ itemId }: Props) {
     return () => setPanelDetailLabel(null);
   }, [load]);
 
+  // Findings computed from the item's CURRENT content (server attaches CurrentFindings on status read),
+  // so the KI tab + review wizard reflect live content and manual edits, not the last run's output.
+  const agenticFindings = useMemo<Finding[]>(
+    () => (Array.isArray(agentic?.CurrentFindings) ? agentic.CurrentFindings : []),
+    [agentic?.CurrentFindings]
+  );
+
+  // Catalogue data-quality grade (L10), derived on read alongside the findings; null when the item has
+  // no spec contract (nothing to grade). Surfaced as a badge in the KI tab.
+  const agenticDataQuality = agentic?.CurrentDataQuality ?? null;
+
   // Derived agentic state — computed before early returns so the hooks below can reference them
   const normalizedAgenticStatus = agentic ? normalizeAgenticRunStatus(agentic.Status) : null;
   const normalizedAgenticReview = agentic ? (agentic.ReviewState || '').trim().toLowerCase() : null;
@@ -1663,6 +1675,9 @@ export default function ItemDetail({ itemId }: Props) {
       }
     }
 
+    // Same findings the KI tab shows (parsed once at component level).
+    const findings: Finding[] = agenticFindings;
+
     const wizardData: AgenticReviewWizardData = {
       artikelbeschreibung: item?.Artikelbeschreibung ?? '',
       kurzbeschreibung: item?.Kurzbeschreibung ?? '',
@@ -1671,7 +1686,8 @@ export default function ItemDetail({ itemId }: Props) {
       hoehe: item?.Höhe_mm != null ? String(item.Höhe_mm) : '',
       gewicht: item?.Gewicht_kg != null ? String(item.Gewicht_kg) : '',
       price: typeof item?.Verkaufspreis === 'number' && Number.isFinite(item.Verkaufspreis) ? String(item.Verkaufspreis) : '',
-      specFields
+      specFields,
+      findings
     };
 
     const wizardResult = await promptReviewWizard(wizardData);
@@ -1866,6 +1882,20 @@ export default function ItemDetail({ itemId }: Props) {
     } finally {
       setAgenticActionPending(false);
     }
+  }
+
+  // L5a: resolve a surfaced finding by regenerating exactly its field, reusing the targeted-rework path.
+  // The field + a short reason come from the finding, so the operator acts on the problem instead of
+  // hand-picking fields. Only 'fix' findings reach here (the panel shows "Beheben" only for those).
+  function handleFixFinding(finding: Finding) {
+    const field = (finding.field ?? '').trim();
+    if (!field) return;
+    const instruction = finding.type === 'banned_phrase'
+      ? `Entferne „${finding.evidence ?? ''}“ aus „${field}“ und formuliere im Hausstil (gebrauchte Ware).`.trim()
+      : finding.type === 'missing_required'
+        ? `Ergänze das fehlende Pflichtfeld „${field}“.`
+        : (finding.message ?? '');
+    void handleReworkSubmit({ selectedFields: [field], additionalInput: instruction });
   }
 
   async function handleReworkSubmit(result: AgenticSpecFieldReviewResult) {
@@ -2764,6 +2794,9 @@ export default function ItemDetail({ itemId }: Props) {
         tabContent = (
           <ItemKiTab
             agenticCardProps={agenticCardProps}
+            findings={agenticFindings}
+            onFixFinding={handleFixFinding}
+            dataQuality={agenticDataQuality}
             reviewWizardState={reviewWizardModalState?.data ?? null}
             onReviewWizardResolve={handleReviewWizardResolve}
             reworkFieldOptions={reworkFieldOptions}

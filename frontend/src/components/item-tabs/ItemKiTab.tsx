@@ -8,9 +8,20 @@ import AgenticSpecFieldReviewModal, {
   type AgenticSpecFieldReviewResult
 } from '../AgenticSpecFieldReviewModal';
 import { AgenticReviewWizard, type AgenticReviewWizardData, type AgenticReviewWizardResult } from '../AgenticReviewWizard';
+import { FindingsPanel } from '../FindingsPanel';
+import { DataQualityBadge } from '../DataQualityBadge';
+import type { Finding } from '../../../../models/agentic-findings';
+import type { DataQualityGrade } from '../../../../models/data-quality';
 
 interface Props {
   agenticCardProps: AgenticStatusCardProps;
+  // Persistent findings for the current run ("Zu prüfen") — shown in the tab, not only during review.
+  findings?: Finding[];
+  // Lever L5a: resolve a surfaced finding by regenerating its field (replaces the blind field-picker as
+  // the primary rework entry). Omitted → findings stay read-only.
+  onFixFinding?: (finding: Finding) => void;
+  // Catalogue data-quality grade (L10), derived on read; shown as a badge above the findings.
+  dataQuality?: DataQualityGrade | null;
   reviewWizardState?: AgenticReviewWizardData | null;
   onReviewWizardResolve?: (result: AgenticReviewWizardResult | null) => void;
   // Targeted rework ("KI Überarbeitung"): selectable fields + a submit handler. Kept local to this tab
@@ -31,6 +42,9 @@ interface Props {
 
 export default function ItemKiTab({
   agenticCardProps,
+  findings,
+  onFixFinding,
+  dataQuality,
   reviewWizardState,
   onReviewWizardResolve,
   reworkFieldOptions,
@@ -67,9 +81,11 @@ export default function ItemKiTab({
               Wiederholen
             </button>
           )}
+          {/* L5a: demoted to a secondary manual fallback — the primary rework path is now the per-finding
+              "Beheben" action below. Relabelled so it reads as "pick fields by hand", not a peer of Starten. */}
           {canRework && (
-            <button type="button" className="btn" disabled={actionPending} onClick={() => setReworkOpen(true)}>
-              KI Überarbeitung
+            <button type="button" className="btn secondary" disabled={actionPending} onClick={() => setReworkOpen(true)}>
+              Feld manuell überarbeiten…
             </button>
           )}
           {needsReview && !reviewIntent && (
@@ -95,6 +111,8 @@ export default function ItemKiTab({
         </div>
       )}
       <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
+      <DataQualityBadge quality={dataQuality ?? null} />
+      <FindingsPanel findings={findings ?? []} onFix={onFixFinding} busy={actionPending} />
       {snapshotArtikelNummer ? (
         <AgenticSnapshotsPanel
           artikelNummer={snapshotArtikelNummer}

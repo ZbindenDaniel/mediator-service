@@ -1,5 +1,5 @@
 // TODO(agent): Revisit item flow orchestration once planner surfaces richer item metadata requirements.
-import { agentActorId, autoApproveConfig } from '../config';
+import { agentActorId } from '../config';
 import type { AgenticResultPayload } from '../result-handler';
 import { createRateLimiter, DEFAULT_DELAY_MS, type RateLimiterLogger } from '../utils/rate-limiter';
 import { FlowError } from './errors';
@@ -21,8 +21,11 @@ import { prepareItemContext } from './context';
 import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
 import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
-import { getSpecContract } from '../..//contracts/registry';
+import { getSpecContract, getStandardsContract } from '../..//contracts/registry';
 import { canonicalizeSpecKeyRecord } from '../../../models/spec-contract';
+import { buildFindings, isAutoApprovable } from '../findings';
+import { runWordingStage } from './item-flow-wording';
+import type { Finding } from '../../../models/agentic-findings';
 
 const REVIEW_CONTEXT_NOTE_LIMIT = 2_000;
 
@@ -242,7 +245,8 @@ function buildCallbackPayload({
   sources,
   actor,
   autoApprovable,
-  specContractVersion
+  specContractVersion,
+  findings
 }: {
   artikelNummer: string;
   itemData: AgenticTarget;
@@ -258,6 +262,7 @@ function buildCallbackPayload({
   actor?: string | null;
   autoApprovable?: boolean;
   specContractVersion?: number | null;
+  findings?: Finding[];
 }): AgenticResultPayload {
   const resolvedStatus = status ?? (needsReview ? 'needs_review' : 'completed');
   const resolvedNeedsReview = typeof needsReview === 'boolean' ? needsReview : resolvedStatus !== 'completed';
@@ -290,7 +295,8 @@ function buildCallbackPayload({
     actor: resolvedActor,
     item: itemPayload,
     autoApprovable: autoApprovable === true,
-    specContractVersion: specContractVersion ?? null
+    specContractVersion: specContractVersion ?? null,
+    findings: Array.isArray(findings) ? findings : []
   };
 }
 
@@ -403,7 +409,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     };
 
     const shopwareAvailable = isShopwareConfigured();
-    const { format, extract, supervisor, categorizer, pricing, jsonCorrection, searchPlanner, shopware } = await loadPrompts({
+    const { format, extract, supervisor, categorizer, pricing, wording, jsonCorrection, searchPlanner, shopware } = await loadPrompts({
       itemId,
       logger,
       includeShopware: shopwareAvailable
@@ -647,6 +653,37 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     checkCancellation();
 
+    // Wording stage: after extraction has the facts, a dedicated LLM pass rewrites the prose fields
+    // into the house style and strips fluff/marketing/source-copied phrases (contracts/standards.json),
+    // without changing facts, and tidies Langtext spec key names. A normal pipeline stage (not flagged —
+    // like extraction/supervisor/pricing). Skipped in rework mode (targeted field regen owns its own
+    // field selection); a failure keeps extraction's wording and never blocks the run.
+    if (!reworkMode && extractionResult.success && extractionResult.data) {
+      try {
+        const wordingResult = await runWordingStage({
+          llm: deps.llm,
+          logger,
+          itemId,
+          wordingPrompt: wording,
+          candidate: extractionResult.data,
+          standards: getStandardsContract(),
+          reviewNotes: reviewerNotes,
+          transcriptWriter
+        });
+        if (wordingResult) {
+          const data = extractionResult.data as Record<string, unknown>;
+          if (typeof wordingResult.Artikelbeschreibung === 'string') data.Artikelbeschreibung = wordingResult.Artikelbeschreibung;
+          if (typeof wordingResult.Kurzbeschreibung === 'string') data.Kurzbeschreibung = wordingResult.Kurzbeschreibung;
+          // Reworded specs (tidied key names): overlaid here, then canonicalizeSpecKeyRecord below still
+          // folds any known variant keys onto their canonical contract key.
+          if (wordingResult.Langtext) data.Langtext = wordingResult.Langtext;
+        }
+      } catch (err) {
+        logger.warn?.({ err, msg: 'wording stage failed; keeping extraction wording', itemId });
+      }
+      checkCancellation();
+    }
+
     // In rework mode, produce a partial update deterministically: start from the ORIGINAL item and
     // accept the model's output ONLY for the selected keys. This preserves every other field
     // regardless of what the model returned — no reliance on the model honouring "locked" fields.
@@ -661,19 +698,29 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       ) as typeof finalData.Langtext;
     }
 
-    // "Clearly good" signal for auto-approval: supervisor PASS + no missing-required + no ambiguous
-    // fields + extraction confidence at/above the configured threshold. The final on/off gate lives
-    // in the result handler (AUTO_APPROVE); here we only compute whether the data qualifies.
-    const extractionConfidence =
-      typeof (extractionResult.data as { confidence?: unknown })?.confidence === 'number'
-        ? ((extractionResult.data as { confidence: number }).confidence)
-        : null;
-    const autoApprovable =
-      extractionResult.success &&
-      specCtx.missingRequired.length === 0 &&
-      Object.keys(specCtx.ambiguousFields).length === 0 &&
-      extractionConfidence !== null &&
-      extractionConfidence >= autoApproveConfig.minConfidence;
+    // Review-by-exception findings, computed on the WORDING-CLEANED output (the wording stage above
+    // already stripped banned phrases): missing-required (block), banned phrases + intake conflicts
+    // (warn), marketing/style hints (info). Drives both the review UI and the auto-approve gate below.
+    const reviewTexts: Record<string, string> = {};
+    if (typeof finalData.Artikelbeschreibung === 'string') reviewTexts.Artikelbeschreibung = finalData.Artikelbeschreibung;
+    if (typeof finalData.Kurzbeschreibung === 'string') reviewTexts.Kurzbeschreibung = finalData.Kurzbeschreibung;
+    if (finalData.Langtext && typeof finalData.Langtext === 'object' && !Array.isArray(finalData.Langtext)) {
+      for (const [key, value] of Object.entries(finalData.Langtext as Record<string, unknown>)) {
+        if (typeof value === 'string') reviewTexts[key] = value;
+      }
+    }
+    const findings: Finding[] = buildFindings(
+      { texts: reviewTexts, missingRequired: specCtx.missingRequired, ambiguousFields: specCtx.ambiguousFields },
+      getStandardsContract()
+    );
+
+    // Auto-approvable (L3): the run produced clean output — no finding needs a human. "Clean" = no
+    // block (missing-required) and no warn (banned phrase / intake conflict); info-level style hints are
+    // tolerated (an operator raises a rule's severity in standards.json to make it gate). This replaces
+    // the old confidence threshold (an unreliable model self-report) and implicitly requires the wording
+    // pass — uncleaned prose leaves warn findings. The on/off gate + settle live in the result handler
+    // under AUTO_APPROVE.
+    const autoApprovable = extractionResult.success && isAutoApprovable(findings);
 
     const payload = buildCallbackPayload({
       artikelNummer: itemId,
@@ -690,7 +737,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       error: extractionResult.success ? null : 'Supervisor flagged issues',
       sources: extractionResult.sources,
       autoApprovable,
-      specContractVersion
+      specContractVersion,
+      findings
     });
 
     await dispatchAgenticResult({

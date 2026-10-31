@@ -733,6 +733,13 @@ export async function handleAgenticResult(
           SpecContractVersion: typeof (payload as { specContractVersion?: unknown }).specContractVersion === 'number'
             ? (payload as { specContractVersion: number }).specContractVersion
             : null,
+          // Persist findings only when this result carries them (item-flow computes them, even []).
+          // An empty array serializes to "[]" and overwrites stale findings; `undefined` → null, and
+          // the COALESCE in upsertAgenticRun then preserves the prior value on paths that don't compute
+          // findings (manual close/restart), rather than wiping them.
+          FindingsJson: Array.isArray((payload as { findings?: unknown }).findings)
+            ? JSON.stringify((payload as { findings: unknown[] }).findings)
+            : null,
           Status: status,
           LastModified: now,
           ReviewState: effectiveReviewState,

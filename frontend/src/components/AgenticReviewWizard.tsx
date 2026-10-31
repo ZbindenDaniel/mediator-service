@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { logError } from '../utils/logger';
+import type { Finding } from '../../../models/agentic-findings';
+import { FindingsPanel } from './FindingsPanel';
 
 // A single spec/contract field the reviewer can edit (blank value = remove the field).
 export interface ReviewWizardSpecField {
@@ -21,6 +23,10 @@ export interface AgenticReviewWizardData {
   gewicht: string;
   price: string;
   specFields: ReviewWizardSpecField[];
+  // Review-by-exception: machine-surfaced things to check (banned phrases, missing-required, intake
+  // conflicts). Shown as a persistent panel so the reviewer knows where to look instead of scanning
+  // every field. Empty/absent = nothing flagged.
+  findings?: Finding[];
 }
 
 export interface AgenticReviewWizardResult {
@@ -66,6 +72,33 @@ export function AgenticReviewWizard({ data, onResolve }: Props) {
   const [shopArticle, setShopArticle] = useState(true);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [view, setView] = useState<View>({ kind: 'content', index: 0 });
+
+  // L5b: verified spec rows (no finding, filled, not required/conflict) collapse so the reviewer sees
+  // only what needs attention — review by exception. Default collapsed; one toggle reveals them.
+  const [showVerifiedSpecs, setShowVerifiedSpecs] = useState(false);
+
+  const findings = data.findings ?? [];
+  // Fields that carry at least one finding — used to mark spec rows "zu prüfen".
+  const findingFields = useMemo(
+    () => new Set(findings.map((f) => f.field).filter((f): f is string => !!f)),
+    [findings]
+  );
+  // L5b: which content steps carry a finding, so the stepper can point the reviewer straight at them
+  // instead of clicking through every step blind. Spec-key findings map to the Spezifikationen step.
+  const DIMENSION_FIELDS = ['Länge_mm', 'Breite_mm', 'Höhe_mm', 'Gewicht_kg'];
+  const flaggedSteps = useMemo<Set<ContentStepId>>(() => {
+    const set = new Set<ContentStepId>();
+    for (const f of findings) {
+      const field = f.field;
+      if (!field) continue;
+      if (field === 'Artikelbeschreibung') set.add('beschreibung');
+      else if (field === 'Kurzbeschreibung') set.add('kurztext');
+      else if (DIMENSION_FIELDS.includes(field)) set.add('dimensionen');
+      else if (field === 'Verkaufspreis' || field === 'Preis') set.add('preis');
+      else set.add('spezifikationen'); // any remaining field is a spec key
+    }
+    return set;
+  }, [findings]);
 
   const setNote = (stepId: string, value: string) => setNotes((prev) => ({ ...prev, [stepId]: value }));
   const updateSpec = (key: string, value: string) => setSpecValues((prev) => ({ ...prev, [key]: value }));
@@ -295,11 +328,24 @@ export function AgenticReviewWizard({ data, onResolve }: Props) {
       );
     } else if (step.id === 'spezifikationen') {
       title = contentTitle('spezifikationen', 'Spezifikationen');
+      // Review by exception: a row needs attention when it's required, empty (will be removed),
+      // flagged by a finding, or conflicts with intake. Everything else is "verified" and collapses.
+      const specNeedsAttention = (field: ReviewWizardSpecField): boolean => {
+        const isConflict = field.intakeValue != null && field.value !== '' && field.value !== field.intakeValue;
+        const isEmpty = !(specValues[field.key] ?? '').trim();
+        return Boolean(field.required) || isEmpty || findingFields.has(field.key) || isConflict;
+      };
+      const noteworthySpecs = data.specFields.filter(specNeedsAttention);
+      const verifiedSpecs = data.specFields.filter((f) => !specNeedsAttention(f));
+      const visibleSpecs = showVerifiedSpecs ? data.specFields : noteworthySpecs;
       body = data.specFields.length === 0 ? (
         <p className="muted">Keine Spezifikationen vorhanden.</p>
       ) : (
         <div className="review-dialog__contract-fields">
-          {data.specFields.map((field) => {
+          {noteworthySpecs.length === 0 && !showVerifiedSpecs ? (
+            <p className="muted">Keine Spezifikation zu prüfen — alle Felder sind gefüllt und ohne Befund.</p>
+          ) : null}
+          {visibleSpecs.map((field) => {
             const isConflict = field.intakeValue != null && field.value !== '' && field.value !== field.intakeValue;
             const isEmpty = !(specValues[field.key] ?? '').trim();
             return (
@@ -314,6 +360,9 @@ export function AgenticReviewWizard({ data, onResolve }: Props) {
                 <label className="contract-field-row__label" htmlFor={`wizard-spec-${field.key}`}>
                   <span className="contract-field-row__key">{field.key}</span>
                   {field.required ? <span className="contract-field-row__badge contract-field-row__badge--required">Pflicht</span> : null}
+                  {findingFields.has(field.key) ? (
+                    <span className="contract-field-row__badge" style={{ background: '#fff4e5', color: '#8a5300' }}>zu prüfen</span>
+                  ) : null}
                   {field.description ? <span className="contract-field-row__desc">{field.description}</span> : null}
                 </label>
                 {isConflict ? (
@@ -342,6 +391,17 @@ export function AgenticReviewWizard({ data, onResolve }: Props) {
               </div>
             );
           })}
+          {verifiedSpecs.length > 0 ? (
+            <button
+              type="button"
+              className="btn secondary review-wizard__verified-toggle"
+              onClick={() => setShowVerifiedSpecs((v) => !v)}
+            >
+              {showVerifiedSpecs
+                ? `${verifiedSpecs.length} geprüfte Felder ausblenden`
+                : `✓ ${verifiedSpecs.length} geprüfte Felder anzeigen`}
+            </button>
+          ) : null}
         </div>
       );
     } else if (step.id === 'dimensionen') {
@@ -443,6 +503,29 @@ export function AgenticReviewWizard({ data, onResolve }: Props) {
         onClick={(event) => event.stopPropagation()}
       >
         <h2 className="dialog-title" id="agentic-review-wizard-title">{title}</h2>
+        <FindingsPanel findings={findings} />
+        {view.kind === 'content' ? (
+          <div className="review-wizard__steps" role="tablist" aria-label="Schritte">
+            {CONTENT_STEPS.map((s, i) => {
+              const isCurrent = view.kind === 'content' && view.index === i;
+              const flagged = flaggedSteps.has(s.id);
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isCurrent}
+                  className={['review-wizard__step', isCurrent ? 'is-current' : '', flagged ? 'is-flagged' : ''].filter(Boolean).join(' ')}
+                  onClick={() => setView({ kind: 'content', index: i })}
+                >
+                  <span className="review-wizard__step-num">{i + 1}</span>
+                  <span>{s.label}</span>
+                  {flagged ? <span className="review-wizard__step-dot" aria-label="zu prüfen" title="zu prüfen">●</span> : null}
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
         {body}
         {footer}
       </div>

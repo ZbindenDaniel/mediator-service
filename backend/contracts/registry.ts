@@ -3,6 +3,7 @@ import path from 'path';
 import type { QualityContract } from '../../models/quality-contract';
 import type { SpecContract } from '../../models/spec-contract';
 import type { AssemblyContract } from '../../models/assembly-contract';
+import type { StandardsContract } from '../../models/agentic-findings';
 import { resolveContractReadPath, listContractCodes } from './paths';
 import { parentCategoryCode } from '../lib/taxonomy';
 
@@ -65,6 +66,17 @@ export function getSpecContract(subcategory: number): SpecContract | null {
   return contract;
 }
 
+// The house standards rule set (contracts/standards.json) — global, not per-subcategory. Cached at
+// module level like the other contracts; a `null` return (missing/invalid file) means "no rules",
+// so the findings engine simply emits no standards findings rather than failing a run.
+let standardsCache: StandardsContract | null | undefined;
+
+export function getStandardsContract(): StandardsContract | null {
+  if (standardsCache !== undefined) return standardsCache;
+  standardsCache = loadJsonFile<StandardsContract>(resolveContractReadPath('standards.json'));
+  return standardsCache;
+}
+
 export function getAssemblyContract(subCategory: number): AssemblyContract | null {
   if (assemblyCache.has(subCategory)) return assemblyCache.get(subCategory)!;
   const contract = loadJsonFile<AssemblyContract>(resolveContractReadPath(path.join('assembly', `${subCategory}.json`)));
@@ -93,6 +105,7 @@ export function clearContractCaches(): void {
   assemblyCache.clear();
   specSubcategoriesCache = null;
   filterableSpecKeysCache = null;
+  standardsCache = undefined;
 }
 
 let filterableSpecKeysCache: Set<string> | null = null;

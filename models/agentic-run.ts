@@ -19,4 +19,12 @@ export interface AgenticRun {
   // Spec contract version this run completed against; lets an idle sweep detect items enriched
   // against an outdated contract (stored < current) and re-apply it.
   SpecContractVersion?: number | null;
+  // Serialized `Finding[]` snapshot from the run's output at completion (history). JSON string or null.
+  FindingsJson?: string | null;
+  // Transient (never persisted): deterministic findings computed from the item's CURRENT stored
+  // content on read, so review surfaces reflect live content + manual edits, not the last run's output.
+  CurrentFindings?: import('./agentic-findings').Finding[];
+  // Transient (never persisted): the catalogue data-quality grade (L10) derived on read from
+  // CurrentFindings + the ref's spec gap + SpecContractVersion. null when the item has no spec contract.
+  CurrentDataQuality?: import('./data-quality').DataQualityGrade | null;
 }
