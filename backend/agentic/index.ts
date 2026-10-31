@@ -52,7 +52,7 @@ import { autoReworkConfig } from './config';
 import { computeReferenceFindings } from './reference-findings';
 import { computeReferenceDataQuality } from './data-quality';
 import { getSpecContract } from '../contracts/registry';
-import { checkSpecGap } from '../../models/spec-contract';
+import { checkSpecGap, type SpecContract } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
 
 export interface AgenticServiceLogger {
@@ -1434,6 +1434,68 @@ export function decideContractAuditAction(
   return { action: 'restamp' };
 }
 
+// L4 (legible sweeper): one entry per stale item the contract-audit sweep would act on. Lets the sweep
+// log/preview the *whole* backlog ("N stale: X rework, Y restamp") instead of acting invisibly, and is
+// the shape a dry-run surfaces to the operator before AUTO_REWORK is trusted on.
+export interface ContractSweepPlanEntry {
+  artikelNummer: string;
+  subCategory: number;
+  action: 'rework' | 'restamp';
+  /** For rework: the now-missing required fields that will be regenerated. */
+  fields?: string[];
+  fromVersion: number | null;
+  toVersion: number;
+}
+
+type ContractAuditCandidate = {
+  Artikel_Nummer: string;
+  SubCategory: number | null;
+  SpecContractVersion: number | null;
+  Langtext: string | null;
+  Artikelbeschreibung?: string | null;
+};
+
+// Pure (no DB/LLM): maps the candidate rows to the actions the sweep would take, in order. `getContract`
+// is injected so this is unit-testable without the contract registry. Parsing/gap-check mirror the live
+// sweep exactly, so the preview and the action can never disagree.
+export function planContractSweep(
+  candidates: ContractAuditCandidate[],
+  getContract: (subCategory: number) => SpecContract | null
+): ContractSweepPlanEntry[] {
+  const plan: ContractSweepPlanEntry[] = [];
+  for (const candidate of candidates) {
+    if (candidate.SubCategory == null) continue;
+    const contract = getContract(candidate.SubCategory);
+    if (!contract) continue;
+    const stored = typeof candidate.SpecContractVersion === 'number' ? candidate.SpecContractVersion : null;
+    if (stored != null && stored >= contract.version) continue; // not stale (fast path, mirrors the sweep)
+
+    let langtextObj: Record<string, unknown> = {};
+    try {
+      const parsed = parseLangtext(candidate.Langtext, { context: 'contract-audit' });
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) langtextObj = parsed as Record<string, unknown>;
+    } catch {
+      // Unparseable Langtext → empty; the gap check then flags required fields.
+    }
+    const gap = checkSpecGap(contract, langtextObj);
+    const decision = decideContractAuditAction(stored, contract.version, gap.missingRequired);
+    if (decision.action === 'skip') continue;
+    plan.push(
+      decision.action === 'rework'
+        ? { artikelNummer: candidate.Artikel_Nummer, subCategory: candidate.SubCategory, action: 'rework', fields: decision.fields, fromVersion: stored, toVersion: contract.version }
+        : { artikelNummer: candidate.Artikel_Nummer, subCategory: candidate.SubCategory, action: 'restamp', fromVersion: stored, toVersion: contract.version }
+    );
+  }
+  return plan;
+}
+
+// Dry run: what the contract-audit sweep *would* do right now, without touching anything. Lets an
+// operator see the stale backlog before enabling AUTO_REWORK (the sweep otherwise acts silently).
+export async function previewContractSweep(limit = 20): Promise<ContractSweepPlanEntry[]> {
+  const candidates = await listContractAuditCandidates(limit);
+  return planContractSweep(candidates, getSpecContract);
+}
+
 // Deterministic idle sweeper for the AUTO_REWORK feature. Finds the oldest settled item enriched
 // against an outdated spec contract version and either re-stamps it (already complete) or enqueues a
 // targeted rework for the now-missing required fields. No LLM in the decision — pure gap check.
@@ -1449,36 +1511,39 @@ async function sweepContractRework(
     return;
   }
 
-  for (const candidate of candidates) {
-    if (candidate.SubCategory == null) continue;
-    const contract = getSpecContract(candidate.SubCategory);
-    if (!contract) continue;
-    const stored = typeof candidate.SpecContractVersion === 'number' ? candidate.SpecContractVersion : null;
-    if (stored != null && stored >= contract.version) continue; // already current — not stale (fast path)
+  const plan = planContractSweep(candidates, getSpecContract);
+  if (plan.length === 0) return;
+  // Legibility: log the whole stale backlog, not just the item we touch this tick, so the sweep's
+  // behaviour is observable even though it acts gently (all re-stamps, at most one rework per tick).
+  logger.info?.('[agentic-service] Contract-audit sweep plan', {
+    stale: plan.length,
+    rework: plan.filter((p) => p.action === 'rework').length,
+    restamp: plan.filter((p) => p.action === 'restamp').length
+  });
 
-    let langtextObj: Record<string, unknown> = {};
+  // Automated origin, so its activity-log entries are distinguishable from operator actions.
+  const AUTO_ACTOR = 'auto-rework';
+  const logSweepEvent = async (artikelNummer: string, event: string, meta: Record<string, unknown>): Promise<void> => {
     try {
-      const parsed = parseLangtext(candidate.Langtext, { context: 'contract-audit' });
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        langtextObj = parsed as Record<string, unknown>;
-      }
-    } catch {
-      // Treat unparseable Langtext as empty — the gap check will flag required fields.
+      await deps.logEvent({ Actor: AUTO_ACTOR, EntityType: 'Item', EntityId: artikelNummer, Event: event, Meta: JSON.stringify(meta) });
+    } catch (err) {
+      // Event logging is non-fatal — the sweep action already happened; a logging failure must not undo it.
+      logger.warn?.('[agentic-service] Contract-audit failed to log event', { artikelNummer, event, error: toErrorMessage(err) });
     }
-    const gap = checkSpecGap(contract, langtextObj);
-    const decision = decideContractAuditAction(stored, contract.version, gap.missingRequired);
-    if (decision.action === 'skip') continue;
+  };
 
-    if (decision.action === 'rework') {
+  for (const entry of plan) {
+    if (entry.action === 'rework') {
       // Enqueue a targeted rework; the completed run stamps the new contract version so this item is
       // not re-selected (self-limiting). One enqueue per idle tick keeps the sweep gentle.
-      pendingRework.set(candidate.Artikel_Nummer, { fields: decision.fields, instructions: null });
+      pendingRework.set(entry.artikelNummer, { fields: entry.fields ?? [], instructions: null });
       const nowIso = resolveNow(deps).toISOString();
+      const candidate = candidates.find((c) => c.Artikel_Nummer === entry.artikelNummer);
       try {
         await deps.updateAgenticRunStatus(normalizeAgenticStatusUpdate({
-          Artikel_Nummer: candidate.Artikel_Nummer,
+          Artikel_Nummer: entry.artikelNummer,
           Status: AGENTIC_RUN_STATUS_QUEUED,
-          SearchQuery: candidate.Artikelbeschreibung ?? candidate.Artikel_Nummer,
+          SearchQuery: candidate?.Artikelbeschreibung ?? entry.artikelNummer,
           LastModified: nowIso,
           ReviewState: 'not_required',
           ReviewedBy: null,
@@ -1493,15 +1558,20 @@ async function sweepContractRework(
           LastAttemptAtIsSet: true
         }));
         logger.info?.('[agentic-service] Contract-audit enqueued rework', {
-          artikelNummer: candidate.Artikel_Nummer,
-          missingRequired: decision.fields,
-          fromVersion: stored,
-          toVersion: contract.version
+          artikelNummer: entry.artikelNummer,
+          missingRequired: entry.fields,
+          fromVersion: entry.fromVersion,
+          toVersion: entry.toVersion
+        });
+        await logSweepEvent(entry.artikelNummer, 'ContractAuditRework', {
+          missingRequired: entry.fields,
+          fromVersion: entry.fromVersion,
+          toVersion: entry.toVersion
         });
       } catch (err) {
-        pendingRework.delete(candidate.Artikel_Nummer);
+        pendingRework.delete(entry.artikelNummer);
         logger.error?.('[agentic-service] Contract-audit failed to enqueue rework', {
-          artikelNummer: candidate.Artikel_Nummer,
+          artikelNummer: entry.artikelNummer,
           error: toErrorMessage(err)
         });
       }
@@ -1510,10 +1580,14 @@ async function sweepContractRework(
 
     // Stale but already complete under the new contract → cheap re-stamp, no rerun.
     try {
-      await stampAgenticRunContractVersion(candidate.Artikel_Nummer, contract.version);
+      await stampAgenticRunContractVersion(entry.artikelNummer, entry.toVersion);
+      await logSweepEvent(entry.artikelNummer, 'ContractAuditRestamp', {
+        fromVersion: entry.fromVersion,
+        toVersion: entry.toVersion
+      });
     } catch (err) {
       logger.warn?.('[agentic-service] Contract-audit failed to re-stamp item', {
-        artikelNummer: candidate.Artikel_Nummer,
+        artikelNummer: entry.artikelNummer,
         error: toErrorMessage(err)
       });
     }
