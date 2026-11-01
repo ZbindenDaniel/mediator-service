@@ -153,6 +153,7 @@ smallest change.
 | **L7** | **Exemplar findings on read (stock→catalogue)** | `reference-findings.ts` + `InstanceSpecs` | compare installed value ↔ capability → **exemplar-scope** findings. **Prereq: replace orphaned `INTAKE_TO_SPEC`** (§1b); aligns with `docs/plans/instance-flow.md` | make instance data real (ladder r5) | L | — |
 | L1 | **Scope tag on findings** | `models/agentic-findings.ts` | add `scope: 'reference'\|'exemplar'` | ref/exemplar axis | S | lands with L7 |
 | L9 | *(optional)* Run provenance | `agentic_runs` | add `TriggerReason` | legibility | S | low priority |
+| **L11** | **Spec *value* canonicalization** | `canonicalizeSpecKeyRecord` (the key twin), `getFilterableSpecKeys` | controlled-value aliases + `canonicalizeSpecValue` on write + a non-canonical finding; agentic clustering *proposes* the vocabulary | grouping/filtering + conformance | M→L | candidate (see §2d) |
 
 **Re-weighting (why the order moved).** The vision wants **less human input**, so the autonomy/
 self-maintenance levers (**L10 → L4 → L8**) now come *before* the review-efficiency levers (L5/L6).
@@ -226,6 +227,44 @@ pre-fills that path from the finding. Finding → action:
    what to edit. Nothing is lost (toggle + summary still show every field).
 3. **L5c:** `choose` (A/B) inline resolution for intake_conflict + one-click `drop`, via a direct
    value-set path (not a regenerate). Then the manual button can retire fully.
+
+---
+
+## 2d. Candidate lever L11 — spec *value* canonicalization (controlled values)
+
+**The problem (operator-flagged).** Spec *keys* are already folded to a canonical form
+(`canonicalizeSpecKeyRecord`: `CPU`→`Prozessor`), but spec **values** are free-form and fragment: one
+`Anschlüsse`/`Interfaces` field holds `DP`, `DisplayPort`, `Display Port`, `1x Display port` for the
+same thing. Filtering/grouping "similar" items — and storefront filters via `getFilterableSpecKeys` —
+treat these as distinct, so items that *are* the same don't group, and the L10 grade's **conformance**
+can't even see the mess. Values need aligning without a human hand-editing every item.
+
+**It's the value-level twin of key canonicalization, and the Standards pillar extended from schema to
+vocabulary.** Layer it cheap → smart:
+
+1. **Controlled vocabulary (deterministic, governed).** Give a spec field an optional canonical value
+   set + aliases (home TBD: on the spec contract like keys, or a sibling runtime-editable `standards`-
+   style file so it needs no schema bump). A pure `canonicalizeSpecValue(key, value)` folds known
+   variants on write, exactly as keys are folded; extraction/wording are told to emit canonical values
+   (prevention); a value outside the vocabulary becomes a `standards` **finding** ("nicht-kanonischer
+   Wert — DisplayPort?") carrying the canonical **suggestion**, so the existing "Beheben"/choose action
+   aligns it. Conformance then feeds the grade.
+
+2. **Agentic vocabulary building (what the operator asked — "decide what values to put").** For fields
+   with no curated vocabulary, or to grow one: an agentic pass **clusters the observed values** across
+   the inventory and **proposes** a canonical set + variant→canonical mappings for the operator to
+   **approve** (propose-not-mutate, like reconciliation). Approved mappings become the vocabulary in (1),
+   and recurring variants are a natural feed for the learning loop (L8).
+
+**Wrinkles to settle when it's picked up:** compound/multi-token values (`1x DisplayPort, 2x USB-C` is a
+*set* of canonical tokens → normalization tokenizes, not just string-matches); scope (a vocabulary is
+per key, perhaps per subcategory); and governance (who edits it, and whether its version drives
+staleness/the sweeper like the spec-contract version does).
+
+**Smallest first step** (when scheduled): the deterministic layer for *one* high-value field (e.g.
+`Anschlüsse`) — contract-held aliases + `canonicalizeSpecValue` on write + a non-canonical finding —
+ships alone and immediately improves grouping; the agentic clustering is the richer follow-up. Parked
+until the current L5/L10 line settles.
 
 ---
 

@@ -109,6 +109,10 @@ redeploy) — distinct from the field schema:
 - content rules: "don't over-explain / no narrative sentences", "no marketing or invented specs",
   formatting/German-style rules, per-subcategory do/don't (generalizes today's `guidance[]` + the
   reject-feedback loop #954, which currently re-learns these one rejection at a time).
+- **controlled spec-value vocabularies** — the value-level twin of key canonicalization: align
+  free-form values that mean the same thing (`DP`/`DisplayPort`/`Display Port`) so items group and
+  filter correctly, deterministically where a vocabulary exists and agentically-proposed where it does
+  not. See the levers doc §2d (candidate lever L11).
 Standards are used **twice**:
 1. **Steer generation** — injected into extraction/supervisor (like `guidance[]`, but first-class).
 2. **Grade & audit existing items** — an **LLM standards-auditor** (todo #50 Phase 2b) scores an item
