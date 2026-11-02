@@ -22,7 +22,7 @@ import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
 import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
 import { getSpecContract, getStandardsContract } from '../..//contracts/registry';
-import { canonicalizeSpecKeyRecord } from '../../../models/spec-contract';
+import { canonicalizeSpecKeyRecord, canonicalizeSpecValuesRecord } from '../../../models/spec-contract';
 import { buildFindings, isAutoApprovable } from '../findings';
 import { runWordingStage } from './item-flow-wording';
 import type { Finding } from '../../../models/agentic-findings';
@@ -169,7 +169,9 @@ function buildSpecContext(
   // Canonicalize spec keys up front so a value under a variant ("CPU") is seen by every stage under
   // its canonical contract key ("Prozessor") — and write it back onto the target so the stored output
   // carries a single canonical name, not a duplicate variant sibling.
-  const langtext = canonicalizeSpecKeyRecord(rawLangtext);
+  // Keys first, then VALUES (L11): fold "CPU"→"Prozessor", then "DP"→"DisplayPort" — so every stage and
+  // the stored output carry a single canonical key AND a controlled value, improving grouping/filtering.
+  const langtext = canonicalizeSpecValuesRecord(canonicalizeSpecKeyRecord(rawLangtext));
   if (target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)) {
     target.Langtext = langtext;
   }
@@ -693,8 +695,8 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     // Canonicalize spec keys on the final output so any variant the model emitted (e.g. "CPU") is
     // folded onto the canonical contract key ("Prozessor") before persistence — one name, no dupes.
     if (finalData.Langtext && typeof finalData.Langtext === 'object' && !Array.isArray(finalData.Langtext)) {
-      finalData.Langtext = canonicalizeSpecKeyRecord(
-        finalData.Langtext as Record<string, unknown>
+      finalData.Langtext = canonicalizeSpecValuesRecord(
+        canonicalizeSpecKeyRecord(finalData.Langtext as Record<string, unknown>)
       ) as typeof finalData.Langtext;
     }
 

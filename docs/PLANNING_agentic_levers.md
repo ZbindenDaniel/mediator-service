@@ -153,7 +153,7 @@ smallest change.
 | **L7** | **Exemplar findings on read (stock→catalogue)** | `reference-findings.ts` + `InstanceSpecs` | compare installed value ↔ capability → **exemplar-scope** findings. Carries the agreed **`scope: 'reference'\|'instance'` field on `SpecContractField`** (operator decision 2026-11; see instance-flow §17) — built *here*, with consumers, not as inert infra. **Prereq: replace orphaned `INTAKE_TO_SPEC`** (§1b) + Phase 0 contract normalization | make instance data real (ladder r5) | L | — |
 | L1 | **Scope tag on findings** | `models/agentic-findings.ts` | add `scope: 'reference'\|'exemplar'` | ref/exemplar axis | S | lands with L7 |
 | L9 | *(optional)* Run provenance | `agentic_runs` | add `TriggerReason` | legibility | S | low priority |
-| **L11** | **Spec *value* canonicalization** | `canonicalizeSpecKeyRecord` (the key twin), `getFilterableSpecKeys` | controlled-value aliases + `canonicalizeSpecValue` on write + a non-canonical finding; agentic clustering *proposes* the vocabulary | grouping/filtering + conformance | M→L | candidate (see §2d) |
+| **L11** | **Spec *value* canonicalization** | `canonicalizeSpecKeyRecord` (the key twin), `getFilterableSpecKeys` | controlled-value aliases + `canonicalizeSpecValue` on write + a non-canonical finding; agentic clustering *proposes* the vocabulary | grouping/filtering + conformance | M→L | ◑ slice 1 shipped (agentic #1013: deterministic whole-value fold, seed vocab); compound/multi-token, operator-editable vocab, off-vocab finding deferred (§2d) |
 
 **Re-weighting (why the order moved).** The vision wants **less human input**, so the autonomy/
 self-maintenance levers (**L10 → L4 → L8**) now come *before* the review-efficiency levers (L5/L6).

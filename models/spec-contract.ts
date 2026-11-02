@@ -88,6 +88,59 @@ export function canonicalizeSpecKeyRecord<T = unknown>(
   return result;
 }
 
+// --- Spec VALUE canonicalization (lever L11) ---------------------------------------------------
+// The value-level twin of SPEC_KEY_VARIANTS: per (canonical) field key, a controlled vocabulary mapping
+// each canonical value to its known variants. Folds free-form values that mean the same thing
+// (DP / Display Port / Displayport → DisplayPort) so items group/filter and the conformance signal is
+// clean. Deterministic, whole-value, case-insensitive — the safe "auto-correct a known" (no prose
+// surgery, no model). SEED ONLY: extend per house style. Compound/multi-token values ("DP, HDMI") and an
+// operator-editable home (a runtime standards file) are deferred — see PLANNING_agentic_levers.md §2d.
+const SPEC_VALUE_VARIANTS: Record<string, Record<string, string[]>> = {
+  'Anschlüsse': { 'DisplayPort': ['DP', 'Display Port', 'Displayport'] },
+  'Speichertyp': { 'SSD': ['Solid State Drive', 'Solid-State-Drive'] },
+};
+
+// field key (lowercased) → (variant lowercased → canonical value). A canonical value maps to itself, so
+// re-running is idempotent. Built once at module load.
+const SPEC_VALUE_LOOKUP: Map<string, Map<string, string>> = (() => {
+  const byField = new Map<string, Map<string, string>>();
+  for (const [field, canonicals] of Object.entries(SPEC_VALUE_VARIANTS)) {
+    const m = new Map<string, string>();
+    for (const [canonical, variants] of Object.entries(canonicals)) {
+      m.set(canonical.trim().toLowerCase(), canonical);
+      for (const variant of variants) m.set(variant.trim().toLowerCase(), canonical);
+    }
+    byField.set(field.trim().toLowerCase(), m);
+  }
+  return byField;
+})();
+
+/** Canonical form of a single spec VALUE for a (canonical) field key, or the value unchanged. */
+export function canonicalizeSpecValue(key: string, value: string): string {
+  const m = SPEC_VALUE_LOOKUP.get(key.trim().toLowerCase());
+  if (!m) return value;
+  return m.get(value.trim().toLowerCase()) ?? value;
+}
+
+/**
+ * Folds known value variants in a Langtext record onto their canonical value, per field. Applies to
+ * string values and to each entry of a string array; non-strings and unknown fields pass through
+ * untouched. Returns a new object. Call AFTER canonicalizeSpecKeyRecord so field keys are canonical.
+ */
+export function canonicalizeSpecValuesRecord<T = unknown>(langtext: Record<string, T>): Record<string, T> {
+  const result: Record<string, T> = {};
+  for (const [key, value] of Object.entries(langtext)) {
+    if (typeof value === 'string') {
+      result[key] = canonicalizeSpecValue(key, value) as T;
+    } else if (Array.isArray(value)) {
+      result[key] = value.map((v) => (typeof v === 'string' ? canonicalizeSpecValue(key, v) : v)) as T;
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
 /**
  * Merges contract fields into langtext as empty strings without overwriting existing values.
  * Empty-string entries signal to operators and agents that the field is expected but not yet filled.
