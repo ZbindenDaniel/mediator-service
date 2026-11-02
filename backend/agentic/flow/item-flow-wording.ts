@@ -74,6 +74,9 @@ export interface RunWordingStageOptions {
   candidate: AgenticOutput;
   standards: StandardsContract | null;
   reviewNotes?: string | null;
+  // The spec-contract field keys for the item's subcategory — the specs that are sanctioned for THIS
+  // category. Given to the model so it never removes a product's defining spec when applying exclusions.
+  recognizedSpecFields?: string[];
   transcriptWriter?: AgentTranscriptWriter | null;
 }
 
@@ -96,6 +99,7 @@ export async function runWordingStage({
   candidate,
   standards,
   reviewNotes,
+  recognizedSpecFields,
   transcriptWriter
 }: RunWordingStageOptions): Promise<WordingResult | null> {
   if (!wordingPrompt || !wordingPrompt.trim()) {
@@ -104,10 +108,14 @@ export async function runWordingStage({
   }
 
   const houseRules = renderStandardsGuidance(standards);
+  // Operator exclusion rules, applied semantically by the model (so "no OS" also catches Betriebssystem).
+  const exclusions = (standards?.exclusions ?? []).filter((r) => typeof r === 'string' && r.trim());
   const trimmedReviewNotes = typeof reviewNotes === 'string' ? reviewNotes.trim() : '';
   const payload: Record<string, unknown> = {
     item: buildWordingFacts(candidate),
     houseRules,
+    ...(exclusions.length ? { exclusions } : {}),
+    ...(recognizedSpecFields && recognizedSpecFields.length ? { recognizedSpecFields } : {}),
     ...(trimmedReviewNotes ? { reviewerNotes: trimmedReviewNotes } : {})
   };
 
@@ -119,7 +127,7 @@ export async function runWordingStage({
     return null;
   }
 
-  logger?.info?.({ msg: 'invoking wording stage', itemId, houseRuleCount: houseRules.length });
+  logger?.info?.({ msg: 'invoking wording stage', itemId, houseRuleCount: houseRules.length, exclusionCount: exclusions.length });
 
   const messages = [
     { role: 'system', content: wordingPrompt },

@@ -60,4 +60,9 @@ export interface BannedPhraseRule {
 export interface StandardsContract {
   version: number;
   bannedPhrases?: BannedPhraseRule[];
+  // Operator house rules, in plain language, for what must NOT appear in the model reference — applied
+  // SEMANTICALLY by the wording step (so "no OS" also removes "Betriebssystem"/"Operating System").
+  // Runtime-editable; the control surface's "say it once, the pipeline obeys". Removal targets both
+  // Spezifikationen and the prose; a key the subcategory's spec contract defines is always protected.
+  exclusions?: string[];
 }

@@ -21,8 +21,7 @@ import { prepareItemContext } from './context';
 import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
 import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
-import { getSpecContract, getStandardsContract, getAssemblyContract } from '../..//contracts/registry';
-import { dropInstanceSpecKeys, stripInstalledSizesFromName } from '../../../models/reference-instance-filter';
+import { getSpecContract, getStandardsContract } from '../..//contracts/registry';
 import { canonicalizeSpecKeyRecord, canonicalizeSpecValuesRecord } from '../../../models/spec-contract';
 import { buildFindings, isAutoApprovable } from '../findings';
 import { runWordingStage } from './item-flow-wording';
@@ -663,6 +662,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     // field selection); a failure keeps extraction's wording and never blocks the run.
     if (!reworkMode && extractionResult.success && extractionResult.data) {
       try {
+        // The spec fields the contract sanctions for this subcategory — handed to the wording step so it
+        // never removes a product's defining spec when applying the operator's exclusion rules.
+        const recognizedSpecFields = (subcategoryCode ? getSpecContract(subcategoryCode)?.fields ?? [] : []).map((f) => f.key);
         const wordingResult = await runWordingStage({
           llm: deps.llm,
           logger,
@@ -671,15 +673,28 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
           candidate: extractionResult.data,
           standards: getStandardsContract(),
           reviewNotes: reviewerNotes,
+          recognizedSpecFields,
           transcriptWriter
         });
         if (wordingResult) {
           const data = extractionResult.data as Record<string, unknown>;
           if (typeof wordingResult.Artikelbeschreibung === 'string') data.Artikelbeschreibung = wordingResult.Artikelbeschreibung;
           if (typeof wordingResult.Kurzbeschreibung === 'string') data.Kurzbeschreibung = wordingResult.Kurzbeschreibung;
-          // Reworded specs (tidied key names): overlaid here, then canonicalizeSpecKeyRecord below still
-          // folds any known variant keys onto their canonical contract key.
-          if (wordingResult.Langtext) data.Langtext = wordingResult.Langtext;
+          // Reworded specs (tidied key names + operator exclusions applied). SAFETY NET: the wording LLM
+          // must never drop a spec the subcategory's CONTRACT defines (protects a drive's "Speicher" /
+          // a module's "RAM-Kapazität" from an over-broad exclusion) — restore any contract field it
+          // removed. Then canonicalizeSpecKeyRecord below folds variant keys onto the canonical key.
+          if (wordingResult.Langtext) {
+            const before = data.Langtext && typeof data.Langtext === 'object' && !Array.isArray(data.Langtext)
+              ? (data.Langtext as Record<string, unknown>)
+              : {};
+            const contractKeys = new Set(recognizedSpecFields.map((k) => k.trim().toLowerCase()));
+            const next: Record<string, unknown> = { ...wordingResult.Langtext };
+            for (const [key, value] of Object.entries(before)) {
+              if (!(key in next) && contractKeys.has(key.trim().toLowerCase())) next[key] = value;
+            }
+            data.Langtext = next;
+          }
         }
       } catch (err) {
         logger.warn?.({ err, msg: 'wording stage failed; keeping extraction wording', itemId });
@@ -701,29 +716,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       ) as typeof finalData.Langtext;
     }
 
-    // Deterministic ref/instance backstop (prevention prompts leak — even a cloud model still put fitted
-    // RAM/disk/OS in specs). A HOST device (laptop/PC: has a ram/storage assembly slot, or a RAM-Slots
-    // capability field) holds RAM/disk/OS as per-unit (instance) data, so: strip the fitted size from
-    // the Artikelbeschreibung (a name, safe to token-strip) and drop installed-concept spec keys the
-    // CONTRACT does not define (the contract is the authority — a drive's "Speicher" / a module's
-    // "RAM-Kapazität" are their own contract fields and survive). Capability keys + the prose
-    // Kurzbeschreibung are left as-is (prose grammar is the wording pass's job). Skipped in rework mode.
-    const hostSpecContract = !reworkMode && subcategoryCode ? getSpecContract(subcategoryCode) : null;
-    const assembly = !reworkMode && subcategoryCode ? getAssemblyContract(subcategoryCode) : null;
-    const isHostDevice =
-      !!assembly?.parts.some((p) => p.key === 'ram' || p.key === 'storage') ||
-      !!hostSpecContract?.fields.some((f) => /^ram-slots$/i.test(f.key));
-    if (isHostDevice) {
-      if (typeof finalData.Artikelbeschreibung === 'string') {
-        finalData.Artikelbeschreibung = stripInstalledSizesFromName(finalData.Artikelbeschreibung);
-      }
-      if (finalData.Langtext && typeof finalData.Langtext === 'object' && !Array.isArray(finalData.Langtext)) {
-        finalData.Langtext = dropInstanceSpecKeys(
-          finalData.Langtext as Record<string, unknown>,
-          (hostSpecContract?.fields ?? []).map((f) => f.key)
-        ) as typeof finalData.Langtext;
-      }
-    }
+    // (Installed RAM/disk/OS removal is the wording stage's job now — operator exclusion rules in
+    // contracts/standards.json, applied semantically, with the contract-field safety net above. The old
+    // hardcoded denylist strip was retired: it couldn't track every spelling, e.g. "hardDrive".)
 
     // Review-by-exception findings, computed on the WORDING-CLEANED output (the wording stage above
     // already stripped banned phrases): missing-required (block), banned phrases + intake conflicts

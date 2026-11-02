@@ -29,5 +29,9 @@
       "fields": ["Artikelbeschreibung", "Kurzbeschreibung"],
       "severity": "info"
     }
+  ],
+  "exclusions": [
+    "Kein Betriebssystem / OS — weder als Spezifikationsfeld noch im Text. Das installierte OS wird pro Gerät erfasst, es gehört nicht in die Modell-Referenz.",
+    "Kein konkret verbauter RAM-/Arbeitsspeicher-Wert und keine konkrete verbaute Speicher-/Festplattenkapazität — das sind Instanz-Daten pro Gerät, nicht Teil der Modell-Referenz. Modell-Fähigkeiten (z. B. 'bis zu 32 GB', RAM-Slots, RAM-Typ) sind erlaubt."
   ]
 }
