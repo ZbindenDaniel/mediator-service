@@ -21,7 +21,8 @@ import { prepareItemContext } from './context';
 import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
 import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
-import { getSpecContract, getStandardsContract } from '../..//contracts/registry';
+import { getSpecContract, getStandardsContract, getAssemblyContract } from '../..//contracts/registry';
+import { dropInstanceSpecKeys, stripInstalledSizesFromName } from '../../../models/reference-instance-filter';
 import { canonicalizeSpecKeyRecord, canonicalizeSpecValuesRecord } from '../../../models/spec-contract';
 import { buildFindings, isAutoApprovable } from '../findings';
 import { runWordingStage } from './item-flow-wording';
@@ -698,6 +699,22 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       finalData.Langtext = canonicalizeSpecValuesRecord(
         canonicalizeSpecKeyRecord(finalData.Langtext as Record<string, unknown>)
       ) as typeof finalData.Langtext;
+    }
+
+    // Deterministic ref/instance backstop (prevention prompts leak): for slotted compute devices —
+    // where RAM/disk are fillable assembly parts, i.e. per-unit (instance) data — strip the fitted size
+    // from the Artikelbeschreibung (a name, safe to token-strip) and drop bare installed spec keys from
+    // the reference Langtext. Capability keys (RAM-Slots/…) and the prose Kurzbeschreibung are left as-is
+    // (prose grammar is the wording pass's job). Skipped in rework mode (targeted field regen).
+    const assembly = !reworkMode && subcategoryCode ? getAssemblyContract(subcategoryCode) : null;
+    const isSlottedComputeDevice = !!assembly?.parts.some((p) => p.key === 'ram' || p.key === 'storage');
+    if (isSlottedComputeDevice) {
+      if (typeof finalData.Artikelbeschreibung === 'string') {
+        finalData.Artikelbeschreibung = stripInstalledSizesFromName(finalData.Artikelbeschreibung);
+      }
+      if (finalData.Langtext && typeof finalData.Langtext === 'object' && !Array.isArray(finalData.Langtext)) {
+        finalData.Langtext = dropInstanceSpecKeys(finalData.Langtext as Record<string, unknown>) as typeof finalData.Langtext;
+      }
     }
 
     // Review-by-exception findings, computed on the WORDING-CLEANED output (the wording stage above
