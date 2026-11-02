@@ -47,10 +47,16 @@ Every target field has four attributes: a **scope**, the **source(s)** it is fil
 - model-generic media
 
 **Instance (per physical unit)**
-- instance-specs = **installed / measured** values (the RAM actually fitted, the disk present, OS)
+- **slot fill-state** = which **assembly slots** are populated with what — the most faithful model of a
+  fillable component. A RAM slot, a drive bay or a battery bay is an **assembly part** (`multipleAllowed`
+  for RAM), already modelled: `contracts/assembly/201.json` (laptops) / `102.json` (PCs) define a `ram`
+  slot → `targetSubcategory` 603 (RAM module); a filled slot links a child item via `item_relations`
+  `Zerlegt_aus`/`SlotKey`, and the condition quality-score already scores it. So "fitted RAM / disk" is
+  **slot state**, not a flat spec string.
+- instance-specs = **installed / measured** values that are *not* slotted (OS, serial, battery wear %),
+  or a spec-only answer for a slot with no linked item (`allowSpecOnly`).
 - quality assessment — physical condition grade (already shipped)
-- logistics — location / box
-- per-unit media & attachments
+- logistics — location / box; per-unit media & attachments
 
 **Commercial / cross-cutting**
 - shop data — price, publish status
@@ -97,9 +103,16 @@ approve the obvious.
 
 One source of truth, read by every transform, so prevention and checking never disagree:
 
-- **Contracts** — the schema **per scope**: the reference **capability** contract **+ a parallel
-  instance-spec contract** (installed fields + `measuredSignal` bindings). The ref/instance split is a
-  first-class axis, not an afterthought (see [`docs/plans/instance-flow.md`](plans/instance-flow.md) §17).
+- **Contracts** — the schema has **three homes**, not two:
+  1. the **reference capability** contract — what the model supports (RAM-Slots/Kapazität/Typ, ports);
+  2. the **assembly** contract — the **slots/structure** (RAM/drive/battery as parts, filled per unit) —
+     *already the home for fillable components*, and the most faithful model of "a slot that can be
+     filled or not";
+  3. the **instance-spec** scope (the agreed `scope` field, levers L7) — only for **non-slotted**
+     measured values (OS, serial, battery wear). Installed RAM/disk are **slot fill-state (2)**, so they
+     are largely *not* a `scope:'instance'` spec — which narrows what the scope field (L7) must carry.
+  The ref/instance/assembly split is a first-class axis (see
+  [`docs/plans/instance-flow.md`](plans/instance-flow.md) §17 + the scope decision there).
 - **Standards** — house rules for content shape **+ controlled value vocabularies** (L11). Used twice:
   steer generation (prevent) and audit existing data (grade / escalate).
 - **Reconciliation rules** — installed ↔ capability **plausibility** (installed RAM ≤ capacity, type ∈

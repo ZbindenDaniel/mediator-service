@@ -384,6 +384,12 @@ search-sources (#916), grounding (#917); data stays on the item; MVP operator-in
    > a `scope` field with no consumer is inert, so it is built when the pipeline/grade/findings routing
    > by scope is built. Until then, the RAM-in-reference leak is held by the extraction/wording
    > prevention rule (agentic #1011).
+   > **Refined (operator, 2026-11): slotted components are ASSEMBLY, not instance-specs.** RAM / drives /
+   > battery are already modelled as **assembly slots** (`contracts/assembly/201.json` + `102.json`: a
+   > `ram` part, `multipleAllowed`, `targetSubcategory` 603), filled per unit via `Zerlegt_aus`/`SlotKey`
+   > and scored by the condition quality-score. So installed RAM/disk are **slot fill-state**, and the
+   > `scope:'instance'` field carries only **non-slotted** measured values (OS, serial, battery wear) or
+   > a slot's spec-only answer (`allowSpecOnly`). This narrows L7's scope-field scope considerably.
 3. **Reconcile compares installed-value ↔ model-capability**, not equality: installed RAM ≤
    `RAM-Kapazität`, `RAM-Typ` ∈ supported, CPU/model identity matches. `wrong_ref` = installed config
    impossible for the model, or identity mismatch. Sharper than the original equality comparison.
