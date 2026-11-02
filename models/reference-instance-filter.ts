@@ -9,7 +9,10 @@
 // "RAM-Kapazität", "RAM-Typ", "Speichertyp" lowercase to something not in this set (exact match).
 const INSTANCE_SPEC_KEYS = new Set([
   'ram', 'arbeitsspeicher', 'memory', 'hauptspeicher',
-  'speicher', 'festplatte', 'ssd', 'hdd', 'storage', 'speicherkapazität'
+  'speicher', 'festplatte', 'ssd', 'hdd', 'storage', 'speicherkapazität',
+  // OS is per-unit on a used device (reinstalled/varies), so the installed OS doesn't belong in the
+  // model reference's spec list either. (Prose OS mentions are still the wording pass's job.)
+  'betriebssystem', 'os', 'operating system', 'betriebssystem (os)'
 ]);
 
 /** Drops bare installed-value spec keys from a reference Langtext record; capability keys pass through. */

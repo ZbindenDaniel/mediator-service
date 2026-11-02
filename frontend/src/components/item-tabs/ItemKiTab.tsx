@@ -110,8 +110,8 @@ export default function ItemKiTab({
           )}
         </div>
       )}
-      <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
       <DataQualityBadge quality={dataQuality ?? null} />
+      <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
       <FindingsPanel findings={findings ?? []} onFix={onFixFinding} busy={actionPending} />
       {snapshotArtikelNummer ? (
         <AgenticSnapshotsPanel

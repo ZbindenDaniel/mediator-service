@@ -3,13 +3,27 @@ import type { DataQualityFreshness, DataQualityInputs, DataQualityGrade } from '
 import { parseLangtext } from '../lib/langtext';
 import { getSpecContract } from '../contracts/registry';
 import { checkSpecGap } from '../../models/spec-contract';
-import { gradeFromRange, gradeLabel } from '../../models/quality-score';
+import { gradeFromRange } from '../../models/quality-score';
 
 export type { DataQualityFreshness, DataQualityInputs, DataQualityGrade } from '../../models/data-quality';
 
+// Data-quality labels — about the DATA (completeness/conformance), NOT the physical condition. Do not
+// reuse the condition labels ("Neuwertig"/…): those describe the device, which is a different axis.
+const DATA_QUALITY_LABELS: Record<number, string> = {
+  5: 'Vollständig',
+  4: 'Gut',
+  3: 'Ausreichend',
+  2: 'Lückenhaft',
+  1: 'Mangelhaft'
+};
+function dataQualityLabel(grade: number | null): string | null {
+  return grade === null ? null : DATA_QUALITY_LABELS[grade] ?? null;
+}
+
 // Lever L10 — a per-reference CATALOGUE DATA-QUALITY grade (how good the *data about* an item is),
 // the mirror of main's condition quality-score (how good the *physical device* is). It is derived,
-// never hand-set, and reuses the condition grade's 1–5 band mapping so operators read one scale.
+// never hand-set. It reuses the condition grade's 1–5 band *thresholds* (gradeFromRange) but has its
+// OWN labels (data completeness/conformance ≠ physical condition) — see DATA_QUALITY_LABELS above.
 //
 // Slice 1 (this file): a pure formula + a ref wrapper, surfaced transiently on read next to the
 // findings — NO stored column yet. We eyeball it on real items and tune the weights below before
@@ -71,7 +85,7 @@ export function computeDataQualityGrade(input: DataQualityInputs): DataQualityGr
   if (capped) score = w.blockCap;
 
   const grade = gradeFromRange({ min: score, max: score });
-  return { score, grade, label: gradeLabel(grade), capped, components: { conformance, completeness, freshness } };
+  return { score, grade, label: dataQualityLabel(grade), capped, components: { conformance, completeness, freshness } };
 }
 
 /**

@@ -11,9 +11,9 @@ import type { Finding } from '../../models/agentic-findings';
 import type { DataQualityGrade } from '../../models/data-quality';
 
 // --- Fixtures (plain objects; the real formula lives server-side, these just exercise the views) ---
-const GRADE_CLEAN: DataQualityGrade = { score: 0.95, grade: 5, label: 'Sehr gut', capped: false, components: { conformance: 1, completeness: 1, freshness: 0.75 } };
+const GRADE_CLEAN: DataQualityGrade = { score: 0.95, grade: 5, label: 'Vollständig', capped: false, components: { conformance: 1, completeness: 1, freshness: 0.75 } };
 const GRADE_STALE: DataQualityGrade = { score: 0.72, grade: 4, label: 'Gut', capped: false, components: { conformance: 1, completeness: 0.8, freshness: 0.5 } };
-const GRADE_CAPPED: DataQualityGrade = { score: 0.4, grade: 3, label: 'Genügend', capped: true, components: { conformance: 0.5, completeness: 0.6, freshness: 1 } };
+const GRADE_CAPPED: DataQualityGrade = { score: 0.4, grade: 3, label: 'Ausreichend', capped: true, components: { conformance: 0.5, completeness: 0.6, freshness: 1 } };
 
 const FINDINGS: Finding[] = [
   { type: 'missing_required', severity: 'block', field: 'Prozessor', message: 'Pflichtfeld „Prozessor“ fehlt.', ask: 'fix' },
