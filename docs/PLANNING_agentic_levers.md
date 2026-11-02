@@ -193,6 +193,15 @@ data before persisting.
 
 ---
 
+> **Refinement pending (operator, 2026-11): findings are the *residue*, not the defect list.** Per the
+> information-model principle ([`PLANNING_agentic_information_model.md`](PLANNING_agentic_information_model.md)
+> §4), each transform should **auto-correct every deterministic known** (banned phrases, value
+> canonicalization, fillable required fields) and surface those as **applied changes** (a diff), and
+> **only escalate judgment residue** (conflicts, plausibility, open choices) as findings. This reverses
+> part of L5a: the banned-phrase → "Beheben" ask is make-work when the fix is known (it overlaps the
+> wording step, which already rewrites it). Next refinement: move deterministic knowns to auto-correct;
+> keep the findings panel + per-finding actions for the judgment residue. Not yet applied in code.
+
 ## 2c. L5 in detail (findings become the interaction; retire "KI Überarbeitung")
 
 **Problem it fixes.** Today the KI tab has a standalone **"KI Überarbeitung"** button that opens a blind

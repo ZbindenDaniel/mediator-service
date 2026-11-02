@@ -5,6 +5,10 @@
 > the *existing* pipeline that move toward this target. Use this doc for the *why* and the finished
 > shape; decide what to build next in the levers doc. (Reset after the planning drifted into a
 > from-scratch redesign; see the levers doc's premise.)
+>
+> **For the *what* — the whole process as one story (sources → complete picture → transforms, with the
+> ref/instance split and the prevent-vs-escalate principle) — see
+> [`PLANNING_agentic_information_model.md`](PLANNING_agentic_information_model.md).**
 
 > **Status:** DESIGN / thinking consolidated. This is the single plan that supersedes and folds in
 > [`PLANNING_rework_feature.md`](PLANNING_rework_feature.md) (rework levers) and
