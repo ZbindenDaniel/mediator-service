@@ -701,19 +701,27 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       ) as typeof finalData.Langtext;
     }
 
-    // Deterministic ref/instance backstop (prevention prompts leak): for slotted compute devices —
-    // where RAM/disk are fillable assembly parts, i.e. per-unit (instance) data — strip the fitted size
-    // from the Artikelbeschreibung (a name, safe to token-strip) and drop bare installed spec keys from
-    // the reference Langtext. Capability keys (RAM-Slots/…) and the prose Kurzbeschreibung are left as-is
-    // (prose grammar is the wording pass's job). Skipped in rework mode (targeted field regen).
+    // Deterministic ref/instance backstop (prevention prompts leak — even a cloud model still put fitted
+    // RAM/disk/OS in specs). A HOST device (laptop/PC: has a ram/storage assembly slot, or a RAM-Slots
+    // capability field) holds RAM/disk/OS as per-unit (instance) data, so: strip the fitted size from
+    // the Artikelbeschreibung (a name, safe to token-strip) and drop installed-concept spec keys the
+    // CONTRACT does not define (the contract is the authority — a drive's "Speicher" / a module's
+    // "RAM-Kapazität" are their own contract fields and survive). Capability keys + the prose
+    // Kurzbeschreibung are left as-is (prose grammar is the wording pass's job). Skipped in rework mode.
+    const hostSpecContract = !reworkMode && subcategoryCode ? getSpecContract(subcategoryCode) : null;
     const assembly = !reworkMode && subcategoryCode ? getAssemblyContract(subcategoryCode) : null;
-    const isSlottedComputeDevice = !!assembly?.parts.some((p) => p.key === 'ram' || p.key === 'storage');
-    if (isSlottedComputeDevice) {
+    const isHostDevice =
+      !!assembly?.parts.some((p) => p.key === 'ram' || p.key === 'storage') ||
+      !!hostSpecContract?.fields.some((f) => /^ram-slots$/i.test(f.key));
+    if (isHostDevice) {
       if (typeof finalData.Artikelbeschreibung === 'string') {
         finalData.Artikelbeschreibung = stripInstalledSizesFromName(finalData.Artikelbeschreibung);
       }
       if (finalData.Langtext && typeof finalData.Langtext === 'object' && !Array.isArray(finalData.Langtext)) {
-        finalData.Langtext = dropInstanceSpecKeys(finalData.Langtext as Record<string, unknown>) as typeof finalData.Langtext;
+        finalData.Langtext = dropInstanceSpecKeys(
+          finalData.Langtext as Record<string, unknown>,
+          (hostSpecContract?.fields ?? []).map((f) => f.key)
+        ) as typeof finalData.Langtext;
       }
     }
 

@@ -5,22 +5,35 @@
 // size from a sentence ("… mit 8 GB RAM und …") mangles grammar. CALL ONLY for slotted compute devices
 // (an assembly with a ram/storage slot); never for RAM-module / drive products, where it is the spec.
 
-// Bare installed-value keys. Capability keys stay because they are NOT bare: "RAM-Slots",
-// "RAM-Kapazität", "RAM-Typ", "Speichertyp" lowercase to something not in this set (exact match).
-const INSTANCE_SPEC_KEYS = new Set([
-  'ram', 'arbeitsspeicher', 'memory', 'hauptspeicher',
-  'speicher', 'festplatte', 'ssd', 'hdd', 'storage', 'speicherkapazität',
-  // OS is per-unit on a used device (reinstalled/varies), so the installed OS doesn't belong in the
-  // model reference's spec list either. (Prose OS mentions are still the wording pass's job.)
-  'betriebssystem', 'os', 'operating system', 'betriebssystem (os)'
-]);
+// Installed-value concepts, matched as WHOLE WORDS so variants are caught without enumerating them:
+// "HardDrive", "Festplattenkapazität", "Arbeitsspeicher (RAM)", "RAM-Größe", "Massenspeicher", "OS".
+// An exact denylist was too brittle (it missed "hardDrive"). This is the robust form of the operator's
+// "anti-value" idea: the concept, not the exact string.
+// German stems are matched as substrings (compounds like "Festplattenkapazität"/"Speichergröße" must
+// match); short/ambiguous tokens keep word boundaries so they don't hit unrelated keys ("os" in
+// "Kosten", "ram" in "Programm"). CAPABILITY_FIELD + the contract-field guard protect the legit cases.
+const INSTALLED_CONCEPT = /festplatte|arbeitsspeicher|hauptspeicher|massenspeicher|speicher|betriebssystem|hard\s?drive|operating\s?system|\b(?:ram|hdd|sshd|ssd|nvme|emmc|memory|storage|os)\b/i;
+// Capability field names describe the MODEL (slots / max / type), never a fitted value — never dropped,
+// even though they contain an installed word ("RAM-Kapazität" contains "RAM").
+const CAPABILITY_FIELD = /^(?:ram-slots|ram-kapazität|ram-kapazitaet|ram-typ|speichertyp|formfaktor)$/i;
 
-/** Drops bare installed-value spec keys from a reference Langtext record; capability keys pass through. */
-export function dropInstanceSpecKeys<T = unknown>(langtext: Record<string, T>): Record<string, T> {
+/**
+ * Drops installed-value spec keys from a reference Langtext record. A key is dropped when it denotes an
+ * installed RAM/disk/OS concept AND the subcategory's spec contract does NOT define it (the contract is
+ * the authority on what specs belong — so a drive's "Speicher" or a RAM module's "RAM-Kapazität", which
+ * ARE their contract fields, are kept) AND it is not a capability field name. Pass the contract's field
+ * keys so product-spec fields survive on module/drive subcategories.
+ */
+export function dropInstanceSpecKeys<T = unknown>(
+  langtext: Record<string, T>,
+  contractFieldKeys: Iterable<string> = []
+): Record<string, T> {
+  const allowed = new Set(Array.from(contractFieldKeys, (k) => k.trim().toLowerCase()));
   const out: Record<string, T> = {};
   for (const [key, value] of Object.entries(langtext)) {
-    if (INSTANCE_SPEC_KEYS.has(key.trim().toLowerCase())) continue;
-    out[key] = value;
+    const lower = key.trim().toLowerCase();
+    const drop = INSTALLED_CONCEPT.test(key) && !allowed.has(lower) && !CAPABILITY_FIELD.test(lower);
+    if (!drop) out[key] = value;
   }
   return out;
 }

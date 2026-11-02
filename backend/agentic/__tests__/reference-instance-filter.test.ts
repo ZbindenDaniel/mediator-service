@@ -1,7 +1,7 @@
 import { dropInstanceSpecKeys, stripInstalledSizesFromName } from '../../../models/reference-instance-filter';
 
-describe('dropInstanceSpecKeys — bare installed keys out of the reference Langtext', () => {
-  it('drops bare installed keys, keeps capability + unrelated keys', () => {
+describe('dropInstanceSpecKeys — installed keys out of the reference Langtext (host device)', () => {
+  it('drops installed keys, keeps capability + unrelated keys (no contract fields given)', () => {
     expect(
       dropInstanceSpecKeys({
         RAM: '8 GB',
@@ -16,7 +16,28 @@ describe('dropInstanceSpecKeys — bare installed keys out of the reference Lang
     ).toEqual({ 'RAM-Slots': '2', 'RAM-Kapazität': '32 GB', Speichertyp: 'SSD', Prozessor: 'Intel i5' });
   });
 
-  it('is case-insensitive on the key and returns a new object', () => {
+  it('catches variant key names the old exact denylist missed (the reported bug)', () => {
+    expect(
+      dropInstanceSpecKeys({
+        HardDrive: '512 GB',               // English camelCase — missed before
+        Festplattenkapazität: '1 TB',      // compound
+        'Arbeitsspeicher (RAM)': '16 GB',  // parenthetical
+        OS: 'Windows 11 Pro',
+        Betriebssystem: 'Windows 10',
+        Massenspeicher: '256 GB',
+        Prozessor: 'i7'
+      })
+    ).toEqual({ Prozessor: 'i7' });
+  });
+
+  it('keeps a key the CONTRACT defines (drive/module product spec survives)', () => {
+    // A drive subcategory: "Speicher" IS its contract field → kept; a stray "RAM" is not → dropped.
+    expect(
+      dropInstanceSpecKeys({ Speicher: '1 TB', Formfaktor: '2.5"', RAM: 'stray' }, ['Speicher', 'Speichertyp', 'Formfaktor'])
+    ).toEqual({ Speicher: '1 TB', Formfaktor: '2.5"' });
+  });
+
+  it('is case-insensitive and returns a new object', () => {
     const input = { ram: '8 GB', Prozessor: 'i7' };
     const out = dropInstanceSpecKeys(input);
     expect(out).toEqual({ Prozessor: 'i7' });
