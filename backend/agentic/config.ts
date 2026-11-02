@@ -120,42 +120,39 @@ function sanitizeEnvForLogging(env: Record<string, unknown>): Record<string, unk
   }, {});
 }
 
-// Resolve each setting using the canonical var first, then legacy provider-specific aliases
-// so existing deployments continue to work unchanged.
+const resolvedProvider =
+  resolveEnumValue(MODEL_PROVIDER_VALUES, 'AGENTIC_MODEL_PROVIDER', 'MODEL_PROVIDER') ?? 'ollama';
+
+// Provider-specific keys win over the generic MODEL_* ones so both providers can stay configured side by
+// side and AGENTIC_MODEL_PROVIDER alone switches between them; the inactive provider's keys are ignored.
+const PROVIDER_ENV_KEYS: Record<
+  (typeof MODEL_PROVIDER_VALUES)[number],
+  { baseUrl: Array<keyof NodeJS.ProcessEnv>; apiKey: Array<keyof NodeJS.ProcessEnv>; model: Array<keyof NodeJS.ProcessEnv>; visionModel: Array<keyof NodeJS.ProcessEnv> }
+> = {
+  ollama: {
+    baseUrl: ['AGENTIC_OLLAMA_BASE_URL', 'OLLAMA_BASE_URL'],
+    apiKey: [],
+    model: ['AGENTIC_OLLAMA_MODEL', 'OLLAMA_MODEL'],
+    visionModel: ['AGENTIC_OLLAMA_VISION_MODEL']
+  },
+  openai: {
+    baseUrl: ['AGENTIC_OPENAI_BASE_URL', 'OPENAI_BASE_URL'],
+    apiKey: ['AGENTIC_OPENAI_API_KEY', 'OPENAI_API_KEY'],
+    model: ['AGENTIC_OPENAI_MODEL', 'OPENAI_MODEL'],
+    visionModel: ['AGENTIC_OPENAI_VISION_MODEL']
+  }
+};
+const providerKeys = PROVIDER_ENV_KEYS[resolvedProvider];
+
 const envInput: EnvSchemaInput = {
   NODE_ENV: resolveEnvValue('NODE_ENV'),
-  MODEL_PROVIDER: resolveEnumValue(
-    MODEL_PROVIDER_VALUES,
-    'AGENTIC_MODEL_PROVIDER',
-    'MODEL_PROVIDER'
-  ),
-  // Shared base URL — canonical, then legacy provider-specific aliases
-  MODEL_BASE_URL: resolveEnvValue(
-    'MODEL_BASE_URL',
-    'AGENTIC_MODEL_BASE_URL',
-    'AGENTIC_OLLAMA_BASE_URL',
-    'OLLAMA_BASE_URL',
-    'AGENTIC_OPENAI_BASE_URL',
-    'OPENAI_BASE_URL'
-  ),
-  // Shared API key — canonical, then legacy aliases
-  MODEL_API_KEY: resolveEnvValue(
-    'MODEL_API_KEY',
-    'AGENTIC_MODEL_API_KEY',
-    'AGENTIC_OPENAI_API_KEY',
-    'OPENAI_API_KEY'
-  ),
-  // Text model name — canonical, then legacy aliases
-  MODEL_NAME: resolveEnvValue(
-    'MODEL_NAME',
-    'AGENTIC_MODEL_NAME',
-    'AGENTIC_OLLAMA_MODEL',
-    'OLLAMA_MODEL',
-    'AGENTIC_OPENAI_MODEL',
-    'OPENAI_MODEL'
-  ),
-  // Vision model name for OCR — standalone only, falls back to MODEL_NAME in code
-  VISION_MODEL_NAME: resolveEnvValue('VISION_MODEL_NAME'),
+  MODEL_PROVIDER: resolvedProvider,
+  // Active provider's keys first, then the generic keys as a shared fallback
+  MODEL_BASE_URL: resolveEnvValue(...providerKeys.baseUrl, 'MODEL_BASE_URL', 'AGENTIC_MODEL_BASE_URL'),
+  MODEL_API_KEY: resolveEnvValue(...providerKeys.apiKey, 'MODEL_API_KEY', 'AGENTIC_MODEL_API_KEY'),
+  MODEL_NAME: resolveEnvValue(...providerKeys.model, 'MODEL_NAME', 'AGENTIC_MODEL_NAME'),
+  // Vision model name for OCR — falls back to MODEL_NAME in code
+  VISION_MODEL_NAME: resolveEnvValue(...providerKeys.visionModel, 'VISION_MODEL_NAME'),
   MODEL_NUM_CTX: resolveNumber('MODEL_NUM_CTX'),
   MODEL_FORMAT_JSON: resolveEnvValue('MODEL_FORMAT_JSON'),
   MODEL_HTTP_HEADERS_TIMEOUT_MS: resolveNumber('MODEL_HTTP_HEADERS_TIMEOUT_MS'),

@@ -188,15 +188,18 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
-| `AGENTIC_MODEL_PROVIDER` | `ollama` | Preferred model provider for agentic runs. |
+| `AGENTIC_MODEL_PROVIDER` | `ollama` | Active model provider (`ollama` / `openai`). Selects which `AGENTIC_<PROVIDER>_*` block below is read; the other provider's block is ignored, so both can stay configured and switching is this one setting. |
 | `AGENTIC_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama host for agentic runs. |
 | `AGENTIC_OLLAMA_MODEL` | `qwen3:0.6b` | Ollama model name for agentic runs. |
+| `AGENTIC_OLLAMA_VISION_MODEL` | (unset) | Ollama vision/OCR model; falls back to `VISION_MODEL_NAME`, then the text model. |
 | `AGENTIC_OPENAI_API_KEY` | (unset) | OpenAI-compatible API key for agentic runs. |
 | `AGENTIC_OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible base URL for agentic runs. |
 | `AGENTIC_OPENAI_MODEL` | `gpt-4o-mini` | OpenAI-compatible model name for agentic runs. |
-| `AGENTIC_MODEL_BASE_URL` | (unset) | Generic model base URL override. |
-| `AGENTIC_MODEL_NAME` | (unset) | Generic model name override. |
-| `AGENTIC_MODEL_API_KEY` | (unset) | Generic model API key override. |
+| `AGENTIC_OPENAI_VISION_MODEL` | (unset) | OpenAI-compatible vision/OCR model; falls back to `VISION_MODEL_NAME`, then the text model. |
+| `AGENTIC_MODEL_BASE_URL` | (unset) | Generic base URL fallback, used only when the active provider's own base URL is unset. |
+| `AGENTIC_MODEL_NAME` | (unset) | Generic model name fallback, used only when the active provider's own model is unset. |
+| `AGENTIC_MODEL_API_KEY` | (unset) | Generic API key fallback, used only when the active provider's own key is unset. |
+| `VISION_MODEL_NAME` | (unset) | Generic vision/OCR model fallback for either provider. |
 | `MODEL_NUM_CTX` | `8192` | Ollama context window (`num_ctx`, tokens). Ollama's own default (2048) is far below the extraction prompt (~6-7k tokens), so the prompt is silently left-truncated and the model returns an empty completion (the `json match missing` / `EXTRACTION_FAILED` loop). Raise for larger prompts (costs VRAM), lower if the GPU can't hold it. Ollama provider only. |
 | `MODEL_FORMAT_JSON` | (off) | Force Ollama responses to valid JSON (`format: "json"`). Strong guard against empty/prose output, but suppresses a reasoning model's `<think>` phase — leave off for reasoning models. Truthy = `1`/`true`/`yes`/`on`. |
 | `MODEL_HTTP_HEADERS_TIMEOUT_MS` | `600000` | undici fetch header timeout (ms) for model calls. Raise if a cold/large local model is slow to first token and runs fail with `UND_ERR_HEADERS_TIMEOUT`; `0` disables. Applied as a global fetch dispatcher. |
@@ -211,6 +214,8 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 | `AUTO_REWORK` | `false` | When true, an idle-time sweeper re-applies the current spec contract to the oldest item enriched against an older contract version (deterministic, no LLM): it re-stamps items already complete, or enqueues a targeted rework for a now-missing required field. Runs only while the pipeline is otherwise idle, one enqueue per tick. Detection relies on the `agentic_runs.SpecContractVersion` stamp. |
 
 Legacy aliases still accepted: `MODEL_PROVIDER`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `MODEL_BASE_URL`, `MODEL_NAME`, `MODEL_API_KEY` (each maps to the `AGENTIC_`-prefixed variable).
+
+Resolution order for the model settings: the active provider's `AGENTIC_<PROVIDER>_*` key → its legacy alias (`OLLAMA_*` / `OPENAI_*`) → generic `MODEL_*` → `AGENTIC_MODEL_*`. The inactive provider's keys are never read.
 
 ## Shopware integration
 
