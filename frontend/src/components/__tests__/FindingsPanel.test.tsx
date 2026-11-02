@@ -20,10 +20,11 @@ describe('FindingsPanel — L5a per-finding "Beheben"', () => {
     expect(screen.queryByRole('button', { name: 'Beheben' })).toBeNull();
   });
 
-  it('shows a "Beheben" button only for fix-findings when onFix is provided', () => {
+  it('shows "Beheben" only for missing_required (not banned_phrase or conflict)', () => {
     render(<FindingsPanel findings={[fixable, banned, conflict]} onFix={() => {}} />);
-    // two fixable (missing_required + banned_phrase), the choose-conflict gets none
-    expect(screen.getAllByRole('button', { name: 'Beheben' })).toHaveLength(2);
+    // Only missing_required (fixable) gets a regenerate action. A banned phrase is handled by the
+    // wording pass (not a per-field rework), and the conflict needs an A/B choice (L5c) — neither here.
+    expect(screen.getAllByRole('button', { name: 'Beheben' })).toHaveLength(1);
   });
 
   it('calls onFix with the finding when clicked', () => {

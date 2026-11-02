@@ -200,7 +200,12 @@ data before persisting.
 > **only escalate judgment residue** (conflicts, plausibility, open choices) as findings. This reverses
 > part of L5a: the banned-phrase → "Beheben" ask is make-work when the fix is known (it overlaps the
 > wording step, which already rewrites it). Next refinement: move deterministic knowns to auto-correct;
-> keep the findings panel + per-finding actions for the judgment residue. Not yet applied in code.
+> keep the findings panel + per-finding actions for the judgment residue.
+> **Applied (step 1): "Beheben" scoped to `missing_required` only** — a regenerate is the right fix only
+> when the value is absent. Banned phrases are handled by the wording pass (substring rules → no safe
+> deterministic strip; a per-field model rework is the wrong tool); intake conflicts need A/B (L5c). The
+> panel no longer poses a "click to fix" ask for deterministic knowns. Remaining: a *safe* deterministic
+> value-level auto-correct (whole-value replace) is **L11** (DP→DisplayPort); A/B + re-word is L5c.
 
 ## 2c. L5 in detail (findings become the interaction; retire "KI Überarbeitung")
 

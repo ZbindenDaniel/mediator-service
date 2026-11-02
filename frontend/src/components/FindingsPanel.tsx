@@ -19,11 +19,15 @@ interface FindingsPanelProps {
   busy?: boolean;
 }
 
-// A finding is one-click fixable when regenerating its single field resolves it: banned phrases and
-// missing-required fields (ask === 'fix'). `choose` conflicts (A/B) need a value, not a regenerate, and
-// are handled by a later slice, so they show no button here.
+// A finding offers a one-click "Beheben" (targeted regenerate) only when a regenerate is genuinely the
+// right fix: a required field that is simply absent (missing_required). The other types are NOT asks:
+//  - banned_phrase is a deterministic known the WORDING pass rewrites away (the rules are substring
+//    patterns, so a naive strip would leave prose fragments; a per-field model rework is the wrong,
+//    heavy tool) — it is surfaced for awareness, not actioned here;
+//  - intake_conflict needs an A/B value choice, not a regenerate (a later slice, L5c).
+// So the panel stays the judgment residue, not a click-through defect checklist (review by exception).
 function isFixable(finding: Finding): boolean {
-  return finding.ask === 'fix' && typeof finding.field === 'string' && finding.field.trim().length > 0;
+  return finding.type === 'missing_required' && typeof finding.field === 'string' && finding.field.trim().length > 0;
 }
 
 // Review-by-exception: the "Zu prüfen" panel listing machine-surfaced findings for a run. Shared by the
