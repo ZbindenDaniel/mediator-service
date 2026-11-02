@@ -376,6 +376,14 @@ search-sources (#916), grounding (#917); data stays on the item; MVP operator-in
 2. **Revised contract approach: a separate instance-spec contract.** Define, per compute subcategory,
    the **installed** fields (RAM, storage, OS, battery health, …) that live in `InstanceSpecs`, paralleling
    the capability-focused reference contract. No `scope` tag on a mixed contract.
+   > **DECISION (operator, 2026-11): reversed — use a `scope` field on the single spec contract**, not a
+   > separate instance-spec contract. `SpecContractField` gains `scope: 'reference' | 'instance'`
+   > (default `'reference'`, fully back-compatible); installed fields are tagged `scope:'instance'` on
+   > compute whole-device contracts; `measuredSignal` still binds them to intake signals. Simpler, one
+   > contract per subcategory. **This lands with the instance arm (Phase 1′ / levers L7), not before** —
+   > a `scope` field with no consumer is inert, so it is built when the pipeline/grade/findings routing
+   > by scope is built. Until then, the RAM-in-reference leak is held by the extraction/wording
+   > prevention rule (agentic #1011).
 3. **Reconcile compares installed-value ↔ model-capability**, not equality: installed RAM ≤
    `RAM-Kapazität`, `RAM-Typ` ∈ supported, CPU/model identity matches. `wrong_ref` = installed config
    impossible for the model, or identity mismatch. Sharper than the original equality comparison.
