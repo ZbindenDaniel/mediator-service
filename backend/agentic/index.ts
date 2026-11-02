@@ -50,7 +50,7 @@ import {
 import { locateTranscript } from './flow/transcript';
 import { autoReworkConfig } from './config';
 import { attachCurrentReviewSignals } from './reference-findings';
-import { getSpecContract } from '../contracts/registry';
+import { getSpecContract, getStandardsContract } from '../contracts/registry';
 import { checkSpecGap, type SpecContract } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
 
@@ -1495,6 +1495,38 @@ export async function previewContractSweep(limit = 20): Promise<ContractSweepPla
   return planContractSweep(candidates, getSpecContract);
 }
 
+// One entry per item enriched before the current standards (house exclusion/style rules) version.
+// Standards are global, so unlike the spec-contract sweep there is no per-subcategory contract to resolve.
+export interface StandardsSweepPlanEntry {
+  artikelNummer: string;
+  fromVersion: number | null;
+  toVersion: number;
+}
+
+// Pure (no DB/LLM): which settled items predate the current standards version. Observation only — there
+// is no acting standards sweep yet (the re-word is step 3, operator-gated), so this just surfaces the
+// backlog a re-word would touch. A null stored version (enriched before stamping existed) counts as stale.
+export function planStandardsSweep(
+  candidates: Array<{ Artikel_Nummer: string; StandardsVersion: number | null }>,
+  currentStandardsVersion: number | null
+): StandardsSweepPlanEntry[] {
+  if (currentStandardsVersion == null) return []; // no standards contract → nothing to be stale against
+  const plan: StandardsSweepPlanEntry[] = [];
+  for (const candidate of candidates) {
+    const stored = typeof candidate.StandardsVersion === 'number' ? candidate.StandardsVersion : null;
+    if (stored != null && stored >= currentStandardsVersion) continue; // already current → skip
+    plan.push({ artikelNummer: candidate.Artikel_Nummer, fromVersion: stored, toVersion: currentStandardsVersion });
+  }
+  return plan;
+}
+
+// Dry run: how many settled items predate the current standards version. Read-only — no reprocessing;
+// the acting re-word stays gated until the operator opts in.
+export async function previewStandardsSweep(limit = 20): Promise<StandardsSweepPlanEntry[]> {
+  const candidates = await listContractAuditCandidates(limit);
+  return planStandardsSweep(candidates, getStandardsContract()?.version ?? null);
+}
+
 // Deterministic idle sweeper for the AUTO_REWORK feature. Finds the oldest settled item enriched
 // against an outdated spec contract version and either re-stamps it (already complete) or enqueues a
 // targeted rework for the now-missing required fields. No LLM in the decision — pure gap check.
@@ -1508,6 +1540,17 @@ async function sweepContractRework(
   } catch (err) {
     logger.error?.('[agentic-service] Contract-audit sweep failed to load candidates', { error: toErrorMessage(err) });
     return;
+  }
+
+  // Observational only: surface how many of these items predate the current standards version. The
+  // acting re-word is still gated (step 3), so this logs the backlog without touching anything — and it
+  // runs before the contract-plan early-return so standards-staleness stays visible on its own.
+  const standardsPlan = planStandardsSweep(candidates, getStandardsContract()?.version ?? null);
+  if (standardsPlan.length > 0) {
+    logger.info?.('[agentic-service] Standards-audit backlog (observe only)', {
+      standardsStale: standardsPlan.length,
+      toVersion: standardsPlan[0]?.toVersion ?? null
+    });
   }
 
   const plan = planContractSweep(candidates, getSpecContract);

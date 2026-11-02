@@ -159,6 +159,8 @@ export interface AgenticResultPayload extends Record<string, unknown> {
   autoApprovable?: boolean;
   /** Spec contract version this run completed against — stamped on the run for staleness detection. */
   specContractVersion?: number | null;
+  /** Standards (house exclusion/style rules) version this run applied — stamped for standards-staleness. */
+  standardsVersion?: number | null;
   /** Deterministic review findings for this run (review-by-exception); persisted as FindingsJson. */
   findings?: Finding[];
 }

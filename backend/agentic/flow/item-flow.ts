@@ -248,6 +248,7 @@ function buildCallbackPayload({
   actor,
   autoApprovable,
   specContractVersion,
+  standardsVersion,
   findings
 }: {
   artikelNummer: string;
@@ -264,6 +265,7 @@ function buildCallbackPayload({
   actor?: string | null;
   autoApprovable?: boolean;
   specContractVersion?: number | null;
+  standardsVersion?: number | null;
   findings?: Finding[];
 }): AgenticResultPayload {
   const resolvedStatus = status ?? (needsReview ? 'needs_review' : 'completed');
@@ -298,6 +300,7 @@ function buildCallbackPayload({
     item: itemPayload,
     autoApprovable: autoApprovable === true,
     specContractVersion: specContractVersion ?? null,
+    standardsVersion: standardsVersion ?? null,
     findings: Array.isArray(findings) ? findings : []
   };
 }
@@ -514,6 +517,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     // Spec contract version this run runs against — stamped on the run so an idle sweep can later detect
     // items enriched against an outdated contract (getSpecContract is cached, so this is cheap).
     const specContractVersion = subcategoryCode ? (getSpecContract(subcategoryCode)?.version ?? null) : null;
+    // Standards version this run applied (the house exclusion/style rules) — stamped so a later sweep
+    // can detect items enriched before the operator's current rules and re-clean them (self-heal).
+    const standardsVersion = getStandardsContract()?.version ?? null;
     const categoryGuidance = subcategoryCode ? (getSpecContract(subcategoryCode)?.guidance ?? []) : [];
     const specCtx = buildSpecContext(target, subcategoryCode, instanceSpecs);
     logger.debug?.({ msg: 'spec context built', itemId, subcategoryCode, missingRequired: specCtx.missingRequired, missingDesired: specCtx.missingDesired, ambiguousCount: Object.keys(specCtx.ambiguousFields).length });
@@ -760,6 +766,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       sources: extractionResult.sources,
       autoApprovable,
       specContractVersion,
+      standardsVersion,
       findings
     });
 

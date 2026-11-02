@@ -1,4 +1,4 @@
-import { decideContractAuditAction, planContractSweep } from '../index';
+import { decideContractAuditAction, planContractSweep, planStandardsSweep } from '../index';
 import type { SpecContract } from '../../../models/spec-contract';
 
 describe('decideContractAuditAction — idle contract-audit sweep decision', () => {
@@ -72,5 +72,27 @@ describe('planContractSweep — L4 legible sweep plan (the dry-run backlog)', ()
       getContract
     );
     expect(plan).toEqual([]);
+  });
+});
+
+describe('planStandardsSweep — observation-only standards backlog', () => {
+  it('flags items with a stored version below current, and never-stamped (null) rows, skipping current ones', () => {
+    const plan = planStandardsSweep(
+      [
+        { Artikel_Nummer: 'A', StandardsVersion: 1 },    // stale
+        { Artikel_Nummer: 'B', StandardsVersion: null },  // never stamped → stale
+        { Artikel_Nummer: 'C', StandardsVersion: 2 },    // current → skipped
+        { Artikel_Nummer: 'D', StandardsVersion: 3 }     // newer than current → skipped
+      ],
+      2
+    );
+    expect(plan).toEqual([
+      { artikelNummer: 'A', fromVersion: 1, toVersion: 2 },
+      { artikelNummer: 'B', fromVersion: null, toVersion: 2 }
+    ]);
+  });
+
+  it('returns an empty plan when there is no standards contract (null current version)', () => {
+    expect(planStandardsSweep([{ Artikel_Nummer: 'A', StandardsVersion: null }], null)).toEqual([]);
   });
 });

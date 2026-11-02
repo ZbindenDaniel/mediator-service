@@ -492,6 +492,7 @@ ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedAt" TEXT;
 ALTER TABLE box_stubs ADD COLUMN IF NOT EXISTS "ClosedBy" TEXT;
 ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "Confidence" FLOAT;
 ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "SpecContractVersion" INTEGER;
+ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "StandardsVersion" INTEGER;
 ALTER TABLE agentic_runs ADD COLUMN IF NOT EXISTS "FindingsJson" TEXT;
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Scope" TEXT NOT NULL DEFAULT 'instance';
 ALTER TABLE item_attachments ADD COLUMN IF NOT EXISTS "Artikel_Nummer" TEXT;
@@ -2425,11 +2426,12 @@ export async function upsertAgenticRun(params: {
   LastReviewNotes?: string | null;
   Confidence?: number | null;
   SpecContractVersion?: number | null;
+  StandardsVersion?: number | null;
   FindingsJson?: string | null;
 }): Promise<void> {
   await execute(
-    `INSERT INTO agentic_runs ("Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy","LastReviewDecision","LastReviewNotes","Confidence","SpecContractVersion","FindingsJson")
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+    `INSERT INTO agentic_runs ("Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy","LastReviewDecision","LastReviewNotes","Confidence","SpecContractVersion","FindingsJson","StandardsVersion")
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
      ON CONFLICT("Artikel_Nummer") DO UPDATE SET
        "SearchQuery"=COALESCE(EXCLUDED."SearchQuery",agentic_runs."SearchQuery"),
        "LastSearchLinksJson"=COALESCE(EXCLUDED."LastSearchLinksJson",agentic_runs."LastSearchLinksJson"),
@@ -2441,19 +2443,20 @@ export async function upsertAgenticRun(params: {
        "LastReviewNotes"=COALESCE(EXCLUDED."LastReviewNotes",agentic_runs."LastReviewNotes"),
        "Confidence"=COALESCE(EXCLUDED."Confidence",agentic_runs."Confidence"),
        "SpecContractVersion"=COALESCE(EXCLUDED."SpecContractVersion",agentic_runs."SpecContractVersion"),
+       "StandardsVersion"=COALESCE(EXCLUDED."StandardsVersion",agentic_runs."StandardsVersion"),
        "FindingsJson"=COALESCE(EXCLUDED."FindingsJson",agentic_runs."FindingsJson"),
        "RetryCount"=CASE WHEN EXCLUDED."Status"='queued' THEN 0 ELSE agentic_runs."RetryCount" END,
        "NextRetryAt"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."NextRetryAt" END,
        "LastError"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."LastError" END,
        "LastAttemptAt"=CASE WHEN EXCLUDED."Status"='queued' THEN NULL ELSE agentic_runs."LastAttemptAt" END`,
-    [params.Artikel_Nummer, params.SearchQuery ?? null, params.LastSearchLinksJson ?? null, params.Status, params.LastModified, params.ReviewState, params.ReviewedBy ?? null, params.LastReviewDecision ?? null, params.LastReviewNotes ?? null, params.Confidence ?? null, params.SpecContractVersion ?? null, params.FindingsJson ?? null]
+    [params.Artikel_Nummer, params.SearchQuery ?? null, params.LastSearchLinksJson ?? null, params.Status, params.LastModified, params.ReviewState, params.ReviewedBy ?? null, params.LastReviewDecision ?? null, params.LastReviewNotes ?? null, params.Confidence ?? null, params.SpecContractVersion ?? null, params.FindingsJson ?? null, params.StandardsVersion ?? null]
   );
 }
 
 export async function getAgenticRun(artikelNummer: string): Promise<AgenticRun | null> {
   return queryOne<AgenticRun>(
     `SELECT "Id","Artikel_Nummer","SearchQuery","LastSearchLinksJson","Status","LastModified","ReviewState","ReviewedBy",
-            "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt","Confidence","SpecContractVersion","FindingsJson"
+            "LastReviewDecision","LastReviewNotes","RetryCount","NextRetryAt","LastError","LastAttemptAt","Confidence","SpecContractVersion","StandardsVersion","FindingsJson"
      FROM agentic_runs WHERE "Artikel_Nummer"=$1`,
     [artikelNummer]
   );
@@ -2464,12 +2467,13 @@ export async function getAgenticRun(artikelNummer: string): Promise<AgenticRun |
 export async function listContractAuditCandidates(limit: number): Promise<Array<{
   Artikel_Nummer: string;
   SpecContractVersion: number | null;
+  StandardsVersion: number | null;
   Langtext: string | null;
   SubCategory: number | null;
   Artikelbeschreibung: string | null;
 }>> {
   return query(
-    `SELECT r."Artikel_Nummer", r."SpecContractVersion",
+    `SELECT r."Artikel_Nummer", r."SpecContractVersion", r."StandardsVersion",
             i."Langtext", ROUND(NULLIF(i."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "SubCategory",
             i."Artikelbeschreibung"
      FROM agentic_runs r

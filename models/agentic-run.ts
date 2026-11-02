@@ -19,6 +19,9 @@ export interface AgenticRun {
   // Spec contract version this run completed against; lets an idle sweep detect items enriched
   // against an outdated contract (stored < current) and re-apply it.
   SpecContractVersion?: number | null;
+  // Standards (house exclusion/style rules) version this run applied; lets an idle sweep detect items
+  // enriched before the operator changed the rules (stored < current) and re-word them.
+  StandardsVersion?: number | null;
   // Serialized `Finding[]` snapshot from the run's output at completion (history). JSON string or null.
   FindingsJson?: string | null;
   // Transient (never persisted): deterministic findings computed from the item's CURRENT stored
