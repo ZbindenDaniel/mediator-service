@@ -10,6 +10,7 @@
     "start": "node dist/backend/server.js",
     "test": "npm run prebuild && node scripts/run-tests.js",
     "smoke": "ts-node --transpile-only scripts/smoke-server.ts",
+    "preview:ui": "node scripts/build-ui-preview.js",
     "try:wording": "ts-node --transpile-only scripts/try-wording.ts",
     "contracts:check": "ts-node --transpile-only backend/cli/check-contracts.ts",
     "quality:recompute": "ts-node --transpile-only backend/cli/recompute-quality-scores.ts",
