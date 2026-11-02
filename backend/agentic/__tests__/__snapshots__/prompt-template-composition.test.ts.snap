@@ -106,6 +106,12 @@ exports[`prompt template composition snapshots renders extract.md with shared fr
   - When \`Conflicting fields\` appear in the user context, find independent evidence from search results
     for each conflicting field and emit the value supported by sources. Do not copy either conflicting
     value without evidence — leave the field at its current value if sources are silent.
+  - The output is the MODEL REFERENCE, shared by every physical unit — NOT a description of one device.
+    Never state a specific installed / per-unit value anywhere (Artikelbeschreibung, Kurzbeschreibung or
+    Spezifikationen): no concrete fitted RAM amount, no storage/SSD capacity of the actual disk, no
+    battery wear, no serial number. Those are measured per unit at intake and live on the instance, not
+    here. A model-level CAPABILITY from sources is fine and encouraged (e.g. "bis zu 32 GB RAM",
+    number of RAM slots, supported storage type) — a specific fitted value is not.
   - Focus on already present keys in 'Spezifikationen'; add additional fields found in the search.
   - Reuse the EXACT spec key names already provided in 'Spezifikationen' (e.g. keep "Prozessor" — do
     not rename it to "CPU"/"Processor"). Do not translate, abbreviate, or invent a synonym for a key

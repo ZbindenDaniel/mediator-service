@@ -15,6 +15,10 @@
     and never promise a manufacturer warranty or scope of delivery ("mit einer Garantie von …",
     "im Lieferumfang enthalten …") — this is datasheet copy that does not apply to second-hand goods.
   - No marketing, calls to action, superlatives, or filler. State what the device is and its key specs.
+  - This copy is the MODEL REFERENCE, not one unit. Keep specific installed / per-unit values OUT of
+    Artikelbeschreibung and Kurzbeschreibung: no concrete fitted RAM amount, actual disk/SSD capacity,
+    battery wear or serial number (these are captured per unit at intake). Model-level capabilities
+    ("bis zu 32 GB RAM") are fine. Do not invent a value to replace one you drop.
   - Kurzbeschreibung: one to three sentences, German. Established technical English terms (SSD, USB-C,
     Intel Core) are fine.
   - Also apply every rule in the payload's "houseRules"; honour "reviewerNotes" if present.
