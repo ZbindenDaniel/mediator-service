@@ -1433,41 +1433,97 @@ export function decideContractAuditAction(
   return { action: 'restamp' };
 }
 
-// L4 (legible sweeper): one entry per stale item the contract-audit sweep would act on. Lets the sweep
-// log/preview the *whole* backlog ("N stale: X rework, Y restamp") instead of acting invisibly, and is
-// the shape a dry-run surfaces to the operator before AUTO_REWORK is trusted on.
+// Unified self-heal decision (no DB/LLM) — the "entry-point router". Given BOTH staleness axes it decides
+// where a settled item must re-enter the pipeline:
+//   • spec contract (SpecContractVersion) changed its fields → needs EXTRACTION to obtain new values;
+//   • standards (StandardsVersion) changed the house rules    → needs a WORDING pass to re-apply them.
+// Outcomes, cheapest-first:
+//   - `skip`    : current on both axes.
+//   - `restamp` : contract stale but already complete, standards current → just bump the version (no LLM).
+//   - `rework`  : contract stale + missing required field(s), standards current → targeted extraction.
+//                 NOTE: rework mode skips the wording stage, so it is only correct when standards are NOT
+//                 also stale (otherwise the new house rules wouldn't be applied).
+//   - `reword`  : standards stale, no extraction need → a search-free run whose wording pass re-applies
+//                 the house rules. (A full run, not targeted — so wording runs.)
+//   - `rerun`   : BOTH an extraction need AND standards staleness → a search-free FULL run so extraction
+//                 and wording both happen; a targeted rework would skip wording.
+// reword/rerun both execute as the same search-free run; they differ only in why they were chosen (kept
+// distinct for legibility). The completed run stamps both versions, so the sweep self-limits either way.
+export function decideSelfHealAction(
+  contractStored: number | null,
+  contractCurrent: number,
+  standardsStored: number | null,
+  standardsCurrent: number | null,
+  gapMissingRequired: string[]
+):
+  | { action: 'skip' }
+  | { action: 'restamp' }
+  | { action: 'rework'; fields: string[] }
+  | { action: 'reword' }
+  | { action: 'rerun'; fields: string[] } {
+  const contract = decideContractAuditAction(contractStored, contractCurrent, gapMissingRequired);
+  const standardsStale = standardsCurrent != null && (standardsStored == null || standardsStored < standardsCurrent);
+  if (contract.action === 'rework') {
+    // Extraction is required. If standards are also stale, escalate to a full run so wording runs too
+    // (a targeted rework skips the wording stage); otherwise the targeted rework is enough.
+    return standardsStale ? { action: 'rerun', fields: contract.fields } : contract;
+  }
+  // contract is 'skip' or 'restamp' — no extraction needed. Standards staleness alone → a re-word.
+  if (standardsStale) return { action: 'reword' };
+  return contract;
+}
+
+// L4 (legible sweeper): one entry per stale item the self-heal sweep would act on. Lets the sweep
+// log/preview the *whole* backlog instead of acting invisibly, and is the shape a dry-run surfaces to the
+// operator before AUTO_REWORK is trusted on.
 export interface ContractSweepPlanEntry {
   artikelNummer: string;
   subCategory: number;
-  action: 'rework' | 'restamp';
-  /** For rework: the now-missing required fields that will be regenerated. */
+  action: 'rework' | 'restamp' | 'reword' | 'rerun';
+  /** For rework/rerun: the now-missing required fields that drove the extraction need. */
   fields?: string[];
+  /** Spec-contract versions (the extraction axis). */
   fromVersion: number | null;
   toVersion: number;
+  /** Standards versions (the wording axis) — set when the entry is driven by standards staleness. */
+  standardsFromVersion?: number | null;
+  standardsToVersion?: number | null;
 }
 
 type ContractAuditCandidate = {
   Artikel_Nummer: string;
   SubCategory: number | null;
   SpecContractVersion: number | null;
+  StandardsVersion?: number | null;
   Langtext: string | null;
   Artikelbeschreibung?: string | null;
 };
 
-// Pure (no DB/LLM): maps the candidate rows to the actions the sweep would take, in order. `getContract`
-// is injected so this is unit-testable without the contract registry. Parsing/gap-check mirror the live
-// sweep exactly, so the preview and the action can never disagree.
-export function planContractSweep(
+// Pure (no DB/LLM): the unified self-heal plan — maps candidate rows to the actions the sweep would take,
+// in order, across BOTH staleness axes. `getContract` is injected for unit-testing without the registry;
+// `standardsCurrent` is the current standards version (null disables the wording axis entirely, which is
+// how `planContractSweep` reuses this for the contract-only view). Parsing/gap-check mirror the live sweep
+// exactly, so the preview and the action can never disagree.
+export function planSelfHealSweep(
   candidates: ContractAuditCandidate[],
-  getContract: (subCategory: number) => SpecContract | null
+  getContract: (subCategory: number) => SpecContract | null,
+  standardsCurrent: number | null
 ): ContractSweepPlanEntry[] {
   const plan: ContractSweepPlanEntry[] = [];
   for (const candidate of candidates) {
     if (candidate.SubCategory == null) continue;
+    // v1 scope: only items with a resolvable spec contract. Standards are global, but the wording pass
+    // relies on the contract's recognizedSpecFields to avoid over-stripping, so contract-less subcategories
+    // are left out of the standards re-word for now (see deferred note in the changelog).
     const contract = getContract(candidate.SubCategory);
     if (!contract) continue;
     const stored = typeof candidate.SpecContractVersion === 'number' ? candidate.SpecContractVersion : null;
-    if (stored != null && stored >= contract.version) continue; // not stale (fast path, mirrors the sweep)
+    const standardsStored = typeof candidate.StandardsVersion === 'number' ? candidate.StandardsVersion : null;
+
+    // Fast path: current on both axes → skip without parsing Langtext.
+    const contractStale = stored == null || stored < contract.version;
+    const standardsStale = standardsCurrent != null && (standardsStored == null || standardsStored < standardsCurrent);
+    if (!contractStale && !standardsStale) continue;
 
     let langtextObj: Record<string, unknown> = {};
     try {
@@ -1477,22 +1533,43 @@ export function planContractSweep(
       // Unparseable Langtext → empty; the gap check then flags required fields.
     }
     const gap = checkSpecGap(contract, langtextObj);
-    const decision = decideContractAuditAction(stored, contract.version, gap.missingRequired);
+    const decision = decideSelfHealAction(stored, contract.version, standardsStored, standardsCurrent, gap.missingRequired);
     if (decision.action === 'skip') continue;
-    plan.push(
-      decision.action === 'rework'
-        ? { artikelNummer: candidate.Artikel_Nummer, subCategory: candidate.SubCategory, action: 'rework', fields: decision.fields, fromVersion: stored, toVersion: contract.version }
-        : { artikelNummer: candidate.Artikel_Nummer, subCategory: candidate.SubCategory, action: 'restamp', fromVersion: stored, toVersion: contract.version }
-    );
+    const base = {
+      artikelNummer: candidate.Artikel_Nummer,
+      subCategory: candidate.SubCategory,
+      fromVersion: stored,
+      toVersion: contract.version,
+      // Only carry the standards axis when it is active, so the contract-only plan/preview stays lean.
+      ...(standardsCurrent != null ? { standardsFromVersion: standardsStored, standardsToVersion: standardsCurrent } : {})
+    };
+    if (decision.action === 'rework') plan.push({ ...base, action: 'rework', fields: decision.fields });
+    else if (decision.action === 'rerun') plan.push({ ...base, action: 'rerun', fields: decision.fields });
+    else if (decision.action === 'reword') plan.push({ ...base, action: 'reword' });
+    else plan.push({ ...base, action: 'restamp' });
   }
   return plan;
 }
 
-// Dry run: what the contract-audit sweep *would* do right now, without touching anything. Lets an
-// operator see the stale backlog before enabling AUTO_REWORK (the sweep otherwise acts silently).
+// Contract-only view (standards axis disabled) — kept for the dry-run preview and existing callers/tests.
+export function planContractSweep(
+  candidates: ContractAuditCandidate[],
+  getContract: (subCategory: number) => SpecContract | null
+): ContractSweepPlanEntry[] {
+  return planSelfHealSweep(candidates, getContract, null);
+}
+
+// Dry run: what the contract-audit sweep *would* do right now (contract axis only), without touching
+// anything. Lets an operator see the stale backlog before enabling AUTO_REWORK.
 export async function previewContractSweep(limit = 20): Promise<ContractSweepPlanEntry[]> {
   const candidates = await listContractAuditCandidates(limit);
   return planContractSweep(candidates, getSpecContract);
+}
+
+// Dry run: the full self-heal backlog across both axes (contract + standards), without touching anything.
+export async function previewSelfHealSweep(limit = 20): Promise<ContractSweepPlanEntry[]> {
+  const candidates = await listContractAuditCandidates(limit);
+  return planSelfHealSweep(candidates, getSpecContract, getStandardsContract()?.version ?? null);
 }
 
 // One entry per item enriched before the current standards (house exclusion/style rules) version.
@@ -1527,9 +1604,11 @@ export async function previewStandardsSweep(limit = 20): Promise<StandardsSweepP
   return planStandardsSweep(candidates, getStandardsContract()?.version ?? null);
 }
 
-// Deterministic idle sweeper for the AUTO_REWORK feature. Finds the oldest settled item enriched
-// against an outdated spec contract version and either re-stamps it (already complete) or enqueues a
-// targeted rework for the now-missing required fields. No LLM in the decision — pure gap check.
+// Deterministic idle sweeper for the AUTO_REWORK feature (gated, default off). Finds the oldest settled
+// item that is stale on either axis — spec contract (SpecContractVersion) or standards (StandardsVersion)
+// — and takes the cheapest correct action per `decideSelfHealAction`: re-stamp, a targeted rework
+// (extraction), or a search-free re-word/rerun (wording re-applies the house rules). No LLM in the
+// decision — pure version + gap check; one enqueue per idle tick keeps it gentle.
 async function sweepContractRework(
   deps: AgenticServiceDependencies,
   logger: AgenticServiceLogger
@@ -1542,25 +1621,17 @@ async function sweepContractRework(
     return;
   }
 
-  // Observational only: surface how many of these items predate the current standards version. The
-  // acting re-word is still gated (step 3), so this logs the backlog without touching anything — and it
-  // runs before the contract-plan early-return so standards-staleness stays visible on its own.
-  const standardsPlan = planStandardsSweep(candidates, getStandardsContract()?.version ?? null);
-  if (standardsPlan.length > 0) {
-    logger.info?.('[agentic-service] Standards-audit backlog (observe only)', {
-      standardsStale: standardsPlan.length,
-      toVersion: standardsPlan[0]?.toVersion ?? null
-    });
-  }
-
-  const plan = planContractSweep(candidates, getSpecContract);
+  const standardsCurrent = getStandardsContract()?.version ?? null;
+  const plan = planSelfHealSweep(candidates, getSpecContract, standardsCurrent);
   if (plan.length === 0) return;
-  // Legibility: log the whole stale backlog, not just the item we touch this tick, so the sweep's
-  // behaviour is observable even though it acts gently (all re-stamps, at most one rework per tick).
-  logger.info?.('[agentic-service] Contract-audit sweep plan', {
+  // Legibility: log the whole stale backlog across both axes, not just the item we touch this tick, so the
+  // sweep's behaviour is observable even though it acts gently (at most one enqueue per idle tick).
+  logger.info?.('[agentic-service] Self-heal sweep plan', {
     stale: plan.length,
     rework: plan.filter((p) => p.action === 'rework').length,
-    restamp: plan.filter((p) => p.action === 'restamp').length
+    restamp: plan.filter((p) => p.action === 'restamp').length,
+    reword: plan.filter((p) => p.action === 'reword').length,
+    rerun: plan.filter((p) => p.action === 'rerun').length
   });
 
   // Automated origin, so its activity-log entries are distinguishable from operator actions.
@@ -1613,6 +1684,55 @@ async function sweepContractRework(
       } catch (err) {
         pendingRework.delete(entry.artikelNummer);
         logger.error?.('[agentic-service] Contract-audit failed to enqueue rework', {
+          artikelNummer: entry.artikelNummer,
+          error: toErrorMessage(err)
+        });
+      }
+      return; // one enqueue per idle tick
+    }
+
+    if (entry.action === 'reword' || entry.action === 'rerun') {
+      // Standards-driven self-heal: enqueue a SEARCH-FREE run (skipSearch, no reworkSpecFields) so the
+      // wording stage runs and re-applies the current house rules to stored content. 'rerun' is the same
+      // run chosen because the contract also needs extraction (a targeted rework would skip wording).
+      // Supervised like any run; the completed run stamps both versions, so the item self-limits. We use
+      // skipSearch — never a fresh web search — because this cleans existing data, not re-researches it.
+      pendingSkipSearch.add(entry.artikelNummer);
+      const nowIso = resolveNow(deps).toISOString();
+      const candidate = candidates.find((c) => c.Artikel_Nummer === entry.artikelNummer);
+      try {
+        await deps.updateAgenticRunStatus(normalizeAgenticStatusUpdate({
+          Artikel_Nummer: entry.artikelNummer,
+          Status: AGENTIC_RUN_STATUS_QUEUED,
+          SearchQuery: candidate?.Artikelbeschreibung ?? entry.artikelNummer,
+          LastModified: nowIso,
+          ReviewState: 'not_required',
+          ReviewedBy: null,
+          ReviewedByIsSet: true,
+          RetryCount: 0,
+          RetryCountIsSet: true,
+          NextRetryAt: null,
+          NextRetryAtIsSet: true,
+          LastError: null,
+          LastErrorIsSet: true,
+          LastAttemptAt: null,
+          LastAttemptAtIsSet: true
+        }));
+        logger.info?.('[agentic-service] Self-heal enqueued standards re-word', {
+          artikelNummer: entry.artikelNummer,
+          mode: entry.action,
+          fields: entry.fields ?? null,
+          standardsFromVersion: entry.standardsFromVersion ?? null,
+          standardsToVersion: entry.standardsToVersion ?? null
+        });
+        await logSweepEvent(entry.artikelNummer, 'StandardsAuditReword', {
+          mode: entry.action,
+          standardsFromVersion: entry.standardsFromVersion ?? null,
+          standardsToVersion: entry.standardsToVersion ?? null
+        });
+      } catch (err) {
+        pendingSkipSearch.delete(entry.artikelNummer);
+        logger.error?.('[agentic-service] Self-heal failed to enqueue re-word', {
           artikelNummer: entry.artikelNummer,
           error: toErrorMessage(err)
         });
