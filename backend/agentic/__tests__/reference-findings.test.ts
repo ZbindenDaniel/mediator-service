@@ -1,4 +1,4 @@
-import { computeReferenceFindings } from '../reference-findings';
+import { computeReferenceFindings, attachCurrentReviewSignals } from '../reference-findings';
 
 // Uses the real contracts/standards.json (seeded with "mit einer Garantie von" etc.), exercising the
 // on-read path: findings reflect the reference's CURRENT content, not a run's frozen output.
@@ -39,5 +39,25 @@ describe('computeReferenceFindings — on-read findings from current content', (
   it('is a no-op for a null/invalid reference', () => {
     expect(computeReferenceFindings(null)).toEqual([]);
     expect(computeReferenceFindings(undefined)).toEqual([]);
+  });
+});
+
+describe('attachCurrentReviewSignals — the shared attach used by item detail + status read', () => {
+  it('adds CurrentFindings + CurrentDataQuality to a run from the current ref content', () => {
+    const run = { Id: 1, SpecContractVersion: 1 };
+    const out = attachCurrentReviewSignals(run, {
+      Artikelbeschreibung: 'Laptop mit einer Garantie von 24 Monaten.',
+      Langtext: null
+    });
+    expect(out.Id).toBe(1); // original fields preserved
+    expect(Array.isArray(out.CurrentFindings)).toBe(true);
+    expect(out.CurrentFindings.some((f) => f.type === 'banned_phrase')).toBe(true);
+    expect('CurrentDataQuality' in out).toBe(true); // null when no spec contract — still present
+  });
+
+  it('attaches empty/neutral signals for a null ref without throwing', () => {
+    const out = attachCurrentReviewSignals({ SpecContractVersion: null }, null);
+    expect(out.CurrentFindings).toEqual([]);
+    expect(out.CurrentDataQuality).toBeNull();
   });
 });

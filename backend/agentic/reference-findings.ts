@@ -2,7 +2,9 @@ import { parseLangtext } from '../lib/langtext';
 import { getSpecContract, getStandardsContract } from '../contracts/registry';
 import { checkSpecGap } from '../../models/spec-contract';
 import { buildFindings } from './findings';
+import { computeReferenceDataQuality } from './data-quality';
 import type { Finding } from '../../models/agentic-findings';
+import type { DataQualityGrade } from '../../models/data-quality';
 
 // Compute deterministic review findings from an item reference's CURRENT stored content, on read.
 //
@@ -44,4 +46,23 @@ export function computeReferenceFindings(ref: Record<string, unknown> | null | u
   }
 
   return buildFindings({ texts, missingRequired }, getStandardsContract());
+}
+
+/**
+ * Attaches the transient on-read review signals — `CurrentFindings` + `CurrentDataQuality` — to a run,
+ * computed from the item's CURRENT reference content. The single source of truth for both, so EVERY
+ * endpoint that hands a run to the UI (item detail AND the agentic status read) surfaces the review-by-
+ * exception signals identically. (They diverged once: item detail returned the bare run, so the findings
+ * panel + data-quality badge never rendered there.) Best-effort — the caller guards against throws.
+ */
+export function attachCurrentReviewSignals<T extends { SpecContractVersion?: number | null }>(
+  run: T,
+  ref: Record<string, unknown> | null | undefined
+): T & { CurrentFindings: Finding[]; CurrentDataQuality: DataQualityGrade | null } {
+  const currentFindings = computeReferenceFindings(ref);
+  return {
+    ...run,
+    CurrentFindings: currentFindings,
+    CurrentDataQuality: computeReferenceDataQuality(ref, currentFindings, run.SpecContractVersion ?? null)
+  };
 }

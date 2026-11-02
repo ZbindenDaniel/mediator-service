@@ -49,8 +49,7 @@ import {
 } from '../db';
 import { locateTranscript } from './flow/transcript';
 import { autoReworkConfig } from './config';
-import { computeReferenceFindings } from './reference-findings';
-import { computeReferenceDataQuality } from './data-quality';
+import { attachCurrentReviewSignals } from './reference-findings';
 import { getSpecContract } from '../contracts/registry';
 import { checkSpecGap, type SpecContract } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
@@ -2602,23 +2601,18 @@ export async function getAgenticStatus(
   if (!run) {
     return { agentic: null };
   }
-  // Attach findings computed from the item's CURRENT content (not the run's frozen output) so review
-  // surfaces reflect live content + manual edits. Best-effort: a failure here never blocks status.
-  // The data-quality grade (L10) is derived from those same findings + the ref's spec gap + the run's
-  // contract version, so the content is scanned once and the two signals always agree.
-  let currentFindings: import('../../models/agentic-findings').Finding[] = [];
-  let currentDataQuality: import('./data-quality').DataQualityGrade | null = null;
+  // Attach the transient on-read review signals (findings + data-quality grade) via the shared helper so
+  // this read and the item-detail read surface them identically. Best-effort: a failure never blocks.
   try {
     const ref = await deps.getItemReference(resolved.artikelNummer);
-    currentFindings = computeReferenceFindings(ref as Record<string, unknown> | null);
-    currentDataQuality = computeReferenceDataQuality(ref as Record<string, unknown> | null, currentFindings, run.SpecContractVersion ?? null);
+    return { agentic: attachCurrentReviewSignals(run, ref as Record<string, unknown> | null) };
   } catch (err) {
-    logger.warn?.('[agentic-service] Failed to compute current findings', {
+    logger.warn?.('[agentic-service] Failed to compute current review signals', {
       artikelNummer: resolved.artikelNummer,
       error: err instanceof Error ? err.message : err
     });
+    return { agentic: { ...run, CurrentFindings: [], CurrentDataQuality: null } };
   }
-  return { agentic: { ...run, CurrentFindings: currentFindings, CurrentDataQuality: currentDataQuality } };
 }
 
 export async function checkAgenticHealth(
