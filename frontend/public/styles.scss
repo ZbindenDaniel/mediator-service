@@ -3986,6 +3986,16 @@ button:focus {
     font-size: 0.85em;
 }
 
+.ki-verdict {
+    margin: 0 0 10px;
+    padding: 8px 12px;
+    border-left: 3px solid var(--color-muted, #98a2b3);
+    background: color-mix(in srgb, var(--color-muted, #98a2b3) 10%, transparent);
+    border-radius: 4px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
 .agentic-snapshots {
     margin-top: 12px;
 }

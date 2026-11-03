@@ -22,6 +22,9 @@ interface Props {
   onFixFinding?: (finding: Finding) => void;
   // Catalogue data-quality grade (L10), derived on read; shown as a badge above the findings.
   dataQuality?: DataQualityGrade | null;
+  // One-line deterministic verdict of the current run state (status + findings + grade) — the scannable
+  // "what happened" line, so the operator doesn't have to read the diff to get the gist.
+  verdict?: string | null;
   reviewWizardState?: AgenticReviewWizardData | null;
   onReviewWizardResolve?: (result: AgenticReviewWizardResult | null) => void;
   // Targeted rework ("KI Überarbeitung"): selectable fields + a submit handler. Kept local to this tab
@@ -45,6 +48,7 @@ export default function ItemKiTab({
   findings,
   onFixFinding,
   dataQuality,
+  verdict,
   reviewWizardState,
   onReviewWizardResolve,
   reworkFieldOptions,
@@ -110,6 +114,7 @@ export default function ItemKiTab({
           )}
         </div>
       )}
+      {verdict ? <p className="ki-verdict" role="status">{verdict}</p> : null}
       <DataQualityBadge quality={dataQuality ?? null} />
       <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
       <FindingsPanel findings={findings ?? []} onFix={onFixFinding} busy={actionPending} />

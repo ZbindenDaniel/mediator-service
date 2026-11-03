@@ -3,6 +3,7 @@ import { getSpecContract, getStandardsContract } from '../contracts/registry';
 import { checkSpecGap } from '../../models/spec-contract';
 import { buildFindings } from './findings';
 import { computeReferenceDataQuality } from './data-quality';
+import { composeRunVerdict } from './run-verdict';
 import type { Finding } from '../../models/agentic-findings';
 import type { DataQualityGrade } from '../../models/data-quality';
 
@@ -54,15 +55,22 @@ export function computeReferenceFindings(ref: Record<string, unknown> | null | u
  * endpoint that hands a run to the UI (item detail AND the agentic status read) surfaces the review-by-
  * exception signals identically. (They diverged once: item detail returned the bare run, so the findings
  * panel + data-quality badge never rendered there.) Best-effort — the caller guards against throws.
+ *
+ * Also composes `CurrentVerdict`: a one-line, human-facing summary of the run's current state built from
+ * the same signals (status + findings + grade), so a reviewer gets the gist without reading the diff.
  */
-export function attachCurrentReviewSignals<T extends { SpecContractVersion?: number | null }>(
+export function attachCurrentReviewSignals<
+  T extends { SpecContractVersion?: number | null; Status?: string | null }
+>(
   run: T,
   ref: Record<string, unknown> | null | undefined
-): T & { CurrentFindings: Finding[]; CurrentDataQuality: DataQualityGrade | null } {
+): T & { CurrentFindings: Finding[]; CurrentDataQuality: DataQualityGrade | null; CurrentVerdict: string } {
   const currentFindings = computeReferenceFindings(ref);
+  const currentDataQuality = computeReferenceDataQuality(ref, currentFindings, run.SpecContractVersion ?? null);
   return {
     ...run,
     CurrentFindings: currentFindings,
-    CurrentDataQuality: computeReferenceDataQuality(ref, currentFindings, run.SpecContractVersion ?? null)
+    CurrentDataQuality: currentDataQuality,
+    CurrentVerdict: composeRunVerdict({ status: run.Status ?? null, findings: currentFindings, dataQuality: currentDataQuality })
   };
 }

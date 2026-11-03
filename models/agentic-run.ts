@@ -30,4 +30,7 @@ export interface AgenticRun {
   // Transient (never persisted): the catalogue data-quality grade (L10) derived on read from
   // CurrentFindings + the ref's spec gap + SpecContractVersion. null when the item has no spec contract.
   CurrentDataQuality?: import('./data-quality').DataQualityGrade | null;
+  // Transient (never persisted): a one-line human-facing verdict for the current state, composed
+  // deterministically from Status + CurrentFindings + CurrentDataQuality (no LLM). See run-verdict.ts.
+  CurrentVerdict?: string;
 }

@@ -1536,6 +1536,9 @@ export default function ItemDetail({ itemId }: Props) {
   // no spec contract (nothing to grade). Surfaced as a badge in the KI tab.
   const agenticDataQuality = agentic?.CurrentDataQuality ?? null;
 
+  // One-line verdict for the current run state, composed server-side from status + findings + grade.
+  const agenticVerdict = agentic?.CurrentVerdict ?? null;
+
   // Derived agentic state — computed before early returns so the hooks below can reference them
   const normalizedAgenticStatus = agentic ? normalizeAgenticRunStatus(agentic.Status) : null;
   const normalizedAgenticReview = agentic ? (agentic.ReviewState || '').trim().toLowerCase() : null;
@@ -2797,6 +2800,7 @@ export default function ItemDetail({ itemId }: Props) {
             findings={agenticFindings}
             onFixFinding={handleFixFinding}
             dataQuality={agenticDataQuality}
+            verdict={agenticVerdict}
             reviewWizardState={reviewWizardModalState?.data ?? null}
             onReviewWizardResolve={handleReviewWizardResolve}
             reworkFieldOptions={reworkFieldOptions}
