@@ -2462,27 +2462,36 @@ export async function getAgenticRun(artikelNummer: string): Promise<AgenticRun |
   );
 }
 
-// Idle contract-audit sweeper: settled runs joined to their item ref, oldest-first, with the stored
-// contract version + the data needed to compute the gap in code (contract versions live in JSON, not SQL).
-export async function listContractAuditCandidates(limit: number): Promise<Array<{
+// Idle self-heal sweeper: settled runs joined to their item ref, oldest-first, with the stored contract
+// + standards versions and the data needed to compute the gap in code (versions live in JSON, not SQL).
+// `statuses` selects which run states to include (default: the settled approved states); the pending-
+// review self-heal (AUTO_REVIEW) passes 'review' in as well. The run's `Status` is returned so the
+// planner can treat review items differently (never silently restamp one — it still needs a re-judge).
+export async function listContractAuditCandidates(
+  limit: number,
+  statuses: readonly string[] = ['approved', 'auto_approved']
+): Promise<Array<{
   Artikel_Nummer: string;
+  Status: string;
   SpecContractVersion: number | null;
   StandardsVersion: number | null;
   Langtext: string | null;
   SubCategory: number | null;
   Artikelbeschreibung: string | null;
 }>> {
+  const list = statuses.length > 0 ? statuses : ['approved', 'auto_approved'];
+  const placeholders = list.map((_, i) => `$${i + 2}`).join(',');
   return query(
-    `SELECT r."Artikel_Nummer", r."SpecContractVersion", r."StandardsVersion",
+    `SELECT r."Artikel_Nummer", r."Status", r."SpecContractVersion", r."StandardsVersion",
             i."Langtext", ROUND(NULLIF(i."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "SubCategory",
             i."Artikelbeschreibung"
      FROM agentic_runs r
      JOIN item_refs i ON i."Artikel_Nummer" = r."Artikel_Nummer"
-     WHERE r."Status" IN ('approved','auto_approved')
+     WHERE r."Status" IN (${placeholders})
        AND i."Unterkategorien_A" IS NOT NULL
      ORDER BY r."LastModified" ASC
      LIMIT $1`,
-    [limit]
+    [limit, ...list]
   );
 }
 

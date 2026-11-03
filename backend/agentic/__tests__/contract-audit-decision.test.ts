@@ -170,4 +170,49 @@ describe('planSelfHealSweep — unified plan across both axes', () => {
     expect(planSelfHealSweep(rows, getContract, null)).toEqual([]); // standards axis off → nothing stale
     expect(planContractSweep(rows, getContract)).toEqual([]);
   });
+
+  describe('pending-review items (AUTO_REVIEW)', () => {
+    it('re-judges a stale review item via a re-run action, carrying its status', () => {
+      // contract stale + missing required → rework (pipeline re-judges on completion)
+      const plan = planSelfHealSweep(
+        [{ Artikel_Nummer: 'R', Status: 'review', SubCategory: 201, SpecContractVersion: 1, StandardsVersion: 3, Langtext: JSON.stringify({ Farbe: 'Schwarz' }) }],
+        getContract,
+        3
+      );
+      expect(plan).toEqual([
+        { artikelNummer: 'R', subCategory: 201, action: 'rework', fields: ['Prozessor'], fromVersion: 1, toVersion: 2, status: 'review', standardsFromVersion: 3, standardsToVersion: 3 }
+      ]);
+    });
+
+    it('NEVER silently restamps a review item (stale-but-complete) — dropped to a skip', () => {
+      // contract stale-but-complete, standards current → would be 'restamp' for an approved item, but a
+      // review item must be re-judged or left for the human, never hidden by a bare version bump.
+      const plan = planSelfHealSweep(
+        [{ Artikel_Nummer: 'R', Status: 'review', SubCategory: 201, SpecContractVersion: 1, StandardsVersion: 3, Langtext: JSON.stringify({ Prozessor: 'i7' }) }],
+        getContract,
+        3
+      );
+      expect(plan).toEqual([]);
+    });
+
+    it('still restamps an APPROVED stale-but-complete item (unchanged behaviour)', () => {
+      const plan = planSelfHealSweep(
+        [{ Artikel_Nummer: 'A', Status: 'approved', SubCategory: 201, SpecContractVersion: 1, StandardsVersion: 3, Langtext: JSON.stringify({ Prozessor: 'i7' }) }],
+        getContract,
+        3
+      );
+      expect(plan).toEqual([
+        { artikelNummer: 'A', subCategory: 201, action: 'restamp', fromVersion: 1, toVersion: 2, status: 'approved', standardsFromVersion: 3, standardsToVersion: 3 }
+      ]);
+    });
+
+    it('leaves a version-current review item alone (no thrash)', () => {
+      const plan = planSelfHealSweep(
+        [{ Artikel_Nummer: 'R', Status: 'review', SubCategory: 201, SpecContractVersion: 2, StandardsVersion: 3, Langtext: JSON.stringify({ Prozessor: 'i7' }) }],
+        getContract,
+        3
+      );
+      expect(plan).toEqual([]);
+    });
+  });
 });

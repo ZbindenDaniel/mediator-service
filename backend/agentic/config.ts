@@ -298,3 +298,14 @@ export const autoApproveConfig: { enabled: boolean; minConfidence: number } = {
 export const autoReworkConfig: { enabled: boolean } = {
   enabled: resolveBooleanFlag('AUTO_REWORK')
 };
+
+// Idle-time pending-review self-heal: when enabled, the same idle sweep also picks up items stuck in
+// manual review (`review` state) that are version-STALE (enriched before the current contract/standards)
+// and re-runs them through the supervised pipeline so it re-judges them under the current rules — items
+// that now come back clean auto-approve (the human queue shrinks), the rest stay in review. Default OFF.
+// Separate from AUTO_REWORK because this touches the human review queue, so it is opted into deliberately
+// and independently. Version-current pending items are left alone (already judged under the current
+// pipeline — re-running wouldn't change the verdict), which also prevents thrash.
+export const autoReviewConfig: { enabled: boolean } = {
+  enabled: resolveBooleanFlag('AUTO_REVIEW')
+};

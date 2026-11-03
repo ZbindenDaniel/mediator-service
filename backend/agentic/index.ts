@@ -4,6 +4,8 @@ import {
   AGENTIC_RUN_STATUS_FAILED,
   AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUS_REVIEW,
+  AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_AUTO_APPROVED,
   AGENTIC_RUN_STATUS_QUEUED,
   AGENTIC_RUN_STATUS_RUNNING,
   AGENTIC_RUN_TERMINAL_STATUSES,
@@ -48,7 +50,7 @@ import {
   type LogEventPayload
 } from '../db';
 import { locateTranscript } from './flow/transcript';
-import { autoReworkConfig } from './config';
+import { autoReworkConfig, autoReviewConfig } from './config';
 import { attachCurrentReviewSignals } from './reference-findings';
 import { getSpecContract, getStandardsContract } from '../contracts/registry';
 import { checkSpecGap, type SpecContract } from '../../models/spec-contract';
@@ -1405,10 +1407,11 @@ export async function dispatchQueuedAgenticRuns(
     logger.debug?.('[agentic-service] Auto-dispatch disabled; skipping notStarted feed');
   }
 
-  // Idle contract-audit sweeper (default off): only when otherwise idle (nothing dispatched or fed this
-  // cycle), re-apply the current spec contract to the oldest stale item — re-stamp if already complete,
-  // else enqueue a targeted rework. Gated on the auto-dispatch kill switch too, since it is auto work.
-  if (autoReworkConfig.enabled && autoDispatchEnabled && scheduled === 0 && autoFed === 0) {
+  // Idle self-heal sweeper (default off): only when otherwise idle (nothing dispatched or fed this cycle),
+  // re-apply the current contract/standards to the oldest stale item. AUTO_REWORK covers the settled
+  // approved states; AUTO_REVIEW additionally re-judges version-stale items stuck in manual review. Gated
+  // on the auto-dispatch kill switch too, since it is auto work.
+  if ((autoReworkConfig.enabled || autoReviewConfig.enabled) && autoDispatchEnabled && scheduled === 0 && autoFed === 0) {
     await sweepContractRework(deps, logger);
   }
 
@@ -1488,10 +1491,13 @@ export interface ContractSweepPlanEntry {
   /** Standards versions (the wording axis) — set when the entry is driven by standards staleness. */
   standardsFromVersion?: number | null;
   standardsToVersion?: number | null;
+  /** The run status this entry acts on (e.g. 'approved', 'review') — carried for legibility/logging. */
+  status?: string;
 }
 
 type ContractAuditCandidate = {
   Artikel_Nummer: string;
+  Status?: string;
   SubCategory: number | null;
   SpecContractVersion: number | null;
   StandardsVersion?: number | null;
@@ -1535,11 +1541,17 @@ export function planSelfHealSweep(
     const gap = checkSpecGap(contract, langtextObj);
     const decision = decideSelfHealAction(stored, contract.version, standardsStored, standardsCurrent, gap.missingRequired);
     if (decision.action === 'skip') continue;
+    const isReview = candidate.Status === AGENTIC_RUN_STATUS_REVIEW;
+    // A pending-review item must never be silently re-stamped: that would mark it "current" and hide it
+    // from the sweep without a human or the pipeline ever re-judging it. Only an actual re-run (which the
+    // pipeline then re-judges) may touch a review item; a bare restamp is dropped to a skip.
+    if (isReview && decision.action === 'restamp') continue;
     const base = {
       artikelNummer: candidate.Artikel_Nummer,
       subCategory: candidate.SubCategory,
       fromVersion: stored,
       toVersion: contract.version,
+      ...(candidate.Status ? { status: candidate.Status } : {}),
       // Only carry the standards axis when it is active, so the contract-only plan/preview stays lean.
       ...(standardsCurrent != null ? { standardsFromVersion: standardsStored, standardsToVersion: standardsCurrent } : {})
     };
@@ -1613,11 +1625,19 @@ async function sweepContractRework(
   deps: AgenticServiceDependencies,
   logger: AgenticServiceLogger
 ): Promise<void> {
+  // Which run states the sweep may touch: AUTO_REWORK covers the settled approved states; AUTO_REVIEW adds
+  // the manual-review queue (re-judged only when version-stale, per planSelfHealSweep). Either flag alone
+  // is enough to run the sweep (the call site gates on their OR).
+  const statuses: string[] = [];
+  if (autoReworkConfig.enabled) statuses.push(AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_AUTO_APPROVED);
+  if (autoReviewConfig.enabled) statuses.push(AGENTIC_RUN_STATUS_REVIEW);
+  if (statuses.length === 0) return;
+
   let candidates: Awaited<ReturnType<typeof listContractAuditCandidates>> = [];
   try {
-    candidates = await listContractAuditCandidates(20);
+    candidates = await listContractAuditCandidates(20, statuses);
   } catch (err) {
-    logger.error?.('[agentic-service] Contract-audit sweep failed to load candidates', { error: toErrorMessage(err) });
+    logger.error?.('[agentic-service] Self-heal sweep failed to load candidates', { error: toErrorMessage(err) });
     return;
   }
 
@@ -1718,15 +1738,22 @@ async function sweepContractRework(
           LastAttemptAt: null,
           LastAttemptAtIsSet: true
         }));
-        logger.info?.('[agentic-service] Self-heal enqueued standards re-word', {
+        // A review-state item re-run here is the pending-review self-heal (AUTO_REVIEW): the pipeline
+        // re-judges it, so it either auto-approves (queue shrinks) or stays in review. Logged distinctly.
+        const fromReview = entry.status === AGENTIC_RUN_STATUS_REVIEW;
+        logger.info?.(fromReview
+          ? '[agentic-service] Self-heal re-judging a pending-review item'
+          : '[agentic-service] Self-heal enqueued standards re-word', {
           artikelNummer: entry.artikelNummer,
           mode: entry.action,
+          status: entry.status ?? null,
           fields: entry.fields ?? null,
           standardsFromVersion: entry.standardsFromVersion ?? null,
           standardsToVersion: entry.standardsToVersion ?? null
         });
-        await logSweepEvent(entry.artikelNummer, 'StandardsAuditReword', {
+        await logSweepEvent(entry.artikelNummer, fromReview ? 'PendingReviewSelfHeal' : 'StandardsAuditReword', {
           mode: entry.action,
+          status: entry.status ?? null,
           standardsFromVersion: entry.standardsFromVersion ?? null,
           standardsToVersion: entry.standardsToVersion ?? null
         });
