@@ -4,6 +4,10 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 1045. ✅ Admin card: Self-Heal preview ("what's the sweep doing?")
+**Why:** Operator turned on the self-heal flags and couldn't tell why nothing happened. New `AgenticSelfHealCard` on the admin page (under the agentic feature, next to the auto-dispatch toggle) renders `GET /api/admin/agentic-self-heal`: the three flag states, the current standards version, `staleCount / totalCandidates`, per-action counts, and a table of the stale items (status, action, contract and standards version transitions `∅→n`). A `staleCount: 0` shows an explicit hint — nothing is stale; the sweep triggers only on a contract/standards **version bump** AND after the contract caches reload (server restart or an admin contract upload — editing a JSON file on disk alone is not picked up, the registry caches per process). Read-only; refresh button; reuses the tested backend preview. 1202 pass; tsc clean.
+**Deferred:** a "run sweep now" button (today it only acts on the idle tick) and a reload-contracts button; both are small follow-ups.
+
 ## 1044. ✅ Item list: Ctrl/Shift multi-select
 **Why:** Managing many items meant clicking checkboxes one by one. `handleToggleItem(ids[], value)` already accepts many ids, so the change stays inside `ItemList`: an anchor (the last plainly toggled group, keyed by group key so it survives reloads) plus a pure `resolveRangeItemIds` that spans the visible, sorted groups. Shift+click on a checkbox applies the clicked row's new state to the whole range; Shift+click on a row adds the range; Ctrl/Cmd+click on a row toggles it. The anchor stays put on Shift+click, as in a file manager. The checkbox handles `click` instead of `change` because only the click event carries `shiftKey`. Shift+mousedown is prevented so no text selection is dragged across the rows.
 **Deferred:** keyboard range selection (Shift+Arrow) and a visual anchor marker.
