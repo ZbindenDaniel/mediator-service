@@ -2100,6 +2100,9 @@ export async function startAgenticRun(
     if (input.skipSearch) {
       pendingSkipSearch.add(artikelNummer);
     }
+    if (input.validateOnly) {
+      pendingValidateOnly.add(artikelNummer);
+    }
 
     if (Array.isArray(input.reworkSpecFields) && input.reworkSpecFields.length > 0) {
       pendingRework.set(artikelNummer, {
@@ -2726,6 +2729,9 @@ export async function restartAgenticRun(
 
   if (input.skipSearch) {
     pendingSkipSearch.add(artikelNummer);
+  }
+  if (input.validateOnly) {
+    pendingValidateOnly.add(artikelNummer);
   }
 
   if (Array.isArray(input.reworkSpecFields) && input.reworkSpecFields.length > 0) {

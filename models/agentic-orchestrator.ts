@@ -43,6 +43,12 @@ export interface AgenticRunStartInput {
   imageData?: string | null;
   skipSearch?: boolean;
   /**
+   * Validate-only: assess the item's EXISTING data (findings + grade + auto-approve gate) without running
+   * any generative stage (no LLM). Used by the bulk "Prüfen" trigger to force a cheap re-check on demand,
+   * regardless of staleness — routing only; the auto-approve gate still decides approve vs. review.
+   */
+  validateOnly?: boolean;
+  /**
    * Targeted rework: the spec/field keys to regenerate. When set, the flow runs in "rework mode" —
    * only these keys are accepted from the model's output (all other fields keep their original
    * values), and the categorizer/pricing stages are skipped.

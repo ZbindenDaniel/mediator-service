@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from 'react';
-import { GoCpu, GoDownload, GoMoveToEnd, GoPackageDependents, GoSync, GoTag, GoTrash, GoXCircle } from 'react-icons/go';
+import { GoChecklist, GoCpu, GoDownload, GoMoveToEnd, GoPackageDependents, GoSync, GoTag, GoTrash, GoXCircle } from 'react-icons/go';
 import type { Item } from '../../../models';
 import {
   AGENTIC_RUN_STATUS_QUEUED,
@@ -820,6 +820,94 @@ export default function BulkItemActionBar({
     }
   }
 
+  // Bulk "Prüfen": force the cheap validate-only re-check (no LLM) on the selection, regardless of
+  // staleness — re-assesses the existing data (findings + data-quality) and lets the auto-approve gate
+  // settle the sure ones. For when the self-heal sweep is correctly inert (nothing stale) but the
+  // operator wants to run checks now.
+  async function handleBulkCheck(): Promise<void> {
+    if (!hasSelection) {
+      setFeedback({ type: 'error', message: 'Keine Artikel für die Aktion ausgewählt.' });
+      return;
+    }
+    setFeedback(null);
+
+    let confirmed = false;
+    try {
+      confirmed = await dialogService.confirm({
+        title: 'KI-Prüfung',
+        message: (
+          <div className="bulk-item-action-bar__confirm-content">
+            <p>Ausgewählte Artikel jetzt prüfen — ohne Suche/Extraktion (kein KI-Lauf)?</p>
+            <p className="muted">
+              Bewertet die vorhandenen Daten neu (fehlende Pflichtfelder, Datenqualität) und gibt eindeutig
+              gute Artikel frei. Unvollständige bleiben im Review.
+            </p>
+            <p>{selectionLabel}</p>
+          </div>
+        ),
+        confirmLabel: 'Prüfen',
+        cancelLabel: 'Abbrechen'
+      });
+    } catch (dialogError) {
+      console.error('Bulk check confirmation dialog failed', dialogError);
+      setFeedback({ type: 'error', message: 'Bestätigung fehlgeschlagen. Bitte erneut versuchen.' });
+      return;
+    }
+    if (!confirmed) return;
+
+    // Use the RESTART endpoint, not /api/agentic/run: the latter refuses to touch an item that already
+    // has a (settled/review) run, which is exactly the set we want to re-check. Restart re-runs it, and
+    // validateOnly keeps it cheap (no LLM).
+    const actor = await ensureActorOrAlert({ context: 'bulk agentic check', resolveActor: effectiveResolveActor });
+    if (!actor) {
+      setFeedback({ type: 'error', message: 'Aktion abgebrochen: Es wurde kein Benutzername angegeben.' });
+      return;
+    }
+
+    setIsProcessing(true);
+    const failures: string[] = [];
+    let successCount = 0;
+    try {
+      for (const item of selectedItems) {
+        const artikelNummer = item.Artikel_Nummer?.trim();
+        if (!artikelNummer) {
+          failures.push(`${item.ItemUUID}: fehlende Artikel_Nummer`);
+          continue;
+        }
+        try {
+          const response = await fetch(`/api/item-refs/${encodeURIComponent(artikelNummer)}/agentic/restart`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actor, validateOnly: true })
+          });
+          if (!response.ok) {
+            failures.push(`${artikelNummer}: ${await readErrorMessage(response)}`);
+            continue;
+          }
+          successCount += 1;
+        } catch (requestError) {
+          failures.push(`${artikelNummer}: ${(requestError as Error).message || 'Request fehlgeschlagen'}`);
+        }
+      }
+
+      if (successCount) {
+        onClearSelection();
+        if (onActionComplete) await onActionComplete();
+      }
+      if (failures.length && successCount) {
+        setFeedback({ type: 'error', message: `${successCount} geprüft, ${failures.length} fehlgeschlagen: ${failures.slice(0, 3).join('; ')}` });
+        return;
+      }
+      if (failures.length) {
+        setFeedback({ type: 'error', message: `Prüfung fehlgeschlagen: ${failures.slice(0, 3).join('; ')}` });
+        return;
+      }
+      setFeedback({ type: 'info', message: `KI-Prüfung für ${successCount} Artikel gestartet.` });
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   async function handleBulkSyncToErp(): Promise<void> {
     if (!hasSelection) {
       setFeedback({ type: 'error', message: 'Keine Artikel für die Aktion ausgewählt.' });
@@ -1271,6 +1359,21 @@ export default function BulkItemActionBar({
           >
             <GoCpu aria-hidden="true" />
             <span>KI</span>
+          </button>
+        )}
+
+        {features['agentic'] && (
+          <button
+            className="bulk-item-action-bar__button"
+            disabled={writeDisabled}
+            onClick={() => {
+              void handleBulkCheck();
+            }}
+            type="button"
+            title="Vorhandene Daten neu prüfen (ohne KI-Lauf) und eindeutig gute Artikel freigeben"
+          >
+            <GoChecklist aria-hidden="true" />
+            <span>Prüfen</span>
           </button>
         )}
 
