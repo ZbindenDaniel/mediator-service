@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "subCategory": 601,
   "fields": [
     { "key": "Prozessor", "required": true,  "description": "Prozessor" },
@@ -7,6 +7,7 @@
     { "key": "RAM-Slots",       "required": false, "description": "number of Ram Slots (e.g. 1, 2, 4)" },
     { "key": "RAM-Kapazität",       "required": false, "description": "max. RAM (e.g. 16GB)" },
     { "key": "RAM-Typ",            "required": false, "description": "Type of RAM (DDR3, DDR4, DDR5)" },
-    { "key": "Karten-Slots",     "required": false, "description": "" }
+    { "key": "Karten-Slots",     "required": false, "description": "" },
+    { "key": "Form-Faktor",     "required": false, "description": "" }
   ]
 }
