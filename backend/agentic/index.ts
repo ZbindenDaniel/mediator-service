@@ -120,6 +120,14 @@ const pendingSkipSearch = new Set<string>();
 // Lost on restart, which is safe: the run then falls back to a normal full run — more expensive, not wrong.
 const pendingValidateOnly = new Set<string>();
 
+// Circuit-breaker: the self-heal sweep must never re-process the same item more than once per cooldown,
+// so a single item that stays stale (e.g. a mis-categorized item whose required field can't be filled)
+// can't burn tokens in a tight loop. The version stamp is the primary mechanism (a healed item drops out
+// of the stale set); this is the belt-and-braces that bounds the damage if the stamp ever fails to stick.
+// In-memory and per-process — lost on restart, which is fine (a restart already clears any loop).
+const SELF_HEAL_COOLDOWN_MS = 30 * 60 * 1000;
+const selfHealEnqueuedAt = new Map<string, number>();
+
 // Tracks targeted-rework parameters for a queued run so the dispatcher can pass them to the invoker.
 // Same transience caveat as pendingOcrImageData — lost on restart (the run then falls back to a
 // normal full re-run, which is safe).
@@ -1815,8 +1823,11 @@ async function sweepContractRework(
   for (const entry of plan) {
     if (entry.action === 'rework') {
       if (!canEnqueue) continue; // waiting queue full → leave it for a later tick (restamps still run)
+      const lastHeal = selfHealEnqueuedAt.get(entry.artikelNummer);
+      if (lastHeal && Date.now() - lastHeal < SELF_HEAL_COOLDOWN_MS) continue; // cooldown: don't re-loop this item
       // Enqueue a targeted rework; the completed run stamps the new contract version so this item is
       // not re-selected (self-limiting). One enqueue per idle tick keeps the sweep gentle.
+      selfHealEnqueuedAt.set(entry.artikelNummer, Date.now());
       pendingRework.set(entry.artikelNummer, { fields: entry.fields ?? [], instructions: null });
       const nowIso = resolveNow(deps).toISOString();
       const candidate = candidates.find((c) => c.Artikel_Nummer === entry.artikelNummer);
@@ -1862,6 +1873,9 @@ async function sweepContractRework(
 
     if (entry.action === 'reword' || entry.action === 'rerun') {
       if (!canEnqueue) continue; // waiting queue full → leave it for a later tick
+      const lastHeal = selfHealEnqueuedAt.get(entry.artikelNummer);
+      if (lastHeal && Date.now() - lastHeal < SELF_HEAL_COOLDOWN_MS) continue; // cooldown: don't re-loop this item
+      selfHealEnqueuedAt.set(entry.artikelNummer, Date.now());
       // Standards-driven self-heal: enqueue a SEARCH-FREE run (skipSearch, no reworkSpecFields) so the
       // wording stage runs and re-applies the current house rules to stored content. 'rerun' is the same
       // run chosen because the contract also needs extraction (a targeted rework would skip wording).
