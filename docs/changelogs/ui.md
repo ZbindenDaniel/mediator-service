@@ -4,6 +4,10 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 1044. ✅ Item list: Ctrl/Shift multi-select
+**Why:** Managing many items meant clicking checkboxes one by one. `handleToggleItem(ids[], value)` already accepts many ids, so the change stays inside `ItemList`: an anchor (the last plainly toggled group, keyed by group key so it survives reloads) plus a pure `resolveRangeItemIds` that spans the visible, sorted groups. Shift+click on a checkbox applies the clicked row's new state to the whole range; Shift+click on a row adds the range; Ctrl/Cmd+click on a row toggles it. The anchor stays put on Shift+click, as in a file manager. The checkbox handles `click` instead of `change` because only the click event carries `shiftKey`. Shift+mousedown is prevented so no text selection is dragged across the rows.
+**Deferred:** keyboard range selection (Shift+Arrow) and a visual anchor marker.
+
 ## 1020. ✅ Data-quality badge: own label scale + placed at the top of the KI tab
 **Why:** Operator feedback: the badge was placed between the status card and findings (too low) and its label was wrong — it read "Neuwertig" etc. because `computeDataQualityGrade` reused the **condition** labels (`gradeLabel`/`QUALITY_LABELS`), which describe the physical device, not the data. Given it its own scale `DATA_QUALITY_LABELS` (5 Vollständig · 4 Gut · 3 Ausreichend · 2 Lückenhaft · 1 Mangelhaft) via a `dataQualityLabel()`; it still reuses the condition grade's band *thresholds* (`gradeFromRange`) but not its words. Moved `<DataQualityBadge>` in `ItemKiTab` to **above the status card** (right under the action buttons) so the grade is the first thing seen. Preview fixtures aligned. Full suite 1179 pass; tsc clean.
 **Deferred:** nothing — cosmetic/label fix.

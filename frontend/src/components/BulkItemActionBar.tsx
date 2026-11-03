@@ -3,7 +3,10 @@ import { GoCpu, GoDownload, GoMoveToEnd, GoPackageDependents, GoSync, GoTag, GoT
 import type { Item } from '../../../models';
 import {
   AGENTIC_RUN_STATUS_QUEUED,
-  AGENTIC_RUN_STATUS_RUNNING
+  AGENTIC_RUN_STATUS_RUNNING,
+  describeQuality,
+  getCategoryLabelFromCode,
+  getSubcategoryLabelFromCode
 } from '../../../models';
 import BoxSearchInput, { BoxSuggestion } from './BoxSearchInput';
 import { dialogService } from './dialog';
@@ -16,7 +19,6 @@ import { useFeatures } from '../context/FeaturesContext';
 // TODO(agentic): Introduce bulk agentic trigger entry point alongside relocation actions.
 // TODO(agent): Fold ERP sync UX into shared bulk action helpers once backend status polling exists.
 // TODO(agent): Show ERP sync availability from a dedicated status endpoint when available.
-// TODO(item-list-export): Keep selection export column compact in the action bar and reuse this serialization helper for future bulk exports.
 
 interface BulkItemActionBarProps {
   selectedIds: string[];
@@ -31,39 +33,77 @@ interface FeedbackState {
   message: string;
 }
 
-const FILTERED_ITEM_EXPORT_COLUMNS = [
-  'ItemUUID',
-  'Artikel_Nummer',
-  'Artikelbeschreibung',
-  'BoxID',
-  'Location',
-  'Menge',
-  'Quality',
-  'Shopartikel',
-  'Veröffentlicht_Status',
-  'Unterkategorien_A',
-  'Datum_erfasst'
-] as const;
+// Built from the list rows already in memory (the list API returns the full item+ref projection), so a
+// selection export needs no extra request — the server ERP export is all-items and logs `Exported` events.
+type ItemRow = Item & Record<string, unknown>;
+
+function formatSpecs(value: unknown): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object') return String(value);
+  return Object.entries(value as Record<string, unknown>)
+    .map(([key, entry]) => `${key}: ${Array.isArray(entry) ? entry.join(', ') : String(entry ?? '')}`)
+    .join(' | ');
+}
+
+function formatCategory(value: unknown, lookup: (code: number) => string | undefined): string {
+  const code = typeof value === 'number' ? value : Number.parseInt(String(value ?? ''), 10);
+  if (!Number.isFinite(code)) return '';
+  return lookup(code) ?? String(code);
+}
+
+const FILTERED_ITEM_EXPORT_COLUMNS: ReadonlyArray<{ header: string; value: (item: ItemRow) => unknown }> = [
+  { header: 'ItemUUID', value: (item) => item.ItemUUID },
+  { header: 'Artikel_Nummer', value: (item) => item.Artikel_Nummer },
+  { header: 'Artikelbeschreibung', value: (item) => item.Artikelbeschreibung },
+  { header: 'Hersteller', value: (item) => item.Hersteller },
+  { header: 'Kurzbeschreibung', value: (item) => item.Kurzbeschreibung },
+  { header: 'Spezifikationen', value: (item) => formatSpecs(item.Langtext) },
+  { header: 'Instanz-Spezifikationen', value: (item) => formatSpecs(item.InstanceSpecs) },
+  { header: 'Hauptkategorie', value: (item) => formatCategory(item.Hauptkategorien_A, getCategoryLabelFromCode) },
+  { header: 'Unterkategorie', value: (item) => formatCategory(item.Unterkategorien_A, getSubcategoryLabelFromCode) },
+  { header: 'Qualität', value: (item) => (item.Quality == null ? '' : `${item.Quality} (${describeQuality(item.Quality).label})`) },
+  { header: 'Seriennummer', value: (item) => item.SerialNumber },
+  { header: 'MAC-Adresse', value: (item) => item.MacAddress },
+  { header: 'Auf_Lager', value: (item) => item.Auf_Lager },
+  { header: 'Einheit', value: (item) => item.Einheit },
+  { header: 'Verkaufspreis', value: (item) => item.Verkaufspreis },
+  { header: 'EAN', value: (item) => item.EAN },
+  { header: 'Länge_mm', value: (item) => item.Länge_mm },
+  { header: 'Breite_mm', value: (item) => item.Breite_mm },
+  { header: 'Höhe_mm', value: (item) => item.Höhe_mm },
+  { header: 'Gewicht_kg', value: (item) => item.Gewicht_kg },
+  { header: 'BoxID', value: (item) => item.BoxID },
+  { header: 'Location', value: (item) => item.Location },
+  { header: 'Regal', value: (item) => item.ShelfLabel },
+  { header: 'Shopartikel', value: (item) => item.Shopartikel },
+  { header: 'Veröffentlicht_Status', value: (item) => item.Veröffentlicht_Status },
+  { header: 'KI-Status', value: (item) => item.AgenticStatus },
+  { header: 'KI-Review', value: (item) => item.AgenticReviewState },
+  { header: 'Datum_erfasst', value: (item) => item.Datum_erfasst },
+  { header: 'UpdatedAt', value: (item) => item.UpdatedAt }
+];
 
 function escapeCsvValue(value: unknown): string {
   if (value === null || value === undefined) {
     return '';
   }
-  const text = String(value);
+  const text = value instanceof Date ? value.toISOString() : String(value);
   if (text.includes(',') || text.includes('"') || text.includes('\n') || text.includes('\r')) {
     return `"${text.replace(/"/g, '""')}"`;
   }
   return text;
 }
 
-function buildFilteredItemsCsv(items: readonly Item[]): string {
-  const headers = FILTERED_ITEM_EXPORT_COLUMNS.join(',');
+export function buildFilteredItemsCsv(items: readonly Item[]): string {
+  const headers = FILTERED_ITEM_EXPORT_COLUMNS.map((column) => column.header).join(',');
   const rows = items.map((item) => (
     FILTERED_ITEM_EXPORT_COLUMNS
-      .map((column) => escapeCsvValue(item[column]))
+      .map((column) => escapeCsvValue(column.value(item as ItemRow)))
       .join(',')
   ));
-  return [headers, ...rows].join('\n');
+  // BOM: without it Excel opens the file as ANSI and mangles umlauts (Qualität, Länge, …).
+  return `﻿${[headers, ...rows].join('\n')}`;
 }
 
 async function readErrorMessage(response: Response): Promise<string> {
