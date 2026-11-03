@@ -2949,6 +2949,30 @@ export async function claimNotStartedAgenticRuns(limit = 3): Promise<AgenticRun[
   }
 }
 
+// The run-less refs the enrol step WOULD create runs for (same WHERE/ORDER/LIMIT as enrolItemRefsWithoutAgenticRun),
+// with the content the enrol-time triage needs to decide validate-only vs. full run (no LLM). Listing then
+// enrolling with the same ordering means the two see the same rows; a race is covered by the enrol's
+// ON CONFLICT and the triage being best-effort.
+export async function listItemRefsWithoutAgenticRun(limit = 3): Promise<Array<{
+  Artikel_Nummer: string;
+  Artikelbeschreibung: string | null;
+  Langtext: string | null;
+  Unterkategorien_A: number | null;
+}>> {
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
+  return query(
+    `SELECT i."Artikel_Nummer", i."Artikelbeschreibung", i."Langtext",
+            ROUND(NULLIF(i."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "Unterkategorien_A"
+     FROM item_refs i
+     WHERE NOT EXISTS (SELECT 1 FROM agentic_runs r WHERE r."Artikel_Nummer" = i."Artikel_Nummer")
+       AND TRIM(COALESCE(i."Artikelbeschreibung", '')) <> ''
+     ORDER BY EXISTS (SELECT 1 FROM items it WHERE it."Artikel_Nummer" = i."Artikel_Nummer") DESC,
+              i."Artikel_Nummer" ASC
+     LIMIT $1`,
+    [effectiveLimit]
+  );
+}
+
 export async function enrolItemRefsWithoutAgenticRun(limit = 3): Promise<number> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
   const now = new Date().toISOString();

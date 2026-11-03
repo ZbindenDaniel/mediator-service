@@ -983,6 +983,7 @@ export class AgenticModelInvoker {
           reworkSpecFields,
           reworkInstructions,
           skipSearch,
+          validateOnly: Boolean(input.validateOnly),
           storedSources,
           exampleItemBlock,
           imageData: input.imageData ?? null

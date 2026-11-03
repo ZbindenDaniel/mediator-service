@@ -42,6 +42,7 @@ import {
   claimQueuedAgenticRuns,
   claimNotStartedAgenticRuns,
   enrolItemRefsWithoutAgenticRun,
+  listItemRefsWithoutAgenticRun,
   updateQueuedAgenticRunQueueState,
   getSystemSetting,
   listAgenticRunReviewHistory,
@@ -53,7 +54,7 @@ import {
 } from '../db';
 import { locateTranscript } from './flow/transcript';
 import { autoReworkConfig, autoReviewConfig, autoApproveConfig } from './config';
-import { attachCurrentReviewSignals } from './reference-findings';
+import { attachCurrentReviewSignals, isValidateOnlyEligible } from './reference-findings';
 import { getSpecContract, getStandardsContract } from '../contracts/registry';
 import { checkSpecGap, type SpecContract } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
@@ -114,6 +115,10 @@ const pendingOcrImageData = new Map<string, string>();
 // Tracks runs queued with skipSearch=true so the dispatcher can pass the flag to the invoker.
 // Same transience caveat as pendingOcrImageData — lost on restart, which is fine.
 const pendingSkipSearch = new Set<string>();
+
+// Tracks runs the enrol-time triage routed to the validate-only path (assess existing data, no LLM).
+// Lost on restart, which is safe: the run then falls back to a normal full run — more expensive, not wrong.
+const pendingValidateOnly = new Set<string>();
 
 // Tracks targeted-rework parameters for a queued run so the dispatcher can pass them to the invoker.
 // Same transience caveat as pendingOcrImageData — lost on restart (the run then falls back to a
@@ -814,6 +819,7 @@ interface BackgroundInvocationPayload {
   logger: AgenticServiceLogger;
   imageData?: string | null;
   skipSearch?: boolean;
+  validateOnly?: boolean;
   reworkSpecFields?: string[] | null;
   reworkInstructions?: string | null;
 }
@@ -1081,6 +1087,7 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
         requestId: payload.request?.id ?? null,
         imageData: payload.imageData ?? null,
         skipSearch: payload.skipSearch ?? false,
+        validateOnly: payload.validateOnly ?? false,
         reworkSpecFields: payload.reworkSpecFields ?? null,
         reworkInstructions: payload.reworkInstructions ?? null
       });
@@ -1351,6 +1358,10 @@ export async function dispatchQueuedAgenticRuns(
       if (rework) {
         pendingRework.delete(artikelNummer);
       }
+      const validateOnly = pendingValidateOnly.has(artikelNummer);
+      if (validateOnly) {
+        pendingValidateOnly.delete(artikelNummer);
+      }
       void scheduleAgenticModelInvocation({
         artikelNummer,
         searchQuery,
@@ -1359,6 +1370,7 @@ export async function dispatchQueuedAgenticRuns(
         request: null,
         imageData,
         skipSearch,
+        validateOnly,
         reworkSpecFields: rework?.fields ?? null,
         reworkInstructions: rework?.instructions ?? null,
         deps,
@@ -1409,11 +1421,27 @@ export async function dispatchQueuedAgenticRuns(
         if (autoFed < feedSlots) {
           // notStarted pool exhausted: enrol just enough never-enrolled refs to fill the free slots, so
           // every ref eventually reaches the pipeline without flooding it.
-          const enrolled = await enrolItemRefsWithoutAgenticRun(feedSlots - autoFed);
+          const toEnrol = feedSlots - autoFed;
+          // Enrol-time triage: route refs whose EXISTING data is already complete + clean to the
+          // validate-only path (assess, no LLM — saves the full run and avoids churning good data). The
+          // list uses the same ordering as the enrol insert, so the marked refs are the ones enrolled.
+          let validateOnlyMarked = 0;
+          try {
+            const candidates = await listItemRefsWithoutAgenticRun(toEnrol);
+            for (const ref of candidates) {
+              if (isValidateOnlyEligible(ref as Record<string, unknown>)) {
+                pendingValidateOnly.add(ref.Artikel_Nummer);
+                validateOnlyMarked += 1;
+              }
+            }
+          } catch (err) {
+            logger.warn?.('[agentic-service] Enrol-time triage failed; refs will take a full run', { error: toErrorMessage(err) });
+          }
+          const enrolled = await enrolItemRefsWithoutAgenticRun(toEnrol);
           if (enrolled > 0) {
-            const enrolledRuns = await claimNotStartedAgenticRuns(feedSlots - autoFed);
+            const enrolledRuns = await claimNotStartedAgenticRuns(toEnrol);
             autoFed += enrolledRuns.length;
-            logger.info?.('[agentic-service] Enrolled item refs without an agentic run', { enrolled });
+            logger.info?.('[agentic-service] Enrolled item refs without an agentic run', { enrolled, validateOnly: validateOnlyMarked });
           }
         }
         if (autoFed > 0) {

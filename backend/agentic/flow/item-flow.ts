@@ -113,6 +113,11 @@ export interface RunItemFlowInput {
   reworkSpecFields?: string[];
   reworkInstructions?: string | null;
   skipSearch?: boolean;
+  // Validate-only (triage): assess the item's EXISTING data and hand it to the auto-approve gate without
+  // running search/extraction/categorization/pricing/wording. No LLM. Used for run-less refs whose current
+  // data is already complete + clean (enrol-time triage), to avoid wasting — and risking churning — a full
+  // run on good data. Approval stays a separate mechanism (the result handler's gate decides).
+  validateOnly?: boolean;
   storedSources?: SearchSource[];
   maxAttempts?: number;
   cancellationSignal?: AbortSignal | null;
@@ -353,6 +358,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     ? input.reviewNotes.trim()
     : null;
   const skipSearch = Boolean(input.skipSearch);
+  const validateOnly = Boolean(input.validateOnly);
 
   // Targeted rework: when set, only these keys are accepted from the model output (all other fields
   // keep their originals) and the categorizer/pricing stages are skipped.
@@ -523,6 +529,55 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     const categoryGuidance = subcategoryCode ? (getSpecContract(subcategoryCode)?.guidance ?? []) : [];
     const specCtx = buildSpecContext(target, subcategoryCode, instanceSpecs);
     logger.debug?.({ msg: 'spec context built', itemId, subcategoryCode, missingRequired: specCtx.missingRequired, missingDesired: specCtx.missingDesired, ambiguousCount: Object.keys(specCtx.ambiguousFields).length });
+
+    // VALIDATE-ONLY (triage): the ref's existing data is already complete + clean, so skip every generative
+    // stage (search/extraction/categorizer/pricing/wording) — no LLM, no risk of degrading good data. We
+    // only assess the current content into findings + an auto-approvable signal and hand it to the normal
+    // result handler, which (separately) decides approve vs. review. buildSpecContext above already
+    // canonicalized the keys and folded in any intake values, so `target` is the content to assess.
+    if (validateOnly) {
+      const reviewTexts: Record<string, string> = {};
+      if (typeof target.Artikelbeschreibung === 'string') reviewTexts.Artikelbeschreibung = target.Artikelbeschreibung;
+      if (typeof target.Kurzbeschreibung === 'string') reviewTexts.Kurzbeschreibung = target.Kurzbeschreibung;
+      if (target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)) {
+        for (const [k, v] of Object.entries(target.Langtext as Record<string, unknown>)) {
+          if (typeof v === 'string') reviewTexts[k] = v;
+        }
+      }
+      const findings: Finding[] = buildFindings(
+        { texts: reviewTexts, missingRequired: specCtx.missingRequired, ambiguousFields: specCtx.ambiguousFields },
+        getStandardsContract()
+      );
+      const autoApprovable = isAutoApprovable(findings);
+      const payload = buildCallbackPayload({
+        artikelNummer: itemId,
+        itemData: { ...target, Artikel_Nummer: itemId },
+        searchQuery: searchTerm,
+        status: 'completed',
+        needsReview: false,
+        summary: 'Validate-only: bestehende Daten geprüft (kein KI-Lauf)',
+        reviewDecision: 'approved',
+        reviewNotes: reviewerNotes,
+        reviewedBy: 'triage',
+        error: null,
+        sources: [],
+        autoApprovable,
+        specContractVersion,
+        standardsVersion,
+        findings
+      });
+      await dispatchAgenticResult({
+        artikelNummer: itemId,
+        payload,
+        logger,
+        saveRequestPayload: deps.saveRequestPayload,
+        applyAgenticResult: deps.applyAgenticResult,
+        markNotificationSuccess: deps.markNotificationSuccess,
+        markNotificationFailure: deps.markNotificationFailure,
+        checkCancellation
+      });
+      return payload;
+    }
 
     // Contract-aware missing fields replace the generic null-field scan; fall back to generic scan when no contract
     const contractMissingFields = [...specCtx.missingRequired, ...specCtx.missingDesired];

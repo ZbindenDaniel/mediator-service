@@ -59,6 +59,21 @@ export function computeReferenceFindings(ref: Record<string, unknown> | null | u
  * Also composes `CurrentVerdict`: a one-line, human-facing summary of the run's current state built from
  * the same signals (status + findings + grade), so a reviewer gets the gist without reading the diff.
  */
+// Enrol-time triage: is this run-less ref's EXISTING data already good enough to skip the generative
+// pipeline (search/extraction/categorization) and take the validate-only path? True only when the ref
+// has a resolvable spec contract (so completeness is defined — a contract-less ref may still need
+// categorization, so it gets a full run) AND no block/warn finding on its current content (missing
+// required fields are block findings, banned phrases / intake conflicts are warn). Deterministic, no LLM.
+// Note: this decides ROUTING only — the approve/review decision stays with the result handler's gate.
+export function isValidateOnlyEligible(ref: Record<string, unknown> | null | undefined): boolean {
+  if (!ref || typeof ref !== 'object') return false;
+  const subRaw = ref.Unterkategorien_A;
+  const sub = typeof subRaw === 'number' ? subRaw : Number.parseInt(String(subRaw ?? ''), 10);
+  if (!Number.isInteger(sub) || sub <= 0) return false;
+  if (!getSpecContract(sub)) return false; // no contract → can't judge completeness → needs a full run
+  return !computeReferenceFindings(ref).some((f) => f.severity === 'block' || f.severity === 'warn');
+}
+
 export function attachCurrentReviewSignals<
   T extends { SpecContractVersion?: number | null; Status?: string | null }
 >(

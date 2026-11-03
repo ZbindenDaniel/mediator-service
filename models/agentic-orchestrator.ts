@@ -129,6 +129,7 @@ export interface AgenticModelInvocationInput {
   requestId?: string | null;
   imageData?: string | null;
   skipSearch?: boolean;
+  validateOnly?: boolean;
   reworkSpecFields?: string[] | null;
   reworkInstructions?: string | null;
 }
