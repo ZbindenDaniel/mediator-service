@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { requireAdminAuth } from '../utils/admin-auth';
-import { getSelfHealPreview } from '../agentic';
+import { getSelfHealPreview, requestSelfHealSweep } from '../agentic';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -18,9 +18,16 @@ const action = defineHttpAction({
   label: 'Admin: Agentic Self-Heal Preview',
   appliesTo: () => false,
   matches: (path: string, method: string) =>
-    path === '/api/admin/agentic-self-heal' && method === 'GET',
+    path === '/api/admin/agentic-self-heal' && (method === 'GET' || method === 'POST'),
   async handle(req: IncomingMessage, res: ServerResponse) {
     if (!requireAdminAuth(req, res)) return;
+    // POST = "run the sweep now": requests one forced sweep pass on the dispatcher's next tick, bypassing
+    // the normal idle gate. Still respects the AUTO_REWORK/AUTO_REVIEW flags (an off slice does nothing).
+    if (req.method === 'POST') {
+      requestSelfHealSweep();
+      sendJson(res, 202, { requested: true });
+      return;
+    }
     try {
       const preview = await getSelfHealPreview(100);
       sendJson(res, 200, preview);

@@ -59,11 +59,45 @@ export function getQualityContract(subcategory: number): QualityContract | null 
   };
 }
 
+function loadSpecFile(key: string): SpecContract | null {
+  return loadJsonFile<SpecContract>(resolveContractReadPath(path.join('specs', `${key}.json`)));
+}
+
+/**
+ * The spec contract for a subcategory: the subcategory's own file, merged over a shared
+ * main-category group file (`specs/group-<Hauptkategorie>.json`) when one exists — mirroring how
+ * `getQualityContract` layers `quality/group-<haupt>.json`. This lets one group contract cover every
+ * subcategory under a category (≈19 main categories vs ≈140 subcategories), with a subcategory file only
+ * where the category default needs refining. Returns null when neither file exists.
+ *
+ * Merge: the SUBCATEGORY's field wins on a key conflict (it is more specific than its category default).
+ * This is a deliberate inversion of the quality contract's group-wins merge — a quality group holds
+ * mandatory shared questions a subcategory must not weaken, whereas a spec group is only a sensible
+ * default a subcategory should be free to override.
+ */
 export function getSpecContract(subcategory: number): SpecContract | null {
   if (specCache.has(subcategory)) return specCache.get(subcategory)!;
-  const contract = loadJsonFile<SpecContract>(resolveContractReadPath(path.join('specs', `${subcategory}.json`)));
-  if (contract) specCache.set(subcategory, contract);
-  return contract;
+  const own = loadSpecFile(String(subcategory));
+  const group = loadSpecFile(groupKeyFor(subcategory));
+  let merged: SpecContract | null;
+  if (!own && !group) {
+    merged = null;
+  } else if (!group) {
+    merged = own;
+  } else if (!own) {
+    merged = { ...group, subCategory: subcategory };
+  } else {
+    const ownKeys = new Set(own.fields.map((f) => f.key));
+    merged = {
+      ...own,
+      subCategory: subcategory,
+      version: own.version ?? group.version,
+      fields: [...own.fields, ...group.fields.filter((f) => !ownKeys.has(f.key))],
+      guidance: own.guidance ?? group.guidance
+    };
+  }
+  if (merged) specCache.set(subcategory, merged);
+  return merged;
 }
 
 // The house standards rule set (contracts/standards.json) — global, not per-subcategory. Cached at

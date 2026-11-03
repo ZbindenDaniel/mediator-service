@@ -47,6 +47,7 @@ export default function AgenticSelfHealCard({ authToken, onAuthFailure }: Props)
   const [data, setData] = useState<SelfHealPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [triggered, setTriggered] = useState(false);
 
   const authHeaders: Record<string, string> = authToken ? { Authorization: `Bearer ${authToken}` } : {};
 
@@ -66,6 +67,20 @@ export default function AgenticSelfHealCard({ authToken, onAuthFailure }: Props)
     }
   }
 
+  async function runNow() {
+    try {
+      setError(null);
+      const res = await fetch('/api/admin/agentic-self-heal', { method: 'POST', headers: authHeaders });
+      if (res.status === 401) { onAuthFailure?.(); return; }
+      if (!res.ok && res.status !== 202) { setError('Fehler beim Auslösen'); return; }
+      setTriggered(true);
+      setTimeout(() => setTriggered(false), 4000);
+    } catch (err) {
+      logError('Failed to trigger self-heal sweep', err);
+      setError('Fehler beim Auslösen');
+    }
+  }
+
   useEffect(() => { void load(); }, []);
 
   return (
@@ -82,6 +97,8 @@ export default function AgenticSelfHealCard({ authToken, onAuthFailure }: Props)
             <Flag label="AUTO_REVIEW" on={data.flags.autoReview} />
             <Flag label="AUTO_APPROVE" on={data.flags.autoApprove} />
             <button type="button" className="btn" onClick={() => void load()}>Aktualisieren</button>
+            <button type="button" className="btn" onClick={() => void runNow()}>Jetzt ausführen</button>
+            {triggered ? <span className="muted">Sweep angefordert — läuft beim nächsten Tick.</span> : null}
           </div>
 
           <p style={{ marginTop: 10 }}>

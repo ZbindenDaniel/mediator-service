@@ -118,6 +118,19 @@ const pendingSkipSearch = new Set<string>();
 // normal full re-run, which is safe).
 const pendingRework = new Map<string, { fields: string[]; instructions: string | null }>();
 
+// Operator "run the self-heal sweep now" request (admin endpoint). The dispatcher consumes it on its
+// next tick, running one sweep pass even if it would otherwise skip this cycle. One-shot flag, not a
+// count — a burst of clicks still means "run on the next tick". Lost on restart, which is fine.
+let forcedSelfHealSweep = false;
+export function requestSelfHealSweep(): void {
+  forcedSelfHealSweep = true;
+}
+function consumeForcedSelfHealSweep(): boolean {
+  const was = forcedSelfHealSweep;
+  forcedSelfHealSweep = false;
+  return was;
+}
+
 // TODO(agentic-flag-normalization): Fold boolean-to-integer coercion into the shared DB layer
 // once SQLite bindings accept native booleans in our migration plan.
 type AgenticRunStatusFlag =
@@ -1407,11 +1420,17 @@ export async function dispatchQueuedAgenticRuns(
     logger.debug?.('[agentic-service] Auto-dispatch disabled; skipping notStarted feed');
   }
 
-  // Idle self-heal sweeper (default off): only when otherwise idle (nothing dispatched or fed this cycle),
-  // re-apply the current contract/standards to the oldest stale item. AUTO_REWORK covers the settled
-  // approved states; AUTO_REVIEW additionally re-judges version-stale items stuck in manual review. Gated
-  // on the auto-dispatch kill switch too, since it is auto work.
-  if ((autoReworkConfig.enabled || autoReviewConfig.enabled) && autoDispatchEnabled && scheduled === 0 && autoFed === 0) {
+  // Self-heal sweeper (default off): re-apply the current contract/standards to the oldest stale item.
+  // AUTO_REWORK covers the settled approved states; AUTO_REVIEW additionally re-judges version-stale items
+  // stuck in manual review. Gated on the auto-dispatch kill switch too, since it is auto work.
+  //
+  // It runs when we did NOT just promote runs to running this cycle (`scheduled === 0`) — i.e. running is
+  // full or idle — OR when an operator forced it via the admin endpoint. It deliberately does NOT require
+  // `autoFed === 0`: the keep-busy feeder tops up the WAITING queue with notStarted items almost every
+  // tick, so requiring a fed-free cycle starved the sweep indefinitely whenever any notStarted backlog
+  // existed (the "flags on but nothing happens" report). One enqueue per tick keeps it gentle regardless.
+  const forcedSweep = consumeForcedSelfHealSweep();
+  if ((autoReworkConfig.enabled || autoReviewConfig.enabled) && autoDispatchEnabled && (forcedSweep || scheduled === 0)) {
     await sweepContractRework(deps, logger);
   }
 
