@@ -2467,9 +2467,19 @@ export async function getAgenticRun(artikelNummer: string): Promise<AgenticRun |
 // `statuses` selects which run states to include (default: the settled approved states); the pending-
 // review self-heal (AUTO_REVIEW) passes 'review' in as well. The run's `Status` is returned so the
 // planner can treat review items differently (never silently restamp one — it still needs a re-judge).
+// Optional pre-filter for the self-heal sweep: only rows whose subcategory has a spec contract AND that are
+// stale on either axis (contract version below the subcategory's current one, or standards version below
+// `standardsVersion`). Contract files live on disk, so the caller resolves the per-subcategory versions.
+export interface ContractAuditStaleFilter {
+  contractVersions: Array<{ subCategory: number; version: number }>;
+  standardsVersion: number | null;
+  offset?: number;
+}
+
 export async function listContractAuditCandidates(
   limit: number,
-  statuses: readonly string[] = ['approved', 'auto_approved']
+  statuses: readonly string[] = ['approved', 'auto_approved'],
+  staleFilter?: ContractAuditStaleFilter
 ): Promise<Array<{
   Artikel_Nummer: string;
   Status: string;
@@ -2481,18 +2491,68 @@ export async function listContractAuditCandidates(
 }>> {
   const list = statuses.length > 0 ? statuses : ['approved', 'auto_approved'];
   const placeholders = list.map((_, i) => `$${i + 2}`).join(',');
+  if (!staleFilter) {
+    return query(
+      `SELECT r."Artikel_Nummer", r."Status", r."SpecContractVersion", r."StandardsVersion",
+              i."Langtext", ROUND(NULLIF(i."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "SubCategory",
+              i."Artikelbeschreibung"
+       FROM agentic_runs r
+       JOIN item_refs i ON i."Artikel_Nummer" = r."Artikel_Nummer"
+       WHERE r."Status" IN (${placeholders})
+         AND i."Unterkategorien_A" IS NOT NULL
+       ORDER BY r."LastModified" ASC
+       LIMIT $1`,
+      [limit, ...list]
+    );
+  }
+  if (staleFilter.contractVersions.length === 0) return [];
+  // Filtering BEFORE the LIMIT is the point: the unfiltered oldest-N window was permanently occupied by
+  // contract-less / current rows the sweep never touches, so it never reached anything actionable.
+  const n = list.length;
   return query(
-    `SELECT r."Artikel_Nummer", r."Status", r."SpecContractVersion", r."StandardsVersion",
-            i."Langtext", ROUND(NULLIF(i."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "SubCategory",
-            i."Artikelbeschreibung"
+    `WITH cv AS (SELECT * FROM unnest($${n + 2}::int[], $${n + 3}::int[]) AS cv(sub, ver)),
+     c AS (
+       SELECT r."Artikel_Nummer", r."Status", r."SpecContractVersion", r."StandardsVersion", r."LastModified", r."Id",
+              i."Langtext", ROUND(NULLIF(i."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "SubCategory",
+              i."Artikelbeschreibung"
+       FROM agentic_runs r
+       JOIN item_refs i ON i."Artikel_Nummer" = r."Artikel_Nummer"
+       WHERE r."Status" IN (${placeholders})
+         AND i."Unterkategorien_A" IS NOT NULL
+     )
+     SELECT c."Artikel_Nummer", c."Status", c."SpecContractVersion", c."StandardsVersion",
+            c."Langtext", c."SubCategory", c."Artikelbeschreibung"
+     FROM c
+     JOIN cv ON cv.sub = c."SubCategory"
+     WHERE c."SpecContractVersion" IS NULL
+        OR c."SpecContractVersion" < cv.ver
+        OR ($${n + 4}::int IS NOT NULL AND (c."StandardsVersion" IS NULL OR c."StandardsVersion" < $${n + 4}::int))
+     ORDER BY c."LastModified" ASC, c."Id" ASC
+     LIMIT $1 OFFSET $${n + 5}`,
+    [
+      limit,
+      ...list,
+      staleFilter.contractVersions.map((c) => c.subCategory),
+      staleFilter.contractVersions.map((c) => c.version),
+      staleFilter.standardsVersion,
+      Math.max(0, staleFilter.offset ?? 0)
+    ]
+  );
+}
+
+// Distinct subcategories among self-heal-eligible runs, so the caller can resolve which have a spec contract.
+export async function listContractAuditSubcategories(statuses: readonly string[]): Promise<number[]> {
+  if (statuses.length === 0) return [];
+  const placeholders = statuses.map((_, i) => `$${i + 1}`).join(',');
+  const rows = await query<{ SubCategory: number | null }>(
+    `SELECT DISTINCT ROUND(NULLIF(i."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "SubCategory"
      FROM agentic_runs r
      JOIN item_refs i ON i."Artikel_Nummer" = r."Artikel_Nummer"
      WHERE r."Status" IN (${placeholders})
-       AND i."Unterkategorien_A" IS NOT NULL
-     ORDER BY r."LastModified" ASC
-     LIMIT $1`,
-    [limit, ...list]
+       AND i."Unterkategorien_A" IS NOT NULL`,
+    [...statuses]
   );
+  return rows.map((row) => row.SubCategory).filter((sub): sub is number => typeof sub === 'number');
 }
 
 // Cheap re-stamp when an item is already complete under the new contract (no rerun needed).
@@ -2885,6 +2945,32 @@ export async function claimNotStartedAgenticRuns(limit = 3): Promise<AgenticRun[
     );
   } catch (err) {
     console.error('[db] Failed to claim notStarted agentic runs for queue', err);
+    throw err;
+  }
+}
+
+export async function enrolItemRefsWithoutAgenticRun(limit = 3): Promise<number> {
+  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
+  const now = new Date().toISOString();
+  try {
+    // Lazy enrolment for the keep-busy feeder: refs that never got an agentic_runs row (bulk imports,
+    // intake, legacy data) were invisible to it. Enrolling only as many as there are free waiting slots —
+    // instead of a one-off backfill — keeps the notStarted pool small and lets the whole catalogue trickle
+    // through the capped queue. Refs with stock first; ON CONFLICT covers a racing create/instance.
+    return execute(
+      `INSERT INTO agentic_runs ("Artikel_Nummer","SearchQuery","Status","LastModified","ReviewState")
+       SELECT i."Artikel_Nummer", TRIM(i."Artikelbeschreibung"), 'notStarted', $2, 'not_required'
+       FROM item_refs i
+       WHERE NOT EXISTS (SELECT 1 FROM agentic_runs r WHERE r."Artikel_Nummer" = i."Artikel_Nummer")
+         AND TRIM(COALESCE(i."Artikelbeschreibung", '')) <> ''
+       ORDER BY EXISTS (SELECT 1 FROM items it WHERE it."Artikel_Nummer" = i."Artikel_Nummer") DESC,
+                i."Artikel_Nummer" ASC
+       LIMIT $1
+       ON CONFLICT ("Artikel_Nummer") DO NOTHING`,
+      [effectiveLimit, now]
+    );
+  } catch (err) {
+    console.error('[db] Failed to enrol item refs without agentic run', err);
     throw err;
   }
 }

@@ -41,10 +41,12 @@ import {
   markAgenticRequestNotificationFailure,
   claimQueuedAgenticRuns,
   claimNotStartedAgenticRuns,
+  enrolItemRefsWithoutAgenticRun,
   updateQueuedAgenticRunQueueState,
   getSystemSetting,
   listAgenticRunReviewHistory,
   listContractAuditCandidates,
+  listContractAuditSubcategories,
   stampAgenticRunContractVersion,
   type AgenticRunQueueUpdate,
   type LogEventPayload
@@ -1404,6 +1406,16 @@ export async function dispatchQueuedAgenticRuns(
       if (feedSlots > 0) {
         const fedRuns = await claimNotStartedAgenticRuns(feedSlots);
         autoFed = fedRuns.length;
+        if (autoFed < feedSlots) {
+          // notStarted pool exhausted: enrol just enough never-enrolled refs to fill the free slots, so
+          // every ref eventually reaches the pipeline without flooding it.
+          const enrolled = await enrolItemRefsWithoutAgenticRun(feedSlots - autoFed);
+          if (enrolled > 0) {
+            const enrolledRuns = await claimNotStartedAgenticRuns(feedSlots - autoFed);
+            autoFed += enrolledRuns.length;
+            logger.info?.('[agentic-service] Enrolled item refs without an agentic run', { enrolled });
+          }
+        }
         if (autoFed > 0) {
           logger.info?.('[agentic-service] Auto-fed notStarted runs into waiting queue', {
             fed: autoFed,
@@ -1609,7 +1621,7 @@ export interface SelfHealPreview {
   flags: { autoRework: boolean; autoReview: boolean; autoApprove: boolean };
   /** Current standards version (null = no standards contract → the wording axis is inert). */
   standardsVersion: number | null;
-  /** Candidate rows examined (capped at `limit`, oldest-first). */
+  /** Stale, contract-covered candidate rows examined (capped at `limit`, oldest-first). */
   totalCandidates: number;
   /** How many of those are actually stale (what the sweep would act on). */
   staleCount: number;
@@ -1626,8 +1638,9 @@ export interface SelfHealPreview {
 // backlog it would act on.
 export async function getSelfHealPreview(limit = 50): Promise<SelfHealPreview> {
   const statuses = [AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_AUTO_APPROVED, AGENTIC_RUN_STATUS_REVIEW];
-  const candidates = await listContractAuditCandidates(limit, statuses);
   const standardsVersion = getStandardsContract()?.version ?? null;
+  // Same pre-filtered source as the live sweep, so the preview never shows a backlog the sweep can't reach.
+  const candidates = await loadStaleSelfHealCandidates(statuses, limit, 0, standardsVersion);
   const plan = planSelfHealSweep(candidates, getSpecContract, standardsVersion);
   const byStatus: Record<string, number> = {};
   for (const entry of plan) {
@@ -1682,6 +1695,28 @@ export async function previewStandardsSweep(limit = 20): Promise<StandardsSweepP
   return planStandardsSweep(candidates, getStandardsContract()?.version ?? null);
 }
 
+type SelfHealCandidate = Awaited<ReturnType<typeof listContractAuditCandidates>>[number];
+const SELF_HEAL_PAGE_SIZE = 50;
+const SELF_HEAL_MAX_PAGES = 20;
+
+// Candidates the self-heal sweep can actually act on: rows in a subcategory with a resolvable spec contract
+// that are stale on either axis, oldest first. The staleness filter runs in SQL before the LIMIT.
+async function loadStaleSelfHealCandidates(
+  statuses: readonly string[],
+  limit: number,
+  offset: number,
+  standardsVersion: number | null
+): Promise<SelfHealCandidate[]> {
+  const subcategories = await listContractAuditSubcategories(statuses);
+  const contractVersions: Array<{ subCategory: number; version: number }> = [];
+  for (const subCategory of subcategories) {
+    const contract = getSpecContract(subCategory);
+    if (contract) contractVersions.push({ subCategory, version: contract.version });
+  }
+  if (contractVersions.length === 0) return [];
+  return listContractAuditCandidates(limit, statuses, { contractVersions, standardsVersion, offset });
+}
+
 // Deterministic idle sweeper for the AUTO_REWORK feature (gated, default off). Finds the oldest settled
 // item that is stale on either axis — spec contract (SpecContractVersion) or standards (StandardsVersion)
 // — and takes the cheapest correct action per `decideSelfHealAction`: re-stamp, a targeted rework
@@ -1699,16 +1734,22 @@ async function sweepContractRework(
   if (autoReviewConfig.enabled) statuses.push(AGENTIC_RUN_STATUS_REVIEW);
   if (statuses.length === 0) return { ran: false, reason: 'no-flags-enabled', staleCount: 0, acted: 'none' };
 
-  let candidates: Awaited<ReturnType<typeof listContractAuditCandidates>> = [];
+  const standardsCurrent = getStandardsContract()?.version ?? null;
+  let candidates: SelfHealCandidate[] = [];
+  let plan: ContractSweepPlanEntry[] = [];
   try {
-    candidates = await listContractAuditCandidates(20, statuses);
+    // Page through the stale pre-filtered rows until one yields a plan: a stale review item that only
+    // needs a restamp is (deliberately) dropped by the planner and never touched, so a page full of those
+    // would otherwise block the sweep the same way the old fixed window did.
+    for (let page = 0; page < SELF_HEAL_MAX_PAGES; page += 1) {
+      candidates = await loadStaleSelfHealCandidates(statuses, SELF_HEAL_PAGE_SIZE, page * SELF_HEAL_PAGE_SIZE, standardsCurrent);
+      plan = planSelfHealSweep(candidates, getSpecContract, standardsCurrent);
+      if (plan.length > 0 || candidates.length < SELF_HEAL_PAGE_SIZE) break;
+    }
   } catch (err) {
     logger.error?.('[agentic-service] Self-heal sweep failed to load candidates', { error: toErrorMessage(err) });
     return { ran: false, reason: 'candidate-load-failed', staleCount: 0, acted: 'none' };
   }
-
-  const standardsCurrent = getStandardsContract()?.version ?? null;
-  const plan = planSelfHealSweep(candidates, getSpecContract, standardsCurrent);
   if (plan.length === 0) return { ran: true, reason: 'nothing-stale', staleCount: 0, acted: 'none' };
   // Legibility: log the whole stale backlog across both axes, not just the item we touch this tick, so the
   // sweep's behaviour is observable even though it acts gently (at most one enqueue per idle tick).
