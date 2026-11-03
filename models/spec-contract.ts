@@ -29,7 +29,7 @@ export interface SpecGapResult {
 const SPEC_KEY_VARIANTS: Record<string, string[]> = {
   Prozessor: ['CPU', 'Processor', 'Prozessortyp', 'CPU-Modell', 'Prozessor (CPU)'],
   RAM: ['Arbeitsspeicher', 'Memory', 'Hauptspeicher', 'RAM-Größe'],
-  Speicher: ['Storage', 'Festplatte', 'Speicherkapazität', 'Speichergröße'],
+  Speicher: ['Storage', 'Festplatte', 'Speicherkapazität', 'Speichergröße', 'Speicherplatz', 'Kapazität', 'Kapazitaet', 'Capacity'],
   Speichertyp: ['Storage Type', 'Laufwerkstyp', 'Drive Type'],
   Grafikkarte: ['GPU', 'Graphics', 'Graphics Card', 'Grafik'],
   Betriebssystem: ['OS', 'Operating System'],
