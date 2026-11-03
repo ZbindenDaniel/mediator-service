@@ -47,7 +47,8 @@ export default function AgenticSelfHealCard({ authToken, onAuthFailure }: Props)
   const [data, setData] = useState<SelfHealPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [triggered, setTriggered] = useState(false);
+  const [runMsg, setRunMsg] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
 
   const authHeaders: Record<string, string> = authToken ? { Authorization: `Bearer ${authToken}` } : {};
 
@@ -70,14 +71,33 @@ export default function AgenticSelfHealCard({ authToken, onAuthFailure }: Props)
   async function runNow() {
     try {
       setError(null);
+      setRunMsg(null);
+      setRunning(true);
       const res = await fetch('/api/admin/agentic-self-heal', { method: 'POST', headers: authHeaders });
       if (res.status === 401) { onAuthFailure?.(); return; }
       if (!res.ok && res.status !== 202) { setError('Fehler beim Auslösen'); return; }
-      setTriggered(true);
-      setTimeout(() => setTriggered(false), 4000);
+      const r = await res.json() as {
+        warmedUp?: boolean; staleCount?: number; reason?: string | null;
+        enqueued?: Array<{ artikelNummer: string; acted: string }>; restamped?: number; note?: string;
+      };
+      if (r.warmedUp === false) {
+        setRunMsg('Dispatcher noch nicht bereit — läuft beim nächsten Tick.');
+      } else if ((r.enqueued?.length ?? 0) === 0 && (r.restamped ?? 0) === 0) {
+        setRunMsg(r.reason === 'no-flags-enabled'
+          ? 'Keine Aktion: AUTO_REWORK/AUTO_REVIEW sind aus.'
+          : `Keine Aktion: ${r.staleCount ?? 0} veraltet, nichts zu tun (${r.reason ?? '—'}).`);
+      } else {
+        const parts: string[] = [];
+        if (r.enqueued?.length) parts.push(`${r.enqueued.length} neu eingereiht (${r.enqueued.map((e) => e.artikelNummer).join(', ')})`);
+        if (r.restamped) parts.push(`${r.restamped} neu gestempelt`);
+        setRunMsg(parts.join(' · '));
+      }
+      await load(); // refresh the backlog so the operator sees it shrink
     } catch (err) {
       logError('Failed to trigger self-heal sweep', err);
       setError('Fehler beim Auslösen');
+    } finally {
+      setRunning(false);
     }
   }
 
@@ -97,8 +117,10 @@ export default function AgenticSelfHealCard({ authToken, onAuthFailure }: Props)
             <Flag label="AUTO_REVIEW" on={data.flags.autoReview} />
             <Flag label="AUTO_APPROVE" on={data.flags.autoApprove} />
             <button type="button" className="btn" onClick={() => void load()}>Aktualisieren</button>
-            <button type="button" className="btn" onClick={() => void runNow()}>Jetzt ausführen</button>
-            {triggered ? <span className="muted">Sweep angefordert — läuft beim nächsten Tick.</span> : null}
+            <button type="button" className="btn" disabled={running} onClick={() => void runNow()}>
+              {running ? 'Läuft…' : 'Jetzt ausführen'}
+            </button>
+            {runMsg ? <span className="muted">{runMsg}</span> : null}
           </div>
 
           <p style={{ marginTop: 10 }}>

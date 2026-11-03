@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { requireAdminAuth } from '../utils/admin-auth';
-import { getSelfHealPreview, requestSelfHealSweep } from '../agentic';
+import { getSelfHealPreview, requestSelfHealSweep, runSelfHealSweepNow } from '../agentic';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -21,11 +21,32 @@ const action = defineHttpAction({
     path === '/api/admin/agentic-self-heal' && (method === 'GET' || method === 'POST'),
   async handle(req: IncomingMessage, res: ServerResponse) {
     if (!requireAdminAuth(req, res)) return;
-    // POST = "run the sweep now": requests one forced sweep pass on the dispatcher's next tick, bypassing
-    // the normal idle gate. Still respects the AUTO_REWORK/AUTO_REVIEW flags (an off slice does nothing).
+    // POST = "run the sweep now": executes sweep passes SYNCHRONOUSLY and reports what happened, so the
+    // operator gets immediate, unambiguous feedback instead of a deferred "will run next tick". Also sets
+    // the force flag as a belt-and-braces fallback for the next tick. Still respects the flags.
     if (req.method === 'POST') {
       requestSelfHealSweep();
-      sendJson(res, 202, { requested: true });
+      try {
+        const { passes, warmedUp } = await runSelfHealSweepNow(5);
+        if (!warmedUp) {
+          // The dispatcher hasn't run a tick yet (no deps captured) — the force flag will catch the next one.
+          sendJson(res, 202, { requested: true, warmedUp: false, note: 'dispatcher not warmed up yet; will run on the next tick' });
+          return;
+        }
+        const enqueued = passes.filter((p) => p.acted === 'rework' || p.acted === 'reword' || p.acted === 'rerun');
+        const restamped = passes.reduce((n, p) => n + (p.restamped ?? 0), 0);
+        sendJson(res, 200, {
+          requested: true,
+          warmedUp: true,
+          staleCount: passes[0]?.staleCount ?? 0,
+          reason: passes[0]?.reason ?? null,
+          enqueued: enqueued.map((p) => ({ artikelNummer: p.artikelNummer, acted: p.acted })),
+          restamped,
+          passes
+        });
+      } catch (err) {
+        sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
+      }
       return;
     }
     try {

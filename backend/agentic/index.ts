@@ -1143,6 +1143,7 @@ export async function dispatchQueuedAgenticRuns(
 ): Promise<{ scheduled: number; skipped: number; failed: number }> {
   validateDependencies(deps);
   const logger = resolveLogger(deps);
+  lastDispatchDeps = deps; // capture for the admin "run sweep now" path (same wiring as the interval)
   const effectiveLimit = Number.isFinite(limit) && (limit ?? 0) > 0 ? Math.floor(limit as number) : 5;
 
   // Recover stale "running" runs that have been in-progress beyond the timeout.
@@ -1689,26 +1690,26 @@ export async function previewStandardsSweep(limit = 20): Promise<StandardsSweepP
 async function sweepContractRework(
   deps: AgenticServiceDependencies,
   logger: AgenticServiceLogger
-): Promise<void> {
+): Promise<SelfHealSweepResult> {
   // Which run states the sweep may touch: AUTO_REWORK covers the settled approved states; AUTO_REVIEW adds
   // the manual-review queue (re-judged only when version-stale, per planSelfHealSweep). Either flag alone
   // is enough to run the sweep (the call site gates on their OR).
   const statuses: string[] = [];
   if (autoReworkConfig.enabled) statuses.push(AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_AUTO_APPROVED);
   if (autoReviewConfig.enabled) statuses.push(AGENTIC_RUN_STATUS_REVIEW);
-  if (statuses.length === 0) return;
+  if (statuses.length === 0) return { ran: false, reason: 'no-flags-enabled', staleCount: 0, acted: 'none' };
 
   let candidates: Awaited<ReturnType<typeof listContractAuditCandidates>> = [];
   try {
     candidates = await listContractAuditCandidates(20, statuses);
   } catch (err) {
     logger.error?.('[agentic-service] Self-heal sweep failed to load candidates', { error: toErrorMessage(err) });
-    return;
+    return { ran: false, reason: 'candidate-load-failed', staleCount: 0, acted: 'none' };
   }
 
   const standardsCurrent = getStandardsContract()?.version ?? null;
   const plan = planSelfHealSweep(candidates, getSpecContract, standardsCurrent);
-  if (plan.length === 0) return;
+  if (plan.length === 0) return { ran: true, reason: 'nothing-stale', staleCount: 0, acted: 'none' };
   // Legibility: log the whole stale backlog across both axes, not just the item we touch this tick, so the
   // sweep's behaviour is observable even though it acts gently (at most one enqueue per idle tick).
   logger.info?.('[agentic-service] Self-heal sweep plan', {
@@ -1730,6 +1731,7 @@ async function sweepContractRework(
     }
   };
 
+  let restamped = 0;
   for (const entry of plan) {
     if (entry.action === 'rework') {
       // Enqueue a targeted rework; the completed run stamps the new contract version so this item is
@@ -1772,8 +1774,9 @@ async function sweepContractRework(
           artikelNummer: entry.artikelNummer,
           error: toErrorMessage(err)
         });
+        return { ran: true, staleCount: plan.length, acted: 'none', reason: 'enqueue-failed', artikelNummer: entry.artikelNummer };
       }
-      return; // one enqueue per idle tick
+      return { ran: true, staleCount: plan.length, acted: 'rework', artikelNummer: entry.artikelNummer }; // one enqueue per tick
     }
 
     if (entry.action === 'reword' || entry.action === 'rerun') {
@@ -1828,13 +1831,15 @@ async function sweepContractRework(
           artikelNummer: entry.artikelNummer,
           error: toErrorMessage(err)
         });
+        return { ran: true, staleCount: plan.length, acted: 'none', reason: 'enqueue-failed', artikelNummer: entry.artikelNummer };
       }
-      return; // one enqueue per idle tick
+      return { ran: true, staleCount: plan.length, acted: entry.action, artikelNummer: entry.artikelNummer }; // one enqueue per tick
     }
 
     // Stale but already complete under the new contract → cheap re-stamp, no rerun.
     try {
       await stampAgenticRunContractVersion(entry.artikelNummer, entry.toVersion);
+      restamped += 1;
       await logSweepEvent(entry.artikelNummer, 'ContractAuditRestamp', {
         fromVersion: entry.fromVersion,
         toVersion: entry.toVersion
@@ -1846,6 +1851,45 @@ async function sweepContractRework(
       });
     }
   }
+  // Loop completed without hitting an enqueue branch → every entry was a (cheap, batched) restamp.
+  return { ran: true, staleCount: plan.length, acted: restamped > 0 ? 'restamp' : 'none', restamped };
+}
+
+// Result of one self-heal sweep pass — returned so the admin "run now" can report what actually happened
+// (enqueued a rework/reword/rerun on item X, restamped N, or nothing stale) instead of leaving the
+// operator guessing whether the tick fired.
+export interface SelfHealSweepResult {
+  ran: boolean;
+  reason?: string;
+  staleCount: number;
+  acted: 'none' | 'rework' | 'reword' | 'rerun' | 'restamp';
+  artikelNummer?: string;
+  restamped?: number;
+}
+
+// The last dependencies the dispatcher was invoked with — captured so the admin "run now" endpoint can
+// drive one sweep pass directly (synchronously), reusing the exact same wiring the interval uses, without
+// the action layer having to assemble its own DB dependencies. Set on the first dispatch tick.
+let lastDispatchDeps: AgenticServiceDependencies | null = null;
+
+// Run one self-heal sweep pass NOW and return what it did. Bypasses the dispatcher's idle gate entirely,
+// so the admin "Jetzt ausführen" button gives immediate, unambiguous feedback. Runs up to `maxActions`
+// enqueues in a batch (each re-queries candidates, so it advances through the backlog) so a single click
+// makes visible progress rather than one item. Restamps are batched within a single pass already.
+export async function runSelfHealSweepNow(maxActions = 5): Promise<{ passes: SelfHealSweepResult[]; warmedUp: boolean }> {
+  if (!lastDispatchDeps) {
+    return { passes: [], warmedUp: false };
+  }
+  const logger = resolveLogger(lastDispatchDeps);
+  const passes: SelfHealSweepResult[] = [];
+  for (let i = 0; i < Math.max(1, maxActions); i += 1) {
+    const result = await sweepContractRework(lastDispatchDeps, logger);
+    passes.push(result);
+    // Stop once a pass enqueued nothing actionable (nothing stale, flags off, or only restamps left —
+    // restamps are already all done in that one pass).
+    if (result.acted === 'none' || result.acted === 'restamp') break;
+  }
+  return { passes, warmedUp: true };
 }
 
 function validateDependencies(deps: AgenticServiceDependencies): void {
