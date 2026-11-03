@@ -4,6 +4,10 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 1048. ✅ KI tab → structured run detail: summary pinned, panels behind sub-tabs (KI-Runs surface, slice 2)
+**Why:** The KI tab was one long pile — status card, findings, history diff, transcript all stacked (the operator's original "everything crammed into one tab"). Restructured into the §9 run-detail shape: the at-a-glance **summary stays pinned** (action buttons + the severity-coloured verdict + the data-quality badge), and the detail panels now sit **one at a time behind a sub-tab bar** — *Status* (`AgenticStatusCard`), *Zu prüfen* (`FindingsPanel`, with an open-count badge), *Änderungen* (`AgenticSnapshotsPanel`, shown only when snapshots exist), *Transkript* (`TranscriptViewer`, only when a transcript exists). Opens on "Zu prüfen" when there's something to review, else "Status". Same components, no backend change — just the layout that stops the cram and prefigures the standalone KI-Runs run-detail view. 1216 pass; tsc clean.
+**Deferred:** the full standalone KI-Runs **list** page (reusing the `ItemListPage` shell) + the KI tab shrinking to a card that deep-links into it — this slice hosts the run-detail tabs inside the existing tab; the Übersicht/Abgleich tabs (reconciliation) still belong to the deferred instance-flow work.
+
 ## 1047. ✅ Verdict banner colours by finding severity (spot the not-shop-ready item)
 **Why:** The one-line verdict ("Auto-freigegeben · 2 Pflichtfelder fehlen") read in calm grey even when it was flagging a settled item that is no longer shop-ready — the operator's "this clearly shouldn't land in the shop". The KI-tab verdict banner now colours by the current findings: red (`is-block`, a missing-required field), amber (`is-warn`, banned phrase / intake conflict), green (`is-ok`, clean). Purely presentational, driven by the existing `findings` prop (block > warn > ok). Makes a stale-but-settled item jump out instead of hiding in the status line. 1214 pass; tsc clean.
 

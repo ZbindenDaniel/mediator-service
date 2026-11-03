@@ -4009,6 +4009,46 @@ button:focus {
     background: color-mix(in srgb, var(--color-green, #079455) 10%, transparent);
 }
 
+.ki-subtabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 10px 0 0;
+    border-bottom: 1px solid var(--border, #d0d5dd);
+}
+.ki-subtab {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--color-muted, #667085);
+    font: inherit;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.ki-subtab.is-active {
+    color: var(--text, inherit);
+    border-bottom-color: var(--color-accent, #2563eb);
+}
+.ki-subtab__badge {
+    display: inline-block;
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--color-muted, #98a2b3);
+    color: #fff;
+    font-size: 0.75em;
+    line-height: 18px;
+    text-align: center;
+}
+.ki-section {
+    margin-top: 10px;
+}
+
 .transcript-viewer {
     margin-top: 12px;
 }

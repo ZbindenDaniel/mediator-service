@@ -83,6 +83,18 @@ export default function ItemKiTab({
       ? 'is-warn'
       : 'is-ok';
 
+  // Run-detail sub-tabs (KI-Runs surface §9): the summary (actions + verdict + grade) stays pinned at the
+  // top; the detail panels sit one-at-a-time behind this bar so the KI tab reads as a structured run
+  // detail instead of one long pile. Open on "Zu prüfen" when there is something to review, else "Status".
+  type KiSection = 'status' | 'findings' | 'changes' | 'transcript';
+  const sectionTabs: Array<{ key: KiSection; label: string; badge?: number }> = [
+    { key: 'status', label: 'Status' },
+    { key: 'findings', label: 'Zu prüfen', badge: findingsList.length || undefined },
+    ...(snapshotArtikelNummer ? [{ key: 'changes' as const, label: 'Änderungen' }] : []),
+    ...(transcriptUrl ? [{ key: 'transcript' as const, label: 'Transkript' }] : [])
+  ];
+  const [section, setSection] = React.useState<KiSection>(findingsList.length > 0 ? 'findings' : 'status');
+
   const hasActions = canStart || canRestart || canCancel || needsReview || canClose || canDelete || canRework;
 
   return (
@@ -130,16 +142,35 @@ export default function ItemKiTab({
       )}
       {verdict ? <p className={`ki-verdict ${verdictSeverity}`} role="status">{verdict}</p> : null}
       <DataQualityBadge quality={dataQuality ?? null} />
-      <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
-      <FindingsPanel findings={findings ?? []} onFix={onFixFinding} busy={actionPending} />
-      {snapshotArtikelNummer ? (
-        <AgenticSnapshotsPanel
-          artikelNummer={snapshotArtikelNummer}
-          currentFields={snapshotCurrentFields ?? {}}
-          onRestored={onSnapshotRestored}
-        />
-      ) : null}
-      <TranscriptViewer url={transcriptUrl} />
+
+      <nav className="ki-subtabs" role="tablist" aria-label="KI-Lauf Details">
+        {sectionTabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={section === t.key}
+            className={`ki-subtab${section === t.key ? ' is-active' : ''}`}
+            onClick={() => setSection(t.key)}
+          >
+            {t.label}
+            {t.badge ? <span className="ki-subtab__badge">{t.badge}</span> : null}
+          </button>
+        ))}
+      </nav>
+
+      <div className="ki-section" role="tabpanel">
+        {section === 'status' ? <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions /> : null}
+        {section === 'findings' ? <FindingsPanel findings={findingsList} onFix={onFixFinding} busy={actionPending} /> : null}
+        {section === 'changes' && snapshotArtikelNummer ? (
+          <AgenticSnapshotsPanel
+            artikelNummer={snapshotArtikelNummer}
+            currentFields={snapshotCurrentFields ?? {}}
+            onRestored={onSnapshotRestored}
+          />
+        ) : null}
+        {section === 'transcript' ? <TranscriptViewer url={transcriptUrl} /> : null}
+      </div>
       {reworkOpen && onReworkSubmit ? ReactDOM.createPortal(
         <AgenticSpecFieldReviewModal
           title="KI Überarbeitung"
