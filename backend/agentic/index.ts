@@ -1800,9 +1800,21 @@ async function sweepContractRework(
     }
   };
 
+  // Respect the waiting-queue cap. The keep-busy feeder runs BEFORE the sweep and tops up the waiting
+  // queue with new items up to MAX_WAITING_RUNS, so self-heal only fills whatever slot is still free — it
+  // keeps the pipeline busy without flooding it (the operator's "keep busy, don't throw everything in").
+  // Restamps don't consume a queue slot, so they always proceed.
+  let canEnqueue = true;
+  try {
+    canEnqueue = (await fetchStatusCount(AGENTIC_RUN_STATUS_QUEUED)) < MAX_WAITING_RUNS;
+  } catch {
+    canEnqueue = true; // a count failure must not permanently block self-heal
+  }
+
   let restamped = 0;
   for (const entry of plan) {
     if (entry.action === 'rework') {
+      if (!canEnqueue) continue; // waiting queue full → leave it for a later tick (restamps still run)
       // Enqueue a targeted rework; the completed run stamps the new contract version so this item is
       // not re-selected (self-limiting). One enqueue per idle tick keeps the sweep gentle.
       pendingRework.set(entry.artikelNummer, { fields: entry.fields ?? [], instructions: null });
@@ -1849,6 +1861,7 @@ async function sweepContractRework(
     }
 
     if (entry.action === 'reword' || entry.action === 'rerun') {
+      if (!canEnqueue) continue; // waiting queue full → leave it for a later tick
       // Standards-driven self-heal: enqueue a SEARCH-FREE run (skipSearch, no reworkSpecFields) so the
       // wording stage runs and re-applies the current house rules to stored content. 'rerun' is the same
       // run chosen because the contract also needs extraction (a targeted rework would skip wording).

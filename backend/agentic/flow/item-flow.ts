@@ -24,8 +24,11 @@ import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWr
 import { getSpecContract, getStandardsContract } from '../..//contracts/registry';
 import { canonicalizeSpecKeyRecord, canonicalizeSpecValuesRecord } from '../../../models/spec-contract';
 import { buildFindings, isAutoApprovable } from '../findings';
+import { computeReferenceDataQuality } from '../data-quality';
+import { autoApproveConfig } from '../config';
 import { runWordingStage } from './item-flow-wording';
 import type { Finding } from '../../../models/agentic-findings';
+import type { DataQualityGrade } from '../../../models/data-quality';
 
 const REVIEW_CONTEXT_NOTE_LIMIT = 2_000;
 
@@ -150,6 +153,17 @@ function formatIntakeSpecValue(key: string, rawValue: unknown): string | null {
   if (key === 'ram_gb') return `${v} GB`;
   if (key === 'storage_gb') return `${v} GB`;
   return v;
+}
+
+// Auto-approve data-quality floor: findings-clean alone is too low a bar for settling an item without a
+// human (the goal is high precision, not maximum approvals). A SUPERVISED run must also reach
+// autoApproveConfig.minGrade (default 4). A VALIDATE-ONLY run — no supervisor ever looked at it — must
+// reach the TOP grade (5 / Vollständig) to auto-approve; anything less goes to review. A null grade
+// (no spec contract, so quality can't be judged) never auto-approves.
+export function gradeClearsAutoApprove(dataQuality: DataQualityGrade | null, validateOnly: boolean): boolean {
+  if (!dataQuality || typeof dataQuality.grade !== 'number') return false;
+  const floor = validateOnly ? 5 : autoApproveConfig.minGrade;
+  return dataQuality.grade >= floor;
 }
 
 function buildSpecContext(
@@ -548,7 +562,10 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
         { texts: reviewTexts, missingRequired: specCtx.missingRequired, ambiguousFields: specCtx.ambiguousFields },
         getStandardsContract()
       );
-      const autoApprovable = isAutoApprovable(findings);
+      // No supervisor looked at this item — require the TOP data-quality grade to settle it; otherwise it
+      // goes to review. buildSpecContext stamped the current contract version, so freshness is 'current'.
+      const dataQuality = computeReferenceDataQuality({ ...target, Artikel_Nummer: itemId }, findings, specContractVersion);
+      const autoApprovable = isAutoApprovable(findings) && gradeClearsAutoApprove(dataQuality, true);
       const payload = buildCallbackPayload({
         artikelNummer: itemId,
         itemData: { ...target, Artikel_Nummer: itemId },
@@ -803,7 +820,11 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     // the old confidence threshold (an unreliable model self-report) and implicitly requires the wording
     // pass — uncleaned prose leaves warn findings. The on/off gate + settle live in the result handler
     // under AUTO_APPROVE.
-    const autoApprovable = extractionResult.success && isAutoApprovable(findings);
+    // Settle only when we're sure: supervisor PASS (extractionResult.success) + findings-clean + the data
+    // quality reaches the configured floor (default grade 4). A findings-clean-but-thin item (grade 3)
+    // now goes to review instead of auto-approving — precision over throughput.
+    const autoApproveDataQuality = computeReferenceDataQuality(finalData as Record<string, unknown>, findings, specContractVersion);
+    const autoApprovable = extractionResult.success && isAutoApprovable(findings) && gradeClearsAutoApprove(autoApproveDataQuality, false);
 
     const payload = buildCallbackPayload({
       artikelNummer: itemId,

@@ -286,9 +286,14 @@ function resolveUnitInterval(fallback: number, ...keys: Array<keyof NodeJS.Proce
 // deliberate operator choice, and `auto_approved` items are ERP-eligible (operators sort by state and
 // decide what to sync). NOTE: the findings-clean gate (L3) replaced the old confidence threshold;
 // `minConfidence` / `AUTO_APPROVE_MIN_CONFIDENCE` is retained for back-compat but no longer gates.
-export const autoApproveConfig: { enabled: boolean; minConfidence: number } = {
+// `minGrade` (AUTO_APPROVE_MIN_GRADE, default 4) is the data-quality floor an item must also clear to
+// auto-approve: findings-clean alone is too low a bar (an item can have every REQUIRED field yet be thin
+// on desired fields / stale → grade 3), and the goal is to settle only items we are very sure about, not
+// to maximize approvals. A null grade (no spec contract → quality can't be judged) never auto-approves.
+export const autoApproveConfig: { enabled: boolean; minConfidence: number; minGrade: number } = {
   enabled: resolveBooleanFlag('AUTO_APPROVE'),
-  minConfidence: resolveUnitInterval(0.8, 'AUTO_APPROVE_MIN_CONFIDENCE')
+  minConfidence: resolveUnitInterval(0.8, 'AUTO_APPROVE_MIN_CONFIDENCE'),
+  minGrade: Math.round(resolveNumber('AUTO_APPROVE_MIN_GRADE') ?? 4)
 };
 
 // Idle-time deterministic rework sweeper: when enabled, the dispatcher (only while otherwise idle)
