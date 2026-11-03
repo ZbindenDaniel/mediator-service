@@ -3995,6 +3995,19 @@ button:focus {
     font-weight: 600;
     line-height: 1.4;
 }
+/* A settled item with open block/warn findings is not shop-ready — make the verdict stand out. */
+.ki-verdict.is-block {
+    border-left-color: var(--color-error, #d92d20);
+    background: color-mix(in srgb, var(--color-error, #d92d20) 12%, transparent);
+}
+.ki-verdict.is-warn {
+    border-left-color: var(--color-warning, #dc6803);
+    background: color-mix(in srgb, var(--color-warning, #dc6803) 12%, transparent);
+}
+.ki-verdict.is-ok {
+    border-left-color: var(--color-green, #079455);
+    background: color-mix(in srgb, var(--color-green, #079455) 10%, transparent);
+}
 
 .transcript-viewer {
     margin-top: 12px;

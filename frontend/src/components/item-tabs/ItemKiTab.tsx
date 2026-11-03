@@ -73,6 +73,16 @@ export default function ItemKiTab({
   const [reworkOpen, setReworkOpen] = React.useState(false);
   const canRework = !needsReview && Boolean(onReworkSubmit) && (reworkFieldOptions?.length ?? 0) > 0;
 
+  // Verdict banner severity: a settled item that currently has block (missing-required) or warn
+  // (banned phrase / intake conflict) findings is NOT shop-ready — show the verdict as a warning so it
+  // stands out instead of reading like a calm "Auto-freigegeben".
+  const findingsList = findings ?? [];
+  const verdictSeverity = findingsList.some((f) => f.severity === 'block')
+    ? 'is-block'
+    : findingsList.some((f) => f.severity === 'warn')
+      ? 'is-warn'
+      : 'is-ok';
+
   const hasActions = canStart || canRestart || canCancel || needsReview || canClose || canDelete || canRework;
 
   return (
@@ -118,7 +128,7 @@ export default function ItemKiTab({
           )}
         </div>
       )}
-      {verdict ? <p className="ki-verdict" role="status">{verdict}</p> : null}
+      {verdict ? <p className={`ki-verdict ${verdictSeverity}`} role="status">{verdict}</p> : null}
       <DataQualityBadge quality={dataQuality ?? null} />
       <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
       <FindingsPanel findings={findings ?? []} onFix={onFixFinding} busy={actionPending} />

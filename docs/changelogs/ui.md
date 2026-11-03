@@ -4,6 +4,9 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
+## 1047. ✅ Verdict banner colours by finding severity (spot the not-shop-ready item)
+**Why:** The one-line verdict ("Auto-freigegeben · 2 Pflichtfelder fehlen") read in calm grey even when it was flagging a settled item that is no longer shop-ready — the operator's "this clearly shouldn't land in the shop". The KI-tab verdict banner now colours by the current findings: red (`is-block`, a missing-required field), amber (`is-warn`, banned phrase / intake conflict), green (`is-ok`, clean). Purely presentational, driven by the existing `findings` prop (block > warn > ok). Makes a stale-but-settled item jump out instead of hiding in the status line. 1214 pass; tsc clean.
+
 ## 1046. ✅ Transcript viewer — "what the agent did", inline (KI-Runs surface, slice 1)
 **Why:** The only window into a run was a "Protokoll öffnen" link dumping raw transcript JSON in a new tab — unreadable, the operator's "I can't comprehend what happened". New `TranscriptViewer` renders the stored transcript (array of per-stage sections: review-context → search-planner → search → extraction → supervisor → categorizer → pricing → wording) as **collapsible stages** in the KI tab: each stage shows its response, with request/messages/tool-calls/errors in nested collapsibles, the last stage expanded by default, German stage labels. Loads on demand from the existing `TranscriptUrl` (no new backend); falls back to the raw link for legacy non-JSON transcripts. This is the first slice of the planned **KI-Runs surface** (instance-flow.md §9 Transkript tab) pulled forward from existing data — pairs with the verdict (what) to give the why. 1211 pass; tsc clean.
 **Deferred:** the full KI-Runs list + run-detail tabs (Übersicht/Änderungen/Abgleich/Review) and the KI-tab-shrinks-to-a-card restructure; validate-only runs have no transcript (no LLM), which the viewer shows as "Kein Transkript vorhanden".
