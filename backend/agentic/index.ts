@@ -50,7 +50,7 @@ import {
   type LogEventPayload
 } from '../db';
 import { locateTranscript } from './flow/transcript';
-import { autoReworkConfig, autoReviewConfig } from './config';
+import { autoReworkConfig, autoReviewConfig, autoApproveConfig } from './config';
 import { attachCurrentReviewSignals } from './reference-findings';
 import { getSpecContract, getStandardsContract } from '../contracts/registry';
 import { checkSpecGap, type SpecContract } from '../../models/spec-contract';
@@ -1582,6 +1582,52 @@ export async function previewContractSweep(limit = 20): Promise<ContractSweepPla
 export async function previewSelfHealSweep(limit = 20): Promise<ContractSweepPlanEntry[]> {
   const candidates = await listContractAuditCandidates(limit);
   return planSelfHealSweep(candidates, getSpecContract, getStandardsContract()?.version ?? null);
+}
+
+export interface SelfHealPreview {
+  /** Which self-heal flags are currently on — so the UI can say "stale items exist but the flag is off". */
+  flags: { autoRework: boolean; autoReview: boolean; autoApprove: boolean };
+  /** Current standards version (null = no standards contract → the wording axis is inert). */
+  standardsVersion: number | null;
+  /** Candidate rows examined (capped at `limit`, oldest-first). */
+  totalCandidates: number;
+  /** How many of those are actually stale (what the sweep would act on). */
+  staleCount: number;
+  counts: { rework: number; restamp: number; reword: number; rerun: number };
+  /** Stale count broken down by the run status the entry acts on (approved/auto_approved/review). */
+  byStatus: Record<string, number>;
+  items: ContractSweepPlanEntry[];
+}
+
+// Observable self-heal backlog for the admin surface: what the sweep sees across ALL eligible statuses
+// (approved/auto_approved/review), regardless of which flags are on — so an operator can diagnose "why
+// isn't it doing anything?" (nothing stale? no spec contract? a flag off?). Pure read, no side effects;
+// it deliberately ignores the flag gating so turning a flag ON isn't a prerequisite for seeing the
+// backlog it would act on.
+export async function getSelfHealPreview(limit = 50): Promise<SelfHealPreview> {
+  const statuses = [AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_AUTO_APPROVED, AGENTIC_RUN_STATUS_REVIEW];
+  const candidates = await listContractAuditCandidates(limit, statuses);
+  const standardsVersion = getStandardsContract()?.version ?? null;
+  const plan = planSelfHealSweep(candidates, getSpecContract, standardsVersion);
+  const byStatus: Record<string, number> = {};
+  for (const entry of plan) {
+    const key = entry.status ?? 'unknown';
+    byStatus[key] = (byStatus[key] ?? 0) + 1;
+  }
+  return {
+    flags: { autoRework: autoReworkConfig.enabled, autoReview: autoReviewConfig.enabled, autoApprove: autoApproveConfig.enabled },
+    standardsVersion,
+    totalCandidates: candidates.length,
+    staleCount: plan.length,
+    counts: {
+      rework: plan.filter((p) => p.action === 'rework').length,
+      restamp: plan.filter((p) => p.action === 'restamp').length,
+      reword: plan.filter((p) => p.action === 'reword').length,
+      rerun: plan.filter((p) => p.action === 'rerun').length
+    },
+    byStatus,
+    items: plan
+  };
 }
 
 // One entry per item enriched before the current standards (house exclusion/style rules) version.
