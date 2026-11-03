@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { AgenticStatusCard, type AgenticStatusCardProps } from '../AgenticStatusCard';
 import { AgenticSnapshotsPanel } from '../AgenticSnapshotsPanel';
+import { TranscriptViewer } from '../TranscriptViewer';
 import type { AgenticSnapshotFields } from '../../../../models';
 import AgenticSpecFieldReviewModal, {
   type AgenticSpecFieldOption,
@@ -25,6 +26,8 @@ interface Props {
   // One-line deterministic verdict of the current run state (status + findings + grade) — the scannable
   // "what happened" line, so the operator doesn't have to read the diff to get the gist.
   verdict?: string | null;
+  // The run's served transcript URL — rendered inline as a collapsible per-stage "what the agent did" view.
+  transcriptUrl?: string | null;
   reviewWizardState?: AgenticReviewWizardData | null;
   onReviewWizardResolve?: (result: AgenticReviewWizardResult | null) => void;
   // Targeted rework ("KI Überarbeitung"): selectable fields + a submit handler. Kept local to this tab
@@ -49,6 +52,7 @@ export default function ItemKiTab({
   onFixFinding,
   dataQuality,
   verdict,
+  transcriptUrl,
   reviewWizardState,
   onReviewWizardResolve,
   reworkFieldOptions,
@@ -125,6 +129,7 @@ export default function ItemKiTab({
           onRestored={onSnapshotRestored}
         />
       ) : null}
+      <TranscriptViewer url={transcriptUrl} />
       {reworkOpen && onReworkSubmit ? ReactDOM.createPortal(
         <AgenticSpecFieldReviewModal
           title="KI Überarbeitung"

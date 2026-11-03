@@ -2801,6 +2801,7 @@ export default function ItemDetail({ itemId }: Props) {
             onFixFinding={handleFixFinding}
             dataQuality={agenticDataQuality}
             verdict={agenticVerdict}
+            transcriptUrl={agentic?.TranscriptUrl ?? null}
             reviewWizardState={reviewWizardModalState?.data ?? null}
             onReviewWizardResolve={handleReviewWizardResolve}
             reworkFieldOptions={reworkFieldOptions}

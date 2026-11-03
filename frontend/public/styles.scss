@@ -3996,6 +3996,57 @@ button:focus {
     line-height: 1.4;
 }
 
+.transcript-viewer {
+    margin-top: 12px;
+}
+.transcript-viewer__head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.transcript-viewer__heading {
+    margin: 0;
+    flex: 1 1 auto;
+}
+.transcript-viewer__raw {
+    font-size: 0.85em;
+}
+.transcript-viewer__stages {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+}
+.transcript-viewer__stage {
+    border-top: 1px solid var(--border, #d0d5dd);
+    padding: 6px 0;
+}
+.transcript-viewer__stage summary {
+    cursor: pointer;
+}
+.transcript-viewer__stage-name {
+    font-weight: 600;
+}
+.transcript-viewer__response,
+.transcript-viewer .transcript-sub pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.82em;
+    background: color-mix(in srgb, var(--color-muted, #98a2b3) 8%, transparent);
+    padding: 8px;
+    border-radius: 4px;
+    max-height: 420px;
+    overflow: auto;
+    margin: 6px 0;
+}
+.transcript-sub {
+    margin: 4px 0 0 8px;
+}
+.transcript-sub summary {
+    cursor: pointer;
+    font-size: 0.85em;
+}
+
 .agentic-snapshots {
     margin-top: 12px;
 }
