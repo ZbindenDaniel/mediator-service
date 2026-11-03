@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "_proposal": "Main-category spec contract for 40 Monitor/Beamer/Kamera. MIXED — only resolution/connection generalize across all three; kept minimal. 401 keeps its own monitor file and overrides.",
+  "fields": [
+    { "key": "Auflösung", "required": false, "description": "Resolution (e.g. 1920x1080, 4K)" },
+    { "key": "Bildschirmgrösse", "required": false, "description": "Screen/diagonal size (displays/projectors)" },
+    { "key": "Anschluss", "required": false, "description": "Inputs/outputs (HDMI, DisplayPort, USB-C, VGA)" }
+  ]
+}

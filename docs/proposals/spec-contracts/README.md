@@ -31,22 +31,27 @@ fields that are genuinely universal for the category and usually extractable —
 
 ## Coverage map (main category → has a group proposal? existing subcategory files)
 
-| Cat | Name | Existing sub files | Group proposal | Notes |
-|----|------|--------------------|----------------|-------|
-| 10 | Computer/Komplettsysteme | 102,103,105,109 | ✅ group-10 | homogeneous — good fit |
-| 20 | Laptop/Zubehör | 201,204 | — | mostly covered by subs |
-| 30 | Drucker/Fax/Scanner | 301 | ⚠️ not drafted | **mixed** (printer vs scanner vs fax) — a single required set is awkward; prefer per-sub or a minimal group |
-| 40 | Monitor/Beamer/Kamera | 401 | ⚠️ not drafted | **mixed** — only `Auflösung`/`Anschluss` generalize; keep minimal |
-| 50 | Tastatur/Maus/VR | — | ⚠️ needs domain input | no sub files yet |
-| 60 | Mainboard/CPU/RAM | 601 | ⚠️ not drafted | **mixed** (board vs CPU vs module) — keep minimal |
-| 70 | Steckkarten | 701 | ✅ group-70 (generic) | 701 keeps its richer file |
-| 80 | Gehäuse/Netzteile/USV/… | — | ⚠️ needs domain input | very mixed |
-| 90 | Festplatten/Flashcards/Sticks | 901,905 | ✅ group-90 | homogeneous — good fit |
-| 100+ | (further categories) | — | ⚠️ needs domain input | |
+| Cat | Name | Existing sub files | Group proposal | Required set | Notes |
+|----|------|--------------------|----------------|-------------|-------|
+| 10 | Computer/Komplettsysteme | 102,103,105,109 | ✅ group-10 | Prozessor* | homogeneous — good fit |
+| 20 | Laptop/Zubehör | 201,204 | ✅ group-20 | none (minimal) | mixed (laptops+accessories); subs override |
+| 30 | Drucker/Fax/Scanner | 301 | ✅ group-30 | none (minimal) | mixed; sanity-check `Gerätetyp` |
+| 40 | Monitor/Beamer/Kamera | 401 | ✅ group-40 | none (minimal) | mixed; only resolution/connection generalize |
+| 50 | Tastatur/Maus/VR | — | ✅ group-50 | none (minimal) | mixed input devices |
+| 60 | Mainboard/CPU/RAM | 601 | ✅ group-60 | none (minimal) | mixed (board/CPU/module); 601 overrides |
+| 70 | Steckkarten | 701 | ✅ group-70 | Schnittstelle* | generic; 701 keeps its richer file |
+| 80 | Gehäuse/Netzteile/USV/… | — | ✅ group-80 | none (minimal) | very mixed |
+| 90 | Festplatten/Flashcards/Sticks | 901,905 | ✅ group-90 | Speichertyp*, Speicher* | homogeneous — good fit |
+| 100+ | (further main categories, if any) | — | ⚠️ needs taxonomy check | — | confirm these exist as real top-level categories before drafting |
 
-**The honest caveat:** main-category contracts shine for *homogeneous* categories (90 storage, 10
-computers) where the whole category shares specs. For *mixed* categories (30, 40, 60, 80) a single
-required-field set mis-fits some members, so those are better served by a **minimal** group (few/no
-required fields — enough to enable a data-quality grade without false `missing_required` noise) plus
-per-subcategory files where it matters. The three drafts here are the clean, homogeneous wins; the mixed
-ones are flagged for a quick domain pass rather than guessed at.
+All 9 labelled main categories (10–90) now have a draft. **The honest caveat:** main-category contracts
+shine for *homogeneous* categories (90 storage, 10 computers, 70 cards) where the whole category shares
+specs — those get real required fields. For *mixed* categories (20/30/40/50/60/80) a single required set
+mis-fits some members, so those drafts are deliberately **minimal** (no required fields): they still give
+every subcategory a data-quality grade + canonical key names and remove the "no contract → never swept"
+exception, without false `missing_required` noise. Promote a field to `required` per-category once you
+confirm it's universal there.
+
+**Before activating:** sanity-check each `required` choice, then move the file into `contracts/specs/`
+(or upload via the admin contracts editor) and reload. The homogeneous three (10/70/90) are the ones that
+will actually drive reworks; the minimal six mostly unlock grading/coverage.

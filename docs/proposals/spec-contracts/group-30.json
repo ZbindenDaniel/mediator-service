@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "_proposal": "Main-category spec contract for 30 Drucker/Fax/Scanner. MIXED (printer vs scanner vs fax vs multifunction), so no required field generalizes — kept minimal. 301 keeps its own printer file and overrides.",
+  "fields": [
+    { "key": "Gerätetyp", "required": false, "description": "Device type (Drucker, Scanner, Multifunktion, Fax)" },
+    { "key": "Anschluss", "required": false, "description": "Connection (USB, LAN, WLAN)" },
+    { "key": "Farbe", "required": false, "description": "Colour vs. monochrome" }
+  ]
+}

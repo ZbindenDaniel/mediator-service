@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "_proposal": "Main-category spec contract for 20 Laptop/Zubehör. MIXED (laptops + tablets + accessories), so kept minimal — no required fields. 201 (laptop) and 204 (tablet) keep their own stricter files and override. Mainly gives the many accessory subcategories a data-quality grade + canonical key names without false missing_required noise.",
+  "fields": [
+    { "key": "Prozessor", "required": false, "description": "CPU model (compute devices only)" },
+    { "key": "Display", "required": false, "description": "Display size/resolution (devices with a screen)" },
+    { "key": "Anschlüsse", "required": false, "description": "Ports/connectivity" }
+  ]
+}
