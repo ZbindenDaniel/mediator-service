@@ -12,6 +12,7 @@ import SystemStatusCard from './admin/SystemStatusCard';
 import NightlyErpSyncCard from './admin/NightlyErpSyncCard';
 import ShopwareStatusCard from './admin/ShopwareStatusCard';
 import AgenticDispatchCard from './admin/AgenticDispatchCard';
+import AgenticSelfHealCard from './admin/AgenticSelfHealCard';
 import AdminGate from './admin/AdminGate';
 import { Feature } from '../context/FeaturesContext';
 
@@ -132,6 +133,7 @@ export default function AdminPage() {
         <Feature name="agentic">
           <AgenticOverviewCard />
           <AgenticDispatchCard authToken={token} onAuthFailure={handleAuthFailure} />
+          <AgenticSelfHealCard authToken={token} onAuthFailure={handleAuthFailure} />
         </Feature>
         <Feature name="admin-system-status">
           <SystemStatusCard authToken={token} onAuthFailure={handleAuthFailure} />

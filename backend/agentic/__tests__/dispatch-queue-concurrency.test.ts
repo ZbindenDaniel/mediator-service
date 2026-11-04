@@ -143,6 +143,37 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
     expect(invokeModel).not.toHaveBeenCalled();
   });
 
+  it('enrols refs without a run only for the slots the notStarted pool could not fill', async () => {
+    const deps = createDeps();
+    (dbClientMod.queryOne as jest.Mock).mockResolvedValue({ runningcount: 0 });
+    jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
+    const feedSpy = jest
+      .spyOn(agenticDb, 'claimNotStartedAgenticRuns')
+      .mockResolvedValueOnce([makeRun({ Artikel_Nummer: 'R-POOL' })])
+      .mockResolvedValueOnce([makeRun({ Artikel_Nummer: 'R-NEW-1' }), makeRun({ Artikel_Nummer: 'R-NEW-2' })]);
+    const enrolSpy = jest.spyOn(agenticDb, 'enrolItemRefsWithoutAgenticRun').mockResolvedValue(2);
+
+    await dispatchQueuedAgenticRuns(deps, { limit: 5 });
+
+    // 3 waiting slots, 1 filled from the pool → enrol and claim exactly the remaining 2.
+    expect(enrolSpy).toHaveBeenCalledWith(2);
+    expect(feedSpy).toHaveBeenNthCalledWith(2, 2);
+  });
+
+  it('does not enrol new refs while the notStarted pool still fills every slot', async () => {
+    const deps = createDeps();
+    (dbClientMod.queryOne as jest.Mock).mockResolvedValue({ runningcount: 0 });
+    jest.spyOn(agenticDb, 'claimQueuedAgenticRuns').mockResolvedValue([]);
+    jest
+      .spyOn(agenticDb, 'claimNotStartedAgenticRuns')
+      .mockResolvedValue([makeRun(), makeRun({ Artikel_Nummer: 'R-2' }), makeRun({ Artikel_Nummer: 'R-3' })]);
+    const enrolSpy = jest.spyOn(agenticDb, 'enrolItemRefsWithoutAgenticRun').mockResolvedValue(0);
+
+    await dispatchQueuedAgenticRuns(deps, { limit: 5 });
+
+    expect(enrolSpy).not.toHaveBeenCalled();
+  });
+
   it('does not auto-feed when the auto-dispatch kill switch is off', async () => {
     const deps = createDeps();
     (dbClientMod.queryOne as jest.Mock).mockResolvedValue({ runningcount: 0 });
@@ -150,10 +181,12 @@ describe('dispatchQueuedAgenticRuns concurrency gating', () => {
     // Kill switch: getSystemSetting('agentic_auto_dispatch_enabled') === 'false'
     jest.spyOn(agenticDb, 'getSystemSetting').mockResolvedValue('false');
     const feedSpy = jest.spyOn(agenticDb, 'claimNotStartedAgenticRuns').mockResolvedValue([]);
+    const enrolSpy = jest.spyOn(agenticDb, 'enrolItemRefsWithoutAgenticRun').mockResolvedValue(0);
 
     await dispatchQueuedAgenticRuns(deps, { limit: 5 });
 
     expect(feedSpy).not.toHaveBeenCalled();
+    expect(enrolSpy).not.toHaveBeenCalled();
   });
 
   it('requeues over-cap running runs to wait instead of cancelling them', async () => {

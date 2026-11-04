@@ -4,6 +4,8 @@ import {
   AGENTIC_RUN_STATUS_FAILED,
   AGENTIC_RUN_STATUS_NOT_STARTED,
   AGENTIC_RUN_STATUS_REVIEW,
+  AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_AUTO_APPROVED,
   AGENTIC_RUN_STATUS_QUEUED,
   AGENTIC_RUN_STATUS_RUNNING,
   AGENTIC_RUN_TERMINAL_STATUSES,
@@ -39,18 +41,27 @@ import {
   markAgenticRequestNotificationFailure,
   claimQueuedAgenticRuns,
   claimNotStartedAgenticRuns,
+  enrolItemRefsWithoutAgenticRun,
+  listItemRefsWithoutAgenticRun,
   updateQueuedAgenticRunQueueState,
   getSystemSetting,
+  setSystemSetting,
   listAgenticRunReviewHistory,
   listContractAuditCandidates,
+  listContractAuditSubcategories,
+  listRunsForFindingsAggregation,
+  listRejectedRunsWithNotes,
+  countRejectedRunsWithNotes,
   stampAgenticRunContractVersion,
   type AgenticRunQueueUpdate,
   type LogEventPayload
 } from '../db';
 import { locateTranscript } from './flow/transcript';
-import { autoReworkConfig } from './config';
-import { getSpecContract } from '../contracts/registry';
-import { checkSpecGap } from '../../models/spec-contract';
+import type { Finding, FindingSeverity, FindingType } from '../../models/agentic-findings';
+import { autoReworkConfig, autoReviewConfig, autoApproveConfig } from './config';
+import { attachCurrentReviewSignals, isValidateOnlyEligible } from './reference-findings';
+import { getSpecContract, getStandardsContract } from '../contracts/registry';
+import { checkSpecGap, type SpecContract } from '../../models/spec-contract';
 import { parseLangtext } from '../lib/langtext';
 
 export interface AgenticServiceLogger {
@@ -110,10 +121,41 @@ const pendingOcrImageData = new Map<string, string>();
 // Same transience caveat as pendingOcrImageData — lost on restart, which is fine.
 const pendingSkipSearch = new Set<string>();
 
+// Tracks runs the enrol-time triage routed to the validate-only path (assess existing data, no LLM).
+// Lost on restart, which is safe: the run then falls back to a normal full run — more expensive, not wrong.
+const pendingValidateOnly = new Set<string>();
+
+// Reviewer notes to carry into a sweep-enqueued correction run (rejected-with-notes → re-run guided by
+// the note, per the operator's "note 'Do X' → corrected next run"). The dispatcher passes these as the
+// run's review.notes so extraction injects them as guidance. In-memory, lost on restart (safe: the run
+// then re-reads nothing and runs plain — the item is still `rejected` so a later sweep re-picks it).
+const pendingReviewNotes = new Map<string, string>();
+
+// Circuit-breaker: the self-heal sweep must never re-process the same item more than once per cooldown,
+// so a single item that stays stale (e.g. a mis-categorized item whose required field can't be filled)
+// can't burn tokens in a tight loop. The version stamp is the primary mechanism (a healed item drops out
+// of the stale set); this is the belt-and-braces that bounds the damage if the stamp ever fails to stick.
+// In-memory and per-process — lost on restart, which is fine (a restart already clears any loop).
+const SELF_HEAL_COOLDOWN_MS = 30 * 60 * 1000;
+const selfHealEnqueuedAt = new Map<string, number>();
+
 // Tracks targeted-rework parameters for a queued run so the dispatcher can pass them to the invoker.
 // Same transience caveat as pendingOcrImageData — lost on restart (the run then falls back to a
 // normal full re-run, which is safe).
 const pendingRework = new Map<string, { fields: string[]; instructions: string | null }>();
+
+// Operator "run the self-heal sweep now" request (admin endpoint). The dispatcher consumes it on its
+// next tick, running one sweep pass even if it would otherwise skip this cycle. One-shot flag, not a
+// count — a burst of clicks still means "run on the next tick". Lost on restart, which is fine.
+let forcedSelfHealSweep = false;
+export function requestSelfHealSweep(): void {
+  forcedSelfHealSweep = true;
+}
+function consumeForcedSelfHealSweep(): boolean {
+  const was = forcedSelfHealSweep;
+  forcedSelfHealSweep = false;
+  return was;
+}
 
 // TODO(agentic-flag-normalization): Fold boolean-to-integer coercion into the shared DB layer
 // once SQLite bindings accept native booleans in our migration plan.
@@ -168,6 +210,49 @@ async function isAutoDispatchEnabled(logger: AgenticServiceLogger): Promise<bool
     });
     return true;
   }
+}
+
+// --- Cockpit levers: runtime-toggleable auto-flags, persisted in system_settings -------------------
+// AUTO_APPROVE/REWORK/REVIEW ship as env booleans resolved once at boot (config.ts). The cockpit needs
+// to flip them at runtime WITHOUT a redeploy and have the choice survive a restart. Mechanism: the
+// dispatcher reads `autoReworkConfig.enabled` etc. live every tick, so mutating the config object takes
+// effect immediately; we persist the chosen value to system_settings and re-hydrate the objects at
+// startup. A stored setting (operator's last choice) therefore wins over the env default once set — the
+// env var only seeds the very first boot. Mirrors the auto-dispatch toggle pattern.
+export type AgenticFlagKey = 'autoApprove' | 'autoRework' | 'autoReview';
+const AGENTIC_FLAG_SETTING_KEYS: Record<AgenticFlagKey, string> = {
+  autoApprove: 'agentic_auto_approve_enabled',
+  autoRework: 'agentic_auto_rework_enabled',
+  autoReview: 'agentic_auto_review_enabled'
+};
+const AGENTIC_FLAG_CONFIGS: Record<AgenticFlagKey, { enabled: boolean }> = {
+  autoApprove: autoApproveConfig,
+  autoRework: autoReworkConfig,
+  autoReview: autoReviewConfig
+};
+
+// Load any persisted flag overrides into the live config objects. Call once at server startup, after the
+// DB is reachable. A missing/unparseable setting leaves the env-seeded default in place.
+export async function hydrateAgenticFlagsFromSettings(logger: AgenticServiceLogger = console): Promise<void> {
+  for (const key of Object.keys(AGENTIC_FLAG_SETTING_KEYS) as AgenticFlagKey[]) {
+    try {
+      const stored = await getSystemSetting(AGENTIC_FLAG_SETTING_KEYS[key]);
+      if (stored === 'true' || stored === 'false') {
+        AGENTIC_FLAG_CONFIGS[key].enabled = stored === 'true';
+      }
+    } catch (err) {
+      logger.warn?.('[agentic-service] Failed to hydrate agentic flag; keeping env default', {
+        flag: key,
+        error: toErrorMessage(err)
+      });
+    }
+  }
+}
+
+// Flip a flag now (mutates the live config object) and persist it so it survives restart.
+export async function setAgenticFlag(flag: AgenticFlagKey, enabled: boolean): Promise<void> {
+  AGENTIC_FLAG_CONFIGS[flag].enabled = enabled;
+  await setSystemSetting(AGENTIC_FLAG_SETTING_KEYS[flag], enabled ? 'true' : 'false');
 }
 
 function toErrorMessage(err: unknown): string {
@@ -796,6 +881,7 @@ interface BackgroundInvocationPayload {
   logger: AgenticServiceLogger;
   imageData?: string | null;
   skipSearch?: boolean;
+  validateOnly?: boolean;
   reworkSpecFields?: string[] | null;
   reworkInstructions?: string | null;
 }
@@ -1063,6 +1149,7 @@ async function scheduleAgenticModelInvocation(payload: BackgroundInvocationPaylo
         requestId: payload.request?.id ?? null,
         imageData: payload.imageData ?? null,
         skipSearch: payload.skipSearch ?? false,
+        validateOnly: payload.validateOnly ?? false,
         reworkSpecFields: payload.reworkSpecFields ?? null,
         reworkInstructions: payload.reworkInstructions ?? null
       });
@@ -1127,6 +1214,7 @@ export async function dispatchQueuedAgenticRuns(
 ): Promise<{ scheduled: number; skipped: number; failed: number }> {
   validateDependencies(deps);
   const logger = resolveLogger(deps);
+  lastDispatchDeps = deps; // capture for the admin "run sweep now" path (same wiring as the interval)
   const effectiveLimit = Number.isFinite(limit) && (limit ?? 0) > 0 ? Math.floor(limit as number) : 5;
 
   // Recover stale "running" runs that have been in-progress beyond the timeout.
@@ -1293,7 +1381,10 @@ export async function dispatchQueuedAgenticRuns(
       continue;
     }
 
-    if (!searchQuery) {
+    // Peek (don't consume) whether this run is validate-only: it re-judges existing content with no search,
+    // so an empty SearchQuery is expected and must NOT fail it. Consumed at scheduling time below.
+    const willValidateOnly = pendingValidateOnly.has(artikelNummer);
+    if (!searchQuery && !willValidateOnly) {
       skipped += 1;
       const nowIso = resolveNow(deps).toISOString();
       const retryCount = run.RetryCount ?? 0;
@@ -1332,14 +1423,37 @@ export async function dispatchQueuedAgenticRuns(
       if (rework) {
         pendingRework.delete(artikelNummer);
       }
+      const validateOnly = pendingValidateOnly.has(artikelNummer);
+      if (validateOnly) {
+        pendingValidateOnly.delete(artikelNummer);
+      }
+      // Correction run: carry the rejected item's reviewer notes into the run as review.notes so the
+      // extraction prompt injects them as guidance (the operator's "note 'Do X' → corrected next run").
+      const correctionNotes = pendingReviewNotes.get(artikelNummer) ?? null;
+      if (correctionNotes) {
+        pendingReviewNotes.delete(artikelNummer);
+      }
       void scheduleAgenticModelInvocation({
         artikelNummer,
         searchQuery,
         context: null,
-        review: null,
+        review: correctionNotes
+          ? {
+              decision: null,
+              information_present: null,
+              missing_spec: [],
+              unneeded_spec: [],
+              bad_format: null,
+              wrong_information: null,
+              wrong_physical_dimensions: null,
+              notes: correctionNotes,
+              reviewedBy: null
+            }
+          : null,
         request: null,
         imageData,
         skipSearch,
+        validateOnly,
         reworkSpecFields: rework?.fields ?? null,
         reworkInstructions: rework?.instructions ?? null,
         deps,
@@ -1387,6 +1501,32 @@ export async function dispatchQueuedAgenticRuns(
       if (feedSlots > 0) {
         const fedRuns = await claimNotStartedAgenticRuns(feedSlots);
         autoFed = fedRuns.length;
+        if (autoFed < feedSlots) {
+          // notStarted pool exhausted: enrol just enough never-enrolled refs to fill the free slots, so
+          // every ref eventually reaches the pipeline without flooding it.
+          const toEnrol = feedSlots - autoFed;
+          // Enrol-time triage: route refs whose EXISTING data is already complete + clean to the
+          // validate-only path (assess, no LLM — saves the full run and avoids churning good data). The
+          // list uses the same ordering as the enrol insert, so the marked refs are the ones enrolled.
+          let validateOnlyMarked = 0;
+          try {
+            const candidates = await listItemRefsWithoutAgenticRun(toEnrol);
+            for (const ref of candidates) {
+              if (isValidateOnlyEligible(ref as Record<string, unknown>)) {
+                pendingValidateOnly.add(ref.Artikel_Nummer);
+                validateOnlyMarked += 1;
+              }
+            }
+          } catch (err) {
+            logger.warn?.('[agentic-service] Enrol-time triage failed; refs will take a full run', { error: toErrorMessage(err) });
+          }
+          const enrolled = await enrolItemRefsWithoutAgenticRun(toEnrol);
+          if (enrolled > 0) {
+            const enrolledRuns = await claimNotStartedAgenticRuns(toEnrol);
+            autoFed += enrolledRuns.length;
+            logger.info?.('[agentic-service] Enrolled item refs without an agentic run', { enrolled, validateOnly: validateOnlyMarked });
+          }
+        }
         if (autoFed > 0) {
           logger.info?.('[agentic-service] Auto-fed notStarted runs into waiting queue', {
             fed: autoFed,
@@ -1404,10 +1544,17 @@ export async function dispatchQueuedAgenticRuns(
     logger.debug?.('[agentic-service] Auto-dispatch disabled; skipping notStarted feed');
   }
 
-  // Idle contract-audit sweeper (default off): only when otherwise idle (nothing dispatched or fed this
-  // cycle), re-apply the current spec contract to the oldest stale item — re-stamp if already complete,
-  // else enqueue a targeted rework. Gated on the auto-dispatch kill switch too, since it is auto work.
-  if (autoReworkConfig.enabled && autoDispatchEnabled && scheduled === 0 && autoFed === 0) {
+  // Self-heal sweeper (default off): re-apply the current contract/standards to the oldest stale item.
+  // AUTO_REWORK covers the settled approved states; AUTO_REVIEW additionally re-judges version-stale items
+  // stuck in manual review. Gated on the auto-dispatch kill switch too, since it is auto work.
+  //
+  // It runs when we did NOT just promote runs to running this cycle (`scheduled === 0`) — i.e. running is
+  // full or idle — OR when an operator forced it via the admin endpoint. It deliberately does NOT require
+  // `autoFed === 0`: the keep-busy feeder tops up the WAITING queue with notStarted items almost every
+  // tick, so requiring a fed-free cycle starved the sweep indefinitely whenever any notStarted backlog
+  // existed (the "flags on but nothing happens" report). One enqueue per tick keeps it gentle regardless.
+  const forcedSweep = consumeForcedSelfHealSweep();
+  if ((autoReworkConfig.enabled || autoReviewConfig.enabled) && autoDispatchEnabled && (forcedSweep || scheduled === 0)) {
     await sweepContractRework(deps, logger);
   }
 
@@ -1432,51 +1579,613 @@ export function decideContractAuditAction(
   return { action: 'restamp' };
 }
 
-// Deterministic idle sweeper for the AUTO_REWORK feature. Finds the oldest settled item enriched
-// against an outdated spec contract version and either re-stamps it (already complete) or enqueues a
-// targeted rework for the now-missing required fields. No LLM in the decision — pure gap check.
-async function sweepContractRework(
-  deps: AgenticServiceDependencies,
-  logger: AgenticServiceLogger
-): Promise<void> {
-  let candidates: Awaited<ReturnType<typeof listContractAuditCandidates>> = [];
-  try {
-    candidates = await listContractAuditCandidates(20);
-  } catch (err) {
-    logger.error?.('[agentic-service] Contract-audit sweep failed to load candidates', { error: toErrorMessage(err) });
-    return;
+// Unified self-heal decision (no DB/LLM) — the "entry-point router". Given BOTH staleness axes it decides
+// where a settled item must re-enter the pipeline:
+//   • spec contract (SpecContractVersion) changed its fields → needs EXTRACTION to obtain new values;
+//   • standards (StandardsVersion) changed the house rules    → needs a WORDING pass to re-apply them.
+// Outcomes, cheapest-first:
+//   - `skip`    : current on both axes.
+//   - `restamp` : contract stale but already complete, standards current → just bump the version (no LLM).
+//   - `rework`  : contract stale + missing required field(s), standards current → targeted extraction.
+//                 NOTE: rework mode skips the wording stage, so it is only correct when standards are NOT
+//                 also stale (otherwise the new house rules wouldn't be applied).
+//   - `reword`  : standards stale, no extraction need → a search-free run whose wording pass re-applies
+//                 the house rules. (A full run, not targeted — so wording runs.)
+//   - `rerun`   : BOTH an extraction need AND standards staleness → a search-free FULL run so extraction
+//                 and wording both happen; a targeted rework would skip wording.
+// reword/rerun both execute as the same search-free run; they differ only in why they were chosen (kept
+// distinct for legibility). The completed run stamps both versions, so the sweep self-limits either way.
+export function decideSelfHealAction(
+  contractStored: number | null,
+  contractCurrent: number,
+  standardsStored: number | null,
+  standardsCurrent: number | null,
+  gapMissingRequired: string[]
+):
+  | { action: 'skip' }
+  | { action: 'restamp' }
+  | { action: 'rework'; fields: string[] }
+  | { action: 'reword' }
+  | { action: 'rerun'; fields: string[] } {
+  const contract = decideContractAuditAction(contractStored, contractCurrent, gapMissingRequired);
+  const standardsStale = standardsCurrent != null && (standardsStored == null || standardsStored < standardsCurrent);
+  if (contract.action === 'rework') {
+    // Extraction is required. If standards are also stale, escalate to a full run so wording runs too
+    // (a targeted rework skips the wording stage); otherwise the targeted rework is enough.
+    return standardsStale ? { action: 'rerun', fields: contract.fields } : contract;
   }
+  // contract is 'skip' or 'restamp' — no extraction needed. Standards staleness alone → a re-word.
+  if (standardsStale) return { action: 'reword' };
+  return contract;
+}
 
+// L4 (legible sweeper): one entry per stale item the self-heal sweep would act on. Lets the sweep
+// log/preview the *whole* backlog instead of acting invisibly, and is the shape a dry-run surfaces to the
+// operator before AUTO_REWORK is trusted on.
+export interface ContractSweepPlanEntry {
+  artikelNummer: string;
+  subCategory: number;
+  action: 'rework' | 'restamp' | 'reword' | 'rerun';
+  /** For rework/rerun: the now-missing required fields that drove the extraction need. */
+  fields?: string[];
+  /** Spec-contract versions (the extraction axis). */
+  fromVersion: number | null;
+  toVersion: number;
+  /** Standards versions (the wording axis) — set when the entry is driven by standards staleness. */
+  standardsFromVersion?: number | null;
+  standardsToVersion?: number | null;
+  /** The run status this entry acts on (e.g. 'approved', 'review') — carried for legibility/logging. */
+  status?: string;
+}
+
+type ContractAuditCandidate = {
+  Artikel_Nummer: string;
+  Status?: string;
+  SubCategory: number | null;
+  SpecContractVersion: number | null;
+  StandardsVersion?: number | null;
+  Langtext: string | null;
+  Artikelbeschreibung?: string | null;
+};
+
+// Pure (no DB/LLM): the unified self-heal plan — maps candidate rows to the actions the sweep would take,
+// in order, across BOTH staleness axes. `getContract` is injected for unit-testing without the registry;
+// `standardsCurrent` is the current standards version (null disables the wording axis entirely, which is
+// how `planContractSweep` reuses this for the contract-only view). Parsing/gap-check mirror the live sweep
+// exactly, so the preview and the action can never disagree.
+export function planSelfHealSweep(
+  candidates: ContractAuditCandidate[],
+  getContract: (subCategory: number) => SpecContract | null,
+  standardsCurrent: number | null
+): ContractSweepPlanEntry[] {
+  const plan: ContractSweepPlanEntry[] = [];
   for (const candidate of candidates) {
     if (candidate.SubCategory == null) continue;
-    const contract = getSpecContract(candidate.SubCategory);
+    // v1 scope: only items with a resolvable spec contract. Standards are global, but the wording pass
+    // relies on the contract's recognizedSpecFields to avoid over-stripping, so contract-less subcategories
+    // are left out of the standards re-word for now (see deferred note in the changelog).
+    const contract = getContract(candidate.SubCategory);
     if (!contract) continue;
     const stored = typeof candidate.SpecContractVersion === 'number' ? candidate.SpecContractVersion : null;
-    if (stored != null && stored >= contract.version) continue; // already current — not stale (fast path)
+    const standardsStored = typeof candidate.StandardsVersion === 'number' ? candidate.StandardsVersion : null;
+
+    // Fast path: current on both axes → skip without parsing Langtext.
+    const contractStale = stored == null || stored < contract.version;
+    const standardsStale = standardsCurrent != null && (standardsStored == null || standardsStored < standardsCurrent);
+    if (!contractStale && !standardsStale) continue;
 
     let langtextObj: Record<string, unknown> = {};
     try {
       const parsed = parseLangtext(candidate.Langtext, { context: 'contract-audit' });
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        langtextObj = parsed as Record<string, unknown>;
-      }
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) langtextObj = parsed as Record<string, unknown>;
     } catch {
-      // Treat unparseable Langtext as empty — the gap check will flag required fields.
+      // Unparseable Langtext → empty; the gap check then flags required fields.
     }
     const gap = checkSpecGap(contract, langtextObj);
-    const decision = decideContractAuditAction(stored, contract.version, gap.missingRequired);
+    const decision = decideSelfHealAction(stored, contract.version, standardsStored, standardsCurrent, gap.missingRequired);
     if (decision.action === 'skip') continue;
+    const isReview = candidate.Status === AGENTIC_RUN_STATUS_REVIEW;
+    // A pending-review item must never be silently re-stamped: that would mark it "current" and hide it
+    // from the sweep without a human or the pipeline ever re-judging it. Only an actual re-run (which the
+    // pipeline then re-judges) may touch a review item; a bare restamp is dropped to a skip.
+    if (isReview && decision.action === 'restamp') continue;
+    const base = {
+      artikelNummer: candidate.Artikel_Nummer,
+      subCategory: candidate.SubCategory,
+      fromVersion: stored,
+      toVersion: contract.version,
+      ...(candidate.Status ? { status: candidate.Status } : {}),
+      // Only carry the standards axis when it is active, so the contract-only plan/preview stays lean.
+      ...(standardsCurrent != null ? { standardsFromVersion: standardsStored, standardsToVersion: standardsCurrent } : {})
+    };
+    if (decision.action === 'rework') plan.push({ ...base, action: 'rework', fields: decision.fields });
+    else if (decision.action === 'rerun') plan.push({ ...base, action: 'rerun', fields: decision.fields });
+    else if (decision.action === 'reword') plan.push({ ...base, action: 'reword' });
+    else plan.push({ ...base, action: 'restamp' });
+  }
+  return plan;
+}
 
-    if (decision.action === 'rework') {
+// Contract-only view (standards axis disabled) — kept for the dry-run preview and existing callers/tests.
+export function planContractSweep(
+  candidates: ContractAuditCandidate[],
+  getContract: (subCategory: number) => SpecContract | null
+): ContractSweepPlanEntry[] {
+  return planSelfHealSweep(candidates, getContract, null);
+}
+
+// Dry run: what the contract-audit sweep *would* do right now (contract axis only), without touching
+// anything. Lets an operator see the stale backlog before enabling AUTO_REWORK.
+export async function previewContractSweep(limit = 20): Promise<ContractSweepPlanEntry[]> {
+  const candidates = await listContractAuditCandidates(limit);
+  return planContractSweep(candidates, getSpecContract);
+}
+
+// Dry run: the full self-heal backlog across both axes (contract + standards), without touching anything.
+export async function previewSelfHealSweep(limit = 20): Promise<ContractSweepPlanEntry[]> {
+  const candidates = await listContractAuditCandidates(limit);
+  return planSelfHealSweep(candidates, getSpecContract, getStandardsContract()?.version ?? null);
+}
+
+export interface SelfHealPreview {
+  /** Which self-heal flags are currently on — so the UI can say "stale items exist but the flag is off". */
+  flags: { autoRework: boolean; autoReview: boolean; autoApprove: boolean };
+  /** Current standards version (null = no standards contract → the wording axis is inert). */
+  standardsVersion: number | null;
+  /** Stale, contract-covered candidate rows examined (capped at `limit`, oldest-first). */
+  totalCandidates: number;
+  /** How many of those are actually stale (what the sweep would act on). */
+  staleCount: number;
+  counts: { rework: number; restamp: number; reword: number; rerun: number };
+  /** Stale count broken down by the run status the entry acts on (approved/auto_approved/review). */
+  byStatus: Record<string, number>;
+  items: ContractSweepPlanEntry[];
+}
+
+// Observable self-heal backlog for the admin surface: what the sweep sees across ALL eligible statuses
+// (approved/auto_approved/review), regardless of which flags are on — so an operator can diagnose "why
+// isn't it doing anything?" (nothing stale? no spec contract? a flag off?). Pure read, no side effects;
+// it deliberately ignores the flag gating so turning a flag ON isn't a prerequisite for seeing the
+// backlog it would act on.
+export async function getSelfHealPreview(limit = 50): Promise<SelfHealPreview> {
+  const statuses = [AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_AUTO_APPROVED, AGENTIC_RUN_STATUS_REVIEW];
+  const standardsVersion = getStandardsContract()?.version ?? null;
+  // Same pre-filtered source as the live sweep, so the preview never shows a backlog the sweep can't reach.
+  const candidates = await loadStaleSelfHealCandidates(statuses, limit, 0, standardsVersion);
+  const plan = planSelfHealSweep(candidates, getSpecContract, standardsVersion);
+  const byStatus: Record<string, number> = {};
+  for (const entry of plan) {
+    const key = entry.status ?? 'unknown';
+    byStatus[key] = (byStatus[key] ?? 0) + 1;
+  }
+  return {
+    flags: { autoRework: autoReworkConfig.enabled, autoReview: autoReviewConfig.enabled, autoApprove: autoApproveConfig.enabled },
+    standardsVersion,
+    totalCandidates: candidates.length,
+    staleCount: plan.length,
+    counts: {
+      rework: plan.filter((p) => p.action === 'rework').length,
+      restamp: plan.filter((p) => p.action === 'restamp').length,
+      reword: plan.filter((p) => p.action === 'reword').length,
+      rerun: plan.filter((p) => p.action === 'rerun').length
+    },
+    byStatus,
+    items: plan
+  };
+}
+
+// The cockpit read model: the pipeline's state and its levers, composed for the KI cockpit surface.
+// Deliberately NOT item-centric — it aggregates what an operator steers globally: the auto-flags, the
+// gating thresholds, the live queue, and the self-heal backlog. One round-trip powers the levers strip.
+export interface PipelineCockpit {
+  /** Effective auto-flags (post-hydration — stored override or env default). */
+  flags: { autoApprove: boolean; autoRework: boolean; autoReview: boolean };
+  /** The keep-busy auto-feeder master switch (system_settings). */
+  autoDispatch: boolean;
+  /** Read-only gating thresholds, so the operator sees the rules the flags act under. */
+  thresholds: { autoApproveMinGrade: number; maxWaitingRuns: number; selfHealCooldownMinutes: number };
+  /** Live pipeline occupancy. `waiting` = queued, `running` = in flight, `notStarted` = enrolled backlog. */
+  queue: { waiting: number; running: number; notStarted: number };
+  /** Items rejected-with-notes awaiting a self-heal correction run (needs AUTO_REWORK to drain). */
+  correctionBacklog: number;
+  /** The self-heal backlog (same numbers the admin self-heal preview reports). */
+  selfHeal: {
+    standardsVersion: number | null;
+    staleCount: number;
+    counts: { rework: number; restamp: number; reword: number; rerun: number };
+    byStatus: Record<string, number>;
+  };
+}
+
+export async function getPipelineCockpit(logger: AgenticServiceLogger = console): Promise<PipelineCockpit> {
+  // Preview + counts are independent reads — run them together.
+  const [preview, waiting, running, notStarted, correctionBacklog, autoDispatch] = await Promise.all([
+    getSelfHealPreview(100),
+    fetchStatusCount(AGENTIC_RUN_STATUS_QUEUED),
+    fetchStatusCount(AGENTIC_RUN_STATUS_RUNNING),
+    fetchStatusCount(AGENTIC_RUN_STATUS_NOT_STARTED),
+    countRejectedRunsWithNotes(),
+    isAutoDispatchEnabled(logger)
+  ]);
+  return {
+    flags: preview.flags,
+    autoDispatch,
+    thresholds: {
+      autoApproveMinGrade: autoApproveConfig.minGrade,
+      maxWaitingRuns: MAX_WAITING_RUNS,
+      selfHealCooldownMinutes: Math.round(SELF_HEAL_COOLDOWN_MS / 60000)
+    },
+    queue: { waiting, running, notStarted },
+    correctionBacklog,
+    selfHeal: {
+      standardsVersion: preview.standardsVersion,
+      staleCount: preview.staleCount,
+      counts: preview.counts,
+      byStatus: preview.byStatus
+    }
+  };
+}
+
+// --- Findings aggregation: the cockpit's "what's systematically wrong" view -----------------------
+// Aggregates the STORED per-run findings snapshot (FindingsJson) across the catalogue, so an operator
+// sees classes of problems (type × field × subcategory) rather than individual rows. Plus the run-status
+// distribution for the pipeline-behaviour chart. Snapshot-based (the per-item view recomputes live on
+// read); fine for a grander-scale overview and cheap — one scan, no per-item recompute.
+
+// A class of problem: N items share this finding type/field/subcategory. The lever acts on the whole class.
+export interface FindingCluster {
+  type: FindingType;
+  field: string | null;
+  subCategory: number | null;
+  /** Worst severity seen in the cluster (block > warn > info) — drives colour/sort. */
+  severity: FindingSeverity;
+  count: number;
+  /** Up to 100 affected article numbers, for drill-down and the bulk lever. */
+  sample: string[];
+  /** Up to 5 distinct concrete examples (the finding's evidence, else its message) — the "what to adjust". */
+  examples: string[];
+}
+
+export interface PipelineFindingsAggregate {
+  totalRuns: number;
+  /** Run count per status, in canonical pipeline order — the chart's data. */
+  statusDistribution: Array<{ status: string; count: number }>;
+  /** Distinct runs carrying at least one finding of any severity — the coverage headline. */
+  itemsWithFindings: number;
+  /** Items (runs) carrying at least one finding of each severity — the "how many bad items" headline. */
+  itemsBySeverity: { block: number; warn: number; info: number };
+  /** Clusters sorted worst-first (severity, then count), capped. */
+  clusters: FindingCluster[];
+  /** Total distinct clusters before the cap, so the UI can say "+N more". */
+  totalClusters: number;
+}
+
+const SEVERITY_ORDER: Record<FindingSeverity, number> = { block: 0, warn: 1, info: 2 };
+// Canonical left-to-right pipeline order for the status chart; unknown statuses sort after, alphabetically.
+const STATUS_ORDER: string[] = [
+  AGENTIC_RUN_STATUS_NOT_STARTED,
+  AGENTIC_RUN_STATUS_QUEUED,
+  AGENTIC_RUN_STATUS_RUNNING,
+  AGENTIC_RUN_STATUS_REVIEW,
+  AGENTIC_RUN_STATUS_AUTO_APPROVED,
+  AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_FAILED,
+  AGENTIC_RUN_STATUS_CANCELLED
+];
+
+function parseFindings(json: string | null): Finding[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as Finding[]) : [];
+  } catch {
+    return []; // a malformed snapshot shouldn't sink the whole aggregate
+  }
+}
+
+export async function getPipelineFindingsAggregate(clusterLimit = 40): Promise<PipelineFindingsAggregate> {
+  return aggregateRunFindings(await listRunsForFindingsAggregation(), clusterLimit);
+}
+
+// Pure reducer (no DB) so the aggregation is unit-testable: run rows → status distribution + finding
+// clusters + per-severity item counts.
+export function aggregateRunFindings(
+  rows: Array<{ Artikel_Nummer: string; Status: string; FindingsJson: string | null; SubCategory: number | null }>,
+  clusterLimit = 40
+): PipelineFindingsAggregate {
+  const statusCounts = new Map<string, number>();
+  const itemsBySeverity = { block: 0, warn: 0, info: 0 };
+  let itemsWithFindings = 0;
+  // key = type||field||subCategory → accumulating cluster
+  const clusterMap = new Map<string, FindingCluster>();
+  // Distinct concrete examples per cluster (evidence, else message), capped — the "what to adjust".
+  const exampleSets = new Map<string, Set<string>>();
+
+  for (const row of rows) {
+    statusCounts.set(row.Status, (statusCounts.get(row.Status) ?? 0) + 1);
+    const findings = parseFindings(row.FindingsJson);
+    if (findings.length === 0) continue;
+    itemsWithFindings += 1;
+    const seenSeverityForItem = new Set<FindingSeverity>();
+    for (const f of findings) {
+      if (!f || typeof f.type !== 'string') continue;
+      const severity: FindingSeverity = f.severity === 'block' || f.severity === 'warn' ? f.severity : 'info';
+      seenSeverityForItem.add(severity);
+      const field = typeof f.field === 'string' && f.field.trim() ? f.field.trim() : null;
+      const key = `${f.type}||${field ?? ''}||${row.SubCategory ?? ''}`;
+      const existing = clusterMap.get(key);
+      if (existing) {
+        existing.count += 1;
+        if (SEVERITY_ORDER[severity] < SEVERITY_ORDER[existing.severity]) existing.severity = severity;
+        if (existing.sample.length < 100) existing.sample.push(row.Artikel_Nummer);
+      } else {
+        clusterMap.set(key, {
+          type: f.type as FindingType,
+          field,
+          subCategory: row.SubCategory,
+          severity,
+          count: 1,
+          sample: [row.Artikel_Nummer],
+          examples: []
+        });
+      }
+      const exampleRaw = typeof f.evidence === 'string' && f.evidence.trim() ? f.evidence : f.message;
+      const example = typeof exampleRaw === 'string' ? exampleRaw.trim().slice(0, 160) : '';
+      if (example) {
+        const set = exampleSets.get(key) ?? new Set<string>();
+        if (set.size < 5) set.add(example);
+        exampleSets.set(key, set);
+      }
+    }
+    // Count each item once per severity it carries (not once per finding), so the headline reads as items.
+    for (const sev of seenSeverityForItem) itemsBySeverity[sev] += 1;
+  }
+
+  for (const [key, cluster] of clusterMap) cluster.examples = Array.from(exampleSets.get(key) ?? []);
+
+  const allClusters = Array.from(clusterMap.values()).sort((a, b) =>
+    SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.count - a.count
+  );
+
+  const statusDistribution = Array.from(statusCounts.entries())
+    .sort((a, b) => {
+      const ia = STATUS_ORDER.indexOf(a[0]);
+      const ib = STATUS_ORDER.indexOf(b[0]);
+      if (ia === -1 && ib === -1) return a[0].localeCompare(b[0]);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    })
+    .map(([status, count]) => ({ status, count }));
+
+  return {
+    totalRuns: rows.length,
+    statusDistribution,
+    itemsWithFindings,
+    itemsBySeverity,
+    clusters: allClusters.slice(0, clusterLimit),
+    totalClusters: allClusters.length
+  };
+}
+
+// One entry per item enriched before the current standards (house exclusion/style rules) version.
+// Standards are global, so unlike the spec-contract sweep there is no per-subcategory contract to resolve.
+export interface StandardsSweepPlanEntry {
+  artikelNummer: string;
+  fromVersion: number | null;
+  toVersion: number;
+}
+
+// Pure (no DB/LLM): which settled items predate the current standards version. Observation only — there
+// is no acting standards sweep yet (the re-word is step 3, operator-gated), so this just surfaces the
+// backlog a re-word would touch. A null stored version (enriched before stamping existed) counts as stale.
+export function planStandardsSweep(
+  candidates: Array<{ Artikel_Nummer: string; StandardsVersion: number | null }>,
+  currentStandardsVersion: number | null
+): StandardsSweepPlanEntry[] {
+  if (currentStandardsVersion == null) return []; // no standards contract → nothing to be stale against
+  const plan: StandardsSweepPlanEntry[] = [];
+  for (const candidate of candidates) {
+    const stored = typeof candidate.StandardsVersion === 'number' ? candidate.StandardsVersion : null;
+    if (stored != null && stored >= currentStandardsVersion) continue; // already current → skip
+    plan.push({ artikelNummer: candidate.Artikel_Nummer, fromVersion: stored, toVersion: currentStandardsVersion });
+  }
+  return plan;
+}
+
+// Dry run: how many settled items predate the current standards version. Read-only — no reprocessing;
+// the acting re-word stays gated until the operator opts in.
+export async function previewStandardsSweep(limit = 20): Promise<StandardsSweepPlanEntry[]> {
+  const candidates = await listContractAuditCandidates(limit);
+  return planStandardsSweep(candidates, getStandardsContract()?.version ?? null);
+}
+
+type SelfHealCandidate = Awaited<ReturnType<typeof listContractAuditCandidates>>[number];
+const SELF_HEAL_PAGE_SIZE = 50;
+const SELF_HEAL_MAX_PAGES = 20;
+
+// Candidates the self-heal sweep can actually act on: rows in a subcategory with a resolvable spec contract
+// that are stale on either axis, oldest first. The staleness filter runs in SQL before the LIMIT.
+async function loadStaleSelfHealCandidates(
+  statuses: readonly string[],
+  limit: number,
+  offset: number,
+  standardsVersion: number | null
+): Promise<SelfHealCandidate[]> {
+  const subcategories = await listContractAuditSubcategories(statuses);
+  const contractVersions: Array<{ subCategory: number; version: number }> = [];
+  for (const subCategory of subcategories) {
+    const contract = getSpecContract(subCategory);
+    if (contract) contractVersions.push({ subCategory, version: contract.version });
+  }
+  if (contractVersions.length === 0) return [];
+  return listContractAuditCandidates(limit, statuses, { contractVersions, standardsVersion, offset });
+}
+
+// Deterministic idle sweeper for the AUTO_REWORK feature (gated, default off). Finds the oldest settled
+// item that is stale on either axis — spec contract (SpecContractVersion) or standards (StandardsVersion)
+// — and takes the cheapest correct action per `decideSelfHealAction`: re-stamp, a targeted rework
+// (extraction), or a search-free re-word/rerun (wording re-applies the house rules). No LLM in the
+// Enqueue (at most) one rejected-with-notes item as a correction run: a normal full run that carries the
+// reviewer's stored notes as guidance (via pendingReviewNotes → the dispatcher sets review.notes). Returns
+// the acted result, or null when nothing was enqueued (queue full, all on cooldown, or none pending) so
+// the caller falls through to the staleness plan.
+async function sweepCorrectionNotes(
+  deps: AgenticServiceDependencies,
+  logger: AgenticServiceLogger
+): Promise<SelfHealSweepResult | null> {
+  let rejected: Array<{ Artikel_Nummer: string; LastReviewNotes: string; Artikelbeschreibung: string | null }> = [];
+  try {
+    rejected = await listRejectedRunsWithNotes(SELF_HEAL_PAGE_SIZE);
+  } catch (err) {
+    logger.error?.('[agentic-service] Correction-notes sweep failed to load rejected items', { error: toErrorMessage(err) });
+    return null;
+  }
+  if (rejected.length === 0) return null;
+
+  let canEnqueue = true;
+  try {
+    canEnqueue = (await fetchStatusCount(AGENTIC_RUN_STATUS_QUEUED)) < MAX_WAITING_RUNS;
+  } catch {
+    canEnqueue = true;
+  }
+  if (!canEnqueue) return null;
+
+  for (const item of rejected) {
+    const lastHeal = selfHealEnqueuedAt.get(item.Artikel_Nummer);
+    if (lastHeal && Date.now() - lastHeal < SELF_HEAL_COOLDOWN_MS) continue; // don't re-loop before the transition lands
+    const notes = item.LastReviewNotes.trim();
+    if (!notes) continue;
+    selfHealEnqueuedAt.set(item.Artikel_Nummer, Date.now());
+    pendingReviewNotes.set(item.Artikel_Nummer, notes);
+    const nowIso = resolveNow(deps).toISOString();
+    try {
+      await deps.updateAgenticRunStatus(normalizeAgenticStatusUpdate({
+        Artikel_Nummer: item.Artikel_Nummer,
+        Status: AGENTIC_RUN_STATUS_QUEUED,
+        SearchQuery: item.Artikelbeschreibung ?? item.Artikel_Nummer,
+        LastModified: nowIso,
+        // Leave LastReviewNotes intact (historical); the run re-judges and transitions the item out of
+        // `rejected`, which is what stops it being re-selected.
+        RetryCount: 0,
+        RetryCountIsSet: true,
+        NextRetryAt: null,
+        NextRetryAtIsSet: true,
+        LastError: null,
+        LastErrorIsSet: true,
+        LastAttemptAt: null,
+        LastAttemptAtIsSet: true
+      }));
+      try {
+        await deps.logEvent({
+          Actor: 'auto-rework',
+          EntityType: 'Item',
+          EntityId: item.Artikel_Nummer,
+          Event: 'CorrectionNoteRework',
+          Meta: JSON.stringify({ noteLength: notes.length })
+        });
+      } catch { /* event logging is non-fatal */ }
+      logger.info?.('[agentic-service] Self-heal enqueued correction-note rework', { artikelNummer: item.Artikel_Nummer });
+      return { ran: true, staleCount: rejected.length, acted: 'rework', artikelNummer: item.Artikel_Nummer };
+    } catch (err) {
+      pendingReviewNotes.delete(item.Artikel_Nummer);
+      selfHealEnqueuedAt.delete(item.Artikel_Nummer);
+      logger.error?.('[agentic-service] Correction-notes sweep failed to enqueue', { artikelNummer: item.Artikel_Nummer, error: toErrorMessage(err) });
+      return { ran: true, staleCount: rejected.length, acted: 'none', reason: 'enqueue-failed', artikelNummer: item.Artikel_Nummer };
+    }
+  }
+  return null; // all pending items are on cooldown
+}
+
+// decision — pure version + gap check; one enqueue per idle tick keeps it gentle.
+async function sweepContractRework(
+  deps: AgenticServiceDependencies,
+  logger: AgenticServiceLogger
+): Promise<SelfHealSweepResult> {
+  // Which run states the sweep may touch: AUTO_REWORK covers the settled approved states; AUTO_REVIEW adds
+  // the manual-review queue (re-judged only when version-stale, per planSelfHealSweep). Either flag alone
+  // is enough to run the sweep (the call site gates on their OR).
+  const statuses: string[] = [];
+  if (autoReworkConfig.enabled) statuses.push(AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_AUTO_APPROVED);
+  if (autoReviewConfig.enabled) statuses.push(AGENTIC_RUN_STATUS_REVIEW);
+  if (statuses.length === 0) return { ran: false, reason: 'no-flags-enabled', staleCount: 0, acted: 'none' };
+
+  // Correction-notes pass (AUTO_REWORK): re-run one rejected-with-notes item, carrying the reviewer's
+  // note as extraction guidance. Prioritised over the staleness plan — it's an explicit operator request,
+  // not a background freshness chore — and like the rest of the sweep, at most one enqueue per tick. The
+  // run transitions the item out of `rejected`, so it drops out of this query (self-limiting); the
+  // cooldown guards the window before that transition lands.
+  if (autoReworkConfig.enabled) {
+    const acted = await sweepCorrectionNotes(deps, logger);
+    if (acted) return acted;
+  }
+
+  const standardsCurrent = getStandardsContract()?.version ?? null;
+  let candidates: SelfHealCandidate[] = [];
+  let plan: ContractSweepPlanEntry[] = [];
+  try {
+    // Page through the stale pre-filtered rows until one yields a plan: a stale review item that only
+    // needs a restamp is (deliberately) dropped by the planner and never touched, so a page full of those
+    // would otherwise block the sweep the same way the old fixed window did.
+    for (let page = 0; page < SELF_HEAL_MAX_PAGES; page += 1) {
+      candidates = await loadStaleSelfHealCandidates(statuses, SELF_HEAL_PAGE_SIZE, page * SELF_HEAL_PAGE_SIZE, standardsCurrent);
+      plan = planSelfHealSweep(candidates, getSpecContract, standardsCurrent);
+      if (plan.length > 0 || candidates.length < SELF_HEAL_PAGE_SIZE) break;
+    }
+  } catch (err) {
+    logger.error?.('[agentic-service] Self-heal sweep failed to load candidates', { error: toErrorMessage(err) });
+    return { ran: false, reason: 'candidate-load-failed', staleCount: 0, acted: 'none' };
+  }
+  if (plan.length === 0) return { ran: true, reason: 'nothing-stale', staleCount: 0, acted: 'none' };
+  // Legibility: log the whole stale backlog across both axes, not just the item we touch this tick, so the
+  // sweep's behaviour is observable even though it acts gently (at most one enqueue per idle tick).
+  logger.info?.('[agentic-service] Self-heal sweep plan', {
+    stale: plan.length,
+    rework: plan.filter((p) => p.action === 'rework').length,
+    restamp: plan.filter((p) => p.action === 'restamp').length,
+    reword: plan.filter((p) => p.action === 'reword').length,
+    rerun: plan.filter((p) => p.action === 'rerun').length
+  });
+
+  // Automated origin, so its activity-log entries are distinguishable from operator actions.
+  const AUTO_ACTOR = 'auto-rework';
+  const logSweepEvent = async (artikelNummer: string, event: string, meta: Record<string, unknown>): Promise<void> => {
+    try {
+      await deps.logEvent({ Actor: AUTO_ACTOR, EntityType: 'Item', EntityId: artikelNummer, Event: event, Meta: JSON.stringify(meta) });
+    } catch (err) {
+      // Event logging is non-fatal — the sweep action already happened; a logging failure must not undo it.
+      logger.warn?.('[agentic-service] Contract-audit failed to log event', { artikelNummer, event, error: toErrorMessage(err) });
+    }
+  };
+
+  // Respect the waiting-queue cap. The keep-busy feeder runs BEFORE the sweep and tops up the waiting
+  // queue with new items up to MAX_WAITING_RUNS, so self-heal only fills whatever slot is still free — it
+  // keeps the pipeline busy without flooding it (the operator's "keep busy, don't throw everything in").
+  // Restamps don't consume a queue slot, so they always proceed.
+  let canEnqueue = true;
+  try {
+    canEnqueue = (await fetchStatusCount(AGENTIC_RUN_STATUS_QUEUED)) < MAX_WAITING_RUNS;
+  } catch {
+    canEnqueue = true; // a count failure must not permanently block self-heal
+  }
+
+  let restamped = 0;
+  for (const entry of plan) {
+    if (entry.action === 'rework') {
+      if (!canEnqueue) continue; // waiting queue full → leave it for a later tick (restamps still run)
+      const lastHeal = selfHealEnqueuedAt.get(entry.artikelNummer);
+      if (lastHeal && Date.now() - lastHeal < SELF_HEAL_COOLDOWN_MS) continue; // cooldown: don't re-loop this item
       // Enqueue a targeted rework; the completed run stamps the new contract version so this item is
       // not re-selected (self-limiting). One enqueue per idle tick keeps the sweep gentle.
-      pendingRework.set(candidate.Artikel_Nummer, { fields: decision.fields, instructions: null });
+      selfHealEnqueuedAt.set(entry.artikelNummer, Date.now());
+      pendingRework.set(entry.artikelNummer, { fields: entry.fields ?? [], instructions: null });
       const nowIso = resolveNow(deps).toISOString();
+      const candidate = candidates.find((c) => c.Artikel_Nummer === entry.artikelNummer);
       try {
         await deps.updateAgenticRunStatus(normalizeAgenticStatusUpdate({
-          Artikel_Nummer: candidate.Artikel_Nummer,
+          Artikel_Nummer: entry.artikelNummer,
           Status: AGENTIC_RUN_STATUS_QUEUED,
-          SearchQuery: candidate.Artikelbeschreibung ?? candidate.Artikel_Nummer,
+          SearchQuery: candidate?.Artikelbeschreibung ?? entry.artikelNummer,
           LastModified: nowIso,
           ReviewState: 'not_required',
           ReviewedBy: null,
@@ -1491,31 +2200,142 @@ async function sweepContractRework(
           LastAttemptAtIsSet: true
         }));
         logger.info?.('[agentic-service] Contract-audit enqueued rework', {
-          artikelNummer: candidate.Artikel_Nummer,
-          missingRequired: decision.fields,
-          fromVersion: stored,
-          toVersion: contract.version
+          artikelNummer: entry.artikelNummer,
+          missingRequired: entry.fields,
+          fromVersion: entry.fromVersion,
+          toVersion: entry.toVersion
+        });
+        await logSweepEvent(entry.artikelNummer, 'ContractAuditRework', {
+          missingRequired: entry.fields,
+          fromVersion: entry.fromVersion,
+          toVersion: entry.toVersion
         });
       } catch (err) {
-        pendingRework.delete(candidate.Artikel_Nummer);
+        pendingRework.delete(entry.artikelNummer);
         logger.error?.('[agentic-service] Contract-audit failed to enqueue rework', {
-          artikelNummer: candidate.Artikel_Nummer,
+          artikelNummer: entry.artikelNummer,
           error: toErrorMessage(err)
         });
+        return { ran: true, staleCount: plan.length, acted: 'none', reason: 'enqueue-failed', artikelNummer: entry.artikelNummer };
       }
-      return; // one enqueue per idle tick
+      return { ran: true, staleCount: plan.length, acted: 'rework', artikelNummer: entry.artikelNummer }; // one enqueue per tick
+    }
+
+    if (entry.action === 'reword' || entry.action === 'rerun') {
+      if (!canEnqueue) continue; // waiting queue full → leave it for a later tick
+      const lastHeal = selfHealEnqueuedAt.get(entry.artikelNummer);
+      if (lastHeal && Date.now() - lastHeal < SELF_HEAL_COOLDOWN_MS) continue; // cooldown: don't re-loop this item
+      selfHealEnqueuedAt.set(entry.artikelNummer, Date.now());
+      // Standards-driven self-heal: enqueue a SEARCH-FREE run (skipSearch, no reworkSpecFields) so the
+      // wording stage runs and re-applies the current house rules to stored content. 'rerun' is the same
+      // run chosen because the contract also needs extraction (a targeted rework would skip wording).
+      // Supervised like any run; the completed run stamps both versions, so the item self-limits. We use
+      // skipSearch — never a fresh web search — because this cleans existing data, not re-researches it.
+      pendingSkipSearch.add(entry.artikelNummer);
+      const nowIso = resolveNow(deps).toISOString();
+      const candidate = candidates.find((c) => c.Artikel_Nummer === entry.artikelNummer);
+      try {
+        await deps.updateAgenticRunStatus(normalizeAgenticStatusUpdate({
+          Artikel_Nummer: entry.artikelNummer,
+          Status: AGENTIC_RUN_STATUS_QUEUED,
+          SearchQuery: candidate?.Artikelbeschreibung ?? entry.artikelNummer,
+          LastModified: nowIso,
+          ReviewState: 'not_required',
+          ReviewedBy: null,
+          ReviewedByIsSet: true,
+          RetryCount: 0,
+          RetryCountIsSet: true,
+          NextRetryAt: null,
+          NextRetryAtIsSet: true,
+          LastError: null,
+          LastErrorIsSet: true,
+          LastAttemptAt: null,
+          LastAttemptAtIsSet: true
+        }));
+        // A review-state item re-run here is the pending-review self-heal (AUTO_REVIEW): the pipeline
+        // re-judges it, so it either auto-approves (queue shrinks) or stays in review. Logged distinctly.
+        const fromReview = entry.status === AGENTIC_RUN_STATUS_REVIEW;
+        logger.info?.(fromReview
+          ? '[agentic-service] Self-heal re-judging a pending-review item'
+          : '[agentic-service] Self-heal enqueued standards re-word', {
+          artikelNummer: entry.artikelNummer,
+          mode: entry.action,
+          status: entry.status ?? null,
+          fields: entry.fields ?? null,
+          standardsFromVersion: entry.standardsFromVersion ?? null,
+          standardsToVersion: entry.standardsToVersion ?? null
+        });
+        await logSweepEvent(entry.artikelNummer, fromReview ? 'PendingReviewSelfHeal' : 'StandardsAuditReword', {
+          mode: entry.action,
+          status: entry.status ?? null,
+          standardsFromVersion: entry.standardsFromVersion ?? null,
+          standardsToVersion: entry.standardsToVersion ?? null
+        });
+      } catch (err) {
+        pendingSkipSearch.delete(entry.artikelNummer);
+        logger.error?.('[agentic-service] Self-heal failed to enqueue re-word', {
+          artikelNummer: entry.artikelNummer,
+          error: toErrorMessage(err)
+        });
+        return { ran: true, staleCount: plan.length, acted: 'none', reason: 'enqueue-failed', artikelNummer: entry.artikelNummer };
+      }
+      return { ran: true, staleCount: plan.length, acted: entry.action, artikelNummer: entry.artikelNummer }; // one enqueue per tick
     }
 
     // Stale but already complete under the new contract → cheap re-stamp, no rerun.
     try {
-      await stampAgenticRunContractVersion(candidate.Artikel_Nummer, contract.version);
+      await stampAgenticRunContractVersion(entry.artikelNummer, entry.toVersion);
+      restamped += 1;
+      await logSweepEvent(entry.artikelNummer, 'ContractAuditRestamp', {
+        fromVersion: entry.fromVersion,
+        toVersion: entry.toVersion
+      });
     } catch (err) {
       logger.warn?.('[agentic-service] Contract-audit failed to re-stamp item', {
-        artikelNummer: candidate.Artikel_Nummer,
+        artikelNummer: entry.artikelNummer,
         error: toErrorMessage(err)
       });
     }
   }
+  // Loop completed without hitting an enqueue branch → every entry was a (cheap, batched) restamp.
+  return { ran: true, staleCount: plan.length, acted: restamped > 0 ? 'restamp' : 'none', restamped };
+}
+
+// Result of one self-heal sweep pass — returned so the admin "run now" can report what actually happened
+// (enqueued a rework/reword/rerun on item X, restamped N, or nothing stale) instead of leaving the
+// operator guessing whether the tick fired.
+export interface SelfHealSweepResult {
+  ran: boolean;
+  reason?: string;
+  staleCount: number;
+  acted: 'none' | 'rework' | 'reword' | 'rerun' | 'restamp';
+  artikelNummer?: string;
+  restamped?: number;
+}
+
+// The last dependencies the dispatcher was invoked with — captured so the admin "run now" endpoint can
+// drive one sweep pass directly (synchronously), reusing the exact same wiring the interval uses, without
+// the action layer having to assemble its own DB dependencies. Set on the first dispatch tick.
+let lastDispatchDeps: AgenticServiceDependencies | null = null;
+
+// Run one self-heal sweep pass NOW and return what it did. Bypasses the dispatcher's idle gate entirely,
+// so the admin "Jetzt ausführen" button gives immediate, unambiguous feedback. Runs up to `maxActions`
+// enqueues in a batch (each re-queries candidates, so it advances through the backlog) so a single click
+// makes visible progress rather than one item. Restamps are batched within a single pass already.
+export async function runSelfHealSweepNow(maxActions = 5): Promise<{ passes: SelfHealSweepResult[]; warmedUp: boolean }> {
+  if (!lastDispatchDeps) {
+    return { passes: [], warmedUp: false };
+  }
+  const logger = resolveLogger(lastDispatchDeps);
+  const passes: SelfHealSweepResult[] = [];
+  for (let i = 0; i < Math.max(1, maxActions); i += 1) {
+    const result = await sweepContractRework(lastDispatchDeps, logger);
+    passes.push(result);
+    // Stop once a pass enqueued nothing actionable (nothing stale, flags off, or only restamps left —
+    // restamps are already all done in that one pass).
+    if (result.acted === 'none' || result.acted === 'restamp') break;
+  }
+  return { passes, warmedUp: true };
 }
 
 function validateDependencies(deps: AgenticServiceDependencies): void {
@@ -1629,6 +2449,9 @@ export async function startAgenticRun(
 
     if (input.skipSearch) {
       pendingSkipSearch.add(artikelNummer);
+    }
+    if (input.validateOnly) {
+      pendingValidateOnly.add(artikelNummer);
     }
 
     if (Array.isArray(input.reworkSpecFields) && input.reworkSpecFields.length > 0) {
@@ -2080,7 +2903,9 @@ export async function restartAgenticRun(
 
   const existing = await fetchAgenticRun(artikelNummer, deps, logger);
   const searchQuery = (input.searchQuery || existing?.SearchQuery || '').trim();
-  if (!searchQuery) {
+  // Validate-only re-checks existing content with no search, so it needs no query. (It still preserves the
+  // stored query above when there is one, so a later full run keeps it.) Every other restart does search.
+  if (!searchQuery && !input.validateOnly) {
     logger.warn?.('[agentic-service] restartAgenticRun missing search query', {
       artikelNummer,
       context: input.context ?? null
@@ -2256,6 +3081,9 @@ export async function restartAgenticRun(
 
   if (input.skipSearch) {
     pendingSkipSearch.add(artikelNummer);
+  }
+  if (input.validateOnly) {
+    pendingValidateOnly.add(artikelNummer);
   }
 
   if (Array.isArray(input.reworkSpecFields) && input.reworkSpecFields.length > 0) {
@@ -2522,7 +3350,22 @@ export async function getAgenticStatus(
     return { agentic: null };
   }
 
-  return { agentic: await fetchAgenticRun(resolved.artikelNummer, deps, logger) };
+  const run = await fetchAgenticRun(resolved.artikelNummer, deps, logger);
+  if (!run) {
+    return { agentic: null };
+  }
+  // Attach the transient on-read review signals (findings + data-quality grade) via the shared helper so
+  // this read and the item-detail read surface them identically. Best-effort: a failure never blocks.
+  try {
+    const ref = await deps.getItemReference(resolved.artikelNummer);
+    return { agentic: attachCurrentReviewSignals(run, ref as Record<string, unknown> | null) };
+  } catch (err) {
+    logger.warn?.('[agentic-service] Failed to compute current review signals', {
+      artikelNummer: resolved.artikelNummer,
+      error: err instanceof Error ? err.message : err
+    });
+    return { agentic: { ...run, CurrentFindings: [], CurrentDataQuality: null } };
+  }
 }
 
 export async function checkAgenticHealth(

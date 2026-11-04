@@ -14,6 +14,7 @@ import QrScannerPage from './QrScannerPage';
 import BoxEdit from './BoxEdit';
 import ItemCreate from './ItemCreate';
 import ItemListPage from './ItemListPage';
+import KiRunsPage from './KiRunsPage';
 import BoxListPage from './BoxListPage';
 import RecentActivitiesPage from './RecentActivitiesPage';
 import ChatPlaceholder from './ChatPlaceholder';
@@ -75,6 +76,7 @@ export function AppRoutes() {
       <Route path="/boxes/:boxId" element={<BoxRoute />} />
       <Route path="/boxes/:boxId/edit" element={<BoxEditRoute />} />
       <Route path="/items" element={<ItemListPage />} />
+      <Route path="/ki" element={gate(features.agentic, <KiRunsPage />)} />
       <Route path="/items/new" element={<ItemCreate />} />
       <Route path="/items/:itemId" element={<ItemRoute />} />
       <Route path="/items/:itemId/edit" element={<ItemEditRoute />} />

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "_proposal": "Main-category spec contract for 10 Computer/Komplettsysteme. Generalized from 102/103/105/109. Subcategories with their own file (102,103,105,109) override per key; others (104,106,107,108,110) inherit this. Activate by moving to contracts/specs/group-10.json and reloading.",
+  "fields": [
+    { "key": "Prozessor", "required": true, "description": "CPU model (e.g. Intel Core i5-8500)" },
+    { "key": "RAM-Kapazität", "required": false, "description": "Supported/fitted RAM capacity as a model capability" },
+    { "key": "RAM-Typ", "required": false, "description": "Memory type (DDR4, DDR5)" },
+    { "key": "RAM-Slots", "required": false, "description": "Number of memory slots" },
+    { "key": "Speichertyp", "required": false, "description": "Storage technology the machine supports (HDD, SSD, NVMe)" },
+    { "key": "Formfaktor", "required": false, "description": "Chassis form factor (Tower, SFF, Mini, All-in-One)" },
+    { "key": "Anschlüsse", "required": false, "description": "Ports (USB, HDMI, DisplayPort, LAN)" }
+  ]
+}

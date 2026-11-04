@@ -2,15 +2,32 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { AgenticStatusCard, type AgenticStatusCardProps } from '../AgenticStatusCard';
 import { AgenticSnapshotsPanel } from '../AgenticSnapshotsPanel';
+import { TranscriptViewer } from '../TranscriptViewer';
 import type { AgenticSnapshotFields } from '../../../../models';
 import AgenticSpecFieldReviewModal, {
   type AgenticSpecFieldOption,
   type AgenticSpecFieldReviewResult
 } from '../AgenticSpecFieldReviewModal';
 import { AgenticReviewWizard, type AgenticReviewWizardData, type AgenticReviewWizardResult } from '../AgenticReviewWizard';
+import { FindingsPanel } from '../FindingsPanel';
+import { DataQualityBadge } from '../DataQualityBadge';
+import type { Finding } from '../../../../models/agentic-findings';
+import type { DataQualityGrade } from '../../../../models/data-quality';
 
 interface Props {
   agenticCardProps: AgenticStatusCardProps;
+  // Persistent findings for the current run ("Zu prüfen") — shown in the tab, not only during review.
+  findings?: Finding[];
+  // Lever L5a: resolve a surfaced finding by regenerating its field (replaces the blind field-picker as
+  // the primary rework entry). Omitted → findings stay read-only.
+  onFixFinding?: (finding: Finding) => void;
+  // Catalogue data-quality grade (L10), derived on read; shown as a badge above the findings.
+  dataQuality?: DataQualityGrade | null;
+  // One-line deterministic verdict of the current run state (status + findings + grade) — the scannable
+  // "what happened" line, so the operator doesn't have to read the diff to get the gist.
+  verdict?: string | null;
+  // The run's served transcript URL — rendered inline as a collapsible per-stage "what the agent did" view.
+  transcriptUrl?: string | null;
   reviewWizardState?: AgenticReviewWizardData | null;
   onReviewWizardResolve?: (result: AgenticReviewWizardResult | null) => void;
   // Targeted rework ("KI Überarbeitung"): selectable fields + a submit handler. Kept local to this tab
@@ -31,6 +48,11 @@ interface Props {
 
 export default function ItemKiTab({
   agenticCardProps,
+  findings,
+  onFixFinding,
+  dataQuality,
+  verdict,
+  transcriptUrl,
   reviewWizardState,
   onReviewWizardResolve,
   reworkFieldOptions,
@@ -51,6 +73,28 @@ export default function ItemKiTab({
   const [reworkOpen, setReworkOpen] = React.useState(false);
   const canRework = !needsReview && Boolean(onReworkSubmit) && (reworkFieldOptions?.length ?? 0) > 0;
 
+  // Verdict banner severity: a settled item that currently has block (missing-required) or warn
+  // (banned phrase / intake conflict) findings is NOT shop-ready — show the verdict as a warning so it
+  // stands out instead of reading like a calm "Auto-freigegeben".
+  const findingsList = findings ?? [];
+  const verdictSeverity = findingsList.some((f) => f.severity === 'block')
+    ? 'is-block'
+    : findingsList.some((f) => f.severity === 'warn')
+      ? 'is-warn'
+      : 'is-ok';
+
+  // Run-detail sub-tabs (KI-Runs surface §9): the summary (actions + verdict + grade) stays pinned at the
+  // top; the detail panels sit one-at-a-time behind this bar so the KI tab reads as a structured run
+  // detail instead of one long pile. Open on "Zu prüfen" when there is something to review, else "Status".
+  type KiSection = 'status' | 'findings' | 'changes' | 'transcript';
+  const sectionTabs: Array<{ key: KiSection; label: string; badge?: number }> = [
+    { key: 'status', label: 'Status' },
+    { key: 'findings', label: 'Zu prüfen', badge: findingsList.length || undefined },
+    ...(snapshotArtikelNummer ? [{ key: 'changes' as const, label: 'Änderungen' }] : []),
+    ...(transcriptUrl ? [{ key: 'transcript' as const, label: 'Transkript' }] : [])
+  ];
+  const [section, setSection] = React.useState<KiSection>(findingsList.length > 0 ? 'findings' : 'status');
+
   const hasActions = canStart || canRestart || canCancel || needsReview || canClose || canDelete || canRework;
 
   return (
@@ -67,9 +111,11 @@ export default function ItemKiTab({
               Wiederholen
             </button>
           )}
+          {/* L5a: demoted to a secondary manual fallback — the primary rework path is now the per-finding
+              "Beheben" action below. Relabelled so it reads as "pick fields by hand", not a peer of Starten. */}
           {canRework && (
-            <button type="button" className="btn" disabled={actionPending} onClick={() => setReworkOpen(true)}>
-              KI Überarbeitung
+            <button type="button" className="btn secondary" disabled={actionPending} onClick={() => setReworkOpen(true)}>
+              Feld manuell überarbeiten…
             </button>
           )}
           {needsReview && !reviewIntent && (
@@ -94,14 +140,37 @@ export default function ItemKiTab({
           )}
         </div>
       )}
-      <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions />
-      {snapshotArtikelNummer ? (
-        <AgenticSnapshotsPanel
-          artikelNummer={snapshotArtikelNummer}
-          currentFields={snapshotCurrentFields ?? {}}
-          onRestored={onSnapshotRestored}
-        />
-      ) : null}
+      {verdict ? <p className={`ki-verdict ${verdictSeverity}`} role="status">{verdict}</p> : null}
+      <DataQualityBadge quality={dataQuality ?? null} />
+
+      <nav className="ki-subtabs" role="tablist" aria-label="KI-Lauf Details">
+        {sectionTabs.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={section === t.key}
+            className={`ki-subtab${section === t.key ? ' is-active' : ''}`}
+            onClick={() => setSection(t.key)}
+          >
+            {t.label}
+            {t.badge ? <span className="ki-subtab__badge">{t.badge}</span> : null}
+          </button>
+        ))}
+      </nav>
+
+      <div className="ki-section" role="tabpanel">
+        {section === 'status' ? <AgenticStatusCard {...agenticCardProps} noCollapse hideInlineActions /> : null}
+        {section === 'findings' ? <FindingsPanel findings={findingsList} onFix={onFixFinding} busy={actionPending} /> : null}
+        {section === 'changes' && snapshotArtikelNummer ? (
+          <AgenticSnapshotsPanel
+            artikelNummer={snapshotArtikelNummer}
+            currentFields={snapshotCurrentFields ?? {}}
+            onRestored={onSnapshotRestored}
+          />
+        ) : null}
+        {section === 'transcript' ? <TranscriptViewer url={transcriptUrl} /> : null}
+      </div>
       {reworkOpen && onReworkSubmit ? ReactDOM.createPortal(
         <AgenticSpecFieldReviewModal
           title="KI Überarbeitung"

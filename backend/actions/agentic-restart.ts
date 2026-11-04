@@ -184,6 +184,10 @@ const action = defineHttpAction({
 
     const replaceReviewMetadata = payload.replaceReviewMetadata === true;
     const skipSearch = payload.skipSearch === true;
+    // Validate-only: re-assess the existing data (findings + grade + auto-approve gate) with no LLM. The
+    // bulk "Prüfen" uses the restart path (not /api/agentic/run, which refuses to touch a settled run) so
+    // it can re-check items already in review/approved on demand.
+    const validateOnly = (payload as { validateOnly?: unknown }).validateOnly === true;
     // Targeted rework: keys to regenerate + free-text instruction. When present, the run does a partial
     // update (only these keys change) and skips categorization/pricing.
     const reworkSpecFields = Array.isArray((payload as { reworkSpecFields?: unknown }).reworkSpecFields)
@@ -205,6 +209,7 @@ const action = defineHttpAction({
           review: normalizedReview,
           replaceReviewMetadata,
           skipSearch,
+          validateOnly,
           reworkSpecFields: reworkSpecFields.length > 0 ? reworkSpecFields : null,
           reworkInstructions,
           context: 'agentic-restart',

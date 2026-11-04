@@ -27,6 +27,37 @@ function advanceToSummary() {
   clickButton('Weiter'); // 5 -> summary
 }
 
+describe('AgenticReviewWizard — findings panel (review by exception)', () => {
+  it('renders the "Zu prüfen" panel with count, messages and evidence when findings are present', () => {
+    const data: AgenticReviewWizardData = {
+      ...BASE_DATA,
+      findings: [
+        { type: 'missing_required', severity: 'block', field: 'Prozessor', message: 'Pflichtfeld „Prozessor“ fehlt.', ask: 'fix' },
+        {
+          type: 'banned_phrase',
+          severity: 'warn',
+          field: 'Artikelbeschreibung',
+          message: 'Garantie-Formulierung entfernen.',
+          evidence: 'mit einer Garantie von',
+          ask: 'fix',
+          ruleId: 'warranty-clause'
+        }
+      ]
+    };
+    render(<AgenticReviewWizard data={data} onResolve={jest.fn()} />);
+    // getByText throws if absent, so these assert presence.
+    expect(screen.getByText('Zu prüfen (2)')).toBeTruthy();
+    expect(screen.getByText('Pflichtfeld „Prozessor“ fehlt.')).toBeTruthy();
+    expect(screen.getByText('Garantie-Formulierung entfernen.')).toBeTruthy();
+    expect(screen.getByText('„mit einer Garantie von“')).toBeTruthy();
+  });
+
+  it('renders no findings panel when there are none', () => {
+    render(<AgenticReviewWizard data={BASE_DATA} onResolve={jest.fn()} />);
+    expect(screen.queryByText(/^Zu prüfen/)).toBeNull();
+  });
+});
+
 describe('AgenticReviewWizard', () => {
   it('approve path captures edits, dimensions, price, shop flag and tagged notes', () => {
     const onResolve = jest.fn();
@@ -81,6 +112,8 @@ describe('AgenticReviewWizard', () => {
     fireEvent.change(document.getElementById('wizard-note-beschreibung')!, { target: { value: 'Marke war falsch' } });
     clickButton('Weiter'); // 2
     clickButton('Weiter'); // 3 (Spezifikationen)
+    // L5b: RAM/Marketing are filled, non-required, unflagged → collapsed as "verified"; reveal to edit.
+    fireEvent.click(screen.getByRole('button', { name: /geprüfte Felder anzeigen/ }));
     fireEvent.change(document.getElementById('wizard-spec-Marketing')!, { target: { value: '' } }); // remove spec
     clickButton('Weiter'); // 4
     fireEvent.change(document.getElementById('wizard-hoehe')!, { target: { value: '26' } });
@@ -137,5 +170,52 @@ describe('AgenticReviewWizard', () => {
     clickButton('Freigeben & abschliessen');
     const result = onResolve.mock.calls[0][0] as AgenticReviewWizardResult;
     expect(result.referenceEdits).toEqual({});
+  });
+});
+
+describe('AgenticReviewWizard — L5b review by exception (stepper + verified-collapse)', () => {
+  it('marks only the steps that carry a finding in the stepper', () => {
+    const data: AgenticReviewWizardData = {
+      ...BASE_DATA,
+      findings: [{ type: 'banned_phrase', severity: 'warn', field: 'Artikelbeschreibung', message: 'x', ask: 'fix' }]
+    };
+    render(<AgenticReviewWizard data={data} onResolve={jest.fn()} />);
+    // One flagged step (beschreibung); the marker carries title "zu prüfen". On step 1 the spec-row
+    // "zu prüfen" badge is not rendered, so the stepper dot is the only one.
+    expect(screen.getAllByTitle('zu prüfen')).toHaveLength(1);
+  });
+
+  it('has no flagged markers when there are no findings', () => {
+    render(<AgenticReviewWizard data={BASE_DATA} onResolve={jest.fn()} />);
+    expect(screen.queryByTitle('zu prüfen')).toBeNull();
+  });
+
+  it('collapses verified spec rows and reveals them on toggle', () => {
+    const data: AgenticReviewWizardData = {
+      ...BASE_DATA,
+      specFields: [
+        { key: 'Prozessor', value: 'i5', required: true },   // required → always shown
+        { key: 'Display', value: '', required: false },        // empty → always shown
+        { key: 'Farbe', value: 'Schwarz', required: false }    // filled, unflagged → collapsed
+      ]
+    };
+    render(<AgenticReviewWizard data={data} onResolve={jest.fn()} />);
+    clickButton('Weiter'); // -> 2 Kurztext
+    clickButton('Weiter'); // -> 3 Spezifikationen
+
+    // Noteworthy rows present; the verified one hidden until revealed.
+    expect(document.getElementById('wizard-spec-Prozessor')).not.toBeNull();
+    expect(document.getElementById('wizard-spec-Display')).not.toBeNull();
+    expect(document.getElementById('wizard-spec-Farbe')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /geprüfte Felder anzeigen/ }));
+    expect(document.getElementById('wizard-spec-Farbe')).not.toBeNull();
+  });
+
+  it('jumps straight to a step when its stepper chip is clicked', () => {
+    render(<AgenticReviewWizard data={BASE_DATA} onResolve={jest.fn()} />);
+    // Stepper chips are tabs; click the Preis one and confirm its field is now shown.
+    fireEvent.click(screen.getByRole('tab', { name: /Preis/ }));
+    expect(document.getElementById('wizard-preis')).not.toBeNull();
   });
 });

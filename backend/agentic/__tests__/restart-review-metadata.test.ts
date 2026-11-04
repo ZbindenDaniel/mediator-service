@@ -144,3 +144,26 @@ describe('restartAgenticRun review metadata behavior', () => {
     expect(updated?.LastReviewNotes).toBeNull();
   });
 });
+
+describe('restartAgenticRun — validate-only needs no search query (bulk "Prüfen" bugfix)', () => {
+  it('declines a normal restart with no query available', async () => {
+    const { deps } = createDeps(null); // no existing run → no stored query
+    const result = await restartAgenticRun({ itemId: 'R-1', actor: 'tester' }, deps as any);
+    expect(result.queued).toBe(false);
+    expect(result.reason).toBe('missing-search-query');
+  });
+
+  it('queues a validate-only restart even with no query available', async () => {
+    const { deps } = createDeps(null);
+    const result = await restartAgenticRun({ itemId: 'R-1', actor: 'tester', validateOnly: true } as AgenticRunRestartInput, deps as any);
+    expect(result.queued).toBe(true);
+    expect(result.reason).toBeUndefined();
+  });
+
+  it('preserves the stored query when a validate-only restart re-checks an existing run', async () => {
+    const { deps, runStore } = createDeps(makeExistingRun());
+    const result = await restartAgenticRun({ itemId: 'R-1', actor: 'tester', validateOnly: true } as AgenticRunRestartInput, deps as any);
+    expect(result.queued).toBe(true);
+    expect(runStore.get('R-1')?.SearchQuery).toBe('prior query');
+  });
+});

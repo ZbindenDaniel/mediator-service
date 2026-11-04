@@ -11,6 +11,14 @@ describe('spec key canonicalization', () => {
     expect(canonicalizeSpecKey('cpu')).toBe('Prozessor');
     expect(canonicalizeSpecKey('Arbeitsspeicher')).toBe('RAM');
     expect(canonicalizeSpecKey('Prozessor')).toBe('Prozessor');
+    // Storage capacity synonyms fold onto Speicher (the recurring "Kapazität" leak that left the
+    // required Speicher field empty on storage devices).
+    expect(canonicalizeSpecKey('Kapazität')).toBe('Speicher');
+    expect(canonicalizeSpecKey('kapazität')).toBe('Speicher');
+    expect(canonicalizeSpecKey('Capacity')).toBe('Speicher');
+    expect(canonicalizeSpecKey('Speicherplatz')).toBe('Speicher');
+    // But the distinct RAM capacity compound is NOT folded (exact whole-key match only).
+    expect(canonicalizeSpecKey('RAM-Kapazität')).toBe('RAM-Kapazität');
     // Unknown keys pass through unchanged.
     expect(canonicalizeSpecKey('Gewicht')).toBe('Gewicht');
   });
