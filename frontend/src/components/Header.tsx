@@ -5,7 +5,7 @@ import { getSimpleMode, setSimpleMode } from '../lib/simpleMode';
 import UserSettingsDialog from './UserSettingsDialog';
 import { useIdentity } from '../context/IdentityContext';
 import { Feature } from '../context/FeaturesContext';
-import { GoArchive, GoListUnordered, GoPlus, GoLog, GoSearch, GoGift, GoHash, GoTools, GoQuestion, GoPerson, GoChevronDown, GoCpu } from 'react-icons/go';
+import { GoArchive, GoListUnordered, GoPlus, GoLog, GoSearch, GoGift, GoHash, GoTools, GoQuestion, GoPerson, GoChevronDown, GoHubot } from 'react-icons/go';
 import { logError } from '../utils/logger';
 import { usePanelContext } from '../context/PanelContext';
 import type { Item } from '../../../models';
@@ -195,7 +195,7 @@ export default function Header() {
             </Link>
             <Feature name="agentic">
               <Link to="/ki" className="simple-keep" aria-label="KI-Läufe" title="KI-Läufe" onClick={() => { setNavOpen(false); setMobileShowDetail(false); }}>
-                <GoCpu aria-hidden="true" />
+                <GoHubot aria-hidden="true" />
               </Link>
             </Feature>
             <Feature name="logs">
