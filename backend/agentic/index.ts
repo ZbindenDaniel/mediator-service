@@ -1373,7 +1373,10 @@ export async function dispatchQueuedAgenticRuns(
       continue;
     }
 
-    if (!searchQuery) {
+    // Peek (don't consume) whether this run is validate-only: it re-judges existing content with no search,
+    // so an empty SearchQuery is expected and must NOT fail it. Consumed at scheduling time below.
+    const willValidateOnly = pendingValidateOnly.has(artikelNummer);
+    if (!searchQuery && !willValidateOnly) {
       skipped += 1;
       const nowIso = resolveNow(deps).toISOString();
       const retryCount = run.RetryCount ?? 0;
@@ -2789,7 +2792,9 @@ export async function restartAgenticRun(
 
   const existing = await fetchAgenticRun(artikelNummer, deps, logger);
   const searchQuery = (input.searchQuery || existing?.SearchQuery || '').trim();
-  if (!searchQuery) {
+  // Validate-only re-checks existing content with no search, so it needs no query. (It still preserves the
+  // stored query above when there is one, so a later full run keeps it.) Every other restart does search.
+  if (!searchQuery && !input.validateOnly) {
     logger.warn?.('[agentic-service] restartAgenticRun missing search query', {
       artikelNummer,
       context: input.context ?? null
