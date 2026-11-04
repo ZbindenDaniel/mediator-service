@@ -9,6 +9,7 @@ Day-to-day tasks are in [`todo.md`](../../todo.md).
 | [instance-flow.md](instance-flow.md) | Design — reconcile intake evidence on compute devices against their reference, operator-gated (todo 53) |
 | [transport-boxes.md](transport-boxes.md) | Draft, not started — `T-` transports between locations (todo 18) |
 | [inventory.md](inventory.md) | Draft, not started — passive inventory cycle and inventory day (todo 19b) |
+| [play-layer.md](play-layer.md) | Draft, not started — playful cataloguing/review: transitions, rotating rewards, mini-quests, fun facts (todo 56) |
 
 Shipped or folded elsewhere (see git history): AI-runs optimization (remaining phase → todo 0z4),
 Shopware integration (→ [detailed/shopware.md](../detailed/shopware.md), todo 54), multi-instance

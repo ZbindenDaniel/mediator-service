@@ -238,6 +238,8 @@
 
 55. **Unverified UI notes (from a 2026-04-28 tester pass; check each, fix or drop).** Exclude the current instance from the Vorrat list; remove the Detail-Liste link and the Behälter column in the box item list; show "erfasst von"; print modal transparent (overridden by `.app-shell__right .card`) and "Label drucken" closes without showing the PDF; KI status above the button group in the AI tab; box info tab summary (count + weight); browser back doesn't restore the detail tab; first/last button in a group need border-radius; header search vs. the old search card; landing page should be `/items?entity=item&tab=create`.
 
+
+56. **Play layer (gamification) for cataloguing and reviews.** Plan: [`docs/plans/play-layer.md`](docs/plans/play-layer.md). Phase 1 first (living transitions, rolling counters, play-level setting), then rewards + Mein-Tag, then quests + fun facts. Guardrails (budget, no leaderboards, reduced motion) are part of the design. Open questions Q1–Q5 in the plan.
 ---
 
 ## Priority 3 — Infrastructure & Platform
