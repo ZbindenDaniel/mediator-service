@@ -115,11 +115,36 @@ const SPEC_VALUE_LOOKUP: Map<string, Map<string, string>> = (() => {
   return byField;
 })();
 
+// Canonical casing for known units — the value-format twin of the vocabulary above, but field-agnostic
+// (a unit means the same on any field). Kept to multi-char, unambiguous units so the number-unit regex
+// below can't fire on model-number fragments (e.g. the "51" in "A514-51", the "U" in "i5-8250U").
+const SPEC_UNIT_CANONICAL: Record<string, string> = {
+  zoll: 'Zoll', gb: 'GB', tb: 'TB', mb: 'MB', kb: 'KB',
+  ghz: 'GHz', mhz: 'MHz', hz: 'Hz', wh: 'Wh', mah: 'mAh',
+  mm: 'mm', cm: 'cm', rpm: 'rpm', dpi: 'dpi', ppm: 'ppm'
+};
+const SPEC_UNIT_ALT = Object.keys(SPEC_UNIT_CANONICAL).join('|');
+const SPEC_UNIT_RE = new RegExp(`(\\d)[\\s\\-–]*(${SPEC_UNIT_ALT})\\b`, 'gi');
+
+// Deterministic, field-agnostic FORMAT normalization so equivalent values unify (3,5 Zoll / 3.5-Zoll /
+// 3.5Zoll → "3.5 Zoll"). Conservative and idempotent: collapse whitespace; German decimal comma BETWEEN
+// DIGITS → dot (house style is "13.5"; "DP, HDMI" is untouched — the comma there is followed by a space);
+// a digit glued/hyphenated to a KNOWN unit → one space + canonical unit casing. Unknown units and any
+// non-unit token (model numbers, OS names) pass through unchanged.
+export function normalizeSpecValueFormat(value: string): string {
+  let v = value.trim().replace(/\s+/g, ' ');
+  v = v.replace(/(\d),(\d)/g, '$1.$2');
+  v = v.replace(SPEC_UNIT_RE, (_m, num: string, unit: string) => `${num} ${SPEC_UNIT_CANONICAL[unit.toLowerCase()]}`);
+  return v;
+}
+
 /** Canonical form of a single spec VALUE for a (canonical) field key, or the value unchanged. */
 export function canonicalizeSpecValue(key: string, value: string): string {
+  // Format first (field-agnostic unit/number shape), then fold a known vocabulary variant if any.
+  const normalized = normalizeSpecValueFormat(value);
   const m = SPEC_VALUE_LOOKUP.get(key.trim().toLowerCase());
-  if (!m) return value;
-  return m.get(value.trim().toLowerCase()) ?? value;
+  if (!m) return normalized;
+  return m.get(normalized.trim().toLowerCase()) ?? normalized;
 }
 
 /**
