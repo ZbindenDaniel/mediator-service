@@ -5806,3 +5806,90 @@ details[open] > .ptree__step::before {
         font-weight: 600;
     }
 }
+
+/* ---- KI cockpit: behaviour chart + findings clusters ---- */
+.cockpit-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.cockpit-bar-row {
+    display: grid;
+    grid-template-columns: minmax(7rem, 11rem) 1fr auto;
+    align-items: center;
+    gap: 0.6rem;
+
+    .cockpit-bar-row__label {
+        font-size: 0.85rem;
+    }
+
+    .cockpit-bar-row__value {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        min-width: 2.5rem;
+        text-align: right;
+    }
+}
+
+.cockpit-bar-track {
+    background: var(--surface-2);
+    border-radius: 999px;
+    overflow: hidden;
+    height: 0.9rem;
+}
+
+.cockpit-bar {
+    height: 100%;
+    border-radius: 999px;
+    min-width: 0.4rem;
+
+    &.cockpit-bar--ok { background: var(--ok); }
+    &.cockpit-bar--warn { background: var(--warn); }
+    &.cockpit-bar--danger { background: var(--danger); }
+    &.cockpit-bar--neutral { background: var(--muted); }
+}
+
+.cockpit-linkbtn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+
+.btn-small {
+    padding: 0.2rem 0.6rem;
+    font-size: 0.82rem;
+}
+
+.cockpit-sev {
+    &.cockpit-sev--danger { background: var(--danger-bg); color: var(--danger); }
+    &.cockpit-sev--warn { background: var(--warn-bg); color: var(--warn); }
+    &.cockpit-sev--muted { background: var(--surface-2); color: var(--muted); }
+}
+
+.cockpit-cluster-detail > td {
+    background: var(--surface-2);
+}
+
+.cockpit-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.4rem 0;
+}
+
+.cockpit-chip {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    font-size: 0.8rem;
+    text-decoration: none;
+    color: inherit;
+    font-variant-numeric: tabular-nums;
+}

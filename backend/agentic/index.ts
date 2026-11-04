@@ -49,11 +49,13 @@ import {
   listAgenticRunReviewHistory,
   listContractAuditCandidates,
   listContractAuditSubcategories,
+  listRunsForFindingsAggregation,
   stampAgenticRunContractVersion,
   type AgenticRunQueueUpdate,
   type LogEventPayload
 } from '../db';
 import { locateTranscript } from './flow/transcript';
+import type { Finding, FindingSeverity, FindingType } from '../../models/agentic-findings';
 import { autoReworkConfig, autoReviewConfig, autoApproveConfig } from './config';
 import { attachCurrentReviewSignals, isValidateOnlyEligible } from './reference-findings';
 import { getSpecContract, getStandardsContract } from '../contracts/registry';
@@ -1788,6 +1790,129 @@ export async function getPipelineCockpit(logger: AgenticServiceLogger = console)
       counts: preview.counts,
       byStatus: preview.byStatus
     }
+  };
+}
+
+// --- Findings aggregation: the cockpit's "what's systematically wrong" view -----------------------
+// Aggregates the STORED per-run findings snapshot (FindingsJson) across the catalogue, so an operator
+// sees classes of problems (type × field × subcategory) rather than individual rows. Plus the run-status
+// distribution for the pipeline-behaviour chart. Snapshot-based (the per-item view recomputes live on
+// read); fine for a grander-scale overview and cheap — one scan, no per-item recompute.
+
+// A class of problem: N items share this finding type/field/subcategory. The lever acts on the whole class.
+export interface FindingCluster {
+  type: FindingType;
+  field: string | null;
+  subCategory: number | null;
+  /** Worst severity seen in the cluster (block > warn > info) — drives colour/sort. */
+  severity: FindingSeverity;
+  count: number;
+  /** Up to 100 affected article numbers, for drill-down and the bulk lever. */
+  sample: string[];
+}
+
+export interface PipelineFindingsAggregate {
+  totalRuns: number;
+  /** Run count per status, in canonical pipeline order — the chart's data. */
+  statusDistribution: Array<{ status: string; count: number }>;
+  /** Items (runs) carrying at least one finding of each severity — the "how many bad items" headline. */
+  itemsBySeverity: { block: number; warn: number; info: number };
+  /** Clusters sorted worst-first (severity, then count), capped. */
+  clusters: FindingCluster[];
+  /** Total distinct clusters before the cap, so the UI can say "+N more". */
+  totalClusters: number;
+}
+
+const SEVERITY_ORDER: Record<FindingSeverity, number> = { block: 0, warn: 1, info: 2 };
+// Canonical left-to-right pipeline order for the status chart; unknown statuses sort after, alphabetically.
+const STATUS_ORDER: string[] = [
+  AGENTIC_RUN_STATUS_NOT_STARTED,
+  AGENTIC_RUN_STATUS_QUEUED,
+  AGENTIC_RUN_STATUS_RUNNING,
+  AGENTIC_RUN_STATUS_REVIEW,
+  AGENTIC_RUN_STATUS_AUTO_APPROVED,
+  AGENTIC_RUN_STATUS_APPROVED,
+  AGENTIC_RUN_STATUS_FAILED,
+  AGENTIC_RUN_STATUS_CANCELLED
+];
+
+function parseFindings(json: string | null): Finding[] {
+  if (!json) return [];
+  try {
+    const parsed = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as Finding[]) : [];
+  } catch {
+    return []; // a malformed snapshot shouldn't sink the whole aggregate
+  }
+}
+
+export async function getPipelineFindingsAggregate(clusterLimit = 40): Promise<PipelineFindingsAggregate> {
+  return aggregateRunFindings(await listRunsForFindingsAggregation(), clusterLimit);
+}
+
+// Pure reducer (no DB) so the aggregation is unit-testable: run rows → status distribution + finding
+// clusters + per-severity item counts.
+export function aggregateRunFindings(
+  rows: Array<{ Artikel_Nummer: string; Status: string; FindingsJson: string | null; SubCategory: number | null }>,
+  clusterLimit = 40
+): PipelineFindingsAggregate {
+  const statusCounts = new Map<string, number>();
+  const itemsBySeverity = { block: 0, warn: 0, info: 0 };
+  // key = type||field||subCategory → accumulating cluster
+  const clusterMap = new Map<string, FindingCluster>();
+
+  for (const row of rows) {
+    statusCounts.set(row.Status, (statusCounts.get(row.Status) ?? 0) + 1);
+    const findings = parseFindings(row.FindingsJson);
+    if (findings.length === 0) continue;
+    const seenSeverityForItem = new Set<FindingSeverity>();
+    for (const f of findings) {
+      if (!f || typeof f.type !== 'string') continue;
+      const severity: FindingSeverity = f.severity === 'block' || f.severity === 'warn' ? f.severity : 'info';
+      seenSeverityForItem.add(severity);
+      const field = typeof f.field === 'string' && f.field.trim() ? f.field.trim() : null;
+      const key = `${f.type}||${field ?? ''}||${row.SubCategory ?? ''}`;
+      const existing = clusterMap.get(key);
+      if (existing) {
+        existing.count += 1;
+        if (SEVERITY_ORDER[severity] < SEVERITY_ORDER[existing.severity]) existing.severity = severity;
+        if (existing.sample.length < 100) existing.sample.push(row.Artikel_Nummer);
+      } else {
+        clusterMap.set(key, {
+          type: f.type as FindingType,
+          field,
+          subCategory: row.SubCategory,
+          severity,
+          count: 1,
+          sample: [row.Artikel_Nummer]
+        });
+      }
+    }
+    // Count each item once per severity it carries (not once per finding), so the headline reads as items.
+    for (const sev of seenSeverityForItem) itemsBySeverity[sev] += 1;
+  }
+
+  const allClusters = Array.from(clusterMap.values()).sort((a, b) =>
+    SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.count - a.count
+  );
+
+  const statusDistribution = Array.from(statusCounts.entries())
+    .sort((a, b) => {
+      const ia = STATUS_ORDER.indexOf(a[0]);
+      const ib = STATUS_ORDER.indexOf(b[0]);
+      if (ia === -1 && ib === -1) return a[0].localeCompare(b[0]);
+      if (ia === -1) return 1;
+      if (ib === -1) return -1;
+      return ia - ib;
+    })
+    .map(([status, count]) => ({ status, count }));
+
+  return {
+    totalRuns: rows.length,
+    statusDistribution,
+    itemsBySeverity,
+    clusters: allClusters.slice(0, clusterLimit),
+    totalClusters: allClusters.length
   };
 }
 

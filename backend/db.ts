@@ -2555,6 +2555,24 @@ export async function listContractAuditSubcategories(statuses: readonly string[]
   return rows.map((row) => row.SubCategory).filter((sub): sub is number => typeof sub === 'number');
 }
 
+// All runs with their status, stored findings snapshot, and subcategory — the raw material for the
+// cockpit's findings aggregation and status chart. LEFT JOIN so a run whose ref is gone still counts
+// toward the status distribution (its subcategory is then null). FindingsJson is the run-time snapshot
+// (persisted per run), aggregated here instead of recomputing per item on read.
+export async function listRunsForFindingsAggregation(): Promise<Array<{
+  Artikel_Nummer: string;
+  Status: string;
+  FindingsJson: string | null;
+  SubCategory: number | null;
+}>> {
+  return query(
+    `SELECT r."Artikel_Nummer", r."Status", r."FindingsJson",
+            ROUND(NULLIF(i."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "SubCategory"
+     FROM agentic_runs r
+     LEFT JOIN item_refs i ON i."Artikel_Nummer" = r."Artikel_Nummer"`
+  );
+}
+
 // Cheap re-stamp when an item is already complete under the new contract (no rerun needed).
 export async function stampAgenticRunContractVersion(artikelNummer: string, version: number): Promise<void> {
   await execute(

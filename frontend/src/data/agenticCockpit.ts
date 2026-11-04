@@ -62,3 +62,47 @@ export function setAutoDispatch(enabled: boolean): Promise<{ enabled: boolean }>
 export function runSelfHealNow(): Promise<SweepNowResult> {
   return postAdmin('/api/admin/agentic-self-heal');
 }
+
+// --- Findings aggregation (increment 2) ------------------------------------------------------------
+
+export type FindingType = 'banned_phrase' | 'missing_required' | 'intake_conflict' | 'standards';
+export type FindingSeverity = 'block' | 'warn' | 'info';
+
+export interface FindingCluster {
+  type: FindingType;
+  field: string | null;
+  subCategory: number | null;
+  severity: FindingSeverity;
+  count: number;
+  sample: string[];
+}
+
+export interface PipelineFindingsAggregate {
+  totalRuns: number;
+  statusDistribution: Array<{ status: string; count: number }>;
+  itemsBySeverity: { block: number; warn: number; info: number };
+  clusters: FindingCluster[];
+  totalClusters: number;
+}
+
+export async function fetchFindingsAggregate(): Promise<PipelineFindingsAggregate> {
+  const res = await fetch('/api/agentic/cockpit/findings');
+  if (!res.ok) throw new Error(`Befunde laden fehlgeschlagen (${res.status})`);
+  return (await res.json()) as PipelineFindingsAggregate;
+}
+
+/**
+ * Re-work one item through the restart endpoint (not admin-gated — same path the bulk "Prüfen" uses).
+ * A field-scoped cluster regenerates just that field (reworkSpecFields); a whole-item cluster does a full
+ * restart. Caller bounds the batch — the dispatcher's queue cap paces actual execution.
+ */
+export async function reworkItem(artikelNummer: string, actor: string, field: string | null): Promise<void> {
+  const body: Record<string, unknown> = { actor };
+  if (field) body.reworkSpecFields = [field];
+  const res = await fetch(`/api/item-refs/${encodeURIComponent(artikelNummer)}/agentic/restart`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error(`${artikelNummer}: ${res.status}`);
+}
