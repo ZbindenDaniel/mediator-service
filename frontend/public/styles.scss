@@ -1092,6 +1092,15 @@ div {
         margin: 0;
         flex: 1;
     }
+
+    // KI-Läufe intro: full-width line below the heading (the header row wraps), not squeezed beside it.
+    .list-header__intro {
+        flex-basis: 100%;
+        margin: 0.1rem 0 0;
+        max-width: 60ch;
+        font-size: 0.85rem;
+        line-height: 1.4;
+    }
 }
 
 .filter-reset-btn {

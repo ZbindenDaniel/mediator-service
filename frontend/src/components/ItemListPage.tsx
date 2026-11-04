@@ -479,7 +479,11 @@ export function filterAndSortItems(options: ItemListComputationOptions): Grouped
   return sorted;
 }
 
-export default function ItemListPage() {
+// variant='ki' renders the same shell as a standalone "KI-Läufe" workbench: a KI heading/intro and the
+// Ki-Status column forced on. Same data, filters and bulk actions — it's the shared AI work queue, not a
+// separate data source. Deeper KI columns (grade/findings) need list-payload backend work (later slice).
+export default function ItemListPage({ variant = 'items' }: { variant?: 'items' | 'ki' } = {}) {
+  const isKi = variant === 'ki';
   const [searchParams, setSearchParams] = useSearchParams();
   const { setEntity, setMultiSelection, clearSelection, clearMultiSelection, entityType, entityId } = usePanelContext();
   const setBulkSelection = useSetBulkSelection();
@@ -1132,7 +1136,14 @@ export default function ItemListPage() {
     // <div className="container item">
     <div className="list-container item">
       <div className="list-header">
-        <h2>Alle Artikel</h2>
+        <h2>{isKi ? 'KI-Läufe' : 'Alle Artikel'}</h2>
+        {isKi && (
+          <p className="muted list-header__intro">
+            Die gemeinsame KI-Arbeitsliste — unabhängig davon, wer einen Artikel erfasst hat. Nach Ki-Status
+            filtern (z.&nbsp;B. „Review“), um zu prüfende Artikel zu finden; Auswahl + „Prüfen“ stößt eine
+            erneute Bewertung an.
+          </p>
+        )}
         {hasActiveFilters && (
           <button
             type="button"
@@ -1425,7 +1436,7 @@ export default function ItemListPage() {
         sortKey={sortKey}
         sortDirection={sortDirection}
         onSort={handleHeaderSort}
-        visibleColumns={visibleColumns}
+        visibleColumns={isKi && features.agentic ? new Set<ItemListColumnKey>([...visibleColumns, 'agentic']) : visibleColumns}
       />
     </div>
   );

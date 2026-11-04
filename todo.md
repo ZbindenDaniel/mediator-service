@@ -204,6 +204,7 @@
   contracts; (1′) instance-spec contract + measured-signal binding; (2) instance-scope run history by
   extending `agentic_run_snapshots`; (3) reconcile step; (4) operator actions; (5) KI-Runs list; (6)
   automation. Open questions in the planning doc §13/§17.
+  - **KI-Runs list (step 5 / Pillar A) — slice 3 shipped (ui #1050):** standalone `/ki` workbench reuses the `ItemListPage` shell via a `variant="ki"` prop (KI heading + Ki-Status column forced on; same filters/bulk actions), `KiRunsPage.tsx` on the agentic-gated route + `GoCpu` nav icon. **Next slice (needs backend):** surface per-row **data-quality grade** + **open-findings count** on the grouped list payload (`groupItemsForDisplay` / grouped-items endpoint carries only `agenticStatusSummary` today; grade/findings are transient on-read signals from `getAgenticStatus`), then grade/scope/findings **filters** and the KI tab shrinking to a deep-link card into a run-detail route.
 
 55b. **Doc-debt: the spec-contract restructure shipped undocumented.** The reference spec contracts were
   redefined around model capabilities (`102.json` gained `RAM-Slots`/`RAM-Kapazität`/`RAM-Typ`;

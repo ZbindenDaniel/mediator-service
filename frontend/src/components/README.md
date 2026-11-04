@@ -8,7 +8,8 @@ All React UI components for the application — organized by feature area in sub
 **Root-level (cross-cutting / page-level)**
 - `App.tsx` — root router and layout shell
 - `Layout.tsx` / `Header.tsx` — app chrome
-- `ItemList.tsx` / `ItemListPage.tsx` — item browse and filter
+- `ItemList.tsx` / `ItemListPage.tsx` — item browse and filter (`ItemListPage` takes a `variant` prop: `'items'` default, `'ki'` for the KI-Läufe workbench)
+- `KiRunsPage.tsx` — standalone KI-Läufe workbench (`/ki`); renders `ItemListPage` in its `'ki'` variant
 - `ItemDetail.tsx` — item detail view (tabs, agentic status, quality, media)
 - `BoxList.tsx` / `BoxListPage.tsx` / `BoxDetail.tsx` — box management
 - `ItemCreate.tsx` — item creation wizard (artikelLookup → quality → basicInfo)
