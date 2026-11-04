@@ -9,6 +9,7 @@ export interface PipelineCockpit {
   autoDispatch: boolean;
   thresholds: { autoApproveMinGrade: number; maxWaitingRuns: number; selfHealCooldownMinutes: number };
   queue: { waiting: number; running: number; notStarted: number };
+  correctionBacklog: number;
   selfHeal: {
     standardsVersion: number | null;
     staleCount: number;

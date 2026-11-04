@@ -277,6 +277,18 @@ export default function PipelineCockpit(): JSX.Element {
                   ))}
                 </div>
                 <p className="muted cockpit-note">{findings.totalRuns} Läufe insgesamt.</p>
+                <div className="cockpit-stats" style={{ marginTop: '0.6rem' }}>
+                  <Stat
+                    value={data.selfHeal.staleCount}
+                    label="veraltet (Self-Heal)"
+                    tone={data.selfHeal.staleCount > 0 ? 'warn' : 'ok'}
+                  />
+                  <Stat
+                    value={data.correctionBacklog}
+                    label="zur Korrektur (abgelehnt + Notiz)"
+                    tone={data.correctionBacklog > 0 ? 'warn' : 'ok'}
+                  />
+                </div>
               </>
             ) : (
               <p className="muted">Befunde konnten nicht geladen werden.</p>

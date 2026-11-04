@@ -2594,6 +2594,17 @@ export async function listRejectedRunsWithNotes(limit: number): Promise<Array<{
   );
 }
 
+// Count of rejected-with-notes items awaiting a self-heal correction run — the cockpit's "the reject→
+// correct loop has a backlog" signal (cheap COUNT, no row payload).
+export async function countRejectedRunsWithNotes(): Promise<number> {
+  const row = await queryOne<{ n: string | number }>(
+    `SELECT COUNT(*)::int AS n FROM agentic_runs
+     WHERE "Status" = $1 AND "LastReviewNotes" IS NOT NULL AND btrim("LastReviewNotes") <> ''`,
+    [AGENTIC_RUN_STATUS_REJECTED]
+  );
+  return Number(row?.n ?? 0);
+}
+
 // Cheap re-stamp when an item is already complete under the new contract (no rerun needed).
 export async function stampAgenticRunContractVersion(artikelNummer: string, version: number): Promise<void> {
   await execute(

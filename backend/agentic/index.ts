@@ -51,6 +51,7 @@ import {
   listContractAuditSubcategories,
   listRunsForFindingsAggregation,
   listRejectedRunsWithNotes,
+  countRejectedRunsWithNotes,
   stampAgenticRunContractVersion,
   type AgenticRunQueueUpdate,
   type LogEventPayload
@@ -1785,6 +1786,8 @@ export interface PipelineCockpit {
   thresholds: { autoApproveMinGrade: number; maxWaitingRuns: number; selfHealCooldownMinutes: number };
   /** Live pipeline occupancy. `waiting` = queued, `running` = in flight, `notStarted` = enrolled backlog. */
   queue: { waiting: number; running: number; notStarted: number };
+  /** Items rejected-with-notes awaiting a self-heal correction run (needs AUTO_REWORK to drain). */
+  correctionBacklog: number;
   /** The self-heal backlog (same numbers the admin self-heal preview reports). */
   selfHeal: {
     standardsVersion: number | null;
@@ -1796,11 +1799,12 @@ export interface PipelineCockpit {
 
 export async function getPipelineCockpit(logger: AgenticServiceLogger = console): Promise<PipelineCockpit> {
   // Preview + counts are independent reads — run them together.
-  const [preview, waiting, running, notStarted, autoDispatch] = await Promise.all([
+  const [preview, waiting, running, notStarted, correctionBacklog, autoDispatch] = await Promise.all([
     getSelfHealPreview(100),
     fetchStatusCount(AGENTIC_RUN_STATUS_QUEUED),
     fetchStatusCount(AGENTIC_RUN_STATUS_RUNNING),
     fetchStatusCount(AGENTIC_RUN_STATUS_NOT_STARTED),
+    countRejectedRunsWithNotes(),
     isAutoDispatchEnabled(logger)
   ]);
   return {
@@ -1812,6 +1816,7 @@ export async function getPipelineCockpit(logger: AgenticServiceLogger = console)
       selfHealCooldownMinutes: Math.round(SELF_HEAL_COOLDOWN_MS / 60000)
     },
     queue: { waiting, running, notStarted },
+    correctionBacklog,
     selfHeal: {
       standardsVersion: preview.standardsVersion,
       staleCount: preview.staleCount,
