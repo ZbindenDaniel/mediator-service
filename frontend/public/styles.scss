@@ -5893,3 +5893,20 @@ details[open] > .ptree__step::before {
     color: inherit;
     font-variant-numeric: tabular-nums;
 }
+
+.cockpit-examples {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.4rem;
+    padding: 0.4rem 0 0.1rem;
+    font-size: 0.82rem;
+}
+
+.cockpit-example {
+    padding: 0.1rem 0.45rem;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    font-style: italic;
+}

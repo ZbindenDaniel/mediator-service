@@ -1809,12 +1809,16 @@ export interface FindingCluster {
   count: number;
   /** Up to 100 affected article numbers, for drill-down and the bulk lever. */
   sample: string[];
+  /** Up to 5 distinct concrete examples (the finding's evidence, else its message) — the "what to adjust". */
+  examples: string[];
 }
 
 export interface PipelineFindingsAggregate {
   totalRuns: number;
   /** Run count per status, in canonical pipeline order — the chart's data. */
   statusDistribution: Array<{ status: string; count: number }>;
+  /** Distinct runs carrying at least one finding of any severity — the coverage headline. */
+  itemsWithFindings: number;
   /** Items (runs) carrying at least one finding of each severity — the "how many bad items" headline. */
   itemsBySeverity: { block: number; warn: number; info: number };
   /** Clusters sorted worst-first (severity, then count), capped. */
@@ -1858,13 +1862,17 @@ export function aggregateRunFindings(
 ): PipelineFindingsAggregate {
   const statusCounts = new Map<string, number>();
   const itemsBySeverity = { block: 0, warn: 0, info: 0 };
+  let itemsWithFindings = 0;
   // key = type||field||subCategory → accumulating cluster
   const clusterMap = new Map<string, FindingCluster>();
+  // Distinct concrete examples per cluster (evidence, else message), capped — the "what to adjust".
+  const exampleSets = new Map<string, Set<string>>();
 
   for (const row of rows) {
     statusCounts.set(row.Status, (statusCounts.get(row.Status) ?? 0) + 1);
     const findings = parseFindings(row.FindingsJson);
     if (findings.length === 0) continue;
+    itemsWithFindings += 1;
     const seenSeverityForItem = new Set<FindingSeverity>();
     for (const f of findings) {
       if (!f || typeof f.type !== 'string') continue;
@@ -1884,13 +1892,23 @@ export function aggregateRunFindings(
           subCategory: row.SubCategory,
           severity,
           count: 1,
-          sample: [row.Artikel_Nummer]
+          sample: [row.Artikel_Nummer],
+          examples: []
         });
+      }
+      const exampleRaw = typeof f.evidence === 'string' && f.evidence.trim() ? f.evidence : f.message;
+      const example = typeof exampleRaw === 'string' ? exampleRaw.trim().slice(0, 160) : '';
+      if (example) {
+        const set = exampleSets.get(key) ?? new Set<string>();
+        if (set.size < 5) set.add(example);
+        exampleSets.set(key, set);
       }
     }
     // Count each item once per severity it carries (not once per finding), so the headline reads as items.
     for (const sev of seenSeverityForItem) itemsBySeverity[sev] += 1;
   }
+
+  for (const [key, cluster] of clusterMap) cluster.examples = Array.from(exampleSets.get(key) ?? []);
 
   const allClusters = Array.from(clusterMap.values()).sort((a, b) =>
     SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.count - a.count
@@ -1910,6 +1928,7 @@ export function aggregateRunFindings(
   return {
     totalRuns: rows.length,
     statusDistribution,
+    itemsWithFindings,
     itemsBySeverity,
     clusters: allClusters.slice(0, clusterLimit),
     totalClusters: allClusters.length

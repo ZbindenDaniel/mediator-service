@@ -6,6 +6,8 @@ function run(Artikel_Nummer: string, Status: string, SubCategory: number | null,
 }
 const missing = (field: string, severity: Finding['severity'] = 'block'): Finding =>
   ({ type: 'missing_required', severity, field, message: `${field} fehlt`, ask: 'fix' });
+const banned = (phrase: string): Finding =>
+  ({ type: 'banned_phrase', severity: 'warn', field: 'Artikelbeschreibung', message: 'Unerwünscht', evidence: phrase, ask: 'fix' });
 
 describe('aggregateRunFindings — cockpit findings aggregation (increment 2)', () => {
   it('counts the status distribution in canonical pipeline order', () => {
@@ -44,6 +46,18 @@ describe('aggregateRunFindings — cockpit findings aggregation (increment 2)', 
       run('a', 'review', 701, [missing('Speicher'), missing('Speichertyp')]) // two block findings, one item
     ]);
     expect(agg.itemsBySeverity.block).toBe(1);
+  });
+
+  it('reports coverage (distinct items with any finding) and distinct cluster examples', () => {
+    const agg = aggregateRunFindings([
+      run('a', 'review', 300, [banned('inkl. Windows 10')]),
+      run('b', 'review', 300, [banned('inkl. Windows 10')]), // same phrase → one example
+      run('c', 'review', 300, [banned('neuwertig')]),
+      run('d', 'approved', 300, []) // no findings → not counted in coverage
+    ]);
+    expect(agg.itemsWithFindings).toBe(3);
+    const cluster = agg.clusters.find((c) => c.type === 'banned_phrase');
+    expect(cluster?.examples.sort()).toEqual(['inkl. Windows 10', 'neuwertig']);
   });
 
   it('respects the cluster cap but still reports the true total', () => {

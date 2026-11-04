@@ -75,11 +75,13 @@ export interface FindingCluster {
   severity: FindingSeverity;
   count: number;
   sample: string[];
+  examples: string[];
 }
 
 export interface PipelineFindingsAggregate {
   totalRuns: number;
   statusDistribution: Array<{ status: string; count: number }>;
+  itemsWithFindings: number;
   itemsBySeverity: { block: number; warn: number; info: number };
   clusters: FindingCluster[];
   totalClusters: number;

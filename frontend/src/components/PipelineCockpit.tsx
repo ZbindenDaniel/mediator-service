@@ -286,6 +286,9 @@ export default function PipelineCockpit(): JSX.Element {
           {findings && (
             <section className="card cockpit-panel">
               <h3>Offene Befunde — was systematisch fehlt</h3>
+              <p className="muted cockpit-note" style={{ marginTop: 0 }}>
+                {findings.itemsWithFindings} von {findings.totalRuns} Läufen haben offene Befunde.
+              </p>
               <div className="cockpit-stats">
                 <Stat value={findings.itemsBySeverity.block} label="Artikel mit blockierendem Befund" tone={findings.itemsBySeverity.block > 0 ? 'danger' : 'ok'} />
                 <Stat value={findings.itemsBySeverity.warn} label="mit Warnung" tone={findings.itemsBySeverity.warn > 0 ? 'warn' : 'ok'} />
@@ -335,6 +338,14 @@ export default function PipelineCockpit(): JSX.Element {
                             {isOpen && (
                               <tr className="cockpit-cluster-detail">
                                 <td colSpan={5}>
+                                  {c.examples.length > 0 && (
+                                    <div className="cockpit-examples">
+                                      <span className="muted">Beispiele:</span>
+                                      {c.examples.map((ex, i) => (
+                                        <span key={i} className="cockpit-example">{ex}</span>
+                                      ))}
+                                    </div>
+                                  )}
                                   <div className="cockpit-chips">
                                     {c.sample.map((nr) => (
                                       <Link key={nr} to={`/items/${encodeURIComponent(nr)}`} className="cockpit-chip">{nr}</Link>
