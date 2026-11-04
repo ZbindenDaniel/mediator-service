@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "bannedPhrases": [
     {
       "id": "warranty-clause",
@@ -32,6 +32,7 @@
   ],
   "exclusions": [
     "Kein Betriebssystem / OS — weder als Spezifikationsfeld noch im Text. Das installierte OS wird pro Gerät erfasst, es gehört nicht in die Modell-Referenz.",
+    "Keine Dimensionen in den Spezifikationen. Für physische Masse exisiteren eigens Felder. Falls specs exisiteren wie 'Höhe_mm' gehören diese in das entsprechende Feld 'Höhe' des items",
     "Short, specific item names. Artikelbeschreibung should be concise and consist of no more then 6 words.",
     "Kein konkret verbauter RAM-/Arbeitsspeicher-Wert und keine konkrete verbaute Speicher-/Festplattenkapazität — das sind Instanz-Daten pro Gerät, nicht Teil der Modell-Referenz. Modell-Fähigkeiten (z. B. 'bis zu 32 GB', RAM-Slots, RAM-Typ) sind erlaubt."
   ]
