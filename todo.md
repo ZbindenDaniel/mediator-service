@@ -17,6 +17,8 @@
 
 ## Priority 1 — Bugs & Active Work
 
+- **Re-audit `docs/user/6_Artikel.md` against the current UI.** Written against the app before the Einzelteile page and tenancy. The merge corrected the known stale parts (tab overview, quality rule, section 8); field tables and edit boundaries in sections 3–4 and 6–7 were not rechecked.
+
 - **In-device parts show a stale device name as Lagerort.** `catalog-spare-part.ts` (3 INSERTs) copies the parent's `Bezeichnung || Artikelbeschreibung` into `items."Location"`; `LocationTag` and `LOCATION_WITH_BOX_FALLBACK` prefer that string, so renaming the device leaves the old name on its parts (intake's `in-device-components.ts` already writes NULL). Plan: write NULL, derive `ParentItemUUID`/`ParentLabel` via the `Zerlegt_aus` join in the read queries, show "in ‹Gerät›" in `LocationTag`, clean up existing rows in the additive-migration batch. **Related, verify first:** `items."Location"` also caches the destination shelf at move time and `move-box.ts` never updates items, so items in a box that moved shelves likely show the old shelf — same cure (derive from `boxes."LocationId"`), but ERP export, Shopware payload and `itemGrouping` read the column.
 
 0z5. **Intake asks RAM / storage despite the scan — ROOT-CAUSED; backend done, image fix handed off.**
@@ -155,7 +157,7 @@
 
 13. **Filter and sort boxes/shelves.** Add filter options (boxes only / shelves only, location dropdown) and sorting to the box/shelf list.
 
-15. **Support text search fallback for relocate item/box (label search).** QR-only flows are brittle when labels/scans fail. Reuse existing search endpoints and add a low-overhead fallback without building a parallel relocation system.
+15. **Support text search fallback for relocate item/box (label search).** QR-only flows are brittle when labels/scans fail. Reuse existing search endpoints and add a low-overhead fallback without building a parallel relocation system. **Item → box done:** the relocation dialog finds boxes by name (ui #963); box → shelf is still open.
 
 16. **Enable item-list filtering by box.** Align with box-detail inventory presentation; consider reusing item-list views in box detail instead of maintaining separate inventory render logic. **Goal:** consolidate around reusable list components and reduce UI surface complexity.
 

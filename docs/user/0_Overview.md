@@ -7,6 +7,7 @@ Hier findest du die Anleitungen zum System. Fang mit **Erste Schritte** an, wenn
 | **Erste Schritte** | Navigation, Artikel anlegen und finden, scannen, umlagern, Etiketten drucken, KI, ERP |
 | **Fehlerbehebung** | Was tun, wenn etwas nicht klappt (Drucker, WebDAV, Bilder, KI, Fehlermeldungen) |
 | **Drucker einrichten** | Etikettendrucker (Brother QL) anschliessen und im System einrichten |
+| **Artikel** | Referenzdaten und Exemplare, Qualität, Spezifikationen und Vorlagen |
 | **Ersatzteile erfassen (Zerlegen)** | Geräte zerlegen und Teile als eigene Artikel erfassen |
 | **CO₂-Einsparung** | Wie der CO₂-Wert eines Artikels berechnet wird |
 

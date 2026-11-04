@@ -8,10 +8,24 @@ interface DocEntry {
   title: string;
 }
 
+function tableCells(line: string): string[] {
+  return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
+}
+
 function renderMarkdown(md: string): React.ReactNode[] {
-  const lines = md.split('\n');
+  const lines = md.replace(/\r\n/g, '\n').split('\n');
   const nodes: React.ReactNode[] = [];
   let i = 0;
+
+  const listItem = (line: string) => line.match(/^(\d+\.|[-*+])\s+(.*)$/);
+  const isTable = (index: number) => (
+    lines[index]?.trim().startsWith('|') &&
+    tableCells(lines[index + 1] ?? '').length === tableCells(lines[index]).length &&
+    tableCells(lines[index + 1] ?? '').every((cell) => /^:?-{3,}:?$/.test(cell))
+  );
+  const startsBlock = (index: number) => (
+    /^(#{1,3} |---\s*$|```|>)/.test(lines[index]) || listItem(lines[index]) || isTable(index)
+  );
 
   while (i < lines.length) {
     const line = lines[i];
@@ -22,24 +36,92 @@ function renderMarkdown(md: string): React.ReactNode[] {
       nodes.push(<h2 key={i}>{inlineMarkdown(line.slice(3))}</h2>);
     } else if (line.startsWith('# ')) {
       nodes.push(<h1 key={i}>{inlineMarkdown(line.slice(2))}</h1>);
+    } else if (isTable(i)) {
+      const headers = tableCells(line);
+      const rows: string[][] = [];
+      const tableKey = i;
+      i += 2;
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        rows.push(tableCells(lines[i]));
+        i++;
+      }
+      nodes.push(
+        <div key={tableKey} className="hilfe-table-scroll" tabIndex={0} role="region" aria-label="Hilfetabelle">
+          <table className="hilfe-table">
+            <thead>
+              <tr>{headers.map((header, index) => <th key={index} scope="col">{inlineMarkdown(header)}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((row, rowIndex) => (
+                <tr key={rowIndex}>
+                  {headers.map((_, columnIndex) => <td key={columnIndex}>{inlineMarkdown(row[columnIndex] ?? '')}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+      i--;
     } else if (line.trim() === '---') {
       nodes.push(<hr key={i} />);
-    } else if (line.startsWith('- [ ] ')) {
-      nodes.push(
-        <label key={i} className="hilfe-check-row">
-          <input type="checkbox" />
-          <span>{inlineMarkdown(line.slice(6))}</span>
-        </label>
-      );
-    } else if (line.startsWith('- [x] ') || line.startsWith('- [X] ')) {
-      nodes.push(
-        <label key={i} className="hilfe-check-row hilfe-check-row--done">
-          <input type="checkbox" defaultChecked />
-          <span>{inlineMarkdown(line.slice(6))}</span>
-        </label>
-      );
-    } else if (line.startsWith('- ')) {
-      nodes.push(<li key={i}>{inlineMarkdown(line.slice(2))}</li>);
+    } else if (listItem(line)) {
+      const first = listItem(line)!;
+      const ordered = /^\d/.test(first[1]);
+      const items: React.ReactNode[] = [];
+      const listKey = i;
+
+      while (i < lines.length) {
+        const match = listItem(lines[i]);
+        if (!match || /^\d/.test(match[1]) !== ordered) break;
+        const itemKey = i;
+        const indent = lines[i].length - match[2].length;
+        const itemLines = [match[2]];
+        i++;
+
+        // Keep indented content inside its step so nested lists and code retain their context.
+        while (i < lines.length) {
+          if (lines[i].startsWith(' '.repeat(indent))) {
+            itemLines.push(lines[i].slice(indent));
+            i++;
+          } else if (!lines[i].trim() && lines[i + 1]?.startsWith(' '.repeat(indent))) {
+            itemLines.push('');
+            i++;
+          } else {
+            break;
+          }
+        }
+
+        const task = itemLines[0].match(/^\[([ xX])\]\s+(.*)$/);
+        if (task) {
+          const done = task[1].toLowerCase() === 'x';
+          items.push(
+            <li key={itemKey} className="hilfe-check-item">
+              <label className={`hilfe-check-row${done ? ' hilfe-check-row--done' : ''}`}>
+                <input type="checkbox" defaultChecked={done} />
+                <span>{inlineMarkdown(task[2])}</span>
+              </label>
+              {renderMarkdown(itemLines.slice(1).join('\n'))}
+            </li>
+          );
+        } else {
+          items.push(<li key={itemKey}>{renderMarkdown(itemLines.join('\n'))}</li>);
+        }
+        while (i < lines.length && !lines[i].trim()) i++;
+      }
+
+      nodes.push(ordered
+        ? <ol key={listKey} start={Number.parseInt(first[1], 10)}>{items}</ol>
+        : <ul key={listKey}>{items}</ul>);
+      i--;
+    } else if (line.startsWith('>')) {
+      const quoteKey = i;
+      const quoteLines: string[] = [];
+      while (i < lines.length && lines[i].startsWith('>')) {
+        quoteLines.push(lines[i].replace(/^> ?/, ''));
+        i++;
+      }
+      nodes.push(<blockquote key={quoteKey}>{renderMarkdown(quoteLines.join('\n'))}</blockquote>);
+      i--;
     } else if (line.startsWith('```')) {
       const codeLines: string[] = [];
       i++;
@@ -49,9 +131,18 @@ function renderMarkdown(md: string): React.ReactNode[] {
       }
       nodes.push(<pre key={i} className="hilfe-code"><code>{codeLines.join('\n')}</code></pre>);
     } else if (line.trim() === '') {
-      nodes.push(<br key={i} />);
+      i++;
+      continue;
     } else {
-      nodes.push(<p key={i}>{inlineMarkdown(line)}</p>);
+      const paragraphKey = i;
+      const paragraph = [line.trim()];
+      i++;
+      while (i < lines.length && lines[i].trim() && !startsBlock(i)) {
+        paragraph.push(lines[i].trim());
+        i++;
+      }
+      nodes.push(<p key={paragraphKey}>{inlineMarkdown(paragraph.join(' '))}</p>);
+      i--;
     }
     i++;
   }
@@ -60,17 +151,20 @@ function renderMarkdown(md: string): React.ReactNode[] {
 }
 
 function inlineMarkdown(text: string): React.ReactNode {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g);
+  const parts = text.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g);
   return parts.map((part, idx) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={idx}>{part.slice(2, -2)}</strong>;
+      return <strong key={idx}>{inlineMarkdown(part.slice(2, -2))}</strong>;
     }
     if (part.startsWith('`') && part.endsWith('`')) {
       return <code key={idx}>{part.slice(1, -1)}</code>;
     }
+    if (part.startsWith('*') && part.endsWith('*')) {
+      return <em key={idx}>{inlineMarkdown(part.slice(1, -1))}</em>;
+    }
     const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
     if (linkMatch) {
-      return <a key={idx} href={linkMatch[2]} target='_blank' rel='noopener noreferrer'>{linkMatch[1]}</a>;
+      return <a key={idx} href={linkMatch[2]} target='_blank' rel='noopener noreferrer'>{inlineMarkdown(linkMatch[1])}</a>;
     }
     return part.replace(/&nbsp;/g, ' ');
   });
