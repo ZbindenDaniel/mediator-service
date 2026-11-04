@@ -1,7 +1,6 @@
 import React, {
   ReactNode,
   useEffect,
-  useMemo,
   useRef,
   useState
 } from 'react';
@@ -9,6 +8,7 @@ import { GoPlus } from 'react-icons/go';
 
 export interface BoxSuggestion {
   BoxID: string;
+  Label?: string | null;
   Location?: string | null;
 }
 
@@ -82,6 +82,7 @@ export default function BoxSearchInput({
           query: searchTerm,
           count: nextSuggestions.length
         });
+        // Preserve the backend's ranked name/token matches instead of filtering them again by ID.
         setSuggestions(nextSuggestions);
       } catch (error) {
         if ((error as { name?: string } | null)?.name === 'AbortError') {
@@ -112,20 +113,8 @@ export default function BoxSearchInput({
     };
   }, []);
 
-  const filteredSuggestions = useMemo(() => {
-    const term = value.trim().toLowerCase();
-    if (!term) {
-      return suggestions;
-    }
-    return suggestions.filter((suggestion) => {
-      const idValue = (suggestion.BoxID || '').toLowerCase();
-      const locationValue = (suggestion.Location || '').toLowerCase();
-      return idValue.includes(term) || locationValue.includes(term);
-    });
-  }, [suggestions, value]);
-
   useEffect(() => {
-    if (!filteredSuggestions.length) {
+    if (!suggestions.length) {
       setHighlightedIndex(-1);
       return;
     }
@@ -133,15 +122,15 @@ export default function BoxSearchInput({
       if (current < 0) {
         return -1;
       }
-      if (current >= filteredSuggestions.length) {
-        return filteredSuggestions.length - 1;
+      if (current >= suggestions.length) {
+        return suggestions.length - 1;
       }
       return current;
     });
-  }, [filteredSuggestions]);
+  }, [suggestions]);
 
   const applySuggestion = (index: number) => {
-    const suggestion = filteredSuggestions[index];
+    const suggestion = suggestions[index];
     if (!suggestion) {
       return;
     }
@@ -171,7 +160,7 @@ export default function BoxSearchInput({
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!filteredSuggestions.length) {
+    if (!suggestions.length) {
       return;
     }
     if (event.key === 'ArrowDown') {
@@ -179,7 +168,7 @@ export default function BoxSearchInput({
       setSuggestionVisible(true);
       setHighlightedIndex((current) => {
         const next = current + 1;
-        if (next >= filteredSuggestions.length) {
+        if (next >= suggestions.length) {
           return 0;
         }
         return next;
@@ -190,7 +179,7 @@ export default function BoxSearchInput({
       setHighlightedIndex((current) => {
         const next = current - 1;
         if (next < 0) {
-          return filteredSuggestions.length - 1;
+          return suggestions.length - 1;
         }
         return next;
       });
@@ -263,7 +252,7 @@ export default function BoxSearchInput({
           autoFocus={autoFocus}
           className={inputClassName ? `box-search__input ${inputClassName}` : 'box-search__input'}
           aria-autocomplete="list"
-          aria-expanded={isSuggestionVisible && filteredSuggestions.length > 0}
+          aria-expanded={isSuggestionVisible && suggestions.length > 0}
           aria-activedescendant={highlightedIndex >= 0 ? `box-suggestion-${highlightedIndex}` : undefined}
         />
         {onCreateBox && (allowCreate !== false) ? (
@@ -283,9 +272,9 @@ export default function BoxSearchInput({
           </button>
         ) : null}
       </div>
-      {isSuggestionVisible && filteredSuggestions.length > 0 ? (
+      {isSuggestionVisible && suggestions.length > 0 ? (
         <div className="box-search__suggestions card suggestion-list" role="listbox">
-          {filteredSuggestions.map((suggestion, index) => (
+          {suggestions.map((suggestion, index) => (
             <button
               type="button"
               key={`${suggestion.BoxID}-${index}`}
@@ -300,6 +289,7 @@ export default function BoxSearchInput({
               aria-selected={index === highlightedIndex}
             >
               <div className="mono">{suggestion.BoxID}</div>
+              {suggestion.Label ? <div>{suggestion.Label}</div> : null}
               {suggestion.Location ? <div className="muted">{suggestion.Location}</div> : null}
             </button>
           ))}

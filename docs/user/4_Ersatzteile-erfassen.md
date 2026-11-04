@@ -18,7 +18,7 @@ Wenn ein **neuer Artikel** angelegt wird, sind unter **Langtext** die Spezifikat
 
 ## 2. Einzelteile öffnen
 
-Öffne das Gerät, Tab **Instanz** → Knopf **Einzelteile**. (Im Tab **Zubehör** gibt es denselben Knopf; dort bleiben nur noch verknüpftes Zubehör wie Ladegeräte.)
+Öffne das Gerät, Tab **Vorrat** → Knopf **Einzelteile**. (Im Tab **Zubehör** gibt es denselben Knopf; dort bleiben nur noch verknüpftes Zubehör wie Ladegeräte.)
 
 Die Seite hat zwei Hälften:
 
@@ -85,3 +85,5 @@ Bei einem noch nicht erfassten Teil: **Mit Artikel erfassen…** verknüpft es g
 3. Auf **Akku** klicken → rechts „Zustand des Teils: Gut", FRU eintragen → **Speichern**.
 4. Weiter mit der Bodenabdeckung, dann Schritt 2 …
 5. Akku ausbauen: Akku anklicken → **Entnehmen…** → `B-042`.
+
+Die Unterschiede zwischen Referenzdaten, einzelnen Exemplaren und Qualitätsantworten erklärt die Seite [Artikel](/hilfe?doc=6_Artikel).
