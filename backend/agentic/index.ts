@@ -50,6 +50,7 @@ import {
   listContractAuditCandidates,
   listContractAuditSubcategories,
   listRunsForFindingsAggregation,
+  listRejectedRunsWithNotes,
   stampAgenticRunContractVersion,
   type AgenticRunQueueUpdate,
   type LogEventPayload
@@ -122,6 +123,12 @@ const pendingSkipSearch = new Set<string>();
 // Tracks runs the enrol-time triage routed to the validate-only path (assess existing data, no LLM).
 // Lost on restart, which is safe: the run then falls back to a normal full run — more expensive, not wrong.
 const pendingValidateOnly = new Set<string>();
+
+// Reviewer notes to carry into a sweep-enqueued correction run (rejected-with-notes → re-run guided by
+// the note, per the operator's "note 'Do X' → corrected next run"). The dispatcher passes these as the
+// run's review.notes so extraction injects them as guidance. In-memory, lost on restart (safe: the run
+// then re-reads nothing and runs plain — the item is still `rejected` so a later sweep re-picks it).
+const pendingReviewNotes = new Map<string, string>();
 
 // Circuit-breaker: the self-heal sweep must never re-process the same item more than once per cooldown,
 // so a single item that stays stale (e.g. a mis-categorized item whose required field can't be filled)
@@ -1419,11 +1426,29 @@ export async function dispatchQueuedAgenticRuns(
       if (validateOnly) {
         pendingValidateOnly.delete(artikelNummer);
       }
+      // Correction run: carry the rejected item's reviewer notes into the run as review.notes so the
+      // extraction prompt injects them as guidance (the operator's "note 'Do X' → corrected next run").
+      const correctionNotes = pendingReviewNotes.get(artikelNummer) ?? null;
+      if (correctionNotes) {
+        pendingReviewNotes.delete(artikelNummer);
+      }
       void scheduleAgenticModelInvocation({
         artikelNummer,
         searchQuery,
         context: null,
-        review: null,
+        review: correctionNotes
+          ? {
+              decision: null,
+              information_present: null,
+              missing_spec: [],
+              unneeded_spec: [],
+              bad_format: null,
+              wrong_information: null,
+              wrong_physical_dimensions: null,
+              notes: correctionNotes,
+              reviewedBy: null
+            }
+          : null,
         request: null,
         imageData,
         skipSearch,
@@ -1996,6 +2021,77 @@ async function loadStaleSelfHealCandidates(
 // item that is stale on either axis — spec contract (SpecContractVersion) or standards (StandardsVersion)
 // — and takes the cheapest correct action per `decideSelfHealAction`: re-stamp, a targeted rework
 // (extraction), or a search-free re-word/rerun (wording re-applies the house rules). No LLM in the
+// Enqueue (at most) one rejected-with-notes item as a correction run: a normal full run that carries the
+// reviewer's stored notes as guidance (via pendingReviewNotes → the dispatcher sets review.notes). Returns
+// the acted result, or null when nothing was enqueued (queue full, all on cooldown, or none pending) so
+// the caller falls through to the staleness plan.
+async function sweepCorrectionNotes(
+  deps: AgenticServiceDependencies,
+  logger: AgenticServiceLogger
+): Promise<SelfHealSweepResult | null> {
+  let rejected: Array<{ Artikel_Nummer: string; LastReviewNotes: string; Artikelbeschreibung: string | null }> = [];
+  try {
+    rejected = await listRejectedRunsWithNotes(SELF_HEAL_PAGE_SIZE);
+  } catch (err) {
+    logger.error?.('[agentic-service] Correction-notes sweep failed to load rejected items', { error: toErrorMessage(err) });
+    return null;
+  }
+  if (rejected.length === 0) return null;
+
+  let canEnqueue = true;
+  try {
+    canEnqueue = (await fetchStatusCount(AGENTIC_RUN_STATUS_QUEUED)) < MAX_WAITING_RUNS;
+  } catch {
+    canEnqueue = true;
+  }
+  if (!canEnqueue) return null;
+
+  for (const item of rejected) {
+    const lastHeal = selfHealEnqueuedAt.get(item.Artikel_Nummer);
+    if (lastHeal && Date.now() - lastHeal < SELF_HEAL_COOLDOWN_MS) continue; // don't re-loop before the transition lands
+    const notes = item.LastReviewNotes.trim();
+    if (!notes) continue;
+    selfHealEnqueuedAt.set(item.Artikel_Nummer, Date.now());
+    pendingReviewNotes.set(item.Artikel_Nummer, notes);
+    const nowIso = resolveNow(deps).toISOString();
+    try {
+      await deps.updateAgenticRunStatus(normalizeAgenticStatusUpdate({
+        Artikel_Nummer: item.Artikel_Nummer,
+        Status: AGENTIC_RUN_STATUS_QUEUED,
+        SearchQuery: item.Artikelbeschreibung ?? item.Artikel_Nummer,
+        LastModified: nowIso,
+        // Leave LastReviewNotes intact (historical); the run re-judges and transitions the item out of
+        // `rejected`, which is what stops it being re-selected.
+        RetryCount: 0,
+        RetryCountIsSet: true,
+        NextRetryAt: null,
+        NextRetryAtIsSet: true,
+        LastError: null,
+        LastErrorIsSet: true,
+        LastAttemptAt: null,
+        LastAttemptAtIsSet: true
+      }));
+      try {
+        await deps.logEvent({
+          Actor: 'auto-rework',
+          EntityType: 'Item',
+          EntityId: item.Artikel_Nummer,
+          Event: 'CorrectionNoteRework',
+          Meta: JSON.stringify({ noteLength: notes.length })
+        });
+      } catch { /* event logging is non-fatal */ }
+      logger.info?.('[agentic-service] Self-heal enqueued correction-note rework', { artikelNummer: item.Artikel_Nummer });
+      return { ran: true, staleCount: rejected.length, acted: 'rework', artikelNummer: item.Artikel_Nummer };
+    } catch (err) {
+      pendingReviewNotes.delete(item.Artikel_Nummer);
+      selfHealEnqueuedAt.delete(item.Artikel_Nummer);
+      logger.error?.('[agentic-service] Correction-notes sweep failed to enqueue', { artikelNummer: item.Artikel_Nummer, error: toErrorMessage(err) });
+      return { ran: true, staleCount: rejected.length, acted: 'none', reason: 'enqueue-failed', artikelNummer: item.Artikel_Nummer };
+    }
+  }
+  return null; // all pending items are on cooldown
+}
+
 // decision — pure version + gap check; one enqueue per idle tick keeps it gentle.
 async function sweepContractRework(
   deps: AgenticServiceDependencies,
@@ -2008,6 +2104,16 @@ async function sweepContractRework(
   if (autoReworkConfig.enabled) statuses.push(AGENTIC_RUN_STATUS_APPROVED, AGENTIC_RUN_STATUS_AUTO_APPROVED);
   if (autoReviewConfig.enabled) statuses.push(AGENTIC_RUN_STATUS_REVIEW);
   if (statuses.length === 0) return { ran: false, reason: 'no-flags-enabled', staleCount: 0, acted: 'none' };
+
+  // Correction-notes pass (AUTO_REWORK): re-run one rejected-with-notes item, carrying the reviewer's
+  // note as extraction guidance. Prioritised over the staleness plan — it's an explicit operator request,
+  // not a background freshness chore — and like the rest of the sweep, at most one enqueue per tick. The
+  // run transitions the item out of `rejected`, so it drops out of this query (self-limiting); the
+  // cooldown guards the window before that transition lands.
+  if (autoReworkConfig.enabled) {
+    const acted = await sweepCorrectionNotes(deps, logger);
+    if (acted) return acted;
+  }
 
   const standardsCurrent = getStandardsContract()?.version ?? null;
   let candidates: SelfHealCandidate[] = [];

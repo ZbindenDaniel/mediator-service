@@ -32,7 +32,8 @@ import {
   EventLogLevel,
   EVENT_LOG_LEVELS,
   parseEventLogLevelAllowList,
-  resolveEventLogLevel
+  resolveEventLogLevel,
+  AGENTIC_RUN_STATUS_REJECTED
 } from '../models';
 import { normalizeQuality } from '../models/quality';
 import type { ItemCategoryDefinition } from '../models/item-categories';
@@ -2570,6 +2571,26 @@ export async function listRunsForFindingsAggregation(): Promise<Array<{
             ROUND(NULLIF(i."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "SubCategory"
      FROM agentic_runs r
      LEFT JOIN item_refs i ON i."Artikel_Nummer" = r."Artikel_Nummer"`
+  );
+}
+
+// Items rejected in review that carry reviewer notes — the self-heal sweep re-runs these with the notes
+// as extraction guidance ("note 'Do X' → corrected next run"). Oldest-first so the longest-waiting
+// correction is picked first. The stored notes already fold in the reviewer's before→after diff
+// (AgenticReviewWizard), so they are directly usable as a rework instruction.
+export async function listRejectedRunsWithNotes(limit: number): Promise<Array<{
+  Artikel_Nummer: string;
+  LastReviewNotes: string;
+  Artikelbeschreibung: string | null;
+}>> {
+  return query(
+    `SELECT r."Artikel_Nummer", r."LastReviewNotes", i."Artikelbeschreibung"
+     FROM agentic_runs r
+     LEFT JOIN item_refs i ON i."Artikel_Nummer" = r."Artikel_Nummer"
+     WHERE r."Status" = $2 AND r."LastReviewNotes" IS NOT NULL AND btrim(r."LastReviewNotes") <> ''
+     ORDER BY r."LastModified" ASC
+     LIMIT $1`,
+    [limit, AGENTIC_RUN_STATUS_REJECTED]
   );
 }
 
