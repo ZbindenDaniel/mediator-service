@@ -2841,6 +2841,11 @@ button:focus {
         background: var(--c-box)
     }
 
+    &.Batch {
+        background: var(--info-bg);
+        color: var(--info);
+    }
+
     &.status {
         font-weight: 600;
         text-transform: uppercase;
@@ -2973,6 +2978,51 @@ button:focus {
 .activities-table td {
     padding: 6px 8px;
     font-size: 0.85rem;
+}
+
+.activities-table .activities-day th {
+    padding-top: 14px;
+    font-weight: 600;
+    color: var(--muted);
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+}
+
+.activities-table .is-error td:first-child {
+    box-shadow: inset 3px 0 0 var(--danger);
+}
+
+.activities-table .activities-burst td {
+    font-style: italic;
+}
+
+.activities-table .is-nested td {
+    background: var(--hover);
+}
+
+.activities-burst__toggle {
+    display: inline-block;
+    width: 1em;
+}
+
+.level-toggle {
+    display: inline-flex;
+    gap: 4px;
+}
+
+.topic-filter-sep {
+    width: 1px;
+    align-self: stretch;
+    background: var(--line);
+    margin: 0 4px;
+}
+
+.activities-footer {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 0;
 }
 
 .item-list .optional-column {
@@ -4533,7 +4583,7 @@ button:focus {
     blockquote {
         margin: 16px 0;
         padding: 14px 16px;
-        border-left: 4px solid $overview-color;
+        border-left: 4px solid var(--acc); // $overview-color was removed by the token palette (5e8d476); the Gitea merge reintroduced it
         border-radius: 0 10px 10px 0;
         background: var(--surface2, #f5f5f5);
 
