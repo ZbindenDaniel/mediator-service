@@ -2,18 +2,37 @@ import { URL } from 'url';
 import type { IncomingMessage, ServerResponse } from 'http';
 import { PUBLIC_ORIGIN } from '../config';
 import { defineHttpAction } from './index';
+import { EVENT_LOG_LEVELS } from '../../models/event-log';
+import { EVENT_TOPICS } from '../../models/event-labels';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
 }
 
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
+// Raised from 50/200: operators want a usable history window, and the cursor makes deeper pages cheap.
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 500;
 
-// TODO(agent): Validate listRecentActivitiesByTerm wiring before removing fallback logging.
-// TODO(agent): Revisit recent activity search filtering once UI wiring is finalized.
-// TODO(agent): Include active topic allow list details in diagnostics metadata responses.
+function parseList(raw: string | null, allowed: readonly string[]): string[] {
+  if (!raw) return [];
+  const byLower = new Map(allowed.map((value) => [value.toLowerCase(), value]));
+  const parsed: string[] = [];
+  for (const token of raw.split(',')) {
+    const match = byLower.get(token.trim().toLowerCase());
+    if (match && !parsed.includes(match)) parsed.push(match);
+  }
+  return parsed;
+}
+
+/**
+ * GET /api/activities
+ *   ?limit=1..500 (default 100)  &before=<cursor from nextCursor>
+ *   &term=  &boxId=  &actor=
+ *   &topics=logistics,agentic    (event-resources topics)
+ *   &levels=Important,Error      (EventLogLevel names; omitted = all levels incl. Debug)
+ * → { events, nextCursor }  — nextCursor is null on the last page.
+ */
 const action = defineHttpAction({
   feature: 'logs',
   key: 'recent-activities',
@@ -22,62 +41,37 @@ const action = defineHttpAction({
   matches: (path, method) => path === '/api/activities' && method === 'GET',
   async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     try {
-      const requestUrl = new URL(req.url || '/', PUBLIC_ORIGIN);
-      const requestedLimit = requestUrl.searchParams.get('limit');
-      const rawTerm = requestUrl.searchParams.get('term') ?? requestUrl.searchParams.get('query');
-      const normalizedTerm = rawTerm ? rawTerm.trim() : '';
-      const hasTerm = normalizedTerm.length > 0;
-      const rawBoxId = requestUrl.searchParams.get('boxId');
-      const normalizedBoxId = rawBoxId ? rawBoxId.trim() : '';
-      const hasBoxId = normalizedBoxId.length > 0;
-      const rawActor = requestUrl.searchParams.get('actor');
-      const normalizedActor = rawActor ? rawActor.trim() : '';
-      const hasActor = normalizedActor.length > 0;
+      const url = new URL(req.url || '/', PUBLIC_ORIGIN);
+      const param = (name: string) => (url.searchParams.get(name) ?? '').trim();
+
+      const requestedLimit = param('limit');
       const parsedLimit = requestedLimit ? Number(requestedLimit) : DEFAULT_LIMIT;
       const limit = Number.isFinite(parsedLimit)
         ? Math.min(Math.max(1, Math.floor(parsedLimit)), MAX_LIMIT)
         : DEFAULT_LIMIT;
-      const actorArg = hasActor ? normalizedActor : undefined;
 
-      let events: unknown[];
-      if (hasBoxId) {
-        events = await ctx.listRecentActivitiesByBoxId(normalizedBoxId, limit, actorArg);
-      } else if (hasTerm) {
-        if (!ctx.listRecentActivitiesByTerm) {
-          console.error('Activities term helper missing; falling back to unfiltered feed', {
-            term: normalizedTerm,
-            limit
-          });
-          events = await ctx.listRecentActivities(limit, actorArg);
-        } else {
-          events = await ctx.listRecentActivitiesByTerm(`%${normalizedTerm}%`, limit, actorArg);
-        }
-      } else {
-        events = await ctx.listRecentActivities(limit, actorArg);
+      const topicsRaw = url.searchParams.get('topics');
+      const levelsRaw = url.searchParams.get('levels');
+      const topics = parseList(topicsRaw, EVENT_TOPICS);
+      const levels = parseList(levelsRaw, EVENT_LOG_LEVELS);
+      if (topicsRaw && topics.length === 0) {
+        console.warn('[activities] No recognized topics in filter; ignoring', { topics: topicsRaw });
       }
-      if (hasTerm) {
-        console.info('Activities feed filtered by search term', { term: normalizedTerm, limit });
-      }
-      try {
-        const totalEvents = await ctx.countEvents() || 0;
-        if (totalEvents > limit) {
-          console.info('Activities feed truncated to requested limit', {
-            limit,
-            total: totalEvents
-          });
-        }
-      } catch (err) {
-        console.error('Failed to determine total event count for activities feed', err);
+      if (levelsRaw && levels.length === 0) {
+        console.warn('[activities] No recognized levels in filter; ignoring', { levels: levelsRaw });
       }
 
-      if (requestedLimit && Number.isFinite(parsedLimit) && parsedLimit !== limit) {
-        console.info('Activities limit adjusted to safe bounds', {
-          requested: parsedLimit,
-          applied: limit
-        });
-      }
+      const page = await ctx.listActivities({
+        limit,
+        before: param('before') || null,
+        actor: param('actor') || null,
+        term: param('term') || param('query') || null,
+        boxId: param('boxId') || null,
+        topics,
+        levels
+      });
 
-      sendJson(res, 200, { events });
+      sendJson(res, 200, { events: page.events, nextCursor: page.nextCursor });
     } catch (err) {
       console.error('Activities endpoint failed', err);
       sendJson(res, 500, { error: (err as Error).message });

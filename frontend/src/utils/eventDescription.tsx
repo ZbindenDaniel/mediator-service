@@ -16,6 +16,17 @@ function num(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
+function describeShopChanges(meta: Record<string, unknown>): string | null {
+  const parts: string[] = [];
+  const shop = num(meta.shopartikel);
+  if (shop !== null) parts.push(shop ? 'Shopartikel' : 'kein Shopartikel');
+  const published = str(meta.veröffentlichtStatus);
+  if (published) parts.push(published === 'yes' ? 'veröffentlicht' : published === 'no' ? 'nicht veröffentlicht' : published);
+  const price = num(meta.verkaufspreis);
+  if (price !== null) parts.push(`CHF ${price.toFixed(2)}`);
+  return parts.length ? parts.join(', ') : null;
+}
+
 export function formatEventDescription(event: EventLog): React.ReactNode {
   const meta = safeParseMeta(event.Meta);
 
@@ -97,6 +108,56 @@ export function formatEventDescription(event: EventLog): React.ReactNode {
       if (removedCount !== null) {
         return <>Ersatzteile mit Gerät entfernt ({removedCount} {removedCount === 1 ? 'Teil' : 'Teile'})</>;
       }
+      break;
+    }
+
+    case 'ShopStatusBulkUpdated': {
+      const references = num(meta.references);
+      const changes = describeShopChanges(meta);
+      if (references !== null) {
+        return <>Shop-Status für {references} {references === 1 ? 'Referenz' : 'Referenzen'} gesetzt{changes ? <> ({changes})</> : null}</>;
+      }
+      break;
+    }
+
+    case 'ShopStatusUpdated': {
+      const changes = describeShopChanges(meta);
+      if (changes) return <>Shop-Status aktualisiert ({changes})</>;
+      break;
+    }
+
+    case 'AgenticBulkQueued': {
+      const queued = num(meta.queued);
+      const skipped = num(meta.skipped);
+      const restart = meta.mode === 'bulk-restart-failed';
+      if (queued !== null) {
+        return (
+          <>
+            {restart ? 'Fehlgeschlagene KI-Läufe neu gestartet' : 'KI-Suche eingeplant'}: {queued} Artikel
+            {skipped ? <> ({skipped} übersprungen)</> : null}
+          </>
+        );
+      }
+      break;
+    }
+
+    case 'AgenticRunFailed':
+    case 'AgenticResultFailed': {
+      const reason = str(meta.error) ?? str(meta.Error) ?? str(meta.reason);
+      if (reason) return <>{eventLabel(event.Event)}: <span className="muted">{reason}</span></>;
+      break;
+    }
+
+    case 'PrintFailed': {
+      const reason = str(meta.reason);
+      if (reason) return <>{eventLabel(event.Event)}: <span className="muted">{reason}</span></>;
+      break;
+    }
+
+    case 'QualityScoreChanged': {
+      const from = str(meta.from);
+      const to = str(meta.to);
+      if (from || to) return <>Qualität {from ?? '—'} → {to ?? '—'}</>;
       break;
     }
 

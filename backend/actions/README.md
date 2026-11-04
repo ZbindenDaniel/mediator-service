@@ -52,7 +52,7 @@ HTTP action handlers — one file per API endpoint. The action boundary between 
 - `search.ts`, `material-number.ts` — search endpoints
 - `searchShopware.ts` — Shopware product search proxy
 - `qr-scan.ts` — QR code scan handling
-- `recent-activities.ts`, `overview.ts` — dashboard data
+- `recent-activities.ts`, `overview.ts` — dashboard data; `GET /api/activities` is a filtered cursor feed (`topics`, `levels`, `term`, `boxId`, `actor`, `before` → `{events, nextCursor}`)
 - `user-marks.ts` — per-user item bookmarks
 - `chat.ts` — AI assistant chat
 - `contracts.ts` — serve JSON contracts to frontend

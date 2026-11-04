@@ -7,7 +7,7 @@ import { getFilterableSpecKeys } from './contracts/registry';
 import { resolveShopwareImageInputs } from './lib/shopware-media';
 import type { ShopwareImageInput } from './shopware/adminClient';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
-import { writeScopeParams, refWriteScopeParams } from './lib/ownership';
+import { writeScopeParams, refWriteScopeParams, currentIdentity } from './lib/ownership';
 import { redactItemRows, visibleBoxRows, isBoxVisible } from './lib/redaction';
 import type {
   ShopwareSyncQueueEntry,
@@ -38,7 +38,7 @@ import { normalizeQuality } from '../models/quality';
 import type { ItemCategoryDefinition } from '../models/item-categories';
 import type { QualityAssessment, QualityAssessmentInsert } from '../models/quality';
 import type { QualityCheckResponse } from '../models/quality-contract';
-import { EVENT_TOPICS, eventKeysForTopics, parseEventTopicAllowList } from '../models/event-labels';
+import { EVENT_TOPICS, eventKeysForTopics, eventKeysForLevels, KNOWN_EVENT_KEYS, parseEventTopicAllowList, type EventLevel } from '../models/event-labels';
 import { parseSequentialItemUUID } from './lib/itemIds';
 
 // ---------------------------------------------------------------------------
@@ -1845,6 +1845,11 @@ export type EventLogInsertPayload = {
 
 export async function logEvent(payload: LogEventPayload): Promise<void> {
   const resolvedLevel = resolveEventLogLevel(payload.Event);
+  // Batch (summary) events have no item/box to derive an owner from, so the actor's org is
+  // stamped into Meta and the feed scope reads it back — avoids a TenantId column on events.
+  if (payload.EntityType === 'Batch') {
+    payload = { ...payload, Meta: stampBatchTenant(payload.Meta) };
+  }
   try {
     await execute(
       `INSERT INTO events ("CreatedAt","Actor","EntityType","EntityId","Event","Level","Meta")
@@ -1854,6 +1859,17 @@ export async function logEvent(payload: LogEventPayload): Promise<void> {
   } catch (err) {
     console.warn('[db] Failed to persist event log entry', { entityType: payload.EntityType, entityId: payload.EntityId, event: payload.Event, error: err });
   }
+}
+
+function stampBatchTenant(meta: string | null | undefined): string {
+  let parsed: Record<string, unknown> = {};
+  try {
+    const candidate = meta ? JSON.parse(meta) : {};
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) parsed = candidate;
+  } catch (err) {
+    console.warn('[db] Batch event Meta is not JSON; replacing with tenant stamp only', { error: err });
+  }
+  return JSON.stringify({ ...parsed, tenantId: currentIdentity()?.tenant ?? null });
 }
 
 export async function insertEventLogEntry(payload: EventLogInsertPayload): Promise<boolean> {
@@ -1904,12 +1920,13 @@ const EVENT_OWNER_JOIN = `LEFT JOIN boxes bx ON e."EntityType"='Box' AND bx."Box
 function eventScopeClause(params: unknown[]): string {
   const base = params.length;
   params.push(...writeScopeParams());
-  return `($${base + 1} OR COALESCE(i."TenantId", bx."TenantId", $${base + 3}) = $${base + 2})`;
+  return `($${base + 1} OR COALESCE(i."TenantId", bx."TenantId", e."Meta"->>'tenantId', $${base + 3}) = $${base + 2})`;
 }
 
 export async function listRecentEvents(): Promise<any[]> {
-  const params: unknown[] = [];
-  const scope = eventScopeClause(params);
+  // The dashboard shows only 3 rows — debug-level bulk noise would crowd out everything else.
+  const params: unknown[] = [eventKeysForLevels(['debug'])];
+  const scope = `${eventScopeClause(params)} AND NOT (e."Event" = ANY($1::text[]))`;
   return query(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
@@ -1923,67 +1940,107 @@ export async function listRecentEvents(): Promise<any[]> {
   );
 }
 
-export async function listRecentActivities(limit: number, actor?: string): Promise<any[]> {
-  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
-  const actorClause = actor ? `AND e."Actor" ILIKE $2` : '';
-  const params: unknown[] = actor ? [effectiveLimit, `%${actor}%`] : [effectiveLimit];
-  const scope = eventScopeClause(params);
-  return query(
-    `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
-            r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
-     FROM events e
-     LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
-     LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
-     ${EVENT_OWNER_JOIN}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} AND ${scope} ${actorClause}
-     ORDER BY e."CreatedAt" DESC LIMIT $1`,
-    params
-  );
+const API_LEVEL_TO_RESOURCE_LEVEL: Record<string, EventLevel> = {
+  Debug: 'debug',
+  Information: 'info',
+  Important: 'important',
+  Error: 'error'
+};
+
+export interface ActivityFilter {
+  limit: number;
+  /** Opaque cursor from a previous page (`<CreatedAt>|<Id>`); returns strictly older rows. */
+  before?: string | null;
+  actor?: string | null;
+  /** Substring of EntityId, Artikel_Nummer or the item's BoxID. */
+  term?: string | null;
+  /** Events whose Meta references this box (from/to/fromBox/toBox). */
+  boxId?: string | null;
+  topics?: string[] | null;
+  /** EventLogLevel names (Debug, Information, Important, Error); empty/null = all levels. */
+  levels?: string[] | null;
 }
 
-export async function listRecentActivitiesByTerm(term: string, limit: number, actor?: string): Promise<any[]> {
-  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
-  const actorClause = actor ? `AND e."Actor" ILIKE $3` : '';
-  const params: unknown[] = actor ? [term, effectiveLimit, `%${actor}%`] : [term, effectiveLimit];
-  const scope = eventScopeClause(params);
-  return query(
-    `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
-            r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
-     FROM events e
-     LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
-     LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
-     ${EVENT_OWNER_JOIN}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} AND ${scope}
-     AND (e."EntityId" LIKE $1 OR COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") LIKE $1 OR i."BoxID" LIKE $1)
-     ${actorClause}
-     ORDER BY e."CreatedAt" DESC LIMIT $2`,
-    params
-  );
+export interface ActivityPage {
+  events: any[];
+  nextCursor: string | null;
 }
 
-export async function listRecentActivitiesByBoxId(boxId: string, limit: number, actor?: string): Promise<any[]> {
-  const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 50;
-  const actorClause = actor ? `AND e."Actor" ILIKE $3` : '';
-  const params: unknown[] = actor ? [boxId, effectiveLimit, `%${actor}%`] : [boxId, effectiveLimit];
-  const scope = eventScopeClause(params);
-  return query(
+export function encodeActivityCursor(row: { CreatedAt: string; Id: number }): string {
+  return `${row.CreatedAt}|${row.Id}`;
+}
+
+export function decodeActivityCursor(raw: string | null | undefined): { createdAt: string; id: number } | null {
+  if (!raw) return null;
+  const sep = raw.lastIndexOf('|');
+  if (sep <= 0) return null;
+  const id = Number(raw.slice(sep + 1));
+  if (!Number.isInteger(id)) return null;
+  return { createdAt: raw.slice(0, sep), id };
+}
+
+/**
+ * One filtered, cursor-paged feed query for the activities page. Level filtering resolves through
+ * the event key's *current* resource level rather than the stored "Level" column, so reclassifying
+ * an event in event-resources.json (e.g. demoting a noisy one to debug) also applies to old rows.
+ */
+export async function listActivities(filter: ActivityFilter): Promise<ActivityPage> {
+  const limit = Number.isFinite(filter.limit) && filter.limit > 0 ? Math.floor(filter.limit) : 100;
+  const params: unknown[] = [];
+  const clauses: string[] = [levelFilterExpression('e'), topicFilterExpression('e'), eventScopeClause(params)];
+  const add = (value: unknown) => { params.push(value); return `$${params.length}`; };
+
+  if (filter.actor) clauses.push(`e."Actor" ILIKE ${add(`%${filter.actor}%`)}`);
+  if (filter.term) {
+    const t = add(`%${filter.term}%`);
+    clauses.push(`(e."EntityId" LIKE ${t} OR COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") LIKE ${t} OR i."BoxID" LIKE ${t})`);
+  }
+  if (filter.boxId) {
+    const b = add(filter.boxId);
+    clauses.push(`(
+       e."Meta" @> jsonb_build_object('from', ${b}::text)
+       OR e."Meta" @> jsonb_build_object('to', ${b}::text)
+       OR e."Meta" @> jsonb_build_object('fromBox', ${b}::text)
+       OR e."Meta" @> jsonb_build_object('toBox', ${b}::text)
+     )`);
+  }
+  if (filter.topics && filter.topics.length) {
+    clauses.push(`e."Event" = ANY(${add(eventKeysForTopics(filter.topics))}::text[])`);
+  }
+  if (filter.levels && filter.levels.length) {
+    const resourceLevels = filter.levels
+      .map((level) => API_LEVEL_TO_RESOURCE_LEVEL[level])
+      .filter((level): level is EventLevel => Boolean(level));
+    const included = add(eventKeysForLevels(resourceLevels));
+    // Unknown event keys resolve to the default level ('error'), so they only pass when errors are requested.
+    clauses.push(resourceLevels.includes('error')
+      ? `(e."Event" = ANY(${included}::text[]) OR NOT (e."Event" = ANY(${add([...KNOWN_EVENT_KEYS])}::text[])))`
+      : `e."Event" = ANY(${included}::text[])`);
+  }
+  const cursor = decodeActivityCursor(filter.before);
+  if (filter.before && !cursor) {
+    console.warn('[db] listActivities ignoring malformed cursor', { before: filter.before });
+  }
+  if (cursor) {
+    clauses.push(`(e."CreatedAt", e."Id") < (${add(cursor.createdAt)}::text, ${add(cursor.id)}::int)`);
+  }
+
+  // Fetch one extra row to know whether another page exists without a COUNT(*).
+  const limitParam = add(limit + 1);
+  const rows = await query<any>(
     `SELECT e."Id",e."CreatedAt",e."Actor",e."EntityType",e."EntityId",e."Event",e."Level",e."Meta",
             r."Artikelbeschreibung",COALESCE(i."Artikel_Nummer",r."Artikel_Nummer") AS "Artikel_Nummer"
      FROM events e
      LEFT JOIN items i ON e."EntityType"='Item' AND e."EntityId"=i."ItemUUID"
      LEFT JOIN item_refs r ON r."Artikel_Nummer"=${ITEM_REFERENCE_JOIN_KEY}
      ${EVENT_OWNER_JOIN}
-     WHERE ${levelFilterExpression('e')} AND ${topicFilterExpression('e')} AND ${scope}
-     AND (
-       e."Meta" @> jsonb_build_object('from', $1::text)
-       OR e."Meta" @> jsonb_build_object('to', $1::text)
-       OR e."Meta" @> jsonb_build_object('fromBox', $1::text)
-       OR e."Meta" @> jsonb_build_object('toBox', $1::text)
-     )
-     ${actorClause}
-     ORDER BY e."CreatedAt" DESC LIMIT $2`,
+     WHERE ${clauses.join(' AND ')}
+     ORDER BY e."CreatedAt" DESC, e."Id" DESC LIMIT ${limitParam}`,
     params
   );
+  const hasMore = rows.length > limit;
+  const events = hasMore ? rows.slice(0, limit) : rows;
+  return { events, nextCursor: hasMore ? encodeActivityCursor(events[events.length - 1]) : null };
 }
 
 export async function countEvents(): Promise<number> {

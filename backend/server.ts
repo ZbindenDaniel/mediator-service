@@ -69,9 +69,7 @@ import {
   bulkUpdateItemRefShopFields,
   listEventsForBox,
   listEventsForItem,
-  listRecentActivities,
-  listRecentActivitiesByTerm,
-  listRecentActivitiesByBoxId,
+  listActivities,
   listRecentEvents,
   countBoxes,
   countEvents,
@@ -513,9 +511,7 @@ type ActionContext = {
   logEvent: typeof logEvent;
   listEventsForBox: typeof listEventsForBox;
   listEventsForItem: typeof listEventsForItem;
-  listRecentActivities: typeof listRecentActivities;
-  listRecentActivitiesByTerm: typeof listRecentActivitiesByTerm;
-  listRecentActivitiesByBoxId: typeof listRecentActivitiesByBoxId;
+  listActivities: typeof listActivities;
   listRecentEvents: typeof listRecentEvents;
   countBoxes: typeof countBoxes;
   countEvents: typeof countEvents;
@@ -1104,9 +1100,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           logEvent,
           listEventsForBox,
           listEventsForItem,
-          listRecentActivities,
-          listRecentActivitiesByTerm,
-          listRecentActivitiesByBoxId,
+          listActivities,
           listRecentEvents,
           countBoxes,
           countEvents,

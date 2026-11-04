@@ -65,6 +65,8 @@
   instead of failing; where to keep a transition trail (events vs table vs transcript).
   Full design history: `docs/PLANNING_ai_runs_optimization.md` in git history (removed 2026-10-27).
 
+0z5. **`npm test` harness is broken: `it.each is not a function`.** `scripts/run-tests.js` + `test/harness.js` run test files through a custom harness that lacks `it.each` (used by `forward-agentic-trigger.test.ts`, `prompt-template-composition.test.ts`), so `npm test` aborts; `npx jest -c jest.config.cjs` runs the full suite fine. Either add `each` to the harness or point `npm test` at Jest. (It was previously masked by a Sass prebuild failure, fixed in ui #1022.)
+
 0z3. **Intake netboot image / station TUI emits a duplicated brand in `model`.** The scan reports `vendor="HP"` with the brand also embedded (sometimes doubled) inside `model` (e.g. `model="HP HP ProBook 470 G4"`), and the external station TUI further combines the echoed `vendor`+`model` when pre-filling the new-ref form. The backend deliberately no longer masks this (see 0z2) — fix it at the source: the netboot intake image should emit a clean `model` (brand once, or brand-free with `vendor` separate), and the TUI should stop concatenating `vendor` into the pre-filled `Kurzbeschreibung`. Contract: [`intake-image.http`](docs/detailed/intake-image.http).
 
 0r. **Ersatzteile: "Hinzufügen" popup needs a close-on-backdrop-click escape for accessibility** — the new portal dialog closes on backdrop click already; verify with screen reader that `aria-modal` and focus-trap work correctly.
@@ -213,7 +215,8 @@
 
 24. **Track total search queries per run.** Persist or compute a per-run count with minimal schema impact and clear log fields.
 
-25. **Improve event log.** Make event log more useful and easier to navigate.
+25. **Event log follow-ups** (core overhaul shipped as ui #1022: debug level, summary events, server-side filters, paging, grouping).
+   - **Open:** error acknowledgement inbox (needs `AcknowledgedAt/By` on `events`), CSV export of filtered view, date-range filter, click-to-filter on actor/box cells, index on `events("CreatedAt","Id")` once the table grows.
    - **Still unlogged (deferred):** successful prints (only `PrintFailed` logs), ERP sync, stub close, a distinct reference-created event. No history backfill for pre-existing items/boxes.
 
 26. **Inconsistent locationTag display.** Audit and fix locationTag rendering across views so it is displayed consistently. Note: box links in ItemDetail now navigate via the panel shell (Steps 8–9) rather than hard-navigating; other views may still use plain `<Link>` to `/boxes/:id`.
