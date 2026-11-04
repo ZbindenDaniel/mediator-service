@@ -1,10 +1,9 @@
 import React from 'react';
-import ItemListPage from './ItemListPage';
+import PipelineCockpit from './PipelineCockpit';
 
-// The standalone KI-Runs workbench. It reuses the ItemListPage shell in its 'ki' variant rather than
-// forking it — the KI list is the same inventory seen through an AI-status lens (shared work queue),
-// so one component keeps filters, columns and bulk actions in lockstep. A dedicated page (vs. an inline
-// element in the router) gives the surface a home to grow richer KI columns/filters into.
+// The KI cockpit route (/ki): a surface to manage the enrichment pipeline's data quality as a whole —
+// global levers + health now, findings aggregation next. Deliberately NOT an item list (that lives at
+// /items); the cockpit's angle is aggregate control, not per-row browsing.
 export default function KiRunsPage(): JSX.Element {
-  return <ItemListPage variant="ki" />;
+  return <PipelineCockpit />;
 }

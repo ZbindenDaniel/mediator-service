@@ -45,6 +45,7 @@ import {
   listItemRefsWithoutAgenticRun,
   updateQueuedAgenticRunQueueState,
   getSystemSetting,
+  setSystemSetting,
   listAgenticRunReviewHistory,
   listContractAuditCandidates,
   listContractAuditSubcategories,
@@ -199,6 +200,49 @@ async function isAutoDispatchEnabled(logger: AgenticServiceLogger): Promise<bool
     });
     return true;
   }
+}
+
+// --- Cockpit levers: runtime-toggleable auto-flags, persisted in system_settings -------------------
+// AUTO_APPROVE/REWORK/REVIEW ship as env booleans resolved once at boot (config.ts). The cockpit needs
+// to flip them at runtime WITHOUT a redeploy and have the choice survive a restart. Mechanism: the
+// dispatcher reads `autoReworkConfig.enabled` etc. live every tick, so mutating the config object takes
+// effect immediately; we persist the chosen value to system_settings and re-hydrate the objects at
+// startup. A stored setting (operator's last choice) therefore wins over the env default once set — the
+// env var only seeds the very first boot. Mirrors the auto-dispatch toggle pattern.
+export type AgenticFlagKey = 'autoApprove' | 'autoRework' | 'autoReview';
+const AGENTIC_FLAG_SETTING_KEYS: Record<AgenticFlagKey, string> = {
+  autoApprove: 'agentic_auto_approve_enabled',
+  autoRework: 'agentic_auto_rework_enabled',
+  autoReview: 'agentic_auto_review_enabled'
+};
+const AGENTIC_FLAG_CONFIGS: Record<AgenticFlagKey, { enabled: boolean }> = {
+  autoApprove: autoApproveConfig,
+  autoRework: autoReworkConfig,
+  autoReview: autoReviewConfig
+};
+
+// Load any persisted flag overrides into the live config objects. Call once at server startup, after the
+// DB is reachable. A missing/unparseable setting leaves the env-seeded default in place.
+export async function hydrateAgenticFlagsFromSettings(logger: AgenticServiceLogger = console): Promise<void> {
+  for (const key of Object.keys(AGENTIC_FLAG_SETTING_KEYS) as AgenticFlagKey[]) {
+    try {
+      const stored = await getSystemSetting(AGENTIC_FLAG_SETTING_KEYS[key]);
+      if (stored === 'true' || stored === 'false') {
+        AGENTIC_FLAG_CONFIGS[key].enabled = stored === 'true';
+      }
+    } catch (err) {
+      logger.warn?.('[agentic-service] Failed to hydrate agentic flag; keeping env default', {
+        flag: key,
+        error: toErrorMessage(err)
+      });
+    }
+  }
+}
+
+// Flip a flag now (mutates the live config object) and persist it so it survives restart.
+export async function setAgenticFlag(flag: AgenticFlagKey, enabled: boolean): Promise<void> {
+  AGENTIC_FLAG_CONFIGS[flag].enabled = enabled;
+  await setSystemSetting(AGENTIC_FLAG_SETTING_KEYS[flag], enabled ? 'true' : 'false');
 }
 
 function toErrorMessage(err: unknown): string {
@@ -1696,6 +1740,54 @@ export async function getSelfHealPreview(limit = 50): Promise<SelfHealPreview> {
     },
     byStatus,
     items: plan
+  };
+}
+
+// The cockpit read model: the pipeline's state and its levers, composed for the KI cockpit surface.
+// Deliberately NOT item-centric — it aggregates what an operator steers globally: the auto-flags, the
+// gating thresholds, the live queue, and the self-heal backlog. One round-trip powers the levers strip.
+export interface PipelineCockpit {
+  /** Effective auto-flags (post-hydration — stored override or env default). */
+  flags: { autoApprove: boolean; autoRework: boolean; autoReview: boolean };
+  /** The keep-busy auto-feeder master switch (system_settings). */
+  autoDispatch: boolean;
+  /** Read-only gating thresholds, so the operator sees the rules the flags act under. */
+  thresholds: { autoApproveMinGrade: number; maxWaitingRuns: number; selfHealCooldownMinutes: number };
+  /** Live pipeline occupancy. `waiting` = queued, `running` = in flight, `notStarted` = enrolled backlog. */
+  queue: { waiting: number; running: number; notStarted: number };
+  /** The self-heal backlog (same numbers the admin self-heal preview reports). */
+  selfHeal: {
+    standardsVersion: number | null;
+    staleCount: number;
+    counts: { rework: number; restamp: number; reword: number; rerun: number };
+    byStatus: Record<string, number>;
+  };
+}
+
+export async function getPipelineCockpit(logger: AgenticServiceLogger = console): Promise<PipelineCockpit> {
+  // Preview + counts are independent reads — run them together.
+  const [preview, waiting, running, notStarted, autoDispatch] = await Promise.all([
+    getSelfHealPreview(100),
+    fetchStatusCount(AGENTIC_RUN_STATUS_QUEUED),
+    fetchStatusCount(AGENTIC_RUN_STATUS_RUNNING),
+    fetchStatusCount(AGENTIC_RUN_STATUS_NOT_STARTED),
+    isAutoDispatchEnabled(logger)
+  ]);
+  return {
+    flags: preview.flags,
+    autoDispatch,
+    thresholds: {
+      autoApproveMinGrade: autoApproveConfig.minGrade,
+      maxWaitingRuns: MAX_WAITING_RUNS,
+      selfHealCooldownMinutes: Math.round(SELF_HEAL_COOLDOWN_MS / 60000)
+    },
+    queue: { waiting, running, notStarted },
+    selfHeal: {
+      standardsVersion: preview.standardsVersion,
+      staleCount: preview.staleCount,
+      counts: preview.counts,
+      byStatus: preview.byStatus
+    }
   };
 }
 
