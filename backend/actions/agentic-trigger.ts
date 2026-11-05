@@ -147,6 +147,9 @@ export async function forwardAgenticTrigger(
   // Forward skipSearch so callers (including bulk start) can reuse a stored search; previously this
   // was silently dropped here, so only the single-item restart path honoured it.
   const skipSearch = (payload as { skipSearch?: unknown }).skipSearch === true;
+  // Validate-only: force the cheap, no-LLM re-check (findings + grade + auto-approve gate) — used by the
+  // bulk "Prüfen" trigger so an operator can run checks on demand even when the sweep sees nothing stale.
+  const validateOnly = (payload as { validateOnly?: unknown }).validateOnly === true;
   if (!serviceDeps) {
     throw new Error('Agentic service dependencies are required');
   }
@@ -161,7 +164,8 @@ export async function forwardAgenticTrigger(
         context,
         request: requestContext,
         imageData,
-        skipSearch
+        skipSearch,
+        validateOnly
       },
       {
         ...serviceDeps,

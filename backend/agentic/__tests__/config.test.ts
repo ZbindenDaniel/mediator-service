@@ -22,6 +22,8 @@ describe('agentic config environment resolution', () => {
     'AGENTIC_OPENAI_API_KEY',
     'OPENAI_API_KEY',
     'VISION_MODEL_NAME',
+    'AGENTIC_OLLAMA_VISION_MODEL',
+    'AGENTIC_OPENAI_VISION_MODEL',
     'SHOPWARE_BASE_URL',
     'SHOPWARE_CLIENT_ID',
     'SHOPWARE_CLIENT_SECRET',
@@ -79,16 +81,63 @@ describe('agentic config environment resolution', () => {
     expect(modelConfig.apiKey).toBe('legacy-key');
   });
 
-  it('prefers canonical MODEL_* keys over legacy aliases when both are set', () => {
+  it('prefers AGENTIC_MODEL_PROVIDER over legacy MODEL_PROVIDER', () => {
     process.env.AGENTIC_MODEL_PROVIDER = 'openai';
     process.env.MODEL_PROVIDER = 'ollama';
-    process.env.MODEL_BASE_URL = 'https://new.example.com';
-    process.env.OPENAI_BASE_URL = 'https://old.example.com';
 
     const { modelConfig } = loadConfig();
 
     expect(modelConfig.provider).toBe('openai');
-    expect(modelConfig.baseUrl).toBe('https://new.example.com');
+  });
+
+  it('prefers the active provider keys over generic MODEL_* keys', () => {
+    process.env.AGENTIC_MODEL_PROVIDER = 'openai';
+    process.env.MODEL_BASE_URL = 'https://generic.example.com';
+    process.env.AGENTIC_OPENAI_BASE_URL = 'https://api.openai.example.com/v1';
+
+    const { modelConfig } = loadConfig();
+
+    expect(modelConfig.baseUrl).toBe('https://api.openai.example.com/v1');
+  });
+
+  describe('with both providers configured', () => {
+    beforeEach(() => {
+      process.env.AGENTIC_OLLAMA_BASE_URL = 'http://ollama.example.com:11434';
+      process.env.AGENTIC_OLLAMA_MODEL = 'qwen3:8b';
+      process.env.AGENTIC_OLLAMA_VISION_MODEL = 'llava:13b';
+      process.env.AGENTIC_OPENAI_BASE_URL = 'https://api.openai.example.com/v1';
+      process.env.AGENTIC_OPENAI_MODEL = 'gpt-4o-mini';
+      process.env.AGENTIC_OPENAI_VISION_MODEL = 'gpt-4o';
+      process.env.AGENTIC_OPENAI_API_KEY = 'openai-key';
+    });
+
+    it('uses only the ollama settings when the provider is ollama', () => {
+      process.env.AGENTIC_MODEL_PROVIDER = 'ollama';
+
+      const { modelConfig } = loadConfig();
+
+      expect(modelConfig).toMatchObject({
+        provider: 'ollama',
+        baseUrl: 'http://ollama.example.com:11434',
+        textModel: 'qwen3:8b',
+        visionModel: 'llava:13b'
+      });
+      expect(modelConfig.apiKey).toBeUndefined();
+    });
+
+    it('uses only the openai settings when the provider is openai', () => {
+      process.env.AGENTIC_MODEL_PROVIDER = 'openai';
+
+      const { modelConfig } = loadConfig();
+
+      expect(modelConfig).toMatchObject({
+        provider: 'openai',
+        baseUrl: 'https://api.openai.example.com/v1',
+        textModel: 'gpt-4o-mini',
+        visionModel: 'gpt-4o',
+        apiKey: 'openai-key'
+      });
+    });
   });
 
   it('resolves AGENTIC_MODEL_BASE_URL and AGENTIC_MODEL_NAME as shared fallbacks', () => {

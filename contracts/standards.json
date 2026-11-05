@@ -1,0 +1,39 @@
+{
+  "version": 3,
+  "bannedPhrases": [
+    {
+      "id": "warranty-clause",
+      "pattern": "mit einer Garantie von",
+      "message": "Herstellergarantie-Formulierung aus dem Quelltext übernommen – für Gebrauchtware nicht erwünscht. Bitte entfernen.",
+      "fields": ["Artikelbeschreibung", "Kurzbeschreibung"],
+      "severity": "warn"
+    },
+    {
+      "id": "scope-of-delivery",
+      "pattern": "im Lieferumfang enthalten",
+      "message": "Lieferumfang-Textbaustein aus dem Quelltext übernommen – trifft auf Gebrauchtware meist nicht zu. Bitte prüfen/entfernen.",
+      "fields": ["Artikelbeschreibung", "Kurzbeschreibung"],
+      "severity": "warn"
+    },
+    {
+      "id": "brand-new",
+      "pattern": "fabrikneu",
+      "message": "„fabrikneu“ passt nicht zu einem Second-Hand-Artikel.",
+      "fields": ["Artikelbeschreibung", "Kurzbeschreibung"],
+      "severity": "warn"
+    },
+    {
+      "id": "marketing-jetzt-kaufen",
+      "pattern": "jetzt kaufen",
+      "message": "Marketing-/Call-to-Action-Text gehört nicht in die Artikelbeschreibung.",
+      "fields": ["Artikelbeschreibung", "Kurzbeschreibung"],
+      "severity": "info"
+    }
+  ],
+  "exclusions": [
+    "Kein Betriebssystem / OS — weder als Spezifikationsfeld noch im Text. Das installierte OS wird pro Gerät erfasst, es gehört nicht in die Modell-Referenz.",
+    "Keine Dimensionen in den Spezifikationen. Für physische Masse exisiteren eigens Felder. Falls specs exisiteren wie 'Höhe_mm' gehören diese in das entsprechende Feld 'Höhe' des items",
+    "Short, specific item names. Artikelbeschreibung should be concise and consist of no more then 6 words.",
+    "Kein konkret verbauter RAM-/Arbeitsspeicher-Wert und keine konkrete verbaute Speicher-/Festplattenkapazität — das sind Instanz-Daten pro Gerät, nicht Teil der Modell-Referenz. Modell-Fähigkeiten (z. B. 'bis zu 32 GB', RAM-Slots, RAM-Typ) sind erlaubt."
+  ]
+}

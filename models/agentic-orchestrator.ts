@@ -1,4 +1,5 @@
 import type { AgenticRun } from './agentic-run';
+import type { Finding } from './agentic-findings';
 
 // TODO(agent): Monitor requestId propagation for model invocations to ensure downstream logging stays consistent.
 
@@ -42,6 +43,12 @@ export interface AgenticRunStartInput {
   imageData?: string | null;
   skipSearch?: boolean;
   /**
+   * Validate-only: assess the item's EXISTING data (findings + grade + auto-approve gate) without running
+   * any generative stage (no LLM). Used by the bulk "Prüfen" trigger to force a cheap re-check on demand,
+   * regardless of staleness — routing only; the auto-approve gate still decides approve vs. review.
+   */
+  validateOnly?: boolean;
+  /**
    * Targeted rework: the spec/field keys to regenerate. When set, the flow runs in "rework mode" —
    * only these keys are accepted from the model's output (all other fields keep their original
    * values), and the categorizer/pricing stages are skipped.
@@ -49,6 +56,8 @@ export interface AgenticRunStartInput {
   reworkSpecFields?: string[] | null;
   /** Free-text operator instruction for a rework (e.g. "translate these to German"). */
   reworkInstructions?: string | null;
+  /** UI surface that triggered the run (e.g. 'cockpit'); recorded on the restart event for the activity log. */
+  source?: string | null;
 }
 
 export interface AgenticRunStartResult {
@@ -128,6 +137,7 @@ export interface AgenticModelInvocationInput {
   requestId?: string | null;
   imageData?: string | null;
   skipSearch?: boolean;
+  validateOnly?: boolean;
   reworkSpecFields?: string[] | null;
   reworkInstructions?: string | null;
 }
@@ -158,4 +168,8 @@ export interface AgenticResultPayload extends Record<string, unknown> {
   autoApprovable?: boolean;
   /** Spec contract version this run completed against — stamped on the run for staleness detection. */
   specContractVersion?: number | null;
+  /** Standards (house exclusion/style rules) version this run applied — stamped for standards-staleness. */
+  standardsVersion?: number | null;
+  /** Deterministic review findings for this run (review-by-exception); persisted as FindingsJson. */
+  findings?: Finding[];
 }

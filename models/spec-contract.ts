@@ -29,7 +29,7 @@ export interface SpecGapResult {
 const SPEC_KEY_VARIANTS: Record<string, string[]> = {
   Prozessor: ['CPU', 'Processor', 'Prozessortyp', 'CPU-Modell', 'Prozessor (CPU)'],
   RAM: ['Arbeitsspeicher', 'Memory', 'Hauptspeicher', 'RAM-Größe'],
-  Speicher: ['Storage', 'Festplatte', 'Speicherkapazität', 'Speichergröße'],
+  Speicher: ['Storage', 'Festplatte', 'Speicherkapazität', 'Speichergröße', 'Speicherplatz', 'Kapazität', 'Kapazitaet', 'Capacity'],
   Speichertyp: ['Storage Type', 'Laufwerkstyp', 'Drive Type'],
   Grafikkarte: ['GPU', 'Graphics', 'Graphics Card', 'Grafik'],
   Betriebssystem: ['OS', 'Operating System'],
@@ -84,6 +84,84 @@ export function canonicalizeSpecKeyRecord<T = unknown>(
       result[canonical] = value;
     }
     // else: drop the variant (canonical wins); the canonical entry is copied when its own key is iterated.
+  }
+  return result;
+}
+
+// --- Spec VALUE canonicalization (lever L11) ---------------------------------------------------
+// The value-level twin of SPEC_KEY_VARIANTS: per (canonical) field key, a controlled vocabulary mapping
+// each canonical value to its known variants. Folds free-form values that mean the same thing
+// (DP / Display Port / Displayport → DisplayPort) so items group/filter and the conformance signal is
+// clean. Deterministic, whole-value, case-insensitive — the safe "auto-correct a known" (no prose
+// surgery, no model). SEED ONLY: extend per house style. Compound/multi-token values ("DP, HDMI") and an
+// operator-editable home (a runtime standards file) are deferred — see PLANNING_agentic_levers.md §2d.
+const SPEC_VALUE_VARIANTS: Record<string, Record<string, string[]>> = {
+  'Anschlüsse': { 'DisplayPort': ['DP', 'Display Port', 'Displayport'] },
+  'Speichertyp': { 'SSD': ['Solid State Drive', 'Solid-State-Drive'] },
+};
+
+// field key (lowercased) → (variant lowercased → canonical value). A canonical value maps to itself, so
+// re-running is idempotent. Built once at module load.
+const SPEC_VALUE_LOOKUP: Map<string, Map<string, string>> = (() => {
+  const byField = new Map<string, Map<string, string>>();
+  for (const [field, canonicals] of Object.entries(SPEC_VALUE_VARIANTS)) {
+    const m = new Map<string, string>();
+    for (const [canonical, variants] of Object.entries(canonicals)) {
+      m.set(canonical.trim().toLowerCase(), canonical);
+      for (const variant of variants) m.set(variant.trim().toLowerCase(), canonical);
+    }
+    byField.set(field.trim().toLowerCase(), m);
+  }
+  return byField;
+})();
+
+// Canonical casing for known units — the value-format twin of the vocabulary above, but field-agnostic
+// (a unit means the same on any field). Kept to multi-char, unambiguous units so the number-unit regex
+// below can't fire on model-number fragments (e.g. the "51" in "A514-51", the "U" in "i5-8250U").
+const SPEC_UNIT_CANONICAL: Record<string, string> = {
+  zoll: 'Zoll', gb: 'GB', tb: 'TB', mb: 'MB', kb: 'KB',
+  ghz: 'GHz', mhz: 'MHz', hz: 'Hz', wh: 'Wh', mah: 'mAh',
+  mm: 'mm', cm: 'cm', rpm: 'rpm', dpi: 'dpi', ppm: 'ppm'
+};
+const SPEC_UNIT_ALT = Object.keys(SPEC_UNIT_CANONICAL).join('|');
+const SPEC_UNIT_RE = new RegExp(`(\\d)[\\s\\-–]*(${SPEC_UNIT_ALT})\\b`, 'gi');
+
+// Deterministic, field-agnostic FORMAT normalization so equivalent values unify (3,5 Zoll / 3.5-Zoll /
+// 3.5Zoll → "3.5 Zoll"). Conservative and idempotent: collapse whitespace; German decimal comma BETWEEN
+// DIGITS → dot (house style is "13.5"; "DP, HDMI" is untouched — the comma there is followed by a space);
+// a digit glued/hyphenated to a KNOWN unit → one space + canonical unit casing. Unknown units and any
+// non-unit token (model numbers, OS names) pass through unchanged.
+export function normalizeSpecValueFormat(value: string): string {
+  let v = value.trim().replace(/\s+/g, ' ');
+  v = v.replace(/(\d),(\d)/g, '$1.$2');
+  v = v.replace(SPEC_UNIT_RE, (_m, num: string, unit: string) => `${num} ${SPEC_UNIT_CANONICAL[unit.toLowerCase()]}`);
+  return v;
+}
+
+/** Canonical form of a single spec VALUE for a (canonical) field key, or the value unchanged. */
+export function canonicalizeSpecValue(key: string, value: string): string {
+  // Format first (field-agnostic unit/number shape), then fold a known vocabulary variant if any.
+  const normalized = normalizeSpecValueFormat(value);
+  const m = SPEC_VALUE_LOOKUP.get(key.trim().toLowerCase());
+  if (!m) return normalized;
+  return m.get(normalized.trim().toLowerCase()) ?? normalized;
+}
+
+/**
+ * Folds known value variants in a Langtext record onto their canonical value, per field. Applies to
+ * string values and to each entry of a string array; non-strings and unknown fields pass through
+ * untouched. Returns a new object. Call AFTER canonicalizeSpecKeyRecord so field keys are canonical.
+ */
+export function canonicalizeSpecValuesRecord<T = unknown>(langtext: Record<string, T>): Record<string, T> {
+  const result: Record<string, T> = {};
+  for (const [key, value] of Object.entries(langtext)) {
+    if (typeof value === 'string') {
+      result[key] = canonicalizeSpecValue(key, value) as T;
+    } else if (Array.isArray(value)) {
+      result[key] = value.map((v) => (typeof v === 'string' ? canonicalizeSpecValue(key, v) : v)) as T;
+    } else {
+      result[key] = value;
+    }
   }
   return result;
 }

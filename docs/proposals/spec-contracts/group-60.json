@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "_proposal": "Main-category spec contract for 60 Mainboard/CPU/RAM. MIXED (board vs CPU vs memory module) — kept minimal. 601 keeps its own richer file and overrides.",
+  "fields": [
+    { "key": "Formfaktor", "required": false, "description": "Form factor (ATX, mITX; or module/socket type)" },
+    { "key": "Schnittstellen", "required": false, "description": "Sockets/slots/interfaces" }
+  ]
+}

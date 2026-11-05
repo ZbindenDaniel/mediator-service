@@ -300,9 +300,9 @@ function pruneUnneededSpecFieldsFromTarget(params: {
 }
 
 // TODO(agent): Revisit Langtext serialization heuristics when upstream payloads evolve.
-function buildTargetFromRow(
+export function buildTargetFromRow(
   row: Record<string, unknown>,
-  logger: AgenticModelInvokerLogger | undefined
+  logger?: AgenticModelInvokerLogger | undefined
 ): Record<string, unknown> {
   const artikelNummer = normalizeString(row.Artikel_Nummer ?? row.artikelNummer ?? row.Artikelnummer);
   if (!artikelNummer) {
@@ -319,7 +319,15 @@ function buildTargetFromRow(
     Länge_mm: normalizeNullableNumber(row.Länge_mm),
     Breite_mm: normalizeNullableNumber(row.Breite_mm),
     Höhe_mm: normalizeNullableNumber(row.Höhe_mm),
-    Gewicht_kg: normalizeNullableNumber(row.Gewicht_kg)
+    Gewicht_kg: normalizeNullableNumber(row.Gewicht_kg),
+    // Carry the stored category (coerced to a number) so the flow can resolve the item's spec contract
+    // and stamp SpecContractVersion. Without it, rework/validate-only runs (which skip the categorizer)
+    // resolve no contract, stamp a null version, and the self-heal sweep re-selects the item forever — a
+    // token-burning death loop. A full run's categorizer still overwrites these afterwards.
+    Hauptkategorien_A: normalizeNullableNumber(row.Hauptkategorien_A),
+    Unterkategorien_A: normalizeNullableNumber(row.Unterkategorien_A),
+    Hauptkategorien_B: normalizeNullableNumber(row.Hauptkategorien_B),
+    Unterkategorien_B: normalizeNullableNumber(row.Unterkategorien_B)
   };
 }
 
@@ -983,6 +991,7 @@ export class AgenticModelInvoker {
           reworkSpecFields,
           reworkInstructions,
           skipSearch,
+          validateOnly: Boolean(input.validateOnly),
           storedSources,
           exampleItemBlock,
           imageData: input.imageData ?? null

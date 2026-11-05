@@ -1,5 +1,5 @@
 // TODO(agent): Revisit item flow orchestration once planner surfaces richer item metadata requirements.
-import { agentActorId, autoApproveConfig } from '../config';
+import { agentActorId } from '../config';
 import type { AgenticResultPayload } from '../result-handler';
 import { createRateLimiter, DEFAULT_DELAY_MS, type RateLimiterLogger } from '../utils/rate-limiter';
 import { FlowError } from './errors';
@@ -21,8 +21,14 @@ import { prepareItemContext } from './context';
 import { loadPrompts } from './prompts';
 import { dispatchAgenticResult } from './result-dispatch';
 import { appendTranscriptSection, createTranscriptWriter, type AgentTranscriptWriter } from './transcript';
-import { getSpecContract } from '../..//contracts/registry';
-import { canonicalizeSpecKeyRecord } from '../../../models/spec-contract';
+import { getSpecContract, getStandardsContract } from '../..//contracts/registry';
+import { canonicalizeSpecKeyRecord, canonicalizeSpecValuesRecord } from '../../../models/spec-contract';
+import { buildFindings, isAutoApprovable } from '../findings';
+import { computeReferenceDataQuality } from '../data-quality';
+import { autoApproveConfig } from '../config';
+import { runWordingStage } from './item-flow-wording';
+import type { Finding } from '../../../models/agentic-findings';
+import type { DataQualityGrade } from '../../../models/data-quality';
 
 const REVIEW_CONTEXT_NOTE_LIMIT = 2_000;
 
@@ -110,6 +116,11 @@ export interface RunItemFlowInput {
   reworkSpecFields?: string[];
   reworkInstructions?: string | null;
   skipSearch?: boolean;
+  // Validate-only (triage): assess the item's EXISTING data and hand it to the auto-approve gate without
+  // running search/extraction/categorization/pricing/wording. No LLM. Used for run-less refs whose current
+  // data is already complete + clean (enrol-time triage), to avoid wasting — and risking churning — a full
+  // run on good data. Approval stays a separate mechanism (the result handler's gate decides).
+  validateOnly?: boolean;
   storedSources?: SearchSource[];
   maxAttempts?: number;
   cancellationSignal?: AbortSignal | null;
@@ -144,6 +155,17 @@ function formatIntakeSpecValue(key: string, rawValue: unknown): string | null {
   return v;
 }
 
+// Auto-approve data-quality floor: findings-clean alone is too low a bar for settling an item without a
+// human (the goal is high precision, not maximum approvals). A SUPERVISED run must also reach
+// autoApproveConfig.minGrade (default 4). A VALIDATE-ONLY run — no supervisor ever looked at it — must
+// reach the TOP grade (5 / Vollständig) to auto-approve; anything less goes to review. A null grade
+// (no spec contract, so quality can't be judged) never auto-approves.
+export function gradeClearsAutoApprove(dataQuality: DataQualityGrade | null, validateOnly: boolean): boolean {
+  if (!dataQuality || typeof dataQuality.grade !== 'number') return false;
+  const floor = validateOnly ? 5 : autoApproveConfig.minGrade;
+  return dataQuality.grade >= floor;
+}
+
 function buildSpecContext(
   target: Record<string, unknown>,
   subcategoryCode: number | null,
@@ -166,7 +188,9 @@ function buildSpecContext(
   // Canonicalize spec keys up front so a value under a variant ("CPU") is seen by every stage under
   // its canonical contract key ("Prozessor") — and write it back onto the target so the stored output
   // carries a single canonical name, not a duplicate variant sibling.
-  const langtext = canonicalizeSpecKeyRecord(rawLangtext);
+  // Keys first, then VALUES (L11): fold "CPU"→"Prozessor", then "DP"→"DisplayPort" — so every stage and
+  // the stored output carry a single canonical key AND a controlled value, improving grouping/filtering.
+  const langtext = canonicalizeSpecValuesRecord(canonicalizeSpecKeyRecord(rawLangtext));
   if (target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)) {
     target.Langtext = langtext;
   }
@@ -242,7 +266,9 @@ function buildCallbackPayload({
   sources,
   actor,
   autoApprovable,
-  specContractVersion
+  specContractVersion,
+  standardsVersion,
+  findings
 }: {
   artikelNummer: string;
   itemData: AgenticTarget;
@@ -258,6 +284,8 @@ function buildCallbackPayload({
   actor?: string | null;
   autoApprovable?: boolean;
   specContractVersion?: number | null;
+  standardsVersion?: number | null;
+  findings?: Finding[];
 }): AgenticResultPayload {
   const resolvedStatus = status ?? (needsReview ? 'needs_review' : 'completed');
   const resolvedNeedsReview = typeof needsReview === 'boolean' ? needsReview : resolvedStatus !== 'completed';
@@ -290,7 +318,9 @@ function buildCallbackPayload({
     actor: resolvedActor,
     item: itemPayload,
     autoApprovable: autoApprovable === true,
-    specContractVersion: specContractVersion ?? null
+    specContractVersion: specContractVersion ?? null,
+    standardsVersion: standardsVersion ?? null,
+    findings: Array.isArray(findings) ? findings : []
   };
 }
 
@@ -342,6 +372,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     ? input.reviewNotes.trim()
     : null;
   const skipSearch = Boolean(input.skipSearch);
+  const validateOnly = Boolean(input.validateOnly);
 
   // Targeted rework: when set, only these keys are accepted from the model output (all other fields
   // keep their originals) and the categorizer/pricing stages are skipped.
@@ -403,7 +434,7 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     };
 
     const shopwareAvailable = isShopwareConfigured();
-    const { format, extract, supervisor, categorizer, pricing, jsonCorrection, searchPlanner, shopware } = await loadPrompts({
+    const { format, extract, supervisor, categorizer, pricing, wording, jsonCorrection, searchPlanner, shopware } = await loadPrompts({
       itemId,
       logger,
       includeShopware: shopwareAvailable
@@ -506,9 +537,64 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     // Spec contract version this run runs against — stamped on the run so an idle sweep can later detect
     // items enriched against an outdated contract (getSpecContract is cached, so this is cheap).
     const specContractVersion = subcategoryCode ? (getSpecContract(subcategoryCode)?.version ?? null) : null;
+    // Standards version this run applied (the house exclusion/style rules) — stamped so a later sweep
+    // can detect items enriched before the operator's current rules and re-clean them (self-heal).
+    const standardsVersion = getStandardsContract()?.version ?? null;
     const categoryGuidance = subcategoryCode ? (getSpecContract(subcategoryCode)?.guidance ?? []) : [];
     const specCtx = buildSpecContext(target, subcategoryCode, instanceSpecs);
     logger.debug?.({ msg: 'spec context built', itemId, subcategoryCode, missingRequired: specCtx.missingRequired, missingDesired: specCtx.missingDesired, ambiguousCount: Object.keys(specCtx.ambiguousFields).length });
+
+    // VALIDATE-ONLY (triage): the ref's existing data is already complete + clean, so skip every generative
+    // stage (search/extraction/categorizer/pricing/wording) — no LLM, no risk of degrading good data. We
+    // only assess the current content into findings + an auto-approvable signal and hand it to the normal
+    // result handler, which (separately) decides approve vs. review. buildSpecContext above already
+    // canonicalized the keys and folded in any intake values, so `target` is the content to assess.
+    if (validateOnly) {
+      const reviewTexts: Record<string, string> = {};
+      if (typeof target.Artikelbeschreibung === 'string') reviewTexts.Artikelbeschreibung = target.Artikelbeschreibung;
+      if (typeof target.Kurzbeschreibung === 'string') reviewTexts.Kurzbeschreibung = target.Kurzbeschreibung;
+      if (target.Langtext && typeof target.Langtext === 'object' && !Array.isArray(target.Langtext)) {
+        for (const [k, v] of Object.entries(target.Langtext as Record<string, unknown>)) {
+          if (typeof v === 'string') reviewTexts[k] = v;
+        }
+      }
+      const findings: Finding[] = buildFindings(
+        { texts: reviewTexts, missingRequired: specCtx.missingRequired, ambiguousFields: specCtx.ambiguousFields },
+        getStandardsContract()
+      );
+      // No supervisor looked at this item — require the TOP data-quality grade to settle it; otherwise it
+      // goes to review. buildSpecContext stamped the current contract version, so freshness is 'current'.
+      const dataQuality = computeReferenceDataQuality({ ...target, Artikel_Nummer: itemId }, findings, specContractVersion);
+      const autoApprovable = isAutoApprovable(findings) && gradeClearsAutoApprove(dataQuality, true);
+      const payload = buildCallbackPayload({
+        artikelNummer: itemId,
+        itemData: { ...target, Artikel_Nummer: itemId },
+        searchQuery: searchTerm,
+        status: 'completed',
+        needsReview: false,
+        summary: 'Validate-only: bestehende Daten geprüft (kein KI-Lauf)',
+        reviewDecision: 'approved',
+        reviewNotes: reviewerNotes,
+        reviewedBy: 'triage',
+        error: null,
+        sources: [],
+        autoApprovable,
+        specContractVersion,
+        standardsVersion,
+        findings
+      });
+      await dispatchAgenticResult({
+        artikelNummer: itemId,
+        payload,
+        logger,
+        saveRequestPayload: deps.saveRequestPayload,
+        applyAgenticResult: deps.applyAgenticResult,
+        markNotificationSuccess: deps.markNotificationSuccess,
+        markNotificationFailure: deps.markNotificationFailure,
+        checkCancellation
+      });
+      return payload;
+    }
 
     // Contract-aware missing fields replace the generic null-field scan; fall back to generic scan when no contract
     const contractMissingFields = [...specCtx.missingRequired, ...specCtx.missingDesired];
@@ -647,6 +733,53 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
 
     checkCancellation();
 
+    // Wording stage: after extraction has the facts, a dedicated LLM pass rewrites the prose fields
+    // into the house style and strips fluff/marketing/source-copied phrases (contracts/standards.json),
+    // without changing facts, and tidies Langtext spec key names. A normal pipeline stage (not flagged —
+    // like extraction/supervisor/pricing). Skipped in rework mode (targeted field regen owns its own
+    // field selection); a failure keeps extraction's wording and never blocks the run.
+    if (!reworkMode && extractionResult.success && extractionResult.data) {
+      try {
+        // The spec fields the contract sanctions for this subcategory — handed to the wording step so it
+        // never removes a product's defining spec when applying the operator's exclusion rules.
+        const recognizedSpecFields = (subcategoryCode ? getSpecContract(subcategoryCode)?.fields ?? [] : []).map((f) => f.key);
+        const wordingResult = await runWordingStage({
+          llm: deps.llm,
+          logger,
+          itemId,
+          wordingPrompt: wording,
+          candidate: extractionResult.data,
+          standards: getStandardsContract(),
+          reviewNotes: reviewerNotes,
+          recognizedSpecFields,
+          transcriptWriter
+        });
+        if (wordingResult) {
+          const data = extractionResult.data as Record<string, unknown>;
+          if (typeof wordingResult.Artikelbeschreibung === 'string') data.Artikelbeschreibung = wordingResult.Artikelbeschreibung;
+          if (typeof wordingResult.Kurzbeschreibung === 'string') data.Kurzbeschreibung = wordingResult.Kurzbeschreibung;
+          // Reworded specs (tidied key names + operator exclusions applied). SAFETY NET: the wording LLM
+          // must never drop a spec the subcategory's CONTRACT defines (protects a drive's "Speicher" /
+          // a module's "RAM-Kapazität" from an over-broad exclusion) — restore any contract field it
+          // removed. Then canonicalizeSpecKeyRecord below folds variant keys onto the canonical key.
+          if (wordingResult.Langtext) {
+            const before = data.Langtext && typeof data.Langtext === 'object' && !Array.isArray(data.Langtext)
+              ? (data.Langtext as Record<string, unknown>)
+              : {};
+            const contractKeys = new Set(recognizedSpecFields.map((k) => k.trim().toLowerCase()));
+            const next: Record<string, unknown> = { ...wordingResult.Langtext };
+            for (const [key, value] of Object.entries(before)) {
+              if (!(key in next) && contractKeys.has(key.trim().toLowerCase())) next[key] = value;
+            }
+            data.Langtext = next;
+          }
+        }
+      } catch (err) {
+        logger.warn?.({ err, msg: 'wording stage failed; keeping extraction wording', itemId });
+      }
+      checkCancellation();
+    }
+
     // In rework mode, produce a partial update deterministically: start from the ORIGINAL item and
     // accept the model's output ONLY for the selected keys. This preserves every other field
     // regardless of what the model returned — no reliance on the model honouring "locked" fields.
@@ -656,24 +789,42 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
     // Canonicalize spec keys on the final output so any variant the model emitted (e.g. "CPU") is
     // folded onto the canonical contract key ("Prozessor") before persistence — one name, no dupes.
     if (finalData.Langtext && typeof finalData.Langtext === 'object' && !Array.isArray(finalData.Langtext)) {
-      finalData.Langtext = canonicalizeSpecKeyRecord(
-        finalData.Langtext as Record<string, unknown>
+      finalData.Langtext = canonicalizeSpecValuesRecord(
+        canonicalizeSpecKeyRecord(finalData.Langtext as Record<string, unknown>)
       ) as typeof finalData.Langtext;
     }
 
-    // "Clearly good" signal for auto-approval: supervisor PASS + no missing-required + no ambiguous
-    // fields + extraction confidence at/above the configured threshold. The final on/off gate lives
-    // in the result handler (AUTO_APPROVE); here we only compute whether the data qualifies.
-    const extractionConfidence =
-      typeof (extractionResult.data as { confidence?: unknown })?.confidence === 'number'
-        ? ((extractionResult.data as { confidence: number }).confidence)
-        : null;
-    const autoApprovable =
-      extractionResult.success &&
-      specCtx.missingRequired.length === 0 &&
-      Object.keys(specCtx.ambiguousFields).length === 0 &&
-      extractionConfidence !== null &&
-      extractionConfidence >= autoApproveConfig.minConfidence;
+    // (Installed RAM/disk/OS removal is the wording stage's job now — operator exclusion rules in
+    // contracts/standards.json, applied semantically, with the contract-field safety net above. The old
+    // hardcoded denylist strip was retired: it couldn't track every spelling, e.g. "hardDrive".)
+
+    // Review-by-exception findings, computed on the WORDING-CLEANED output (the wording stage above
+    // already stripped banned phrases): missing-required (block), banned phrases + intake conflicts
+    // (warn), marketing/style hints (info). Drives both the review UI and the auto-approve gate below.
+    const reviewTexts: Record<string, string> = {};
+    if (typeof finalData.Artikelbeschreibung === 'string') reviewTexts.Artikelbeschreibung = finalData.Artikelbeschreibung;
+    if (typeof finalData.Kurzbeschreibung === 'string') reviewTexts.Kurzbeschreibung = finalData.Kurzbeschreibung;
+    if (finalData.Langtext && typeof finalData.Langtext === 'object' && !Array.isArray(finalData.Langtext)) {
+      for (const [key, value] of Object.entries(finalData.Langtext as Record<string, unknown>)) {
+        if (typeof value === 'string') reviewTexts[key] = value;
+      }
+    }
+    const findings: Finding[] = buildFindings(
+      { texts: reviewTexts, missingRequired: specCtx.missingRequired, ambiguousFields: specCtx.ambiguousFields },
+      getStandardsContract()
+    );
+
+    // Auto-approvable (L3): the run produced clean output — no finding needs a human. "Clean" = no
+    // block (missing-required) and no warn (banned phrase / intake conflict); info-level style hints are
+    // tolerated (an operator raises a rule's severity in standards.json to make it gate). This replaces
+    // the old confidence threshold (an unreliable model self-report) and implicitly requires the wording
+    // pass — uncleaned prose leaves warn findings. The on/off gate + settle live in the result handler
+    // under AUTO_APPROVE.
+    // Settle only when we're sure: supervisor PASS (extractionResult.success) + findings-clean + the data
+    // quality reaches the configured floor (default grade 4). A findings-clean-but-thin item (grade 3)
+    // now goes to review instead of auto-approving — precision over throughput.
+    const autoApproveDataQuality = computeReferenceDataQuality(finalData as Record<string, unknown>, findings, specContractVersion);
+    const autoApprovable = extractionResult.success && isAutoApprovable(findings) && gradeClearsAutoApprove(autoApproveDataQuality, false);
 
     const payload = buildCallbackPayload({
       artikelNummer: itemId,
@@ -690,7 +841,9 @@ export async function runItemFlow(input: RunItemFlowInput, deps: ItemFlowDepende
       error: extractionResult.success ? null : 'Supervisor flagged issues',
       sources: extractionResult.sources,
       autoApprovable,
-      specContractVersion
+      specContractVersion,
+      standardsVersion,
+      findings
     });
 
     await dispatchAgenticResult({

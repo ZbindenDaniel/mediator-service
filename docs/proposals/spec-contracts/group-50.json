@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "_proposal": "Main-category spec contract for 50 Tastatur/Maus/Spielsteuerung/VR. MIXED input devices — kept minimal, no required fields.",
+  "fields": [
+    { "key": "Anschluss", "required": false, "description": "Connection (USB, Bluetooth, Funk/2.4GHz)" },
+    { "key": "Layout", "required": false, "description": "Keyboard layout (DE, CH, US) — keyboards only" }
+  ]
+}

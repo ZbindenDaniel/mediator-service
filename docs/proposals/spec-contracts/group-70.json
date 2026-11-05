@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "_proposal": "Main-category spec contract for 70 Steckkarten (expansion cards: GPU, NIC, sound, controller…). Kept GENERIC on purpose — 701 (graphics) keeps its own richer file and overrides. Activate by moving to contracts/specs/group-70.json and reloading.",
+  "fields": [
+    { "key": "Schnittstelle", "required": true, "description": "Bus interface (PCIe x16, PCIe x1, PCI)" },
+    { "key": "Chipsatz", "required": false, "description": "Controller/chipset the card is built on" },
+    { "key": "Anschlüsse", "required": false, "description": "External ports the card exposes" }
+  ]
+}

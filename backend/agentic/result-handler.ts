@@ -575,7 +575,13 @@ export async function handleAgenticResult(
     statusForPersistence = AGENTIC_RUN_STATUS_APPROVED;
   }
 
-  const eventName = statusForPersistence === AGENTIC_RUN_STATUS_FAILED ? 'AgenticResultFailed' : 'AgenticResultReceived';
+  // Auto-approval finalizes catalogue data unattended, so it gets its own (non-debug) event instead of
+  // hiding inside the per-result AgenticResultReceived noise.
+  const eventName = statusForPersistence === AGENTIC_RUN_STATUS_FAILED
+    ? 'AgenticResultFailed'
+    : statusForPersistence === AGENTIC_RUN_STATUS_AUTO_APPROVED
+      ? 'AgenticAutoApproved'
+      : 'AgenticResultReceived';
   const nowIso = new Date().toISOString();
 
   try {
@@ -732,6 +738,18 @@ export async function handleAgenticResult(
           // COALESCE keeps the prior value). Enables the idle sweep to detect outdated enrichments.
           SpecContractVersion: typeof (payload as { specContractVersion?: unknown }).specContractVersion === 'number'
             ? (payload as { specContractVersion: number }).specContractVersion
+            : null,
+          // Stamp the standards version this run applied (null → COALESCE keeps prior). Enables the
+          // sweep to detect items enriched before the operator's current house rules (self-heal).
+          StandardsVersion: typeof (payload as { standardsVersion?: unknown }).standardsVersion === 'number'
+            ? (payload as { standardsVersion: number }).standardsVersion
+            : null,
+          // Persist findings only when this result carries them (item-flow computes them, even []).
+          // An empty array serializes to "[]" and overwrites stale findings; `undefined` → null, and
+          // the COALESCE in upsertAgenticRun then preserves the prior value on paths that don't compute
+          // findings (manual close/restart), rather than wiping them.
+          FindingsJson: Array.isArray((payload as { findings?: unknown }).findings)
+            ? JSON.stringify((payload as { findings: unknown[] }).findings)
             : null,
           Status: status,
           LastModified: now,

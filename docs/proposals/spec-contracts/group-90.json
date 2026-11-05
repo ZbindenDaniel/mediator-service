@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "_proposal": "Main-category spec contract for 90 Festplatten/Flashcards/Sticks. Generalized from 901/905. Activate by moving to contracts/specs/group-90.json (or upload via the admin contracts editor) and reloading.",
+  "fields": [
+    { "key": "Speichertyp", "required": true, "description": "Storage technology (HDD, SSD, NVMe, Flash)" },
+    { "key": "Speicher", "required": true, "description": "Capacity (e.g. 2 TB, 512 GB)" },
+    { "key": "Formfaktor", "required": false, "description": "Form factor (2.5\", 3.5\", M.2, USB stick)" },
+    { "key": "Schnittstelle", "required": false, "description": "Connection (SATA, USB 3.0, USB-C, NVMe/PCIe)" }
+  ]
+}
