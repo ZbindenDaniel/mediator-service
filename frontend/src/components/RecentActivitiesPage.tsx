@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { EventLog } from '../../../models';
-import { RecentEventsList } from './RecentEventsCard';
+import { RecentEventsList, EVENT_LEVEL_LABELS } from './RecentEventsCard';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { EVENT_TOPICS } from '../../../models/event-labels';
 
@@ -194,6 +194,11 @@ export default function RecentActivitiesPage() {
             </button>
           ))}
         </div>
+      </div>
+      <div className="level-legend muted" aria-hidden="true">
+        {(levelMode === 'all' ? ['error', 'important', 'info', 'debug'] : ['error', 'important', 'info']).map((level) => (
+          <span key={level} className={`level-legend__item level-${level}`}>{EVENT_LEVEL_LABELS[level]}</span>
+        ))}
       </div>
       {loading && <p className="muted">Aktivitäten werden geladen…</p>}
       {error && (

@@ -2988,9 +2988,49 @@ button:focus {
     border-bottom: 1px solid var(--line);
 }
 
-.activities-table .is-error td:first-child {
+// Level hints: a thin left bar per row, plus a faint tint for errors only so they stand out without
+// turning the table into a traffic light. Colour is backed by title/aria-label text (a11y).
+.activities-table tr.level-error td {
+    background: color-mix(in srgb, var(--danger-bg) 55%, transparent);
+}
+
+.activities-table tr.level-error td:first-child {
     box-shadow: inset 3px 0 0 var(--danger);
 }
+
+.activities-table tr.level-important td:first-child {
+    box-shadow: inset 3px 0 0 var(--warn);
+}
+
+.activities-table tr.level-info td:first-child {
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--info) 35%, transparent);
+}
+
+.activities-table tr.level-debug td {
+    color: var(--muted);
+}
+
+.level-legend {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    font-size: 0.8rem;
+    margin: 4px 0 8px;
+}
+
+.level-legend__item::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 0.9em;
+    margin-right: 6px;
+    vertical-align: -0.1em;
+    background: var(--line);
+}
+
+.level-legend__item.level-error::before { background: var(--danger); }
+.level-legend__item.level-important::before { background: var(--warn); }
+.level-legend__item.level-info::before { background: color-mix(in srgb, var(--info) 35%, transparent); }
 
 .activities-table .activities-burst td {
     font-style: italic;

@@ -107,6 +107,14 @@ interface ListProps extends Props {
   grouped?: boolean;
 }
 
+// Spoken/tooltip level names — colour alone must not be the only cue (a11y), so rows also say it.
+export const EVENT_LEVEL_LABELS: Record<string, string> = {
+  error: 'Fehler',
+  important: 'Wichtig',
+  info: 'Info',
+  debug: 'Technisch'
+};
+
 function entityTypeLabel(entityType: string): string {
   if (entityType === 'Box') return 'Behälter';
   if (entityType === 'Item') return 'Artikel';
@@ -144,16 +152,18 @@ export function RecentEventsList({ events, grouped = false }: ListProps) {
     const label = eventLabel(e.Event);
     const ariaActor = e.Actor ? `${e.Actor}: ` : 'Unbekannt: ';
     const clickable = e.EntityType === 'Item' || e.EntityType === 'Box';
-    const isError = eventLevel(e.Event) === 'error';
-    const className = ['item-list-row', isError ? 'is-error' : '', nested ? 'is-nested' : ''].filter(Boolean).join(' ');
+    const level = eventLevel(e.Event);
+    const levelLabel = EVENT_LEVEL_LABELS[level] ?? level;
+    const className = ['item-list-row', `level-${level}`, nested ? 'is-nested' : ''].filter(Boolean).join(' ');
 
     return (
       <tr
         key={e.Id}
         className={className}
+        title={levelLabel}
         role={clickable ? 'button' : undefined}
         tabIndex={clickable ? 0 : undefined}
-        aria-label={`${ariaActor}${label} am ${formattedDate} – ${ariaSuffix}`}
+        aria-label={`${levelLabel} – ${ariaActor}${label} am ${formattedDate} – ${ariaSuffix}`}
         onClick={clickable ? () => handleEventClick(e) : undefined}
         onKeyDown={clickable ? (ev) => { if (ev.key === 'Enter' || ev.key === ' ') handleEventClick(e); } : undefined}
       >
@@ -182,11 +192,12 @@ export function RecentEventsList({ events, grouped = false }: ListProps) {
       const first = row.events[0];
       const last = row.events[row.events.length - 1];
       const expanded = expandedBursts.has(row.key);
-      const isError = eventLevel(first.Event) === 'error';
+      const level = eventLevel(first.Event);
       const summary = (
         <tr
           key={row.key}
-          className={`item-list-row activities-burst${isError ? ' is-error' : ''}`}
+          className={`item-list-row activities-burst level-${level}`}
+          title={EVENT_LEVEL_LABELS[level] ?? level}
           role="button"
           tabIndex={0}
           aria-expanded={expanded}
