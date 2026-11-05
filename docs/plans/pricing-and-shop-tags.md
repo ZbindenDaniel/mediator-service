@@ -37,15 +37,20 @@ Status: **Design, not started** (todo 59). Decided with the operator on 2026-11-
 
 ### 3.2 Formula (`contracts/quality/general.json`)
 
+**Linear in the grade, floor 20 %** (decided 2026-11-05, Q1/Q2): factor = grade / 5, so grades
+1–5 → 20 / 40 / 60 / 80 / 100 % of the base price. Grade 1 (Ersatzteil) lands exactly on the floor; an
+unknown grade gets the floor. Base CHF 500 → 100 / 200 / 300 / 400 / 500.
+
 ```json
 "pricing": {
-  "gradeFactors": { "5": 1.0, "4": 0.85, "3": 0.7, "2": 0.4, "1": 0.15 },
-  "unknownGradeFactor": null,
-  "rounding": { "step": 5, "mode": "nearest", "min": 5 }
+  "model": "linear-grade",
+  "minFactor": 0.2,
+  "rounding": { "step": 5, "mode": "nearest" }
 }
 ```
 
-The numbers are placeholders. The operator sets the real factors (Q1).
+The rounding step is still a placeholder (→ Q1b). The grade is used, not the quality score, because the score
+is a range that moves with every assessment; the grade is the stable, already-calibrated band (#1004).
 
 ```ts
 // models/pricing.ts — pure, shared by backend + frontend
@@ -53,10 +58,11 @@ resolveInstancePrice({ basePrice, grade, override, config }) →
   { price: number | null, source: 'override' | 'formula' | 'none', factor: number | null }
 ```
 
-- `override` wins (also 0? → Q3).
+- `override` wins when it is a number > 0. `0`/empty = **no override** (Q3): overrides are the exception,
+  never a way to give things away.
 - `basePrice` null or ≤ 0 → `none` (same as `isUsablePrice`; the shop catches items without a price).
-- `grade` null/unknown → `unknownGradeFactor` (null = no price) → Q2.
-- Round to `step`, never below `min`.
+- factor = `max(minFactor, grade / 5)`; grade null/unknown → `minFactor` (Q2).
+- Round to `step`.
 - Later (deferred): a subcategory quality contract may carry its own `pricing` that replaces the global one.
   The resolver takes the merged contract the same way scoring does.
 
@@ -70,8 +76,8 @@ resolveInstancePrice({ basePrice, grade, override, config }) →
 | Shopware variants | Children inherit the parent's price | **Each child gets its own `price`** (instance price); parent keeps the base price. Verify the storefront "ab CHF …" display live |
 | Labels / marketing sheet (`print-unified.ts:272`) | Reference price | Instance price for instance labels |
 | Stats inventory value (`db.sumInventoryPriceValue`) | `Auf_Lager × ref price` in SQL | Sum of instance prices (compute in TS or mirror the factor table in SQL) |
-| Item list price filter/sort | Reference price | Instance rows: instance price; grouped rows: base price (→ Q4) |
-| ERP export (`sellprice`) | Reference price | **Unchanged = base price** (Kivitendo prices per article) → Q5 |
+| Item list price filter/sort | Reference price | Instance rows: instance price; grouped rows: base price (Q4) |
+| ERP export (`sellprice`) | Reference price | **Unchanged = base price** (Kivitendo interaction stays as is, Q5) |
 | Review wizard "Preis" / bulk Shopstatus | Sets the reference price | Unchanged; the label says "Basispreis" |
 | Agentic pricing stage | Tries to find "a price" | Unchanged for now; when it's reworked, its target becomes the base price (like-new refurb). Separate topic (todo 0p pricing-stage notes) |
 
@@ -89,7 +95,8 @@ enqueue an `item-upsert` for the reference, or the shop price goes stale. A chan
 - New `item_refs."Mietware" BOOLEAN NOT NULL DEFAULT FALSE` (additive migration, `ItemRef.Mietware`).
 - Reference form: checkbox "Mietware". Bulk bar Shopstatus form: optional "Mietware ja/nein" (same
   pattern as `verkaufspreis` there). Item list: filter + small badge (nice to have).
-- Not exported to the ERP and not touched by the agentic flow (→ Q6).
+- **Exported to the ERP and read back on import** (Q6): new column next to `shoparticle` in
+  `export-items.ts` + importer alias (Kivitendo cvar name to confirm). Not touched by the agentic flow.
 
 ### 4.2 Tag derivation (extensible)
 
@@ -138,13 +145,15 @@ Steps 1–5 (pricing) and 6–7 (Mietware/tags) are independent and can ship sep
 
 ## 6. Open questions
 
-- **Q1** Real grade factors and rounding (step 5? ending in .90?). The placeholders above aren't policy.
-- **Q2** Unknown grade ("?", range too wide): no price (shop catches it) or a default factor?
-- **Q3** Is an override of 0 a valid price ("gratis") or the same as "no override"?
-- **Q4** Grouped item-list rows: show the base price or a range (min–max of the instances)?
-- **Q5** ERP: does Kivitendo stay at the base price, or should the export carry the instance price per row?
-- **Q6** Should `Mietware` also go to the ERP (cvar) or arrive via import?
-- **Q7** Tag display name: exactly "Mietware", or what the shop theme expects (e.g. "Mieten")?
+Answered 2026-11-05: **Q1** linear in the grade, floor 20 % · **Q2** unknown grade → 20 % ·
+**Q3** override 0 = no override · **Q4** grouped rows show the base price · **Q5** Kivitendo unchanged
+(base price) · **Q6** Mietware goes to the ERP too.
+
+Still open:
+- **Q1b** Rounding: steps of CHF 5, or prices ending in .90?
+- **Q6b** Kivitendo cvar name for Mietware.
+- **Q7** Tag display name: exactly "Mietware", or what the shop theme expects? Not verifiable from the
+  dev environment (shop host not reachable) — check in the Shopware admin / theme before step 7.
 
 ## 7. Deferred
 

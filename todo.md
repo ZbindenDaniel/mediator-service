@@ -128,7 +128,7 @@
 
 ## Priority 2 — Feature Improvements
 
-59. **Instance pricing + Mietware shop tag.** Plan: [`docs/plans/pricing-and-shop-tags.md`](docs/plans/pricing-and-shop-tags.md). Pricing: base price on the ref (`Verkaufspreis` = like-new) × global grade factor from `contracts/quality/general.json` + `items.PreisOverride`; Shopware writes per-variant prices. Mietware: `item_refs.Mietware` flag → managed Shopware product tags (generic tag-rule mechanism). Open questions Q1–Q7 in the plan (factors, unknown grade, ERP price).
+59. **Instance pricing + Mietware shop tag.** Plan: [`docs/plans/pricing-and-shop-tags.md`](docs/plans/pricing-and-shop-tags.md). Pricing: base price on the ref (`Verkaufspreis` = like-new) × global grade factor from `contracts/quality/general.json` + `items.PreisOverride`; Shopware writes per-variant prices. Mietware: `item_refs.Mietware` flag → managed Shopware product tags (generic tag-rule mechanism). Decided: factor = grade/5, floor 20 %, unknown grade → 20 %, ERP keeps the base price, Mietware also goes to the ERP. Open: rounding (Q1b), Kivitendo cvar name (Q6b), tag name the shop expects (Q7).
 
 - **Item list: spec filters per subcategory** (deferred from ui #1002). Once one subcategory is chosen, offer selects for its filterable spec fields (`registry.getFilterableSpecKeys()` / spec contracts) with the values present in the loaded items. Needs its own filter state, persistence and neighbor-navigation support; keep it to "select per field", no ranges.
 
