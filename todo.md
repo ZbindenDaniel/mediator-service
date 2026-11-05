@@ -128,6 +128,8 @@
 
 ## Priority 2 — Feature Improvements
 
+59. **Instance pricing + Mietware shop tag.** Plan: [`docs/plans/pricing-and-shop-tags.md`](docs/plans/pricing-and-shop-tags.md). Pricing: base price on the ref (`Verkaufspreis` = like-new) × global grade factor from `contracts/quality/general.json` + `items.PreisOverride`; Shopware writes per-variant prices. Mietware: `item_refs.Mietware` flag → managed Shopware product tags (generic tag-rule mechanism). Open questions Q1–Q7 in the plan (factors, unknown grade, ERP price).
+
 - **Item list: spec filters per subcategory** (deferred from ui #1002). Once one subcategory is chosen, offer selects for its filterable spec fields (`registry.getFilterableSpecKeys()` / spec contracts) with the values present in the loaded items. Needs its own filter state, persistence and neighbor-navigation support; keep it to "select per field", no ranges.
 
 **Parts catalogue Phase 6 (planned 2026-10-20, [plan §11](docs/PLANNING_PARTS_CATALOGUE.md)):** steps 6a–6f — ✅ 6a stable part IDs `C-<root Art>-<sub>-<####>` (graduation without re-key, #991); ✅ 6b contract fields + validator + shared question selector + slot scoring (#993); ✅ 6c slot-answer PATCH + carry-over on full save (#994); ✅ 6d–6f Einzelteile page, specs at creation, catalogue content (#996) — **open: browser walkthrough with the testers**; `askOnCreate`/`steps`/`refinedBy` + validator + shared question selector, slot scoring change (unassessed slots excluded), answer-merge PATCH + slot carry-over on full save, article specs at creation (warning only), Einzelteile page + Zubehör split (retires Zerlegen card + modal level stack, refurbishment parity first), catalogue content drafts. Team: work steps (F1), `refinedBy` + weights (F2, part of C1).
@@ -416,11 +418,11 @@
 - For **periodic backups**, what recovery targets (RPO/RTO) are required?
 - For **PWA**, is offline capability required now or is installability enough for the first phase?
 - For **embeddings**, which primary use case should the spike optimize for — search relevance, deduplication, or review assistance?
-- For **the price formula**, where should it apply first — UI preview, export pipeline, ERP sync, or all?
 - For **loading page emojis**, which emojis / what style?
 
 ### Answered
 
+- **Price formula (2026-11-05):** one shared pure resolver (`models/pricing.ts`) used by UI, labels, stats and Shopware; ERP keeps the base price for now — see `docs/plans/pricing-and-shop-tags.md`. Rental is a `Mietware` ref flag shown via shop tags, not a taxonomy category; rented-out units aren't tracked.
 - **Shelf totals:** shelf weight is not interesting; item count is what matters.
 - **QR relocation failure cases:** moving an item to a box should work the same from the perspective of a box and an item. Multi-scan and scan-until will be added in future iterations.
 - **Dual-format field names:** `*_json` and `*_html`, e.g. `langtext_json`.
