@@ -46,5 +46,14 @@
   { "key": "ComponentGraduated", "label": "Komponente ausgebaut", "level": "important", "topic": "logistics" },
   { "key": "InstanceMatched", "label": "Instanz zugeordnet", "level": "info", "topic": "logistics" },
   { "key": "ShopStatusBulkUpdated", "label": "Shop-Status (Sammelaktion)", "level": "info", "topic": "export" },
-  { "key": "AgenticBulkQueued", "label": "KI-Suche eingeplant (Sammelaktion)", "level": "info", "topic": "agentic" }
+  { "key": "AgenticBulkQueued", "label": "KI-Suche eingeplant (Sammelaktion)", "level": "info", "topic": "agentic" },
+  { "key": "CorrectionNoteRework", "label": "Korrektur-Notiz: Überarbeitung eingereiht", "level": "info", "topic": "agentic" },
+  { "key": "ContractAuditRework", "label": "Self-Heal: Pflichtfelder neu erzeugt", "level": "info", "topic": "agentic" },
+  { "key": "ContractAuditRestamp", "label": "Self-Heal: Vertragsversion aktualisiert", "level": "debug", "topic": "agentic" },
+  { "key": "StandardsAuditReword", "label": "Self-Heal: Texte nach neuem Standard überarbeitet", "level": "info", "topic": "agentic" },
+  { "key": "PendingReviewSelfHeal", "label": "Self-Heal: offene Prüfung neu bewertet", "level": "info", "topic": "agentic" },
+  { "key": "AgenticAutoApproved", "label": "KI-Ergebnis automatisch freigegeben", "level": "info", "topic": "agentic" },
+  { "key": "AgenticFlagChanged", "label": "KI-Automatik umgeschaltet", "level": "important", "topic": "agentic" },
+  { "key": "AgenticDispatchToggled", "label": "KI-Dispatch umgeschaltet", "level": "important", "topic": "agentic" },
+  { "key": "AgenticSelfHealTriggered", "label": "Self-Heal manuell ausgelöst", "level": "info", "topic": "agentic" }
 ]

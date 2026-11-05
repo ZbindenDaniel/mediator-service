@@ -56,6 +56,8 @@ export interface AgenticRunStartInput {
   reworkSpecFields?: string[] | null;
   /** Free-text operator instruction for a rework (e.g. "translate these to German"). */
   reworkInstructions?: string | null;
+  /** UI surface that triggered the run (e.g. 'cockpit'); recorded on the restart event for the activity log. */
+  source?: string | null;
 }
 
 export interface AgenticRunStartResult {

@@ -78,6 +78,7 @@ describe('agentic result handler auto-approval gate (AUTO_APPROVE=true)', () => 
   test('finalizes a clearly-good result as auto_approved instead of forcing review', async () => {
     const { handleAgenticResult } = await import('../result-handler');
     const upsertAgenticRun = jest.fn(async () => undefined);
+    const ctx = makeCtx('A-500', upsertAgenticRun);
 
     const result = await handleAgenticResult(
       {
@@ -93,10 +94,12 @@ describe('agentic result handler auto-approval gate (AUTO_APPROVE=true)', () => 
           autoApprovable: true,
         },
       },
-      { ctx: makeCtx('A-500', upsertAgenticRun), logger: console }
+      { ctx, logger: console }
     );
 
     expect(result.status).toBe(AGENTIC_RUN_STATUS_AUTO_APPROVED);
+    // Unattended approval must surface in the activity log, not hide in debug-level AgenticResultReceived.
+    expect(ctx.logEvent).toHaveBeenCalledWith(expect.objectContaining({ EntityId: 'A-500', Event: 'AgenticAutoApproved' }));
     expect(upsertAgenticRun).toHaveBeenCalledWith(
       expect.objectContaining({ Artikel_Nummer: 'A-500', Status: AGENTIC_RUN_STATUS_AUTO_APPROVED, ReviewState: 'auto_approved' })
     );
@@ -105,6 +108,7 @@ describe('agentic result handler auto-approval gate (AUTO_APPROVE=true)', () => 
   test('still routes a not-clearly-good supervisor approval to manual review', async () => {
     const { handleAgenticResult } = await import('../result-handler');
     const upsertAgenticRun = jest.fn(async () => undefined);
+    const ctx = makeCtx('A-501', upsertAgenticRun);
 
     const result = await handleAgenticResult(
       {
@@ -120,10 +124,11 @@ describe('agentic result handler auto-approval gate (AUTO_APPROVE=true)', () => 
           autoApprovable: false,
         },
       },
-      { ctx: makeCtx('A-501', upsertAgenticRun), logger: console }
+      { ctx, logger: console }
     );
 
     expect(result.status).toBe(AGENTIC_RUN_STATUS_REVIEW);
+    expect(ctx.logEvent).toHaveBeenCalledWith(expect.objectContaining({ EntityId: 'A-501', Event: 'AgenticResultReceived' }));
     expect(upsertAgenticRun).toHaveBeenCalledWith(
       expect.objectContaining({ Artikel_Nummer: 'A-501', Status: AGENTIC_RUN_STATUS_REVIEW })
     );

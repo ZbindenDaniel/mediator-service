@@ -16,6 +16,13 @@ function num(v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
+// Same wording as the KI-cockpit lever labels (PipelineCockpit.tsx), so log and UI read alike.
+const AGENTIC_FLAG_LABELS: Record<string, string> = {
+  autoApprove: 'Auto-Freigabe',
+  autoRework: 'Auto-Rework',
+  autoReview: 'Auto-Review'
+};
+
 function describeShopChanges(meta: Record<string, unknown>): string | null {
   const parts: string[] = [];
   const shop = num(meta.shopartikel);
@@ -158,6 +165,68 @@ export function formatEventDescription(event: EventLog): React.ReactNode {
       const from = str(meta.from);
       const to = str(meta.to);
       if (from || to) return <>Qualität {from ?? '—'} → {to ?? '—'}</>;
+      break;
+    }
+
+    // --- KI cockpit levers + unattended pipeline actions -----------------------------------------------
+    case 'AgenticFlagChanged': {
+      const flag = str(meta.flag);
+      if (flag && typeof meta.enabled === 'boolean') {
+        return <>{AGENTIC_FLAG_LABELS[flag] ?? flag} {meta.enabled ? 'eingeschaltet' : 'ausgeschaltet'}</>;
+      }
+      break;
+    }
+
+    case 'AgenticDispatchToggled': {
+      if (typeof meta.enabled === 'boolean') {
+        return <>Auto-Verteilung {meta.enabled ? 'eingeschaltet' : 'gestoppt'}</>;
+      }
+      break;
+    }
+
+    case 'AgenticSelfHealTriggered': {
+      const enqueued = num(meta.enqueued) ?? 0;
+      const restamped = num(meta.restamped) ?? 0;
+      const stale = num(meta.staleCount);
+      if (enqueued === 0 && restamped === 0) {
+        const reason = str(meta.reason);
+        return <>Self-Heal ausgelöst: keine Aktion{reason ? <> <span className="muted">({reason})</span></> : null}</>;
+      }
+      const parts: string[] = [];
+      if (enqueued) parts.push(`${enqueued} eingereiht`);
+      if (restamped) parts.push(`${restamped} neu gestempelt`);
+      return <>Self-Heal ausgelöst: {parts.join(', ')}{stale !== null ? <span className="muted"> · {stale} veraltet</span> : null}</>;
+    }
+
+    case 'AgenticRunRestarted': {
+      const fields = Array.isArray(meta.reworkSpecFields)
+        ? (meta.reworkSpecFields as unknown[]).filter((f): f is string => typeof f === 'string')
+        : [];
+      const fromCockpit = meta.source === 'cockpit';
+      if (meta.validateOnly === true) {
+        return <>KI-Prüfung ohne Suche eingereiht{fromCockpit ? ' (KI-Cockpit)' : ''}</>;
+      }
+      if (fields.length) {
+        return <>KI-Überarbeitung von <code>{fields.join(', ')}</code> eingereiht{fromCockpit ? ' (KI-Cockpit)' : ''}</>;
+      }
+      if (fromCockpit) return <>{eventLabel(event.Event)} (KI-Cockpit)</>;
+      break;
+    }
+
+    case 'ContractAuditRework': {
+      const missing = Array.isArray(meta.missingRequired)
+        ? (meta.missingRequired as unknown[]).filter((f): f is string => typeof f === 'string')
+        : [];
+      if (missing.length) return <>Self-Heal: fehlende Pflichtfelder neu erzeugt (<code>{missing.join(', ')}</code>)</>;
+      break;
+    }
+
+    case 'StandardsAuditReword':
+    case 'PendingReviewSelfHeal': {
+      const to = meta.standardsToVersion;
+      if (typeof to === 'string' || typeof to === 'number') {
+        return <>{eventLabel(event.Event)} <span className="muted">(Standard v{String(to)})</span></>;
+      }
       break;
     }
 

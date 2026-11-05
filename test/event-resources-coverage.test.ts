@@ -13,7 +13,16 @@ function collectLoggedEventKeys(dir: string, found = new Set<string>()): Set<str
       collectLoggedEventKeys(full, found);
     } else if (entry.name.endsWith('.ts')) {
       const source = fs.readFileSync(full, 'utf8');
-      for (const match of source.matchAll(/\bEvent:\s*'([A-Za-z]+)'/g)) found.add(match[1]);
+      // `Event: <expr>` (incl. ternaries) and the self-heal helper `logSweepEvent(nr, <expr>, …)`:
+      // collect every quoted PascalCase identifier inside the event-name expression.
+      const exprs = [
+        ...Array.from(source.matchAll(/\bEvent:\s*([^,\n}]+)/g), (m) => m[1]),
+        ...Array.from(source.matchAll(/logSweepEvent\([^,]+,\s*([^{]+?),\s*\{/g), (m) => m[1]),
+        ...Array.from(source.matchAll(/\beventName\s*=\s*([^;]+);/g), (m) => m[1])
+      ];
+      for (const expr of exprs) {
+        for (const match of expr.matchAll(/'([A-Z][A-Za-z]+)'/g)) found.add(match[1]);
+      }
     }
   }
   return found;

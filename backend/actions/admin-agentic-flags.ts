@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { requireAdminAuth } from '../utils/admin-auth';
 import { setAgenticFlag, type AgenticFlagKey } from '../agentic';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -20,7 +21,7 @@ const action = defineHttpAction({
   label: 'Admin: Agentic Auto-Flags',
   appliesTo: () => false,
   matches: (path: string, method: string) => path === '/api/admin/agentic-flags' && method === 'POST',
-  async handle(req: IncomingMessage, res: ServerResponse) {
+  async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     if (!requireAdminAuth(req, res)) return;
 
     let body = '';
@@ -44,6 +45,18 @@ const action = defineHttpAction({
     }
     try {
       await setAgenticFlag(flag as AgenticFlagKey, enabled);
+      // Audit trail: these flags change what the pipeline does to the catalogue unattended.
+      try {
+        await ctx?.logEvent?.({
+          Actor: resolveActor(ctx, '') || 'admin',
+          EntityType: 'Batch',
+          EntityId: 'agentic-flags',
+          Event: 'AgenticFlagChanged',
+          Meta: JSON.stringify({ flag, enabled })
+        });
+      } catch (logErr) {
+        console.error('[admin-agentic-flags] Failed to log flag change', logErr);
+      }
       sendJson(res, 200, { flag, enabled });
     } catch (err) {
       sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
