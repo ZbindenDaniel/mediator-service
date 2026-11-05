@@ -100,7 +100,7 @@ export async function fetchFindingsAggregate(): Promise<PipelineFindingsAggregat
  * restart. Caller bounds the batch — the dispatcher's queue cap paces actual execution.
  */
 export async function reworkItem(artikelNummer: string, actor: string, field: string | null): Promise<void> {
-  const body: Record<string, unknown> = { actor };
+  const body: Record<string, unknown> = { actor, source: 'cockpit' };
   if (field) body.reworkSpecFields = [field];
   const res = await fetch(`/api/item-refs/${encodeURIComponent(artikelNummer)}/agentic/restart`, {
     method: 'POST',

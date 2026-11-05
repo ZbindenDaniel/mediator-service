@@ -73,9 +73,16 @@ describe('agentic-bulk-queue action', () => {
     expect(ctx.upsertAgenticRun).toHaveBeenCalledWith(
       expect.objectContaining({ Artikel_Nummer: 'R-002', Status: 'queued', ReviewState: 'not_required' })
     );
-    expect(ctx.logEvent).toHaveBeenCalledTimes(1);
+    // One per-reference (debug) event plus one summary row for the global feed.
+    expect(ctx.logEvent).toHaveBeenCalledTimes(2);
     expect(ctx.logEvent).toHaveBeenCalledWith(
       expect.objectContaining({ EntityId: 'R-002', Actor: 'tester', Event: 'AgenticSearchQueued' })
+    );
+    expect(ctx.logEvent).toHaveBeenLastCalledWith(
+      expect.objectContaining({ EntityType: 'Batch', Actor: 'tester', Event: 'AgenticBulkQueued' })
+    );
+    expect(JSON.parse((ctx.logEvent as jest.Mock).mock.calls[1][0].Meta)).toEqual(
+      expect.objectContaining({ mode: 'missing', queued: 1, skipped: 1, total: 2 })
     );
     expect(getStatus()).toBe(200);
     expect(getBody()).toEqual(expect.objectContaining({ queued: 1, skipped: 1, mode: 'missing', total: 2 }));
@@ -105,7 +112,7 @@ describe('agentic-bulk-queue action', () => {
     expect(ctx.listItemReferences).toHaveBeenCalled();
     expect(ctx.getAgenticRun).toHaveBeenCalledTimes(2);
     expect(ctx.upsertAgenticRun).toHaveBeenCalledTimes(2);
-    expect(ctx.logEvent).toHaveBeenCalledTimes(2);
+    expect(ctx.logEvent).toHaveBeenCalledTimes(3);
     expect(getStatus()).toBe(200);
     expect(getBody()).toEqual(expect.objectContaining({ queued: 2, skipped: 0, mode: 'all', total: 2 }));
   });
@@ -130,7 +137,7 @@ describe('agentic-bulk-queue action', () => {
 
     expect(ctx.getAgenticRun).toHaveBeenCalledTimes(2);
     expect(ctx.upsertAgenticRun).toHaveBeenCalledTimes(1);
-    expect(ctx.logEvent).toHaveBeenCalledTimes(1);
+    expect(ctx.logEvent).toHaveBeenCalledTimes(2);
     expect(getStatus()).toBe(200);
     expect(getBody()).toEqual(expect.objectContaining({ queued: 1, skipped: 1, total: 2 }));
   });

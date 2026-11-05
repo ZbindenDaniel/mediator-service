@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
+import { resolveActor } from '../utils/actor';
 import { requireAdminAuth } from '../utils/admin-auth';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -45,7 +46,23 @@ const action = defineHttpAction({
       sendJson(res, 400, { error: 'enabled must be a boolean' });
       return;
     }
+    const previous = await ctx.getSystemSetting(SETTING_KEY);
     await ctx.setSystemSetting(SETTING_KEY, enabled ? 'true' : 'false');
+    const wasEnabled = previous !== 'false';
+    // Kill-switch audit trail; a no-op re-submit of the same state is not an event.
+    if (wasEnabled !== enabled) {
+      try {
+        await ctx.logEvent({
+          Actor: resolveActor(ctx, '') || 'admin',
+          EntityType: 'Batch',
+          EntityId: 'agentic-dispatch',
+          Event: 'AgenticDispatchToggled',
+          Meta: JSON.stringify({ enabled })
+        });
+      } catch (logErr) {
+        console.error('[admin-agentic-dispatch] Failed to log dispatch toggle', logErr);
+      }
+    }
     sendJson(res, 200, { enabled });
   },
   view: () => ''

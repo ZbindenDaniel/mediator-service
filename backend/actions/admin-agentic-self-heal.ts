@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import { requireAdminAuth } from '../utils/admin-auth';
 import { getSelfHealPreview, requestSelfHealSweep, runSelfHealSweepNow } from '../agentic';
+import { resolveActor } from '../utils/actor';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -19,7 +20,7 @@ const action = defineHttpAction({
   appliesTo: () => false,
   matches: (path: string, method: string) =>
     path === '/api/admin/agentic-self-heal' && (method === 'GET' || method === 'POST'),
-  async handle(req: IncomingMessage, res: ServerResponse) {
+  async handle(req: IncomingMessage, res: ServerResponse, ctx: any) {
     if (!requireAdminAuth(req, res)) return;
     // POST = "run the sweep now": executes sweep passes SYNCHRONOUSLY and reports what happened, so the
     // operator gets immediate, unambiguous feedback instead of a deferred "will run next tick". Also sets
@@ -35,6 +36,23 @@ const action = defineHttpAction({
         }
         const enqueued = passes.filter((p) => p.acted === 'rework' || p.acted === 'reword' || p.acted === 'rerun');
         const restamped = passes.reduce((n, p) => n + (p.restamped ?? 0), 0);
+        // One summary row per manual trigger; the per-item sweep events carry the detail.
+        try {
+          await ctx?.logEvent?.({
+            Actor: resolveActor(ctx, '') || 'admin',
+            EntityType: 'Batch',
+            EntityId: 'agentic-self-heal',
+            Event: 'AgenticSelfHealTriggered',
+            Meta: JSON.stringify({
+              staleCount: passes[0]?.staleCount ?? 0,
+              enqueued: enqueued.length,
+              restamped,
+              reason: enqueued.length === 0 && restamped === 0 ? passes[0]?.reason ?? null : null
+            })
+          });
+        } catch (logErr) {
+          console.error('[admin-agentic-self-heal] Failed to log sweep trigger', logErr);
+        }
         sendJson(res, 200, {
           requested: true,
           warmedUp: true,

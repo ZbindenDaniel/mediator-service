@@ -575,7 +575,13 @@ export async function handleAgenticResult(
     statusForPersistence = AGENTIC_RUN_STATUS_APPROVED;
   }
 
-  const eventName = statusForPersistence === AGENTIC_RUN_STATUS_FAILED ? 'AgenticResultFailed' : 'AgenticResultReceived';
+  // Auto-approval finalizes catalogue data unattended, so it gets its own (non-debug) event instead of
+  // hiding inside the per-result AgenticResultReceived noise.
+  const eventName = statusForPersistence === AGENTIC_RUN_STATUS_FAILED
+    ? 'AgenticResultFailed'
+    : statusForPersistence === AGENTIC_RUN_STATUS_AUTO_APPROVED
+      ? 'AgenticAutoApproved'
+      : 'AgenticResultReceived';
   const nowIso = new Date().toISOString();
 
   try {

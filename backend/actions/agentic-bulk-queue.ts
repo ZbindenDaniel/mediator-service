@@ -236,6 +236,20 @@ type AgenticBulkQueueResult = {
       references: references.length
     });
 
+    if (result.queued > 0) {
+      try {
+        await ctx.logEvent({
+          Actor: actor,
+          EntityType: 'Batch',
+          EntityId: 'agentic-queue',
+          Event: 'AgenticBulkQueued',
+          Meta: JSON.stringify({ mode, total, queued: result.queued, skipped: result.skipped })
+        });
+      } catch (logErr) {
+        console.error('[agentic-bulk-queue] Failed to log summary event', logErr);
+      }
+    }
+
     return sendJson(res, 200, { ok: true, mode, total, queued: result.queued, skipped: result.skipped });
   },
   view: () => '<div class="card"><p class="muted">Agentic bulk queue API</p></div>'

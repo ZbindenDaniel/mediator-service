@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import type { EventLog } from '../../../models';
 import { formatDate } from '../lib/format';
-import { eventLabel } from '../../../models/event-labels';
+import { eventLabel, eventLevel } from '../../../models/event-labels';
 import { formatEventDescription } from '../utils/eventDescription';
+import { buildActivityRows } from '../utils/activityGroups';
 import { useNavigate } from 'react-router-dom';
 import { filterVisibleEvents } from '../utils/eventLogTopics';
 import { usePanelContext } from '../context/PanelContext';
 
-// TODO(agent): Surface active topic filters in the UI to avoid confusing operators.
 // TODO(agent): Follow up on filtering the activities feed by query once backend support lands.
 // TODO(navigation): Validate header navigation coverage before reintroducing card-level links.
 // TODO(agent): Confirm Artikelbezeichnung data coverage for activity rows without item references.
@@ -82,7 +82,9 @@ function resolveEventLink(event: EventLog): ResolvedEventLink {
       };
     }
 
-    console.warn('RecentEventsCard: Unknown EntityType for event, falling back to /activities.', event);
+    if (event.EntityType !== 'Batch') {
+      console.warn('RecentEventsCard: Unknown EntityType for event, falling back to /activities.', event);
+    }
     return {
       path: '/activities',
       ariaSuffix: 'Aktivitätenübersicht',
@@ -100,13 +102,32 @@ interface Props {
   events: EventLog[];
 }
 
-export function RecentEventsList({ events }: Props) {
+interface ListProps extends Props {
+  /** Day headers + folding of consecutive similar events (activities page). */
+  grouped?: boolean;
+}
+
+// Spoken/tooltip level names — colour alone must not be the only cue (a11y), so rows also say it.
+export const EVENT_LEVEL_LABELS: Record<string, string> = {
+  error: 'Fehler',
+  important: 'Wichtig',
+  info: 'Info',
+  debug: 'Technisch'
+};
+
+function entityTypeLabel(entityType: string): string {
+  if (entityType === 'Box') return 'Behälter';
+  if (entityType === 'Item') return 'Artikel';
+  if (entityType === 'Batch') return 'Sammelaktion';
+  return entityType;
+}
+
+export function RecentEventsList({ events, grouped = false }: ListProps) {
   const allowedEvents = filterVisibleEvents(events);
   const { setEntity } = usePanelContext();
+  const [expandedBursts, setExpandedBursts] = useState<Set<string>>(() => new Set());
 
   const handleEventClick = (e: EventLog) => {
-    const { ariaSuffix } = resolveEventLink(e);
-    void ariaSuffix; // still used for aria-label below
     if (e.EntityType === 'Box' && e.EntityId) {
       setEntity('box', e.EntityId);
     } else if (e.EntityType === 'Item') {
@@ -115,6 +136,86 @@ export function RecentEventsList({ events }: Props) {
         || null;
       if (id) setEntity('item', id);
     }
+  };
+
+  const toggleBurst = (key: string) => {
+    setExpandedBursts((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const renderEventRow = (e: EventLog, nested = false) => {
+    const { ariaSuffix } = resolveEventLink(e);
+    const formattedDate = formatDate(e.CreatedAt);
+    const label = eventLabel(e.Event);
+    const ariaActor = e.Actor ? `${e.Actor}: ` : 'Unbekannt: ';
+    const clickable = e.EntityType === 'Item' || e.EntityType === 'Box';
+    const level = eventLevel(e.Event);
+    const levelLabel = EVENT_LEVEL_LABELS[level] ?? level;
+    const className = ['item-list-row', `level-${level}`, nested ? 'is-nested' : ''].filter(Boolean).join(' ');
+
+    return (
+      <tr
+        key={e.Id}
+        className={className}
+        title={levelLabel}
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        aria-label={`${levelLabel} – ${ariaActor}${label} am ${formattedDate} – ${ariaSuffix}`}
+        onClick={clickable ? () => handleEventClick(e) : undefined}
+        onKeyDown={clickable ? (ev) => { if (ev.key === 'Enter' || ev.key === ' ') handleEventClick(e); } : undefined}
+      >
+        <td><span className={`pill ${e.EntityType}`}>{entityTypeLabel(e.EntityType)}</span></td>
+        <td>{e.EntityId ?? '—'}</td>
+        <td>{e.Artikelbeschreibung ?? '—'}</td>
+        <td>{e.Actor ?? '[?]'}</td>
+        <td>{formatEventDescription(e)}</td>
+        <td>{formattedDate}</td>
+      </tr>
+    );
+  };
+
+  const renderRows = () => {
+    if (!grouped) return allowedEvents.map((e) => renderEventRow(e));
+    return buildActivityRows(allowedEvents).flatMap((row) => {
+      if (row.kind === 'day') {
+        return [
+          <tr key={row.key} className="activities-day">
+            <th scope="colgroup" colSpan={6}>{row.label}</th>
+          </tr>
+        ];
+      }
+      if (row.kind === 'event') return [renderEventRow(row.event)];
+
+      const first = row.events[0];
+      const last = row.events[row.events.length - 1];
+      const expanded = expandedBursts.has(row.key);
+      const level = eventLevel(first.Event);
+      const summary = (
+        <tr
+          key={row.key}
+          className={`item-list-row activities-burst level-${level}`}
+          title={EVENT_LEVEL_LABELS[level] ?? level}
+          role="button"
+          tabIndex={0}
+          aria-expanded={expanded}
+          onClick={() => toggleBurst(row.key)}
+          onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggleBurst(row.key); } }}
+        >
+          <td><span className={`pill ${first.EntityType}`}>{entityTypeLabel(first.EntityType)}</span></td>
+          <td colSpan={2}>
+            <span className="activities-burst__toggle" aria-hidden="true">{expanded ? '▾' : '▸'}</span>{' '}
+            {row.events.length} Einträge
+          </td>
+          <td>{first.Actor ?? '[?]'}</td>
+          <td>{eventLabel(first.Event)} ×{row.events.length}</td>
+          <td>{formatDate(last.CreatedAt)} – {formatDate(first.CreatedAt)}</td>
+        </tr>
+      );
+      return expanded ? [summary, ...row.events.map((e) => renderEventRow(e, true))] : [summary];
+    });
   };
 
   return (
@@ -132,39 +233,7 @@ export function RecentEventsList({ events }: Props) {
                 <th scope="col">Datum</th>
               </tr>
             </thead>
-            <tbody>
-              {allowedEvents.map((e) => {
-                const { ariaSuffix } = resolveEventLink(e);
-                const formattedDate = formatDate(e.CreatedAt);
-                const label = eventLabel(e.Event);
-                const actorText = e.Actor ?? '[?]';
-                const ariaActor = e.Actor ? `${e.Actor}: ` : 'Unbekannt: ';
-                const ariaLabel = `${ariaActor}${label} am ${formattedDate} – ${ariaSuffix}`;
-                const description = formatEventDescription(e);
-                const typeLabel = e.EntityType === 'Box' ? 'Behälter' : e.EntityType === 'Item' ? 'Artikel' : e.EntityType;
-                const entityId = e.EntityId ?? '—';
-                const artikelbezeichnung = e.Artikelbeschreibung ?? '—';
-
-                return (
-                  <tr
-                    key={e.Id}
-                    className="item-list-row"
-                    role="button"
-                    tabIndex={0}
-                    aria-label={ariaLabel}
-                    onClick={() => handleEventClick(e)}
-                    onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') handleEventClick(e); }}
-                  >
-                    <td><span className={`pill ${e.EntityType}`}>{typeLabel}</span></td>
-                    <td>{entityId}</td>
-                    <td>{artikelbezeichnung}</td>
-                    <td>{actorText}</td>
-                    <td>{description}</td>
-                    <td>{formattedDate}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
+            <tbody>{renderRows()}</tbody>
           </table>
         </div>
       ) : (

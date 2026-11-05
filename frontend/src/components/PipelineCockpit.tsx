@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { logError } from '../utils/logger';
+import CockpitActivityPanel from './CockpitActivityPanel';
 import { useTaxonomy } from '../context/TaxonomyContext';
 import { describeAgenticStatus } from '../lib/agenticStatusLabels';
 import { ensureActorOrAlert } from './relocation/relocationHelpers';
@@ -100,6 +101,7 @@ export default function PipelineCockpit(): JSX.Element {
   const [sweepMsg, setSweepMsg] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [clusterMsg, setClusterMsg] = useState<string | null>(null);
+  const [activityRefresh, setActivityRefresh] = useState(0);
 
   const loadLevers = useCallback(async () => {
     try {
@@ -142,6 +144,7 @@ export default function PipelineCockpit(): JSX.Element {
       }
     } finally {
       setBusyKey(null);
+      setActivityRefresh((n) => n + 1);
     }
   }, [loadLevers]);
 
@@ -192,6 +195,7 @@ export default function PipelineCockpit(): JSX.Element {
       setClusterMsg('Überarbeitung fehlgeschlagen.');
     } finally {
       setBusyKey(null);
+      setActivityRefresh((n) => n + 1);
     }
   }, [loadLevers]);
 
@@ -388,6 +392,8 @@ export default function PipelineCockpit(): JSX.Element {
               </p>
             </section>
           )}
+
+          <CockpitActivityPanel refreshKey={activityRefresh} />
 
           {error && data && <p className="alert alert-error">{error}</p>}
         </>

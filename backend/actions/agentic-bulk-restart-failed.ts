@@ -92,6 +92,20 @@ const action = defineHttpAction({
       }
     }
 
+    if (restarted > 0) {
+      try {
+        await ctx.logEvent({
+          Actor: actor,
+          EntityType: 'Batch',
+          EntityId: 'agentic-queue',
+          Event: 'AgenticBulkQueued',
+          Meta: JSON.stringify({ mode: 'bulk-restart-failed', total: failedRuns.length, queued: restarted, skipped })
+        });
+      } catch (logErr) {
+        console.error('[agentic-bulk-restart-failed] Failed to log summary event', logErr);
+      }
+    }
+
     sendJson(res, 200, { ok: true, restarted, skipped });
   },
   view: () => '<div class="card"><p class="muted">Agentic bulk restart failed API</p></div>'

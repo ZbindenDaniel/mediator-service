@@ -3046,6 +3046,9 @@ export async function restartAgenticRun(
             previousStatus: input.previousStatus ?? existing?.Status ?? null,
             searchQuery,
             context,
+            source: input.source ?? null,
+            validateOnly: input.validateOnly === true,
+            reworkSpecFields: input.reworkSpecFields ?? null,
             lastReviewDecision: review?.decision ?? null,
             lastReviewNotes: review?.notes ?? null,
             lastReviewActor: review?.reviewedBy ?? null

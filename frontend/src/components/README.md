@@ -9,7 +9,7 @@ All React UI components for the application — organized by feature area in sub
 - `App.tsx` — root router and layout shell
 - `Layout.tsx` / `Header.tsx` — app chrome
 - `ItemList.tsx` / `ItemListPage.tsx` — item browse and filter
-- `KiRunsPage.tsx` / `PipelineCockpit.tsx` — the KI cockpit (`/ki`): a surface to *manage data quality across the pipeline* (global levers + aggregated findings), not an item list
+- `KiRunsPage.tsx` / `PipelineCockpit.tsx` — the KI cockpit (`/ki`): a surface to *manage data quality across the pipeline* (global levers + aggregated findings), not an item list; `CockpitActivityPanel.tsx` shows the latest KI events (activity log filtered to `agentic`) under the levers
 - `ItemDetail.tsx` — item detail view (tabs, agentic status, quality, media)
 - `BoxList.tsx` / `BoxListPage.tsx` / `BoxDetail.tsx` — box management
 - `ItemCreate.tsx` — item creation wizard (artikelLookup → quality → basicInfo)
