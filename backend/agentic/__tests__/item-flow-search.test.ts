@@ -1,4 +1,4 @@
-import { collectSearchContexts, type SearchInvoker } from '../flow/item-flow-search';
+import { collectSearchContexts, identifyMissingSchemaFields, type SearchInvoker } from '../flow/item-flow-search';
 import type { SearchResult } from '../tools/tavily-client';
 
 describe('collectSearchContexts', () => {
@@ -118,5 +118,14 @@ describe('collectSearchContexts', () => {
     const urls = result.aggregatedSources.map((s) => s.url);
     const uniqueUrls = new Set(urls);
     expect(urls.length).toBe(uniqueUrls.size);
+  });
+});
+
+describe('identifyMissingSchemaFields', () => {
+  it('never asks the planner to search for internal category codes', () => {
+    const missing = identifyMissingSchemaFields({ Artikelbeschreibung: 'ThinkPad T480', Hauptkategorien_B: null, Unterkategorien_B: null });
+    expect(missing).not.toEqual(expect.arrayContaining(['Unterkategorien_B']));
+    expect(missing.some((field) => /kategorien/i.test(field))).toBe(false);
+    expect(missing).toContain('Gewicht_kg');
   });
 });

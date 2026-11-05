@@ -120,42 +120,39 @@ function sanitizeEnvForLogging(env: Record<string, unknown>): Record<string, unk
   }, {});
 }
 
-// Resolve each setting using the canonical var first, then legacy provider-specific aliases
-// so existing deployments continue to work unchanged.
+const resolvedProvider =
+  resolveEnumValue(MODEL_PROVIDER_VALUES, 'AGENTIC_MODEL_PROVIDER', 'MODEL_PROVIDER') ?? 'ollama';
+
+// Provider-specific keys win over the generic MODEL_* ones so both providers can stay configured side by
+// side and AGENTIC_MODEL_PROVIDER alone switches between them; the inactive provider's keys are ignored.
+const PROVIDER_ENV_KEYS: Record<
+  (typeof MODEL_PROVIDER_VALUES)[number],
+  { baseUrl: Array<keyof NodeJS.ProcessEnv>; apiKey: Array<keyof NodeJS.ProcessEnv>; model: Array<keyof NodeJS.ProcessEnv>; visionModel: Array<keyof NodeJS.ProcessEnv> }
+> = {
+  ollama: {
+    baseUrl: ['AGENTIC_OLLAMA_BASE_URL', 'OLLAMA_BASE_URL'],
+    apiKey: [],
+    model: ['AGENTIC_OLLAMA_MODEL', 'OLLAMA_MODEL'],
+    visionModel: ['AGENTIC_OLLAMA_VISION_MODEL']
+  },
+  openai: {
+    baseUrl: ['AGENTIC_OPENAI_BASE_URL', 'OPENAI_BASE_URL'],
+    apiKey: ['AGENTIC_OPENAI_API_KEY', 'OPENAI_API_KEY'],
+    model: ['AGENTIC_OPENAI_MODEL', 'OPENAI_MODEL'],
+    visionModel: ['AGENTIC_OPENAI_VISION_MODEL']
+  }
+};
+const providerKeys = PROVIDER_ENV_KEYS[resolvedProvider];
+
 const envInput: EnvSchemaInput = {
   NODE_ENV: resolveEnvValue('NODE_ENV'),
-  MODEL_PROVIDER: resolveEnumValue(
-    MODEL_PROVIDER_VALUES,
-    'AGENTIC_MODEL_PROVIDER',
-    'MODEL_PROVIDER'
-  ),
-  // Shared base URL — canonical, then legacy provider-specific aliases
-  MODEL_BASE_URL: resolveEnvValue(
-    'MODEL_BASE_URL',
-    'AGENTIC_MODEL_BASE_URL',
-    'AGENTIC_OLLAMA_BASE_URL',
-    'OLLAMA_BASE_URL',
-    'AGENTIC_OPENAI_BASE_URL',
-    'OPENAI_BASE_URL'
-  ),
-  // Shared API key — canonical, then legacy aliases
-  MODEL_API_KEY: resolveEnvValue(
-    'MODEL_API_KEY',
-    'AGENTIC_MODEL_API_KEY',
-    'AGENTIC_OPENAI_API_KEY',
-    'OPENAI_API_KEY'
-  ),
-  // Text model name — canonical, then legacy aliases
-  MODEL_NAME: resolveEnvValue(
-    'MODEL_NAME',
-    'AGENTIC_MODEL_NAME',
-    'AGENTIC_OLLAMA_MODEL',
-    'OLLAMA_MODEL',
-    'AGENTIC_OPENAI_MODEL',
-    'OPENAI_MODEL'
-  ),
-  // Vision model name for OCR — standalone only, falls back to MODEL_NAME in code
-  VISION_MODEL_NAME: resolveEnvValue('VISION_MODEL_NAME'),
+  MODEL_PROVIDER: resolvedProvider,
+  // Active provider's keys first, then the generic keys as a shared fallback
+  MODEL_BASE_URL: resolveEnvValue(...providerKeys.baseUrl, 'MODEL_BASE_URL', 'AGENTIC_MODEL_BASE_URL'),
+  MODEL_API_KEY: resolveEnvValue(...providerKeys.apiKey, 'MODEL_API_KEY', 'AGENTIC_MODEL_API_KEY'),
+  MODEL_NAME: resolveEnvValue(...providerKeys.model, 'MODEL_NAME', 'AGENTIC_MODEL_NAME'),
+  // Vision model name for OCR — falls back to MODEL_NAME in code
+  VISION_MODEL_NAME: resolveEnvValue(...providerKeys.visionModel, 'VISION_MODEL_NAME'),
   MODEL_NUM_CTX: resolveNumber('MODEL_NUM_CTX'),
   MODEL_FORMAT_JSON: resolveEnvValue('MODEL_FORMAT_JSON'),
   MODEL_HTTP_HEADERS_TIMEOUT_MS: resolveNumber('MODEL_HTTP_HEADERS_TIMEOUT_MS'),
@@ -283,13 +280,20 @@ function resolveUnitInterval(fallback: number, ...keys: Array<keyof NodeJS.Proce
   return parsed;
 }
 
-// Auto-approval: when enabled, a run whose extraction is clearly good (supervisor PASS + confidence ≥
-// minConfidence + no missing-required fields + no ambiguous fields) is finalized as `auto_approved`
-// instead of forced into manual review. Default OFF — enabling it is a deliberate operator choice,
-// and `auto_approved` items are ERP-eligible (operators sort by state and decide what to sync).
-export const autoApproveConfig: { enabled: boolean; minConfidence: number } = {
+// Auto-approval: when enabled, a run whose output is "clean" — no review finding of severity block
+// (missing-required) or warn (banned phrase / intake conflict); info-level style hints tolerated — is
+// finalized as `auto_approved` instead of forced into manual review. Default OFF — enabling it is a
+// deliberate operator choice, and `auto_approved` items are ERP-eligible (operators sort by state and
+// decide what to sync). NOTE: the findings-clean gate (L3) replaced the old confidence threshold;
+// `minConfidence` / `AUTO_APPROVE_MIN_CONFIDENCE` is retained for back-compat but no longer gates.
+// `minGrade` (AUTO_APPROVE_MIN_GRADE, default 4) is the data-quality floor an item must also clear to
+// auto-approve: findings-clean alone is too low a bar (an item can have every REQUIRED field yet be thin
+// on desired fields / stale → grade 3), and the goal is to settle only items we are very sure about, not
+// to maximize approvals. A null grade (no spec contract → quality can't be judged) never auto-approves.
+export const autoApproveConfig: { enabled: boolean; minConfidence: number; minGrade: number } = {
   enabled: resolveBooleanFlag('AUTO_APPROVE'),
-  minConfidence: resolveUnitInterval(0.8, 'AUTO_APPROVE_MIN_CONFIDENCE')
+  minConfidence: resolveUnitInterval(0.8, 'AUTO_APPROVE_MIN_CONFIDENCE'),
+  minGrade: Math.round(resolveNumber('AUTO_APPROVE_MIN_GRADE') ?? 4)
 };
 
 // Idle-time deterministic rework sweeper: when enabled, the dispatcher (only while otherwise idle)
@@ -298,4 +302,15 @@ export const autoApproveConfig: { enabled: boolean; minConfidence: number } = {
 // field. Default OFF. No LLM involved (deterministic gap check only).
 export const autoReworkConfig: { enabled: boolean } = {
   enabled: resolveBooleanFlag('AUTO_REWORK')
+};
+
+// Idle-time pending-review self-heal: when enabled, the same idle sweep also picks up items stuck in
+// manual review (`review` state) that are version-STALE (enriched before the current contract/standards)
+// and re-runs them through the supervised pipeline so it re-judges them under the current rules — items
+// that now come back clean auto-approve (the human queue shrinks), the rest stay in review. Default OFF.
+// Separate from AUTO_REWORK because this touches the human review queue, so it is opted into deliberately
+// and independently. Version-current pending items are left alone (already judged under the current
+// pipeline — re-running wouldn't change the verdict), which also prevents thrash.
+export const autoReviewConfig: { enabled: boolean } = {
+  enabled: resolveBooleanFlag('AUTO_REVIEW')
 };

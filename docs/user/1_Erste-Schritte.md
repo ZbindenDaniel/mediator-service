@@ -4,7 +4,7 @@ Willkommen! Diese Seite erklärt die wichtigsten Abläufe im System — vom erst
 
 Beim ersten Aufruf wirst du nach deinem **Benutzernamen** gefragt. Damit kann man besser nachvollziehen, wer was macht. Du kannst ihn jederzeit ändern — einfach oben rechts im Header auf deinen Namen **klicken**. Dort findest du auch den einfachen Modus, das Farbschema (Hell/Dunkel) und, wenn du angemeldet bist, „Abmelden“.
 
-**Einfacher Modus:** Im gleichen Dialog (Doppelklick auf deinen Namen) kannst du **Einfacher Modus (weniger anzeigen)** einschalten. Dann siehst du nur die wichtigsten Menüpunkte und Tabs — praktisch, wenn du vor allem erfasst und einlagerst. Die Einstellung gilt nur für deinen Browser.
+**Einfacher Modus:** Im gleichen Dialog (Klick auf deinen Namen) kannst du **Einfacher Modus (weniger anzeigen)** einschalten. Dann siehst du nur die wichtigsten Menüpunkte und Tabs — praktisch, wenn du vor allem erfasst und einlagerst. Die Einstellung gilt nur für deinen Browser.
 
 ---
 
@@ -79,29 +79,119 @@ Mit dem Scan-Symbol navigierst du blitzschnell zu einem Artikel oder Behälter.
 
 ## 5. Artikel finden
 
-- **Suche:** Artikelnummer, Beschreibung, Seriennummer, MAC-Adresse oder EAN ins Suchfeld oben eingeben. Gibt es keinen genauen Treffer, zeigt die Suche die ähnlichsten Artikel an — prüf dann genau, ob der richtige dabei ist.
-- **Filter:** In der Artikelliste kannst du nach Behälter, Qualität, KI-Status, Shop-Status, Platzierung und **Preis** (Alle / Ohne Preis / Mit Preis) filtern. Beim Sortieren nach **Preis** stehen Artikel ohne Preis immer am Ende. Gefiltert und sortiert wird nach dem Basispreis.
+### Welche Suche passt zu deiner Aufgabe?
+
+| Wo? | Was wird gesucht? | Wie startest du? |
+|-----|------------------|-----------------|
+| Suchfeld **Suchen…** oben | Artikel sowie Behälter und Regale | Begriff eingeben → Enter oder Lupe |
+| Artikelliste, Feld **Suche** | Name, Nummer, Hersteller, Seriennummer, Spezifikationen und weitere Artikeldaten | Text eingeben → Enter |
+| Behälterliste, Feld **Suche** | Box-ID, Behältername, Standort-ID oder Regalname | Text eingeben; die Liste wird beim Tippen gefiltert |
+| Dialog **Artikel umlagern**, Feld **Ziel wählen** | Box-ID oder Behältername | Mindestens zwei Zeichen eingeben → Treffer auswählen |
+
+### Oben nach einem Artikel oder Behälter suchen
+
+1. Gib deinen Begriff in **Suchen…** ein.
+2. Drück **Enter** oder klick auf die **Lupe**.
+3. Klick in der Ergebnisliste auf den gewünschten Artikel oder Behälter, um ihn zu öffnen.
+
+Bei Artikeln werden **Artikelnummer**, **Artikelbeschreibung**, der hinterlegte **Suchbegriff**, **Kurzbeschreibung**, **Referenz-Spezifikationen**, **Hersteller**, **Seriennummer**, **MAC-Adresse**, **EAN**, **ItemUUID** und **Box-ID** berücksichtigt. Die Spezifikationen des einzelnen Exemplars unter **Vorrat** werden hier nicht mit durchsucht.
+
+Bei Behältern und Regalen werden **Box-ID** und **Name** durchsucht. Für eine Suche nach der Standort-ID oder dem zugehörigen Regalnamen benutze die **Behälterliste**.
+
+**Beispiele:** Suche nach einer Artikelnummer wie `000001`, einem Hersteller oder einer bekannten Seriennummer. Einen benannten Behälter kannst du über seinen Namen suchen, zum Beispiel **Kabelkiste**.
+
+Groß- und Kleinschreibung werden bei der Textsuche nicht unterschieden. Mehrere durch Leerzeichen getrennte Wörter werden einzeln berücksichtigt; ein Treffer muss daher nicht die gesamte Eingabe als zusammenhängenden Text enthalten. Gibt es keinen genauen Treffer, zeigt die Suche die ähnlichsten Artikel an — prüf dann genau, ob der richtige dabei ist. Prüfe die angezeigte Artikelnummer beziehungsweise Box-ID vor der Auswahl.
+
+> Die obere Suche zeigt eine begrenzte Auswahl von Treffern. Benutze für die Arbeit mit einer längeren Liste die Artikel- oder Behälterliste und deren Filter.
+
+### Mit einer vollständigen ID direkt öffnen
+
+Wenn die Eingabe oben mit **I-**, **B-** oder **S-** beginnt, behandelt das System sie beim Absenden als direkte ID:
+
+- **I-…:** öffnet die Artikelinstanz, zum Beispiel `I-000001-0001`.
+- **B-…:** öffnet den Behälter, zum Beispiel `B-281026-0001`.
+- **S-…:** öffnet das Regal.
+
+Gib dafür die **vollständige ID** ein. Eine unvollständige ID mit einem dieser Präfixe öffnet keine Liste ähnlicher IDs. Teile einer Box-ID kannst du in der Behälterliste oder in der Zielsuche beim Umlagern suchen. Für Teile einer Artikelnummer eignet sich das Feld **Suche** in der Artikelliste.
+
+### Die Artikelliste eingrenzen
+
+1. Öffne die Artikelliste über das **Listen-Symbol**.
+2. Gib im Feld **Suche** deinen Begriff ein und drück **Enter**. Leerst du das Feld, zeigt die Liste sofort wieder alles.
+3. Ergänze bei Bedarf weitere Filter, zum Beispiel **Behälter** oder **Unterkategorie**. **Qualität**, **Ki-Status**, **Bilder**, **Preis** (Alle / Ohne Preis / Mit Preis) und weitere findest du unter **Weitere Filter**.
+
+Das Feld **Suche** findet Artikel, bei denen jedes eingegebene Wort irgendwo vorkommt — in beliebiger Reihenfolge, Akzente und Umlaute spielen keine Rolle. `7490 dell` findet also auch einen Dell Latitude 7490. Durchsucht werden Beschreibung, Kurzbeschreibung, Hersteller, Artikelnummer, ItemUUID, Seriennummer, EAN, Suchbegriff, Langtext und die Spezifikationen des Exemplars. Eine MAC-Adresse suchst du über die **obere Suche**.
+
+Beim Sortieren nach **Preis** stehen Artikel ohne Preis immer am Ende. Gefiltert und sortiert wird nach dem Basispreis.
+
+Im separaten Feld **Behälter** kannst du eine Box-ID oder Standortangabe eingeben. Übernimm den Filter mit **Enter** oder indem du das Feld verlässt. Dieses Feld sucht nicht nach dem Behälternamen.
+
+**Zu wenige Treffer?** Prüfe zusätzlich gesetzte Filter. Wenn **Filter zurücksetzen** angezeigt wird, kannst du damit die Listenfilter auf ihre Standardwerte zurückstellen. Artikel ohne Lagerbestand sind in der Standardliste ausgeblendet; eine bekannte vollständige ItemUUID kannst du weiterhin über die obere Suche öffnen.
+
+### Behälter suchen und ein Umlagerungsziel wählen
+
+In der **Behälterliste** findet das Suchfeld trotz des Platzhalters **Box-ID suchen** auch Behälter- und Regalnamen sowie Standort-IDs. Die übrigen Filter, etwa Typ und Standort, gelten zusätzlich.
+
+Beim **Umlagern** kannst du nach **Box-ID oder Behältername** suchen. Wähle einen Vorschlag aus; erst dann wird dessen Box-ID als Ziel übernommen. Alternativ gibst du eine bekannte Box-ID vollständig ein oder scannst den Zielbehälter. Den Ablauf erklärt Abschnitt 6.
+
+**Markierte Artikel:** Im Tab **Markierung** auf **Merken** klicken (optional mit Notiz). Markierungen und Notizen sehen alle — so kannst du Kolleg:innen auf einen Artikel hinweisen.
+
+### Preise, Mietware und Shop
+
 - **Preise:** In der Referenz steht der **Basispreis** — der Preis eines neuwertigen Geräts. Jedes Exemplar kostet je nach Zustand einen Anteil davon (Zustand 5 = 100 %, 4 = 80 %, 3 = 60 %, 2 = 40 %, 1 oder unbekannt = 20 %, auf 5 Franken gerundet). Der Preis des Exemplars steht im Tab **Instanz**. Nur für Ausnahmen: unter **Instanz bearbeiten → Fixer Preis** einen eigenen Preis setzen (leer = wieder nach Zustand).
 - **Mietware:** Im Referenz-Formular den Schalter **Mietware** setzen — der Artikel bekommt im Shop den Tag „rental“ und bleibt trotzdem kaufbar.
 - **Sofort in den Shop (Admins):** Im Dialog **Shopstatus setzen** eines Artikels überträgt **Jetzt mit Shop synchronisieren** den gespeicherten Stand an den Shop, ohne Felder zu ändern (nach etwa 10 Sekunden sichtbar).
-- **Direktnavigation:** Behälter-ID (z. B. `B-042`) direkt ins Suchfeld eingeben — springt sofort zur Behälterdetailansicht.
-- **Markierte Artikel:** Im Tab **Markierung** auf **Merken** klicken (optional mit Notiz). Markierungen und Notizen sehen alle — so kannst du Kolleg:innen auf einen Artikel hinweisen.
+
+Zum Verständnis von Artikelnummer, ItemUUID und Spezifikationen siehe die Hilfeseite [Artikel](/hilfe?doc=6_Artikel).
 
 ---
 
 ## 6. Artikel und Behälter umlagern
 
-**Artikel in einen anderen Behälter:**
-1. Artikel öffnen → Tab **Vorrat** → **Umlagern**.
-2. Ziel-Behälter scannen oder ID eingeben.
-3. Bestätigen.
+### Was macht Umlagern?
 
-**Behälter auf ein anderes Regal:**
-1. Behälter öffnen → **Umlagern**.
-2. Zielregal auswählen oder scannen.
-3. Bestätigen.
+Mit **Umlagern** hältst du fest, wo ein Artikel oder Behälter im Lager liegt:
 
-Der neue Standort ist sofort in der Artikel- und Behälteransicht sichtbar.
+- **Artikel umlagern:** Der geöffnete Artikel wird dem gewählten Zielbehälter zugeordnet. Dabei übernimmt er dessen hinterlegten Standort. Hat der Zielbehälter noch keinen Standort, bleibt diese Angabe beim Artikel leer.
+- **Behälter umlagern:** Du ordnest den Behälter einem neuen Standort, zum Beispiel einem Regal, zu.
+
+> Lege den Artikel beziehungsweise Behälter auch tatsächlich an den gewählten Platz. Die Zuordnung im System und der physische Lagerort sollen übereinstimmen.
+
+### Artikel in einen vorhandenen Behälter verschieben
+
+1. Öffne den gewünschten Artikel und wechsle auf den Tab **Vorrat**.
+2. Klick auf **Umlagern**. Der Dialog **Artikel umlagern** öffnet sich.
+3. Gib unter **Ziel wählen** die **Box-ID** oder den **Namen des Behälters** ein. Ab zwei Zeichen erscheinen Suchvorschläge.
+4. Wähle den passenden Treffer aus der Liste. Die Vorschläge zeigen die Box-ID und, falls vorhanden, den Behälternamen. Nach der Auswahl steht die Box-ID im Eingabefeld.
+5. Prüfe die Ziel-ID und klick auf **Verschieben**.
+6. Nach erfolgreichem Verschieben schließt sich der Dialog. Prüfe die neue Zuordnung unter **Behälter** im Tab **Vorrat**.
+
+**Beispiel:** Dein Zielbehälter heißt **Kabelkiste** und hat die ID `B-281026-0001`. Suche nach **Kabelkiste**, wähle den Treffer mit der passenden ID und klick auf **Verschieben**.
+
+**Alternativ per QR-Code:** Klick neben dem Suchfeld auf **Zielbehälter scannen** und scanne das Etikett des Zielbehälters. Die Box-ID wird übernommen. Prüfe sie und bestätige mit **Verschieben**. Du kannst eine bekannte Box-ID auch direkt vollständig eingeben.
+
+> Bei einer Suche nach dem Namen musst du einen Treffer auswählen. Der Name allein im Eingabefeld wählt noch keinen Zielbehälter aus.
+
+### Artikel in einen neuen Behälter verschieben
+
+1. Öffne den Artikel → Tab **Vorrat** → **Umlagern**.
+2. Klick auf **In neuen Behälter verschieben**. Das System erstellt einen Behälter mit einer neuen Box-ID und ordnet den Artikel diesem Behälter zu.
+3. Prüfe nach dem Schließen des Dialogs die neue Zuordnung unter **Behälter** und öffne den verlinkten Behälter.
+4. Drucke dort bei Bedarf das Behälteretikett und ordne den neuen Behälter über **Umlagern** seinem Standort zu.
+
+### Behälter auf ein anderes Regal verschieben
+
+1. Öffne den Behälter und klick auf **Umlagern**.
+2. Wähle im Feld **Neuer Ort** den gewünschten Standort aus.
+3. Klick auf **Verschieben** und prüfe anschließend den angezeigten Standort des Behälters.
+
+**Alternativ per QR-Code:** Wähle **Standort scannen** und scanne das Etikett des Zielregals. Falls der Dialog anschließend noch geöffnet ist, bestätige mit **Verschieben**.
+
+### Ergebnis prüfen und Fehler korrigieren
+
+Prüfe nach jeder Bewegung die Zuordnung beim Artikel beziehungsweise den Standort beim Behälter. Die Bewegung wird mit deinem Benutzernamen in den Aktivitäten protokolliert. Falls noch kein Benutzername gesetzt ist, wirst du vor dem Verschieben danach gefragt.
+
+**Falsches Ziel gewählt?** Öffne **Umlagern** erneut und verschiebe den Artikel oder Behälter an den richtigen Ort. Bei einer Fehlermeldung prüfe zuerst die Ziel-ID und ob der Zielbehälter bereits existiert.
 
 **Viele Artikel auf einmal einscannen (Handy):** Behälter öffnen → **Einscannen** → **▶ Scannen starten**. Scanne einen Artikel nach dem anderen; nach jedem Scan kommst du automatisch zurück. Liegt ein Artikel laut System woanders, fragt das System **Verschieben** oder **Überspringen**. Mit **Fertig** beendest du die Runde. Artikel, die laut System im Behälter sein sollten, aber nicht gescannt wurden, werden dann aufgelistet — wähle für jeden **Bestand entfernen** (Artikel ist weg) oder **Standort entfernen** (Artikel ist woanders).
 
@@ -181,7 +271,7 @@ Ein Gerät kommt rein, das noch nicht im System ist:
 4. **Review:** Wenn die KI fertig ist, erscheint **Review**. Schritte durchgehen, Fehler direkt korrigieren, am Ende **Freigeben** (siehe Abschnitt 9).
 5. **Alle Infos vollständig?** Im Tab **Referenz** prüfen, ob Spezifikationen und Preis eingetragen sind. Fehlende Felder ergänzen.
 6. **Shop:** Beim Freigeben **Artikel in den Shop stellen?** bestätigen, wenn er verkauft werden soll.
-7. **Einlagern:** Artikel in den richtigen Behälter legen → Tab **Vorrat** → **Umlagern**, Behälter-ID einscannen oder eingeben.
+7. **Einlagern:** Artikel in den richtigen Behälter legen → Tab **Vorrat** → **Umlagern**, Zielbehälter per Box-ID oder Name suchen und auswählen oder den QR-Code scannen → **Verschieben**. Details findest du in Abschnitt 6.
 
 ---
 

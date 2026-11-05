@@ -20,7 +20,7 @@ Shared TypeScript type definitions — the single source of truth for data shape
 - `shop-tags.ts` — rules deriving the Shopware tags the mediator manages (`Mietware` → `rental`)
 - `assembly-contract.ts` — assembly (Zerlegen) contract shape + canonical slot presence values
 - `co2.ts` — CO₂ impact scoring types
-- `event-log.ts` / `event-labels.ts` / `event-resources.json` — event log display metadata
+- `event-log.ts` / `event-labels.ts` / `event-resources.json` — event log display metadata; every logged event key must be registered (unknown keys default to level `error`; guarded by `test/event-resources-coverage.test.ts`). Levels: `debug` (per-item bulk noise, hidden from global feeds) < `info` < `important` < `error`
 - `intake.ts` — intake station state and step types
 - `external-doc.ts` / `item-attachment.ts` — file attachment types
 - `label-job.ts` / `print-label.ts` — print job types
@@ -42,5 +42,6 @@ Type definitions and constants only. No business logic, no DB queries, no HTTP c
 - No imports from `backend/` or `frontend/`
 
 ## Decisions
+- **Event levels are resolved from `event-resources.json` at query time for the activities feed**, not from the stored `events.Level` column: reclassifying an event (e.g. demoting to `debug`) then applies to historic rows without a migration
 - **`quality-score.ts` is logic in `models/`** (exception to "types only"): the server stores the range and the quality form previews it live; one pure function on both sides guarantees the preview equals what gets saved
 - **Single shared models package**: avoids type drift between backend API responses and frontend consumption; a type change in one place breaks both sides at compile time

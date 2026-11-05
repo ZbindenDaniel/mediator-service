@@ -188,15 +188,18 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 
 | Variable | Default / Example | Notes |
 | --- | --- | --- |
-| `AGENTIC_MODEL_PROVIDER` | `ollama` | Preferred model provider for agentic runs. |
+| `AGENTIC_MODEL_PROVIDER` | `ollama` | Active model provider (`ollama` / `openai`). Selects which `AGENTIC_<PROVIDER>_*` block below is read; the other provider's block is ignored, so both can stay configured and switching is this one setting. |
 | `AGENTIC_OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Ollama host for agentic runs. |
 | `AGENTIC_OLLAMA_MODEL` | `qwen3:0.6b` | Ollama model name for agentic runs. |
+| `AGENTIC_OLLAMA_VISION_MODEL` | (unset) | Ollama vision/OCR model; falls back to `VISION_MODEL_NAME`, then the text model. |
 | `AGENTIC_OPENAI_API_KEY` | (unset) | OpenAI-compatible API key for agentic runs. |
 | `AGENTIC_OPENAI_BASE_URL` | `https://api.openai.com/v1` | OpenAI-compatible base URL for agentic runs. |
 | `AGENTIC_OPENAI_MODEL` | `gpt-4o-mini` | OpenAI-compatible model name for agentic runs. |
-| `AGENTIC_MODEL_BASE_URL` | (unset) | Generic model base URL override. |
-| `AGENTIC_MODEL_NAME` | (unset) | Generic model name override. |
-| `AGENTIC_MODEL_API_KEY` | (unset) | Generic model API key override. |
+| `AGENTIC_OPENAI_VISION_MODEL` | (unset) | OpenAI-compatible vision/OCR model; falls back to `VISION_MODEL_NAME`, then the text model. |
+| `AGENTIC_MODEL_BASE_URL` | (unset) | Generic base URL fallback, used only when the active provider's own base URL is unset. |
+| `AGENTIC_MODEL_NAME` | (unset) | Generic model name fallback, used only when the active provider's own model is unset. |
+| `AGENTIC_MODEL_API_KEY` | (unset) | Generic API key fallback, used only when the active provider's own key is unset. |
+| `VISION_MODEL_NAME` | (unset) | Generic vision/OCR model fallback for either provider. |
 | `MODEL_NUM_CTX` | `8192` | Ollama context window (`num_ctx`, tokens). Ollama's own default (2048) is far below the extraction prompt (~6-7k tokens), so the prompt is silently left-truncated and the model returns an empty completion (the `json match missing` / `EXTRACTION_FAILED` loop). Raise for larger prompts (costs VRAM), lower if the GPU can't hold it. Ollama provider only. |
 | `MODEL_FORMAT_JSON` | (off) | Force Ollama responses to valid JSON (`format: "json"`). Strong guard against empty/prose output, but suppresses a reasoning model's `<think>` phase — leave off for reasoning models. Truthy = `1`/`true`/`yes`/`on`. |
 | `MODEL_HTTP_HEADERS_TIMEOUT_MS` | `600000` | undici fetch header timeout (ms) for model calls. Raise if a cold/large local model is slow to first token and runs fail with `UND_ERR_HEADERS_TIMEOUT`; `0` disables. Applied as a global fetch dispatcher. |
@@ -206,11 +209,14 @@ Operator check: look for `[erp-sync] media_copy_result status=success` in script
 | `SEARCH_MAX_PLANS` | `3` | Max agentic search plans per request. |
 | `SEARCH_MAX_AGENT_QUERIES_PER_REQUEST` | `1` | Max agentic search queries per request. |
 | `AGENT_ACTOR_ID` | `item-flow-service` | Overrides the actor ID used in agentic logs. |
-| `AUTO_APPROVE` | `false` | When true, a run whose extraction is clearly good (supervisor PASS + confidence ≥ `AUTO_APPROVE_MIN_CONFIDENCE` + no missing-required spec fields + no ambiguous fields) is finalized as `auto_approved` instead of waiting for manual review. `auto_approved` items are ERP-eligible; operators sort by state and decide what to sync, and `Abschliessen` promotes them to full `approved`. |
-| `AUTO_APPROVE_MIN_CONFIDENCE` | `0.8` | Minimum extraction confidence (0–1) required for auto-approval. Ignored unless `AUTO_APPROVE` is true. |
-| `AUTO_REWORK` | `false` | When true, an idle-time sweeper re-applies the current spec contract to the oldest item enriched against an older contract version (deterministic, no LLM): it re-stamps items already complete, or enqueues a targeted rework for a now-missing required field. Runs only while the pipeline is otherwise idle, one enqueue per tick. Detection relies on the `agentic_runs.SpecContractVersion` stamp. |
+| `AUTO_APPROVE` | `false` | When true, a run whose output is **clean** — no review finding of severity `block` (missing-required) or `warn` (banned phrase / intake conflict); info-level style hints tolerated — is finalized as `auto_approved` instead of waiting for manual review. `auto_approved` items are ERP-eligible; operators sort by state and decide what to sync, and `Abschliessen` promotes them to full `approved`. (The findings-clean gate replaced the old confidence threshold.) |
+| `AUTO_APPROVE_MIN_CONFIDENCE` | `0.8` | **Deprecated / no longer gates.** Retained for back-compat; auto-approval now uses the findings-clean gate above, not extraction confidence. |
+| `AUTO_REWORK` | `false` | When true, an idle-time sweeper re-applies the current spec contract **and** standards (house exclusion/style rules) to the oldest stale settled item (approved/auto_approved): it re-stamps items already complete, enqueues a targeted rework for a now-missing required field, or enqueues a search-free re-word when only the standards changed. Runs only while the pipeline is otherwise idle, one enqueue per tick. Detection relies on the `agentic_runs.SpecContractVersion` / `StandardsVersion` stamps. |
+| `AUTO_REVIEW` | `false` | When true, the same idle sweeper also picks up items stuck in manual **review** that are version-stale (enriched before the current contract/standards) and re-runs them through the supervised pipeline so it re-judges them under the current rules — items that now come back clean auto-approve (shrinking the human queue, requires `AUTO_APPROVE`), the rest stay in review. Version-current pending items are left untouched (already judged; re-running wouldn't change the verdict), and a pending item is never silently re-stamped. Separate flag from `AUTO_REWORK` because it touches the human review queue. |
 
 Legacy aliases still accepted: `MODEL_PROVIDER`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `MODEL_BASE_URL`, `MODEL_NAME`, `MODEL_API_KEY` (each maps to the `AGENTIC_`-prefixed variable).
+
+Resolution order for the model settings: the active provider's `AGENTIC_<PROVIDER>_*` key → its legacy alias (`OLLAMA_*` / `OPENAI_*`) → generic `MODEL_*` → `AGENTIC_MODEL_*`. The inactive provider's keys are never read.
 
 ## Shopware integration
 

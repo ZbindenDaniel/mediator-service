@@ -1,5 +1,11 @@
 # Instance Agentic Flow — Planning
 
+> ⚠️ **SUPERSEDED — merged into [`PLANNING_ai_data_quality.md`](PLANNING_ai_data_quality.md).**
+> The instance flow + reconciliation object became Pillar E there, the KI-Runs list became Pillar A,
+> and §17's contract findings became Phase 0. This doc is retained as the **detailed reference for the
+> reconciliation-object field schema (§5) and the data/UI inventories (§15/§16)** until those migrate
+> into the unified plan; for direction and phasing, the unified plan is the source of truth.
+
 Status: **design in progress.** An **instance** agentic flow that consumes intake evidence (the
 netboot artifacts + instance specs) to fill instance specs and **reconcile** a physical compute
 device against its reference (`item_refs`) — producing a **reconciliation object** that flags
@@ -370,6 +376,20 @@ search-sources (#916), grounding (#917); data stays on the item; MVP operator-in
 2. **Revised contract approach: a separate instance-spec contract.** Define, per compute subcategory,
    the **installed** fields (RAM, storage, OS, battery health, …) that live in `InstanceSpecs`, paralleling
    the capability-focused reference contract. No `scope` tag on a mixed contract.
+   > **DECISION (operator, 2026-11): reversed — use a `scope` field on the single spec contract**, not a
+   > separate instance-spec contract. `SpecContractField` gains `scope: 'reference' | 'instance'`
+   > (default `'reference'`, fully back-compatible); installed fields are tagged `scope:'instance'` on
+   > compute whole-device contracts; `measuredSignal` still binds them to intake signals. Simpler, one
+   > contract per subcategory. **This lands with the instance arm (Phase 1′ / levers L7), not before** —
+   > a `scope` field with no consumer is inert, so it is built when the pipeline/grade/findings routing
+   > by scope is built. Until then, the RAM-in-reference leak is held by the extraction/wording
+   > prevention rule (agentic #1011).
+   > **Refined (operator, 2026-11): slotted components are ASSEMBLY, not instance-specs.** RAM / drives /
+   > battery are already modelled as **assembly slots** (`contracts/assembly/201.json` + `102.json`: a
+   > `ram` part, `multipleAllowed`, `targetSubcategory` 603), filled per unit via `Zerlegt_aus`/`SlotKey`
+   > and scored by the condition quality-score. So installed RAM/disk are **slot fill-state**, and the
+   > `scope:'instance'` field carries only **non-slotted** measured values (OS, serial, battery wear) or
+   > a slot's spec-only answer (`allowSpecOnly`). This narrows L7's scope-field scope considerably.
 3. **Reconcile compares installed-value ↔ model-capability**, not equality: installed RAM ≤
    `RAM-Kapazität`, `RAM-Typ` ∈ supported, CPU/model identity matches. `wrong_ref` = installed config
    impossible for the model, or identity mismatch. Sharper than the original equality comparison.

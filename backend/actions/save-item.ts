@@ -18,6 +18,7 @@ import { emitMediaAudit } from '../lib/media-audit';
 import { assertPathWithinRoot, resolvePathWithinRoot } from '../lib/path-guard';
 import { generateShopwareCorrelationId } from '../db';
 import { attachTranscriptReference } from '../agentic';
+import { attachCurrentReviewSignals } from '../agentic/reference-findings';
 import { loadSubcategoryReviewAutomationSignals } from '../agentic/review-automation-signals';
 import { ALT_DOC_DIRS } from '../config';
 import { buildExternalDocSummary } from '../lib/external-docs';
@@ -744,6 +745,20 @@ const action = defineHttpAction({
           } catch (error) {
             console.error('[save-item] Failed to resolve reference owner; hiding reviewer', { itemId, error });
             agentic = { ...agentic, ReviewedBy: null };
+          }
+        }
+        // Attach the transient on-read review signals (findings + data-quality grade) so the KI tab's
+        // review-by-exception surfaces render from the item-detail load — the UI reads `agentic` from
+        // HERE, not the status endpoint, so without this the findings panel + data-quality badge never
+        // appear. Computed from the item's CURRENT reference content; best-effort, never blocks detail.
+        if (agentic) {
+          try {
+            const ref = ctx.getItemReference
+              ? ((await ctx.getItemReference(agenticArtikelNummer)) as Record<string, unknown> | null)
+              : (item as unknown as Record<string, unknown>);
+            agentic = attachCurrentReviewSignals(agentic, ref);
+          } catch (error) {
+            console.error('[save-item] Failed to attach current review signals to item detail', { itemId, error });
           }
         }
         const normalisedGrafikname = normaliseMediaReference(itemId, item.Artikel_Nummer, item.Grafikname);

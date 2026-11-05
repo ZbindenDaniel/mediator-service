@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "_proposal": "Main-category spec contract for 80 Gehäuse/Netzteile/Umschalter/USB-Hubs/USV/Serverracks. VERY MIXED — kept minimal, no required fields.",
+  "fields": [
+    { "key": "Formfaktor", "required": false, "description": "Form factor (ATX/Tower/Rack HE; connector/socket type)" },
+    { "key": "Leistung", "required": false, "description": "Rated power/capacity (W / VA) — PSUs and USV" },
+    { "key": "Anschlüsse", "required": false, "description": "Ports/connectors" }
+  ]
+}

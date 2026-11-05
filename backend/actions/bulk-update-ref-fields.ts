@@ -121,6 +121,26 @@ const action = defineHttpAction({
         return sendJson(res, 500, { error: (dbErr as Error).message });
       }
 
+      // One summary row for the global feed; the per-reference ShopStatusUpdated rows are debug-level.
+      try {
+        await ctx.logEvent({
+          Actor: actor,
+          EntityType: 'Batch',
+          EntityId: 'shop-status',
+          Event: 'ShopStatusBulkUpdated',
+          Meta: JSON.stringify({
+            references: updatedArtikelNummern.length,
+            items: itemIds.length,
+            shopartikel,
+            veröffentlichtStatus: veröffentlicht,
+            verkaufspreis,
+            sample: updatedArtikelNummern.slice(0, 10)
+          })
+        });
+      } catch (logErr) {
+        console.error('[bulk-update-ref-fields] Failed to log summary event', logErr);
+      }
+
       console.log('[bulk-update-ref-fields] Updated shop fields', {
         updated: updatedArtikelNummern.length,
         shopartikel,

@@ -18,7 +18,7 @@ test('event label translations', () => {
 
 test('event level helpers', () => {
   expect(eventLevel('Deleted')).toBe('important');
-  expect(eventLevel('AgenticResultReceived')).toBe('info');
+  expect(eventLevel('AgenticResultReceived')).toBe('debug'); // demoted: per-item bulk noise, see changelog
   expect(eventLevel('AgenticReviewRejected')).toBe('important');
   expect(eventLevel('AgenticReviewSubmitted')).toBe('info');
   expect(eventLevel('UnknownEvent')).toBe(EVENT_DEFAULT_LEVEL);

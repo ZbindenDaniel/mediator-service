@@ -9,7 +9,7 @@ import { loadActions } from './actions';
 import { MEDIA_DIR, resolveFetchMediaRoots } from './lib/media';
 
 export { MEDIA_DIR } from './lib/media';
-import { dispatchQueuedAgenticRuns, resumeStaleAgenticRuns, type AgenticServiceDependencies } from './agentic';
+import { dispatchQueuedAgenticRuns, resumeStaleAgenticRuns, hydrateAgenticFlagsFromSettings, type AgenticServiceDependencies } from './agentic';
 // TODO(agent): Verify recent activities term helper wiring in the action context.
 // TODO(agent): Audit Langtext response serialization once structured payload adoption completes.
 // TODO(agent): Revisit inbox watcher patterns once ZIP uploads introduce mixed payload sequencing.
@@ -69,9 +69,7 @@ import {
   bulkUpdateItemRefShopFields,
   listEventsForBox,
   listEventsForItem,
-  listRecentActivities,
-  listRecentActivitiesByTerm,
-  listRecentActivitiesByBoxId,
+  listActivities,
   listRecentEvents,
   countBoxes,
   countEvents,
@@ -513,9 +511,7 @@ type ActionContext = {
   logEvent: typeof logEvent;
   listEventsForBox: typeof listEventsForBox;
   listEventsForItem: typeof listEventsForItem;
-  listRecentActivities: typeof listRecentActivities;
-  listRecentActivitiesByTerm: typeof listRecentActivitiesByTerm;
-  listRecentActivitiesByBoxId: typeof listRecentActivitiesByBoxId;
+  listActivities: typeof listActivities;
   listRecentEvents: typeof listRecentEvents;
   countBoxes: typeof countBoxes;
   countEvents: typeof countEvents;
@@ -588,6 +584,11 @@ function createAgenticServiceDependencies(
 
 if (agenticServiceEnabled) {
   console.info('[server] In-process agentic orchestrator active; runs queue on start, dispatcher picks them up.');
+  // Load any cockpit flag overrides (AUTO_APPROVE/REWORK/REVIEW) persisted in system_settings into the
+  // live config objects before the first dispatch tick, so the operator's last toggle wins over env.
+  void hydrateAgenticFlagsFromSettings(console).catch((err: unknown) => {
+    console.error('[agentic-service] Failed to hydrate agentic flags from settings', err);
+  });
   // TODO(agentic-queue-dispatch): Revisit dispatch cadence once agentic queue volume increases.
   const agenticQueueDispatchIntervalMs = 5000;
   const agenticQueueDispatchLimit = 5;
@@ -1104,9 +1105,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
           logEvent,
           listEventsForBox,
           listEventsForItem,
-          listRecentActivities,
-          listRecentActivitiesByTerm,
-          listRecentActivitiesByBoxId,
+          listActivities,
           listRecentEvents,
           countBoxes,
           countEvents,

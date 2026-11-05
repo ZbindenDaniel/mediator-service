@@ -70,6 +70,26 @@ const DESC_COLUMN: ColumnLayout = { className: 'col-desc', header: 'Artikel', so
 
 type ItemLocationSource = Pick<Item, 'ItemUUID' | 'BoxID' | 'Location' | 'ShelfLabel'>;
 
+/**
+ * Item ids of every group from `anchorKey` to `targetKey` (inclusive) in the order shown, for Shift+click
+ * range selection. Null when the anchor is no longer visible (filtered/sorted away) — the caller then
+ * toggles only the clicked row.
+ */
+export function resolveRangeItemIds(
+  groups: readonly GroupedItemDisplay[],
+  anchorKey: string | null,
+  targetKey: string
+): string[] | null {
+  if (!anchorKey) return null;
+  const from = groups.findIndex((group) => group.key === anchorKey);
+  const to = groups.findIndex((group) => group.key === targetKey);
+  if (from < 0 || to < 0) return null;
+  return groups
+    .slice(Math.min(from, to), Math.max(from, to) + 1)
+    .flatMap((group) => group.items.map((item) => item.ItemUUID))
+    .filter((itemId): itemId is string => Boolean(itemId));
+}
+
 function shouldIgnoreInteractiveTarget(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) {
     return false;
@@ -172,6 +192,18 @@ export default function ItemList({
   const navigate = useNavigate();
   const { entityId, setEntity } = usePanelContext();
   const { isMarked, toggleMark } = useUserMarks();
+  // Keyed by group key (not index) so the anchor survives a reload; it stays put on Shift+click like a
+  // file manager, so repeated Shift+clicks re-span from the same row.
+  const selectionAnchorRef = useRef<string | null>(null);
+  const toggleGroupSelection = useCallback((groupKey: string, groupItemIds: string[], nextValue: boolean, extendRange: boolean) => {
+    const rangeIds = extendRange ? resolveRangeItemIds(safeItems, selectionAnchorRef.current, groupKey) : null;
+    if (rangeIds) {
+      onToggleItem(rangeIds, nextValue);
+      return;
+    }
+    selectionAnchorRef.current = groupKey;
+    onToggleItem(groupItemIds, nextValue);
+  }, [safeItems, onToggleItem]);
   const navigateToItemDetail = useCallback((itemId: string, identifierType: 'itemUUID' | 'artikelNummer', source: 'click' | 'keyboard') => {
     try {
       if (onSelect) {
@@ -385,11 +417,24 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                 aria-selected={group.summary.representativeItemId === entityId}
                 tabIndex={0}
                 aria-label={rowLabel}
+                onMouseDown={(event) => {
+                  // Shift+click would otherwise drag a text selection across the rows it spans.
+                  if (event.shiftKey) event.preventDefault();
+                }}
                 onClick={(event) => {
                   if (shouldIgnoreInteractiveTarget(event.target)) {
                     return;
                   }
                   event.preventDefault();
+                  // Ctrl/Cmd toggles and Shift spans the selection, so a modifier click never opens the detail panel.
+                  if (event.ctrlKey || event.metaKey) {
+                    toggleGroupSelection(group.key, groupItemIds, !isSelected, false);
+                    return;
+                  }
+                  if (event.shiftKey) {
+                    toggleGroupSelection(group.key, groupItemIds, true, true);
+                    return;
+                  }
                   if (rowNavigationIdentifier && rowNavigationIdentifierType) {
                     navigateToItemDetail(rowNavigationIdentifier, rowNavigationIdentifierType, 'click');
                   } else {
@@ -418,7 +463,9 @@ const isSelected = groupItemIds.length > 0 && groupItemIds.every((itemId) => sel
                   <input
                     aria-label={checkboxLabel}
                     checked={isSelected}
-                    onChange={(event) => onToggleItem(groupItemIds, event.target.checked)}
+                    // Handled on click, not change: only the click event carries shiftKey for range selection.
+                    onChange={() => undefined}
+                    onClick={(event) => toggleGroupSelection(group.key, groupItemIds, !isSelected, event.shiftKey)}
                     ref={(input) => {
                       if (input) {
                         input.indeterminate = isPartiallySelected;

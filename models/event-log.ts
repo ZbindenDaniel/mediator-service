@@ -30,6 +30,7 @@ export const EVENT_LOG_LEVELS: readonly EventLogLevel[] = Object.freeze([
 const LOGGER_PREFIX = '[event-log]';
 
 const EVENT_RESOURCE_LEVEL_TO_LOG_LEVEL: Record<EventLevel, EventLogLevel> = {
+  debug: EventLogLevel.Debug,
   info: EventLogLevel.Information,
   important: EventLogLevel.Important,
   error: EventLogLevel.Error

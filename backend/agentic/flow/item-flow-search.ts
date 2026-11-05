@@ -63,6 +63,9 @@ export type SearchPlan = {
   metadata: SearchInvokerMetadata;
 };
 
+// Category codes are deliberately absent: they are our internal taxonomy (set by the categorizer step),
+// not facts the web can supply — and the optional B pair is almost always empty, so listing them made
+// the planner spend queries on "Unterkategorien_B".
 const TRACKED_SCHEMA_FIELDS = [
   'Artikelbeschreibung',
   'Verkaufspreis',
@@ -72,11 +75,7 @@ const TRACKED_SCHEMA_FIELDS = [
   'Länge_mm',
   'Breite_mm',
   'Höhe_mm',
-  'Gewicht_kg',
-  'Hauptkategorien_A',
-  'Unterkategorien_A',
-  'Hauptkategorien_B',
-  'Unterkategorien_B'
+  'Gewicht_kg'
 ] as const;
 
 type TrackedSchemaField = (typeof TRACKED_SCHEMA_FIELDS)[number];

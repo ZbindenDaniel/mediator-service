@@ -1,7 +1,9 @@
 // Event label metadata is sourced from the JSON resources defined alongside this module.
 import rawEventResources from './event-resources.json';
 
-export type EventLevel = 'info' | 'important' | 'error';
+// 'debug' = per-item noise from bulk/background jobs: kept on the item history, hidden from the global feed by default.
+export type EventLevel = 'debug' | 'info' | 'important' | 'error';
+export const EVENT_LEVELS: readonly EventLevel[] = Object.freeze(['debug', 'info', 'important', 'error'] as EventLevel[]);
 
 export interface EventResource {
   key: string;
@@ -43,7 +45,7 @@ function normalizeEventResources(data: unknown): EventResource[] {
         continue;
       }
 
-      if (!['info', 'important', 'error'].includes(level)) {
+      if (!(EVENT_LEVELS as readonly string[]).includes(level)) {
         console.warn(`${LOGGER_PREFIX} Skipping event resource with unknown level.`, { key, level });
         continue;
       }
@@ -209,6 +211,14 @@ export function eventKeysForTopics(topics: Iterable<string>): string[] {
   }
   return Array.from(allowedKeys);
 }
+
+/** Event keys whose configured level is one of `levels` (unknown keys are not included). */
+export function eventKeysForLevels(levels: Iterable<EventLevel>): string[] {
+  const wanted = new Set(levels);
+  return EVENT_RESOURCES.filter((resource) => wanted.has(resource.level)).map((resource) => resource.key);
+}
+
+export const KNOWN_EVENT_KEYS: readonly string[] = Object.freeze(EVENT_RESOURCES.map((resource) => resource.key));
 
 export default {
   EVENT_RESOURCES,
