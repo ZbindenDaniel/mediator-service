@@ -121,6 +121,8 @@ import {
   resolveQuantityEinheit,
 } from '../lib/itemDetailFormatting';
 import { useFeatures } from '../context/FeaturesContext';
+import { useIdentity } from '../context/IdentityContext';
+import { readAdminToken, requestShopSync } from '../lib/shopSync';
 import { openOrgInfo } from '../lib/orgInfo';
 import { ITEM_TAB_FEATURES, resolveTab } from '../lib/tabFeatures';
 import { fetchSpecContract } from '../lib/contractsApi';
@@ -186,6 +188,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [attachments, setAttachments] = useState<any[]>([]);
   const [co2Impact, setCo2Impact] = useState<{ label: Co2ImpactLabel; score?: number } | null>(null);
   const features = useFeatures();
+  const identity = useIdentity();
   const statisticsEnabled = features.statistics;
   // Missing (older backend) = everything allowed, as before tenancy.
   const [permissions, setPermissions] = useState<ItemPermissions>({ canEditItem: true, canEditReference: true, canDeleteReference: false });
@@ -2552,7 +2555,13 @@ export default function ItemDetail({ itemId }: Props) {
       confirmed = await dialogService.confirm({
         title: 'Shopstatus setzen',
         message: (
-          <ShopStatusForm onChange={(values) => { shopValues = values; }} />
+          <ShopStatusForm
+            onChange={(values) => { shopValues = values; }}
+            // Same gate as the list's "Shop Sync": the endpoint is super-admin only, so don't offer a button that 403s.
+            onSyncNow={features.shopware && (readAdminToken() || identity.isPlatformAdmin)
+              ? () => requestShopSync([item.ItemUUID])
+              : undefined}
+          />
         ),
         confirmLabel: 'Setzen',
         cancelLabel: 'Abbrechen'

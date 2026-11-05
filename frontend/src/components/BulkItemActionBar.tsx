@@ -12,6 +12,7 @@ import { ensureUser } from '../lib/user';
 import { logger } from '../utils/logger';
 import { useIdentity } from '../context/IdentityContext';
 import { useFeatures } from '../context/FeaturesContext';
+import { readAdminToken, requestShopSync } from '../lib/shopSync';
 
 // TODO(agentic): Introduce bulk agentic trigger entry point alongside relocation actions.
 // TODO(agent): Fold ERP sync UX into shared bulk action helpers once backend status polling exists.
@@ -166,9 +167,12 @@ export interface ShopStatusValues {
 
 interface ShopStatusFormProps {
   onChange: (values: ShopStatusValues) => void;
+  // Item dialog only: push the item to the shop right away, without changing any field.
+  onSyncNow?: () => Promise<{ ok: boolean; message: string }>;
 }
 
-export function ShopStatusForm({ onChange }: ShopStatusFormProps) {
+export function ShopStatusForm({ onChange, onSyncNow }: ShopStatusFormProps) {
+  const [syncState, setSyncState] = useState<{ busy: boolean; ok?: boolean; message?: string }>({ busy: false });
   const [shopartikel, setShopartikel] = useState<number | null>(null);
   const [veröffentlicht, setVeröffentlicht] = useState<string | null>(null);
   const [verkaufspreis, setVerkaufspreis] = useState<number | null>(null);
@@ -315,6 +319,28 @@ export function ShopStatusForm({ onChange }: ShopStatusFormProps) {
           <span className="muted shop-status-form__unchanged">nicht ändern</span>
         )}
       </div>
+
+      {onSyncNow ? (
+        <div className="shop-status-form__row">
+          <button
+            type="button"
+            className="btn"
+            disabled={syncState.busy}
+            onClick={async () => {
+              setSyncState({ busy: true });
+              const result = await onSyncNow();
+              setSyncState({ busy: false, ok: result.ok, message: result.message });
+            }}
+          >
+            {syncState.busy ? 'Synchronisiere…' : 'Jetzt mit Shop synchronisieren'}
+          </button>
+          {syncState.message ? (
+            <span className={syncState.ok ? 'muted' : 'error'} role="status">{syncState.message}</span>
+          ) : (
+            <span className="muted">Übernimmt den gespeicherten Stand, ohne Felder zu ändern.</span>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -340,9 +366,7 @@ export default function BulkItemActionBar({
   // those who hold the admin token. Read once; the endpoint re-validates it anyway.
   const identity = useIdentity();
   const features = useFeatures();
-  const [adminToken] = useState<string>(() => {
-    try { return sessionStorage.getItem('adminSecret') ?? ''; } catch { return ''; }
-  });
+  const [adminToken] = useState<string>(readAdminToken);
 
   // Tenancy (Phase 3): the bulk write endpoints reject a mixed selection all-or-nothing
   // (guardWriteMany), so one foreign item makes every bulk write 403. Foreign rows arrive already
@@ -949,33 +973,14 @@ export default function BulkItemActionBar({
 
     setIsProcessing(true);
     try {
-      const response = await fetch('/api/admin/shopware/sync', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {})
-        },
-        body: JSON.stringify({ itemIds: selectedIds })
-      });
-
-      if (!response.ok) {
-        const message = await readErrorMessage(response);
-        console.error('Bulk shop sync failed', { status: response.status, message });
-        setFeedback({ type: 'error', message: response.status === 401 ? 'Nicht autorisiert (Admin-Login erforderlich).' : message });
+      const result = await requestShopSync(selectedIds, adminToken);
+      if (!result.ok) {
+        console.error('Bulk shop sync failed', { message: result.message });
+        setFeedback({ type: 'error', message: result.message });
         return;
       }
-
-      const payload = await response.json() as { ok: boolean; reason?: string; enqueued?: number; total?: number };
-      if (!payload.ok && payload.reason === 'sync_disabled') {
-        setFeedback({ type: 'error', message: 'Shop-Sync ist deaktiviert (SHOPWARE_SYNC_ENABLED=false).' });
-        return;
-      }
-
       await handleAfterSuccess();
-      setFeedback({ type: 'info', message: `Shop-Sync für ${payload.enqueued ?? 0} Artikel ausgelöst.` });
-    } catch (error) {
-      console.error('Bulk shop sync request failed', error);
-      setFeedback({ type: 'error', message: (error as Error).message || 'Unbekannter Fehler beim Shop-Sync.' });
+      setFeedback({ type: 'info', message: result.message });
     } finally {
       setIsProcessing(false);
     }
