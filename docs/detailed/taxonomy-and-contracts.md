@@ -161,6 +161,7 @@ quality  = certain / total  …  possible / total            e.g. "60–85 %"
 | **Change what an answer is worth** | Change `states` (or the `scale` in general.json), then `npm run quality:recompute`. |
 | **Make a defect decisive** | Add a `knockout` to that question or slot. |
 | **Tune the grade bands** | `grading` in general.json (per deployment via the overlay), then `npm run quality:recompute`. |
+| **Change the price formula** | `pricing` in general.json (`minFactor`, `rounding.step`/`mode`; model `linear-grade` = grade / 5). Prices are computed on read, so the app follows at once; re-sync the shop refs from the admin panel so Shopware follows too. |
 | **Add a spec field** | Add it to `specs/<code>.json`; `required: true` makes it show as missing until filled. |
 | **Switch a deployment's categories** | Put the seed in place (`TAXONOMY_SEED_FILE`), then on an existing DB: `npm run taxonomy:apply -- <seed>` and restart the mediator (§6). |
 | **Upload a contract on a running system** | Admin → "Taxonomie verwalten" → contract upload per code (needs `CONTRACTS_OVERLAY_DIR`). It is validated first and refused with the reason if it would break something. |

@@ -122,6 +122,8 @@ import {
   resolveQuantityEinheit,
 } from '../lib/itemDetailFormatting';
 import { useFeatures } from '../context/FeaturesContext';
+import { useIdentity } from '../context/IdentityContext';
+import { readAdminToken, requestShopSync } from '../lib/shopSync';
 import { openOrgInfo } from '../lib/orgInfo';
 import { ITEM_TAB_FEATURES, resolveTab } from '../lib/tabFeatures';
 import { fetchSpecContract } from '../lib/contractsApi';
@@ -133,6 +135,13 @@ interface Props {
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 
+// The API computes the unit's price (models/pricing.ts); the UI only says where it comes from.
+function formatInstancePrice(item: Item): string | null {
+  const price = item.InstancePrice;
+  if (typeof price !== 'number' || !Number.isFinite(price)) return null;
+  const amount = `CHF ${price.toFixed(2)}`;
+  return item.InstancePriceSource === 'override' ? `${amount} (fixer Preis)` : `${amount} (nach Zustand)`;
+}
 
 
 
@@ -180,6 +189,7 @@ export default function ItemDetail({ itemId }: Props) {
   const [attachments, setAttachments] = useState<any[]>([]);
   const [co2Impact, setCo2Impact] = useState<{ label: Co2ImpactLabel; score?: number } | null>(null);
   const features = useFeatures();
+  const identity = useIdentity();
   const statisticsEnabled = features.statistics;
   // Missing (older backend) = everything allowed, as before tenancy.
   const [permissions, setPermissions] = useState<ItemPermissions>({ canEditItem: true, canEditReference: true, canDeleteReference: false });
@@ -680,7 +690,9 @@ export default function ItemDetail({ itemId }: Props) {
     rows.push(
       ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null],
       ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : null],
-      ['Verkaufspreis', item.Verkaufspreis ?? null]
+      ['Basispreis (neuwertig)', item.Verkaufspreis ?? null],
+      ['Preis', formatInstancePrice(item)],
+      ['Mietware', item.Mietware ? 'Ja' : null]
     );
 
     if (statisticsEnabled && co2Impact && co2Impact.label !== 'irrelevant') {
@@ -710,6 +722,7 @@ export default function ItemDetail({ itemId }: Props) {
         'Menge',
         'Erfasst am',
         'Aktualisiert am',
+        'Preis',
         'CO₂ Einsparung'
       ]);
       for (const row of detailRows) {
@@ -2575,7 +2588,13 @@ export default function ItemDetail({ itemId }: Props) {
       confirmed = await dialogService.confirm({
         title: 'Shopstatus setzen',
         message: (
-          <ShopStatusForm onChange={(values) => { shopValues = values; }} />
+          <ShopStatusForm
+            onChange={(values) => { shopValues = values; }}
+            // Same gate as the list's "Shop Sync": the endpoint is super-admin only, so don't offer a button that 403s.
+            onSyncNow={features.shopware && (readAdminToken() || identity.isPlatformAdmin)
+              ? () => requestShopSync([item.ItemUUID])
+              : undefined}
+          />
         ),
         confirmLabel: 'Setzen',
         cancelLabel: 'Abbrechen'
@@ -2596,6 +2615,7 @@ export default function ItemDetail({ itemId }: Props) {
           shopartikel: shopValues.shopartikel,
           veröffentlicht: shopValues.veröffentlicht,
           verkaufspreis: shopValues.verkaufspreis,
+          ...(typeof shopValues.mietware === 'boolean' ? { mietware: shopValues.mietware } : {}),
           actor,
           confirm: true,
         })

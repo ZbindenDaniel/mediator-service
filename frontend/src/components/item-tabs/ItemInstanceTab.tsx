@@ -225,6 +225,7 @@ export default function ItemInstanceTab({
               currentSerialNumber={item.SerialNumber}
               currentMacAddress={item.MacAddress}
               currentInstanceSpecs={item.InstanceSpecs}
+              currentPriceOverride={item.PreisOverride}
               onSaved={onInstanceSaved}
               onCancel={onInstanceSaved}
             />

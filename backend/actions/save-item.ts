@@ -33,6 +33,7 @@ import { guardWrite } from '../utils/write-guard';
 import { redactItemRows, redactPeople } from '../lib/redaction';
 import { canDeleteReference, canEditReference, canWrite, currentIdentity, isUnrestricted } from '../lib/ownership';
 import { getRowOwner } from '../db';
+import { instancePriceFields } from '../lib/pricing';
 
 const MEDIA_PREFIX = '/media/';
 // TODO(item-detail-reference): Confirm reference payload expectations once API consumers update.
@@ -775,7 +776,8 @@ const action = defineHttpAction({
           ...item,
           Einheit: resolveItemEinheitValue(item.Einheit, 'fetchResponse'),
           Quality: resolveItemQualityValue(item.Quality, 'fetchResponse'),
-          EffectiveSubCategory: effectiveSubCategory
+          EffectiveSubCategory: effectiveSubCategory,
+          ...instancePriceFields(item)
         };
         // TODO(stock-visibility): Verify Auf_Lager instance summary data feeds withdrawal availability.
         let instances: ItemInstanceSummary[] = [];
@@ -1379,6 +1381,10 @@ const action = defineHttpAction({
       }
       if (Object.prototype.hasOwnProperty.call(referencePayload, 'Shopartikel')) {
         referenceUpdates.Shopartikel = resolveShopartikelFlag(incomingShopartikel, resolvedQuality);
+      }
+      if (Object.prototype.hasOwnProperty.call(referencePayload, 'Mietware')) {
+        const raw = referencePayload.Mietware;
+        referenceUpdates.Mietware = raw === true || raw === 1 || raw === 'true' || raw === '1';
       }
       const resolvedGrafikname =
         grafikWasExplicitlyUpdated && typeof grafik === 'string'

@@ -17,6 +17,7 @@ import type { PrintFileResult, PrintLabelType } from '../print';
 import { resolvePrinterQueue } from '../print';
 import { buildItemCategoryLookups } from '../../models/item-category-lookups';
 import { resolveActor } from '../utils/actor';
+import { instancePriceFor } from '../lib/pricing';
 
 const LABEL_TEMPLATES: Record<PrintLabelType, string> = {
   box: '62x100',
@@ -270,7 +271,8 @@ function buildMarketingSheetPayload(item: Item): MarketingSheetPayload {
     specs,
     instanceSpecs,
     quality: typeof item.Quality === 'number' ? item.Quality : null,
-    price: typeof item.Verkaufspreis === 'number' ? item.Verkaufspreis : null,
+    // The sheet lies next to this physical unit, so it shows the unit's price (grade factor / override).
+    price: instancePriceFor(item).price,
     currency: 'CHF',
     category: categoryLabel || null,
     manufacturer: item.Hersteller?.trim() || null,

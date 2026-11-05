@@ -76,6 +76,9 @@ const action = defineHttpAction({
             return Number.isFinite(n) ? n : null;
           })();
 
+      // null = leave Mietware as it is (the bulk form only sends it when the operator ticked the field).
+      const mietware: boolean | null = typeof data.mietware === 'boolean' ? data.mietware : null;
+
       // Resolve Artikel_Nummer for each ItemUUID and group them
       const missing: string[] = [];
       const groupMap = new Map<string, string[]>();
@@ -112,7 +115,7 @@ const action = defineHttpAction({
 
       let updatedArtikelNummern: string[] = [];
       try {
-        updatedArtikelNummern = await ctx.bulkUpdateItemRefShopFields(groups, shopartikel, veröffentlicht, verkaufspreis, actor);
+        updatedArtikelNummern = await ctx.bulkUpdateItemRefShopFields(groups, shopartikel, veröffentlicht, verkaufspreis, actor, mietware);
       } catch (dbErr) {
         console.error('[bulk-update-ref-fields] Database transaction failed', dbErr);
         return sendJson(res, 500, { error: (dbErr as Error).message });
@@ -143,6 +146,7 @@ const action = defineHttpAction({
         shopartikel,
         veröffentlicht,
         verkaufspreis,
+        mietware,
         actor
       });
 

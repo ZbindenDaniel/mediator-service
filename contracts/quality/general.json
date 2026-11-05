@@ -39,6 +39,14 @@
     ],
     "maxUncertainty": 0.25
   },
+  "pricing": {
+    "model": "linear-grade",
+    "minFactor": 0.2,
+    "rounding": {
+      "step": 5,
+      "mode": "nearest"
+    }
+  },
   "questions": [
     {
       "id": "discoloration_residue",

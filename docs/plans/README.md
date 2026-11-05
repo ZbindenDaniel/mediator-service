@@ -10,6 +10,7 @@ Day-to-day tasks are in [`todo.md`](../../todo.md).
 | [transport-boxes.md](transport-boxes.md) | Draft, not started — `T-` transports between locations (todo 18) |
 | [inventory.md](inventory.md) | Draft, not started — passive inventory cycle and inventory day (todo 19b) |
 
-Shipped or folded elsewhere (see git history): AI-runs optimization (remaining phase → todo 0z4),
+Shipped or folded elsewhere (see git history): instance pricing + Mietware shop tag
+(→ [detailed/items.md](../detailed/items.md), [detailed/shopware.md](../detailed/shopware.md)), AI-runs optimization (remaining phase → todo 0z4),
 Shopware integration (→ [detailed/shopware.md](../detailed/shopware.md), todo 54), multi-instance
 (→ [ARCHITECTURE.md](../ARCHITECTURE.md)), stub boxes, placement actions, UI architecture, v2.3.

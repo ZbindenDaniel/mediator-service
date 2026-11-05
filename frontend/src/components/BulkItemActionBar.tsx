@@ -15,6 +15,7 @@ import { ensureUser } from '../lib/user';
 import { logger } from '../utils/logger';
 import { useIdentity } from '../context/IdentityContext';
 import { useFeatures } from '../context/FeaturesContext';
+import { readAdminToken, requestShopSync } from '../lib/shopSync';
 
 // TODO(agentic): Introduce bulk agentic trigger entry point alongside relocation actions.
 // TODO(agent): Fold ERP sync UX into shared bulk action helpers once backend status polling exists.
@@ -200,25 +201,32 @@ export interface ShopStatusValues {
   shopartikel: number | null;
   veröffentlicht: string | null;
   verkaufspreis: number | null;
+  // null/undefined = leave as is (bulk "nicht ändern"); sent to the backend only when set.
+  mietware?: boolean | null;
 }
 
 interface ShopStatusFormProps {
   onChange: (values: ShopStatusValues) => void;
+  // Item dialog only: push the item to the shop right away, without changing any field.
+  onSyncNow?: () => Promise<{ ok: boolean; message: string }>;
 }
 
-export function ShopStatusForm({ onChange }: ShopStatusFormProps) {
+export function ShopStatusForm({ onChange, onSyncNow }: ShopStatusFormProps) {
+  const [syncState, setSyncState] = useState<{ busy: boolean; ok?: boolean; message?: string }>({ busy: false });
   const [shopartikel, setShopartikel] = useState<number | null>(null);
   const [veröffentlicht, setVeröffentlicht] = useState<string | null>(null);
   const [verkaufspreis, setVerkaufspreis] = useState<number | null>(null);
   const [shopartikelEnabled, setShopartikelEnabled] = useState(false);
   const [veröffentlichtEnabled, setVeröffentlichtEnabled] = useState(false);
   const [verkaufspreisEnabled, setVerkaufspreisEnabled] = useState(false);
+  const [mietware, setMietware] = useState<boolean | null>(null);
 
   function update(patch: Partial<ShopStatusValues>) {
     const next: ShopStatusValues = {
       shopartikel: patch.shopartikel !== undefined ? patch.shopartikel : shopartikel,
       veröffentlicht: patch.veröffentlicht !== undefined ? patch.veröffentlicht : veröffentlicht,
-      verkaufspreis: patch.verkaufspreis !== undefined ? patch.verkaufspreis : verkaufspreis
+      verkaufspreis: patch.verkaufspreis !== undefined ? patch.verkaufspreis : verkaufspreis,
+      mietware: patch.mietware !== undefined ? patch.mietware : mietware
     };
     onChange(next);
   }
@@ -302,7 +310,7 @@ export function ShopStatusForm({ onChange }: ShopStatusFormProps) {
               update({ verkaufspreis: val });
             }}
           />
-          <span>Verkaufspreis (CHF)</span>
+          <span>Basispreis neuwertig (CHF)</span>
         </label>
         {verkaufspreisEnabled ? (
           <input
@@ -322,6 +330,57 @@ export function ShopStatusForm({ onChange }: ShopStatusFormProps) {
           <span className="muted shop-status-form__unchanged">nicht ändern</span>
         )}
       </div>
+
+      <div className="shop-status-form__row">
+        <label className="shop-status-form__enable">
+          <input
+            type="checkbox"
+            checked={mietware !== null}
+            onChange={(e) => {
+              const val = e.target.checked ? false : null;
+              setMietware(val);
+              update({ mietware: val });
+            }}
+          />
+          <span>Mietware</span>
+        </label>
+        {mietware !== null ? (
+          <input
+            type="checkbox"
+            role="switch"
+            className="item-form__binary-switch"
+            checked={mietware === true}
+            onChange={(e) => {
+              setMietware(e.target.checked);
+              update({ mietware: e.target.checked });
+            }}
+          />
+        ) : (
+          <span className="muted shop-status-form__unchanged">nicht ändern</span>
+        )}
+      </div>
+
+      {onSyncNow ? (
+        <div className="shop-status-form__row">
+          <button
+            type="button"
+            className="btn"
+            disabled={syncState.busy}
+            onClick={async () => {
+              setSyncState({ busy: true });
+              const result = await onSyncNow();
+              setSyncState({ busy: false, ok: result.ok, message: result.message });
+            }}
+          >
+            {syncState.busy ? 'Synchronisiere…' : 'Jetzt mit Shop synchronisieren'}
+          </button>
+          {syncState.message ? (
+            <span className={syncState.ok ? 'muted' : 'error'} role="status">{syncState.message}</span>
+          ) : (
+            <span className="muted">Übernimmt den gespeicherten Stand, ohne Felder zu ändern.</span>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -347,9 +406,7 @@ export default function BulkItemActionBar({
   // those who hold the admin token. Read once; the endpoint re-validates it anyway.
   const identity = useIdentity();
   const features = useFeatures();
-  const [adminToken] = useState<string>(() => {
-    try { return sessionStorage.getItem('adminSecret') ?? ''; } catch { return ''; }
-  });
+  const [adminToken] = useState<string>(readAdminToken);
 
   // Tenancy (Phase 3): the bulk write endpoints reject a mixed selection all-or-nothing
   // (guardWriteMany), so one foreign item makes every bulk write 403. Foreign rows arrive already
@@ -1044,33 +1101,14 @@ export default function BulkItemActionBar({
 
     setIsProcessing(true);
     try {
-      const response = await fetch('/api/admin/shopware/sync', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(adminToken ? { Authorization: `Bearer ${adminToken}` } : {})
-        },
-        body: JSON.stringify({ itemIds: selectedIds })
-      });
-
-      if (!response.ok) {
-        const message = await readErrorMessage(response);
-        console.error('Bulk shop sync failed', { status: response.status, message });
-        setFeedback({ type: 'error', message: response.status === 401 ? 'Nicht autorisiert (Admin-Login erforderlich).' : message });
+      const result = await requestShopSync(selectedIds, adminToken);
+      if (!result.ok) {
+        console.error('Bulk shop sync failed', { message: result.message });
+        setFeedback({ type: 'error', message: result.message });
         return;
       }
-
-      const payload = await response.json() as { ok: boolean; reason?: string; enqueued?: number; total?: number };
-      if (!payload.ok && payload.reason === 'sync_disabled') {
-        setFeedback({ type: 'error', message: 'Shop-Sync ist deaktiviert (SHOPWARE_SYNC_ENABLED=false).' });
-        return;
-      }
-
       await handleAfterSuccess();
-      setFeedback({ type: 'info', message: `Shop-Sync für ${payload.enqueued ?? 0} Artikel ausgelöst.` });
-    } catch (error) {
-      console.error('Bulk shop sync request failed', error);
-      setFeedback({ type: 'error', message: (error as Error).message || 'Unbekannter Fehler beim Shop-Sync.' });
+      setFeedback({ type: 'info', message: result.message });
     } finally {
       setIsProcessing(false);
     }
@@ -1212,12 +1250,13 @@ export default function BulkItemActionBar({
 
     setIsProcessing(true);
     try {
-      const { shopartikel, veröffentlicht, verkaufspreis } = shopFormRef.current;
+      const { shopartikel, veröffentlicht, verkaufspreis, mietware } = shopFormRef.current;
       console.log('bulk update shop status requested', {
         count: selectedCount,
         shopartikel,
         veröffentlicht,
-        verkaufspreis
+        verkaufspreis,
+        mietware
       });
 
       const response = await fetch('/api/items/bulk/update-ref', {
@@ -1228,6 +1267,7 @@ export default function BulkItemActionBar({
           shopartikel,
           veröffentlicht,
           verkaufspreis,
+          ...(typeof mietware === 'boolean' ? { mietware } : {}),
           actor,
           confirm: true
         })

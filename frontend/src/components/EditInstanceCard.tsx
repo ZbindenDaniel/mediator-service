@@ -14,6 +14,7 @@ interface Props {
   currentSerialNumber: string | null | undefined;
   currentMacAddress: string | null | undefined;
   currentInstanceSpecs: Item['InstanceSpecs'];
+  currentPriceOverride?: number | null;
   onSaved: () => void;
   onCancel: () => void;
 }
@@ -32,6 +33,7 @@ export default function EditInstanceCard({
   currentSerialNumber,
   currentMacAddress,
   currentInstanceSpecs,
+  currentPriceOverride,
   onSaved,
   onCancel
 }: Props) {
@@ -40,6 +42,8 @@ export default function EditInstanceCard({
   const [serialNumber, setSerialNumber] = useState(currentSerialNumber ?? '');
   const [macAddress, setMacAddress] = useState(currentMacAddress ?? '');
   const [specRows, setSpecRows] = useState<SpecRow[]>(() => initialSpecRows(currentInstanceSpecs));
+  const initialPriceOverride = typeof currentPriceOverride === 'number' && currentPriceOverride > 0 ? String(currentPriceOverride) : '';
+  const [priceOverride, setPriceOverride] = useState(initialPriceOverride);
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -74,6 +78,10 @@ export default function EditInstanceCard({
       if (key && value) specs[key] = value;
     }
     body.InstanceSpecs = specs;
+    // Only send the override when it changed: the backend re-syncs the shop price on every override write.
+    if (priceOverride.trim() !== initialPriceOverride) {
+      body.PreisOverride = priceOverride.trim() || null;
+    }
 
     setSaving(true);
     setStatus('');
@@ -124,6 +132,19 @@ export default function EditInstanceCard({
             />
           </div>
         )}
+
+        <div className="row">
+          <label title="Leer lassen = Basispreis × Zustand. Nur für Ausnahmen.">Fixer Preis (CHF)</label>
+          <input
+            type="number"
+            min="0"
+            step="0.05"
+            value={priceOverride}
+            onChange={(e) => setPriceOverride(e.target.value)}
+            placeholder="leer = nach Zustand"
+            disabled={saving}
+          />
+        </div>
 
         <div className="row">
           <label>Spezifikationen</label>

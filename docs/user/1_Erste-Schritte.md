@@ -122,7 +122,7 @@ Gib dafür die **vollständige ID** ein. Eine unvollständige ID mit einem diese
 
 Das Feld **Suche** findet Artikel, bei denen jedes eingegebene Wort irgendwo vorkommt — in beliebiger Reihenfolge, Akzente und Umlaute spielen keine Rolle. `7490 dell` findet also auch einen Dell Latitude 7490. Durchsucht werden Beschreibung, Kurzbeschreibung, Hersteller, Artikelnummer, ItemUUID, Seriennummer, EAN, Suchbegriff, Langtext und die Spezifikationen des Exemplars. Eine MAC-Adresse suchst du über die **obere Suche**.
 
-Beim Sortieren nach **Preis** stehen Artikel ohne Preis immer am Ende.
+Beim Sortieren nach **Preis** stehen Artikel ohne Preis immer am Ende. Gefiltert und sortiert wird nach dem Basispreis.
 
 Im separaten Feld **Behälter** kannst du eine Box-ID oder Standortangabe eingeben. Übernimm den Filter mit **Enter** oder indem du das Feld verlässt. Dieses Feld sucht nicht nach dem Behälternamen.
 
@@ -135,6 +135,12 @@ In der **Behälterliste** findet das Suchfeld trotz des Platzhalters **Box-ID su
 Beim **Umlagern** kannst du nach **Box-ID oder Behältername** suchen. Wähle einen Vorschlag aus; erst dann wird dessen Box-ID als Ziel übernommen. Alternativ gibst du eine bekannte Box-ID vollständig ein oder scannst den Zielbehälter. Den Ablauf erklärt Abschnitt 6.
 
 **Markierte Artikel:** Im Tab **Markierung** auf **Merken** klicken (optional mit Notiz). Markierungen und Notizen sehen alle — so kannst du Kolleg:innen auf einen Artikel hinweisen.
+
+### Preise, Mietware und Shop
+
+- **Preise:** In der Referenz steht der **Basispreis** — der Preis eines neuwertigen Geräts. Jedes Exemplar kostet je nach Zustand einen Anteil davon (Zustand 5 = 100 %, 4 = 80 %, 3 = 60 %, 2 = 40 %, 1 oder unbekannt = 20 %, auf 5 Franken gerundet). Der Preis des Exemplars steht im Tab **Instanz**. Nur für Ausnahmen: unter **Instanz bearbeiten → Fixer Preis** einen eigenen Preis setzen (leer = wieder nach Zustand).
+- **Mietware:** Im Referenz-Formular den Schalter **Mietware** setzen — der Artikel bekommt im Shop den Tag „rental“ und bleibt trotzdem kaufbar.
+- **Sofort in den Shop (Admins):** Im Dialog **Shopstatus setzen** eines Artikels überträgt **Jetzt mit Shop synchronisieren** den gespeicherten Stand an den Shop, ohne Felder zu ändern (nach etwa 10 Sekunden sichtbar).
 
 Zum Verständnis von Artikelnummer, ItemUUID und Spezifikationen siehe die Hilfeseite [Artikel](/hilfe?doc=6_Artikel).
 
