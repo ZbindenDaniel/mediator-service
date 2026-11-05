@@ -1,0 +1,38 @@
+name: Probe runner (temporary)
+
+# Throwaway: answers "can our runner give a job a Postgres?" for the maintenance plan
+# (docs/plans/maintenance-ci-validation-migrations.md, open decision 1). Delete once answered.
+on:
+  workflow_dispatch:
+
+jobs:
+  host-docker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Docker CLI reachable from the job?
+        run: |
+          set -x
+          uname -a
+          node --version || true
+          docker version || echo "PROBE: no docker CLI/socket in the job"
+          docker run --rm postgres:16-alpine postgres --version || echo "PROBE: cannot run containers from the job"
+
+  service-container:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mediator
+          POSTGRES_PASSWORD: mediator
+          POSTGRES_DB: mediator
+    steps:
+      - name: Postgres service reachable by hostname?
+        run: |
+          for i in $(seq 1 30); do
+            if node -e "require('net').connect(5432,'postgres').on('connect',()=>process.exit(0)).on('error',()=>process.exit(1))"; then
+              echo "PROBE: service container OK (postgres:5432)"; exit 0
+            fi
+            sleep 2
+          done
+          echo "PROBE: service container NOT reachable"; exit 1

@@ -72,7 +72,7 @@
 
 0z5. **`npm test` harness is broken: `it.each is not a function`.** → plan WP1 step 1 (point `npm test` at Jest). `scripts/run-tests.js` + `test/harness.js` run test files through a custom harness that lacks `it.each` (used by `forward-agentic-trigger.test.ts`, `prompt-template-composition.test.ts`), so `npm test` aborts; `npx jest -c jest.config.cjs` runs the full suite fine. Either add `each` to the harness or point `npm test` at Jest. (It was previously masked by a Sass prebuild failure, fixed in ui #1071.)
 
-0z10. **No database backup exists.** No `pg_dump`/restore script, no pre-deploy snapshot, never test-restored. → plan WP2 (`docs/plans/maintenance-ci-validation-migrations.md`); destination/retention/scope are open decisions there.
+0z10. **No pre-deploy DB dump / rollback path.** Disaster recovery is the whole-VM backup; what's missing is a dump taken right before each deploy so one release can be rolled back without losing the day's data. → plan WP2 (`docs/plans/maintenance-ci-validation-migrations.md`).
 
 0z3. **Intake netboot image / station TUI emits a duplicated brand in `model`.** The scan reports `vendor="HP"` with the brand also embedded (sometimes doubled) inside `model` (e.g. `model="HP HP ProBook 470 G4"`), and the external station TUI further combines the echoed `vendor`+`model` when pre-filling the new-ref form. The backend deliberately no longer masks this (see 0z2) — fix it at the source: the netboot intake image should emit a clean `model` (brand once, or brand-free with `vendor` separate), and the TUI should stop concatenating `vendor` into the pre-filled `Kurzbeschreibung`. Contract: [`intake-image.http`](docs/detailed/intake-image.http).
 

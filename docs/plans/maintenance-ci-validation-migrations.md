@@ -36,35 +36,39 @@ Goal: nothing reaches the registry unless it compiles and the suite is green.
 
 **Done when:** a commit with a failing test on `main` produces a red run and no new image tag.
 
-## WP2 — Backup + safer deploy (≈ 1–1½ days)
+## WP2 — Rollback dump + safer deploy (≈ 1 day)
 
-Goal: every deploy is preceded by a restorable snapshot, and a bad deploy is noticed and reversible.
+Goal: a bad deploy is noticed and reversible within minutes. **Disaster recovery is the whole-VM backup**
+(covers all volumes, `.env`, Authentik); this package only adds what a VM restore is too coarse for:
+going back one release without losing the day's data.
 
-1. **`scripts/ops/backup-db.sh`** (runs on the host, in the deploy dir):
+1. **`scripts/ops/backup-db.sh <label>`** (runs on the host, in the deploy dir):
    `docker compose … exec -T postgres pg_dump -U mediator -Fc mediator > backups/mediator-<UTC timestamp>-<label>.dump`,
-   verify with `pg_restore --list` (non-empty), prune to the retention policy. Exit non-zero on any failure.
+   check it with `pg_restore --list`, keep the last 5 dumps. Exit non-zero on any failure.
 2. **`scripts/ops/restore-db.sh <dump>`**: restore into a **scratch** Postgres container by default
-   (`--into-prod` must be explicit), then run a row-count sanity query. This is also the restore test.
-3. **Nightly backup** on the host (systemd timer or cron calling `backup-db.sh nightly`). Documented, not
-   installed by CI.
-4. **`deploy.yaml` gets three steps around the existing `pull` / `up -d`:**
+   (`--into-prod` must be explicit), then a row-count sanity query. Run it once against a real dump so we know it works.
+3. **`deploy.yaml` gets three steps around the existing `pull` / `up -d`:**
    - before: record the running image (`docker inspect`) and run `backup-db.sh pre-deploy-<tag>`; abort the deploy if it fails;
-   - after: poll `GET /api/health` (already exists, `backend/actions/health.ts`) for up to ~90 s;
-   - on failure: `up -d` the recorded previous image and fail the run. Schema is still forward-only
-     (see WP4), so a rollback is safe as long as migrations stay additive — the dump is the fallback for the rest.
-5. **Monthly restore drill** (documented checklist in `detailed/deployment.md`): restore the latest
-   nightly dump into a scratch container, start the app against it, open one item. A backup that was never restored is a hope, not a backup.
+   - after: poll `GET /api/health` (exists, `backend/actions/health.ts`) for up to ~90 s;
+   - on failure: `up -d` the recorded previous image and fail the run. Image rollback is safe while migrations
+     stay additive (WP4); the dump is for the rest, restored by hand.
+4. **Keep old images restorable:** registry cleanup in Gitea must keep at least the last few `sha-*` tags,
+   or "roll back to the previous image" has nothing to pull.
+
+**What a DB rollback can't undo:** whatever the bad release already pushed out — Shopware products/stock,
+ERP sync/export, printed labels. After a restore, re-run the Shopware/ERP sync for items changed since the
+dump instead of assuming the outside world rolled back too. Documented in `detailed/deployment.md`.
 
 **Done when:** a deploy run shows a dump file in its log, a forced-unhealthy deploy rolls back by itself,
-and one restore drill has been done and noted.
+and `restore-db.sh` has restored one real dump into a scratch container.
 
 ## WP3 — Fail loudly on bad configuration (≈ 1 day)
 
 Goal: a broken contract or config stops the app at boot with a precise message, instead of degrading silently.
 
-1. **Validate contracts at startup.** Call the same `loadContractSetFromDisk` + `validateContractSet` as
-   `contracts:check` from `server.ts` before `initDb`. Errors → log every problem and exit 1 (same pattern
-   as the existing fatal "Failed to load category taxonomy seed" path).
+1. **Validate contracts at startup — exactly what `contracts:check` does, nothing new.** Same function,
+   same rules: errors → log every problem and exit 1 (like the existing fatal taxonomy-seed path), unused
+   codes → one info line. One rule set for CI and boot (decided 2026-11: keep it simple).
 2. **Stop swallowing in `registry.ts`.** `loadJsonFile` keeps returning `null` for a *missing* file
    (legitimate: no contract for that code) but logs + rethrows a *parse* error. With (1) in place this can
    only fire if a file changes at runtime (overlay dir / admin upload), so make the admin upload path
@@ -120,14 +124,17 @@ Goal: test what mocks can't — locking, constraints, real SQL.
 - **Automatic deploy on push** — deploy stays manual (one click, now with backup/health/rollback). Revisit after a few clean releases.
 - **Dependency upgrades** (React 19, router 7, …) — easier once CI exists; add Renovate after WP1.
 
+## Decisions (2026-11)
+
+- **Backup:** the whole VM is backed up (all volumes, `.env`, Authentik DB). The DB dump in WP2 exists only
+  for release rollback → keep 5, no nightly timer, no off-host copy, no retention scheme.
+- **WebDAV** (`/mnt` mount) is backed up on its own side; nothing to do here.
+- **Boot strictness:** boot runs the same check as `contracts:check` (errors fail, unused codes are info).
+
 ## Open decisions
 
-1. **Runner capability:** can the Gitea runner start a Postgres service container (`services:` or host
-   `docker run`)? `docker-publish.yaml` uses the host Docker CLI, so probably yes — needed for WP4 step 5 and WP5.
-2. **Backup destination & retention:** local `backups/` on the host only, or also off-host (NAS / second
-   server)? Suggested default: 14 nightly + 8 weekly + every pre-deploy dump for 30 days, with an off-host copy.
-3. **Backup scope:** DB only, or also the `mediator-data` volume (inbox/archive) and media? Media on WebDAV
-   presumably has its own backup — confirm.
-4. **Strictness at boot (WP3):** hard-fail on any contract problem, or hard-fail only on parse errors and
-   warn on semantic ones (unknown subcategory etc.)? Suggested: parse/shape = fail, unused codes = warn
-   (matches `contracts:check` today).
+1. **Runner capability:** can a CI job get a Postgres (service container or host `docker run`)? Needed for
+   WP4 step 5 and WP5, not for WP1–WP3. Answer it by running the manual workflow
+   `.gitea/workflows/probe-runner.yaml` once (Gitea → repo → Actions → "Probe runner" → Run) and reading
+   the `PROBE:` lines; delete the workflow afterwards. If neither job works, the runner needs the Docker
+   socket mounted (act_runner `container.docker_host` / `valid_volumes` in its `config.yaml`).
