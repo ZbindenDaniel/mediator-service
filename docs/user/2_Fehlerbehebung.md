@@ -4,7 +4,8 @@ Hier findest du Hilfe bei den häufigsten Problemen. Geh die Schritte der Reihe 
 
 ---
 
-## 1. Drucker funktioniert nicht
+<!-- if-feature: printing -->
+## Drucker funktioniert nicht
 
 ### Symptome
 - Die Meldung „Kein Drucker konfiguriert" erscheint nach dem Drucken.
@@ -32,8 +33,9 @@ Wenn nichts davon hilft, gib der Systemadministration folgende Infos:
 - Gibt es eine Fehlermeldung? (bitte Screenshot)
 
 ---
+<!-- end-feature -->
 
-## 2. WebDAV ist nicht erreichbar
+## WebDAV ist nicht erreichbar
 
 ### Was ist WebDAV?
 WebDAV ist ein gemeinsam genutzter Netzwerkspeicher für Artikelbilder und Dokumente. Wenn er nicht erreichbar ist, können Bilder nicht gespeichert oder angezeigt werden.
@@ -61,7 +63,8 @@ Wenn das Problem länger als 5 Minuten anhält, meld es der Systemadministration
 
 ---
 
-## 3. Bilder werden nicht angezeigt
+<!-- if-feature: item-images -->
+## Bilder werden nicht angezeigt
 
 ### Symptome
 - Im Bild-Tab erscheint ein leeres Feld oder ein defektes Bild-Symbol.
@@ -80,14 +83,15 @@ Drück `F5` oder `Strg + R` (Windows) bzw. `Cmd + R` (Mac).
 - Firefox: `Strg + Umschalt + Entf` → „Cache" → „Jetzt löschen"
 
 **Schritt 4 — WebDAV prüfen**
-Bilder liegen auf dem WebDAV-Server. Wenn der nicht erreichbar ist, können keine Bilder geladen werden → siehe Abschnitt 2.
+Bilder liegen auf dem WebDAV-Server. Wenn der nicht erreichbar ist, können keine Bilder geladen werden → siehe **WebDAV ist nicht erreichbar**.
 
 **Schritt 5 — Sysadmin benachrichtigen**
 Wenn Bilder dauerhaft fehlen, könnte ein Konfigurationsproblem vorliegen. Meld es mit Artikelnummer und Zeitpunkt des letzten Uploads.
 
 ---
+<!-- end-feature -->
 
-## 4. Veraltete Daten im Browser
+## Veraltete Daten im Browser
 
 ### Symptome
 - Du siehst eine alte Version eines Artikels oder eine leere Liste, obwohl Daten vorhanden sein müssten.
@@ -99,14 +103,16 @@ Wenn Bilder dauerhaft fehlen, könnte ein Konfigurationsproblem vorliegen. Meld 
 `Strg + Umschalt + R` (Windows/Linux) oder `Cmd + Umschalt + R` (Mac) — erzwingt ein vollständiges Neuladen ohne Cache.
 
 **Schritt 2 — Cache komplett leeren**
-Wenn Hard Refresh nicht hilft, lösche den Browser-Cache vollständig (→ Abschnitt 3, Schritt 3).
+Wenn Hard Refresh nicht hilft, lösche den Browser-Cache vollständig:
+- Chrome: `Strg + Umschalt + Entf` → „Bilder und Dateien im Cache" → „Daten löschen"
+- Firefox: `Strg + Umschalt + Entf` → „Cache" → „Jetzt löschen"
 
 **Schritt 3 — Inkognito-Tab testen**
 Öffne die App in einem Inkognito-/Privatfenster. Wenn die Daten dort stimmen, liegt es am Cache oder an Extensions in deinem normalen Browser.
 
 ---
 
-## 5. Seite lädt nicht / reagiert nicht
+## Seite lädt nicht / reagiert nicht
 
 ### Symptome
 - Die App lädt ewig oder zeigt nur eine leere Seite.
@@ -128,7 +134,8 @@ Wenn die App dauerhaft nicht reagiert, ist wahrscheinlich der Server nicht errei
 
 ---
 
-## 6. KI-Anreicherung hängt
+<!-- if-feature: agentic -->
+## KI-Anreicherung hängt
 
 ### Symptome
 - Im KI-Tab steht seit Minuten „Wird ausgeführt…" ohne Fortschritt.
@@ -151,12 +158,13 @@ Wenn der Lauf nach 10 Minuten noch läuft: im KI-Tab **Abbrechen**, dann **Wiede
 Wenn Neustarts nichts bringen, könnte ein Problem mit dem KI-Dienst vorliegen. Nenn Artikelnummer und seit wann der Lauf hängt.
 
 ---
+<!-- end-feature -->
 
-## 7. Ein Fehler ist passiert — was tun?
+## Ein Fehler ist passiert — was tun?
 
 Keine Panik. Die meisten Aktionen lassen sich korrigieren.
 
-### 7a. Falscher Lagerort
+### Falscher Lagerort
 
 **Problem:** Ein Artikel oder Behälter wurde falsch umgelagert.
 
@@ -167,13 +175,15 @@ Keine Panik. Die meisten Aktionen lassen sich korrigieren.
 
 Für Behälter: Behälter öffnen → **Umlagern** → richtiges Regal wählen.
 
-> Alle Bewegungen werden in der Aktivitätshistorie protokolliert — du kannst jederzeit nachvollziehen, wer was wann verschoben hat.
+<!-- if-feature: logs -->
+> Alle Bewegungen werden in den [Aktivitäten](/hilfe?doc=9_Aktivitaeten) protokolliert — du kannst jederzeit nachvollziehen, wer was wann verschoben hat.
+<!-- end-feature -->
 
 **Lagerort unklar?** Wenn du dir nicht sicher bist, wo ein Artikel wirklich liegt, kannst du einen Behälter oder ein Regal öffnen und alle enthaltenen Artikel auf einen Blick sehen. So kannst du schnell prüfen, ob etwas fehlt oder am falschen Ort ist — und den Standort direkt korrigieren.
 
 ---
 
-### 7b. Falsche Artikeldaten
+### Falsche Artikeldaten
 
 **Problem:** Beim Erfassen wurden falsche Daten eingegeben.
 
@@ -186,7 +196,8 @@ Für Behälter: Behälter öffnen → **Umlagern** → richtiges Regal wählen.
 
 ---
 
-### 7c. Falscher QR-Code aufgeklebt / Etikett fehlt
+<!-- if-feature: printing -->
+### Falscher QR-Code aufgeklebt / Etikett fehlt
 
 **Problem:** Ein Etikett wurde auf dem falschen Artikel befestigt, oder es ist verloren gegangen.
 
@@ -195,8 +206,9 @@ Für Behälter: Behälter öffnen → **Umlagern** → richtiges Regal wählen.
 2. Neues Etikett aufkleben — das alte bitte entfernen oder unkenntlich machen.
 
 ---
+<!-- end-feature -->
 
-### 7d. Artikel versehentlich gelöscht
+### Artikel versehentlich gelöscht
 
 **Problem:** Ein Artikel wurde über **Löschen** entfernt.
 
@@ -208,7 +220,8 @@ Für Behälter: Behälter öffnen → **Umlagern** → richtiges Regal wählen.
 
 ---
 
-### 7e. KI hat falsche Daten eingetragen
+<!-- if-feature: agentic -->
+### KI hat falsche Daten eingetragen
 
 **Problem:** Nach der KI-Anreicherung sind falsche Spezifikationen oder ein falscher Preis im Artikel.
 
@@ -217,14 +230,17 @@ Für Behälter: Behälter öffnen → **Umlagern** → richtiges Regal wählen.
 - **Nach der Freigabe:** Artikel öffnen → Tab **Referenz** → **Bearbeiten** und die Felder manuell korrigieren. Alternativ im Tab **KI** die Anreicherung neu starten.
 
 ---
+<!-- end-feature -->
 
-### 7f. Falscher ERP-Export
+<!-- if-feature: erp-sync -->
+### Falscher ERP-Export
 
 **Problem:** Beim ERP-Sync wurden die falschen Artikel ausgewählt oder mit falschen Daten übertragen.
 
-**Lösung:** Falls die Daten im System inzwischen korrigiert wurden, kannst du die Artikel erneut auswählen und nochmal per **ERP-Sync** übertragen — das überschreibt den vorherigen Export. Bei größeren Fehlern oder wenn Daten direkt im ERP geändert werden müssen, bitte die ERP-verantwortliche Person kontaktieren.
+**Lösung:** Falls die Daten im System inzwischen korrigiert wurden, kannst du die Artikel erneut auswählen und nochmal per **Kivi Sync 🥝** übertragen — das überschreibt den vorherigen Export. Bei größeren Fehlern oder wenn Daten direkt im ERP geändert werden müssen, bitte die ERP-verantwortliche Person kontaktieren.
 
 ---
+<!-- end-feature -->
 
 ## Noch immer ein Problem?
 

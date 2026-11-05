@@ -1,4 +1,5 @@
 # Drucker einrichten
+<!-- feature: printing -->
 
 Diese Anleitung erklärt, wie du einen Etikettendrucker (z.B. Brother QL-500, QL-800) oder
 einen Netzwerkdrucker mit dem System verbindest.

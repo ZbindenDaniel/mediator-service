@@ -19,12 +19,22 @@ Mehrere Exemplare können dieselbe Artikelnummer haben. Ihre ItemUUIDs untersche
 |-----|--------|
 | **Vorrat** | Daten des geöffneten Exemplars, eigene Spezifikationen, Bestandsaktionen, Umlagern und die Vorratstabelle |
 | **Referenz** | Gemeinsame Beschreibungen, Kategorien, Referenz-Spezifikationen, Maße, Gewicht und Verkaufspreis; Aktionen **Bearbeiten** und **Shopartikel** |
+<!-- if-feature: agentic -->
 | **KI** | Status und Bedienung der KI-Anreicherung |
+<!-- end-feature -->
+<!-- if-feature: item-images -->
 | **Bilder** | Bilder des Artikels |
+<!-- end-feature -->
+<!-- if-feature: item-attachments -->
 | **Anhänge** | Verknüpfte Dateien und Dokumente |
+<!-- end-feature -->
 | **Zubehör** | Übersicht und Knopf zu den **Einzelteilen** sowie Zubehör- und Kompatibilitätsverknüpfungen |
+<!-- if-feature: logs -->
 | **Aktivitäten** | Protokollierte Aktionen |
+<!-- end-feature -->
+<!-- if-feature: item-marks -->
 | **Markierung** | Eigene Markierung und Notiz sowie angezeigte Kommentare zu diesem Artikel |
+<!-- end-feature -->
 
 > Im vereinfachten Modus sind **KI**, **Anhänge** und **Zubehör** ausgeblendet. Den Modus kannst du über die Benutzereinstellungen ändern, die sich per Klick auf deinen Namen im Header öffnen.
 
@@ -39,7 +49,9 @@ Die Karte **dieser Artikel** beschreibt das gerade geöffnete Exemplar.
 | **Seriennummer** | Hinterlegte Seriennummer des Geräts |
 | **MAC-Adresse** | Hinterlegte MAC-Adresse des Geräts |
 | **Qualität** | Qualitätsstufe von 1 bis 5; **?** steht für einen fehlenden beziehungsweise unbekannten Wert |
+<!-- if-feature: agentic -->
 | **Ki Status** | Zustand der KI-Verarbeitung. **Fehlgeschlagen** bezieht sich hier auf den KI-Vorgang. |
+<!-- end-feature -->
 | **EAN** | Produktkennung aus den gemeinsamen Referenzdaten, auch wenn sie hier im Vorrat angezeigt wird |
 | **Menge** | Hinterlegter Bestand bei Einheit **Menge**; diese Zeile erscheint für Mengenartikel |
 | **Erfasst am** | Erfassungszeitpunkt dieses Exemplars |
@@ -76,7 +88,9 @@ Gespeichert werden Spezifikationszeilen mit ausgefülltem Feldnamen und Wert. En
 
 Die Felder der Referenz stehen allen Exemplaren mit dieser Artikelnummer gemeinsam zur Verfügung. **EAN** wird ebenfalls an der Referenz gespeichert und über **Referenz → Bearbeiten** geändert; die Detailansicht zeigt sie im Tab **Vorrat**.
 
+<!-- if-feature: shopware -->
 Die Anzeige **Shop/Veröffentlichung** und die Aktion **Shopartikel** gehören ebenfalls zum Tab **Referenz**.
+<!-- end-feature -->
 
 ## 5. Qualität bewerten und verstehen
 
@@ -144,4 +158,4 @@ Geräte mit einer Komponentenvorlage nimmst du auf der Seite **Einzelteile** aus
 
 > **Entnehmen** bei einem Einzelteil legt es in einen Behälter. **Entnehmen** im Tab **Vorrat** eines Stückartikels bucht dagegen den geöffneten Artikel aus dem Bestand aus. Bei Mengenartikeln heißt die Bestandsaktion **Menge reduzieren**.
 
-Den ganzen Ablauf erklärt [Ersatzteile erfassen](/hilfe?doc=4_Ersatzteile-erfassen). Das Umlagern findest du in [Erste Schritte, Abschnitt 6](/hilfe?doc=1_Erste-Schritte).
+Den ganzen Ablauf erklärt [Ersatzteile erfassen](/hilfe?doc=4_Ersatzteile-erfassen). Das Umlagern findest du in [Erste Schritte](/hilfe?doc=1_Erste-Schritte) unter **Artikel und Behälter umlagern**.

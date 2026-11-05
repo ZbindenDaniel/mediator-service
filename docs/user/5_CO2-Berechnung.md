@@ -1,4 +1,5 @@
 # CO₂-Einsparung: Wie wird gerechnet?
+<!-- feature: statistics -->
 
 Gebrauchte IT-Geräte zu kaufen statt neue zu produzieren spart erheblich CO₂. Diese Seite erklärt, wie das System den Einsparungswert für jeden Artikel schätzt.
 

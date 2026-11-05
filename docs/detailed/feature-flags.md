@@ -30,6 +30,8 @@
 | `stubs` | Fundsachen page, nav link, shelf tab | stub APIs 404 |
 | `statistics` | overview panel (empty state shows a hint instead), CO₂ values | none (`/api/overview` also feeds other cards) |
 | `help` | help page, nav link, first-steps redirect | `/api/user-docs` 404 |
+
+The help pages themselves follow all other flags too: see [`docs/user/README.md`](../user/README.md) for the `<!-- feature: … -->` / `<!-- if-feature: … -->` markers.
 | `intake` | netboot intake station | `/api/intake/*` 404 |
 | `import-export` | import/export admin cards, bulk CSV export | import/export APIs 404 |
 | `qr-scan` | scanner page, scan buttons, placement scanning | `qr-scan` API 404 |
@@ -69,6 +71,7 @@ FEATURES / FEATURES_FILE ──► backend/lib/features.ts (parse + validate, fa
 3. Gate any background job with `isFeatureEnabled('<key>')`.
 4. Hide the UI with `useFeature` / `<Feature>`; for a detail tab, add it to `lib/tabFeatures.ts`.
 5. Add it to the table above.
+6. Gate its help text in `docs/user/` with `<!-- if-feature: <key> -->` (or a page-level `<!-- feature: <key> -->`).
 
 ## Not covered yet
 

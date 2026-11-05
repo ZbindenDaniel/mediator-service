@@ -4565,8 +4565,11 @@ button:focus {
 
     &--active {
         background: var(--c-overview);
-        color: var(--on-strong);
+        // Identity colours are light in light mode and deep in dark mode; --fg reads on both
+        // (--on-strong is for status fills and was near-white on the pale blue).
+        color: var(--fg);
         border-color: var(--c-overview);
+        font-weight: 600;
     }
 }
 
@@ -4627,9 +4630,11 @@ button:focus {
     blockquote {
         margin: 16px 0;
         padding: 14px 16px;
-        border-left: 4px solid var(--acc); // $overview-color was removed by the token palette (5e8d476); the Gitea merge reintroduced it
+        border-left: 4px solid var(--info);
         border-radius: 0 10px 10px 0;
-        background: var(--surface2, #f5f5f5);
+        // Was var(--surface2, #f5f5f5): the token doesn't exist, so the white fallback sat under
+        // light text in dark mode. --info-bg is themed and marks the block as a note.
+        background: var(--info-bg);
 
         > :last-child {
             margin-bottom: 0;
@@ -4685,7 +4690,7 @@ button:focus {
     }
 
     tbody tr:nth-child(even) {
-        background: var(--surface2, #f5f5f5);
+        background: var(--tint); // fg-relative overlay: zebra works on both themes (old #f5f5f5 fallback didn't)
     }
 }
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { getUser, setUser } from '../lib/user';
 import { logError } from '../utils/logger';
 
@@ -8,12 +8,15 @@ interface DocEntry {
   title: string;
 }
 
+const UNAVAILABLE_DOC = '# Nicht verfügbar\n\nDiese Hilfeseite gehört zu einer Funktion, die in diesem System nicht aktiviert ist. Wähle links eine andere Seite.';
+
 function tableCells(line: string): string[] {
   return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((cell) => cell.trim());
 }
 
 function renderMarkdown(md: string): React.ReactNode[] {
-  const lines = md.replace(/\r\n/g, '\n').split('\n');
+  // The server strips feature markers already; dropping any leftover comment line keeps raw files renderable too.
+  const lines = md.replace(/\r\n/g, '\n').split('\n').filter((line) => !/^\s*<!--.*-->\s*$/.test(line));
   const nodes: React.ReactNode[] = [];
   let i = 0;
 
@@ -163,6 +166,10 @@ function inlineMarkdown(text: string): React.ReactNode {
       return <em key={idx}>{inlineMarkdown(part.slice(1, -1))}</em>;
     }
     const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+    if (linkMatch && linkMatch[2].startsWith('/')) {
+      // In-app links (e.g. /hilfe?doc=…) stay in the current tab instead of opening a second app window.
+      return <Link key={idx} to={linkMatch[2]}>{inlineMarkdown(linkMatch[1])}</Link>;
+    }
     if (linkMatch) {
       return <a key={idx} href={linkMatch[2]} target='_blank' rel='noopener noreferrer'>{inlineMarkdown(linkMatch[1])}</a>;
     }
@@ -241,7 +248,8 @@ export default function HilfePage() {
     setLoading(true);
     setContent(null);
     fetch(`/api/user-docs/${encodeURIComponent(activeDoc)}`)
-      .then((r) => r.text())
+      // A page of a switched-off feature answers 404 (e.g. an old bookmark); show a note, not the error body.
+      .then((r) => (r.ok === false ? UNAVAILABLE_DOC : r.text()))
       .then((text) => { setContent(text); setLoading(false); })
       .catch((err) => {
         logError('HilfePage: failed to load doc', err);
