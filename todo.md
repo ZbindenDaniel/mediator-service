@@ -56,7 +56,7 @@
   with 0 candidates — fixed in #957 — or a station-side upload failure). Next: re-run an intake on that
   device and grep the server log for `[media-audit]` + the serial; if absent, debug `phase2.sh` on the image.
 
-0z7. **Add a CI JSON-lint over `contracts/`.** The invalid-JSON bug in `quality/201.json` (intake #914) was
+0z7. **Add a CI JSON-lint over `contracts/`.** → plan WP1 (`contracts:check` in CI) + WP3 (validate at boot), `docs/plans/maintenance-ci-validation-migrations.md`. The invalid-JSON bug in `quality/201.json` (intake #914) was
   invisible because both contract loaders swallow parse errors and return `null`. A cheap `node -e JSON.parse`
   (or `jq empty`) sweep over `contracts/**/*.json` in CI would catch the next one at commit time.
 
@@ -70,7 +70,9 @@
   instead of failing; where to keep a transition trail (events vs table vs transcript).
   Full design history: `docs/PLANNING_ai_runs_optimization.md` in git history (removed 2026-10-27).
 
-0z5. **`npm test` harness is broken: `it.each is not a function`.** `scripts/run-tests.js` + `test/harness.js` run test files through a custom harness that lacks `it.each` (used by `forward-agentic-trigger.test.ts`, `prompt-template-composition.test.ts`), so `npm test` aborts; `npx jest -c jest.config.cjs` runs the full suite fine. Either add `each` to the harness or point `npm test` at Jest. (It was previously masked by a Sass prebuild failure, fixed in ui #1071.)
+0z5. **`npm test` harness is broken: `it.each is not a function`.** → plan WP1 step 1 (point `npm test` at Jest). `scripts/run-tests.js` + `test/harness.js` run test files through a custom harness that lacks `it.each` (used by `forward-agentic-trigger.test.ts`, `prompt-template-composition.test.ts`), so `npm test` aborts; `npx jest -c jest.config.cjs` runs the full suite fine. Either add `each` to the harness or point `npm test` at Jest. (It was previously masked by a Sass prebuild failure, fixed in ui #1071.)
+
+0z10. **No database backup exists.** No `pg_dump`/restore script, no pre-deploy snapshot, never test-restored. → plan WP2 (`docs/plans/maintenance-ci-validation-migrations.md`); destination/retention/scope are open decisions there.
 
 0z3. **Intake netboot image / station TUI emits a duplicated brand in `model`.** The scan reports `vendor="HP"` with the brand also embedded (sometimes doubled) inside `model` (e.g. `model="HP HP ProBook 470 G4"`), and the external station TUI further combines the echoed `vendor`+`model` when pre-filling the new-ref form. The backend deliberately no longer masks this (see 0z2) — fix it at the source: the netboot intake image should emit a clean `model` (brand once, or brand-free with `vendor` separate), and the TUI should stop concatenating `vendor` into the pre-filled `Kurzbeschreibung`. Contract: [`intake-image.http`](docs/detailed/intake-image.http).
 

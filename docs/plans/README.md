@@ -6,6 +6,7 @@ Day-to-day tasks are in [`todo.md`](../../todo.md).
 
 | Plan | Status |
 |---|---|
+| [maintenance-ci-validation-migrations.md](maintenance-ci-validation-migrations.md) | Plan, not started — CI gate, DB backup + safer deploy, fail-loud validation, versioned migrations, integration tests |
 | [instance-flow.md](instance-flow.md) | Design — reconcile intake evidence on compute devices against their reference, operator-gated (todo 53) |
 | [transport-boxes.md](transport-boxes.md) | Draft, not started — `T-` transports between locations (todo 18) |
 | [inventory.md](inventory.md) | Draft, not started — passive inventory cycle and inventory day (todo 19b) |
