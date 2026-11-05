@@ -123,6 +123,7 @@ import { resolveIdentity, loadConfigTenantGroupMap } from './lib/identity';
 import { reloadTenantsFromDb, getTenantRows, getSites } from './lib/tenants';
 import { shelfLocations } from '../models/shelf-locations';
 import { loadFeatures, isFeatureEnabled, FEATURE_KEYS } from './lib/features';
+import { compareDocNames, filterDocSections, isDocPageEnabled } from './lib/userDocs';
 import { isRequestAllowed } from './utils/require-identity';
 import { sendAppShellFile } from './utils/app-shell';
 import { runWithIdentity } from './lib/ownership';
@@ -891,16 +892,22 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     if (url.pathname === '/api/user-docs' && req.method === 'GET') {
       const USER_DOCS_DIR = path.join(__dirname, '../../docs/user');
       try {
-        const files = fs.readdirSync(USER_DOCS_DIR).filter((f) => f.endsWith('.md'));
-        const docs = files.map((fileName) => {
+        const files = fs.readdirSync(USER_DOCS_DIR)
+          .filter((f) => f.endsWith('.md') && f !== 'README.md')
+          .sort(compareDocNames);
+        const docs: Array<{ name: string; title: string }> = [];
+        for (const fileName of files) {
           const name = fileName.replace(/\.md$/, '');
           let title = name;
           try {
-            const firstLine = fs.readFileSync(path.join(USER_DOCS_DIR, fileName), 'utf8').split('\n')[0] ?? '';
+            const raw = fs.readFileSync(path.join(USER_DOCS_DIR, fileName), 'utf8');
+            // A page for a switched-off feature is left out of the list entirely.
+            if (!isDocPageEnabled(raw, isFeatureEnabled)) continue;
+            const firstLine = raw.split('\n')[0] ?? '';
             if (firstLine.startsWith('# ')) title = firstLine.slice(2).trim();
           } catch { /* keep filename as title */ }
-          return { name, title };
-        });
+          docs.push({ name, title });
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
         return res.end(JSON.stringify(docs));
       } catch (err) {
@@ -923,8 +930,11 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       }
       try {
         const data = fs.readFileSync(filePath, 'utf8');
+        if (safeName === 'README' || !isDocPageEnabled(data, isFeatureEnabled)) {
+          res.writeHead(404); return res.end('Not found');
+        }
         res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8' });
-        return res.end(data);
+        return res.end(filterDocSections(data, isFeatureEnabled));
       } catch {
         res.writeHead(404); return res.end('Not found');
       }

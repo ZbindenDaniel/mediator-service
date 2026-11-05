@@ -1,14 +1,30 @@
 # Übersicht
 
-Hier findest du die Anleitungen zum System. Fang mit **Erste Schritte** an, wenn du neu bist.
+Anleitungen zum System. Neu hier: Beginne mit **Erste Schritte**.
+
+Die Hilfe zeigt nur Funktionen, die in diesem System eingeschaltet sind.
 
 | Seite | Worum geht's? |
 |---|---|
-| **Erste Schritte** | Navigation, Artikel anlegen und finden, scannen, umlagern, Etiketten drucken, KI, ERP |
-| **Fehlerbehebung** | Was tun, wenn etwas nicht klappt (Drucker, WebDAV, Bilder, KI, Fehlermeldungen) |
-| **Drucker einrichten** | Etikettendrucker (Brother QL) anschliessen und im System einrichten |
+| **Erste Schritte** | Navigation, Artikel anlegen, suchen, umlagern, typische Abläufe |
+| **Fehlerbehebung** | Häufige Probleme und wie du sie löst |
+<!-- if-feature: printing -->
+| **Drucker einrichten** | Etikettendrucker anschliessen und einrichten (für Admins) |
+<!-- end-feature -->
 | **Artikel** | Referenzdaten und Exemplare, Qualität, Spezifikationen und Vorlagen |
-| **Ersatzteile erfassen (Zerlegen)** | Geräte zerlegen und Teile als eigene Artikel erfassen |
-| **CO₂-Einsparung** | Wie der CO₂-Wert eines Artikels berechnet wird |
+| **Einzelteile erfassen** | Geräte zerlegen und Teile als eigene Artikel erfassen |
+<!-- if-feature: statistics -->
+| **CO₂-Einsparung** | Berechnung des CO₂-Werts |
+<!-- end-feature -->
+| **Administration** | Karten der Administration und wer Zugriff hat |
+<!-- if-feature: stubs -->
+| **Fundsachen** | Noch nicht erfasste Sachen im Lager notieren |
+<!-- end-feature -->
+<!-- if-feature: logs -->
+| **Aktivitäten** | Protokoll: wer hat was wann gemacht |
+<!-- end-feature -->
+<!-- if-feature: agentic -->
+| **KI-Cockpit** | Übersicht und Einstellungen für alle KI-Läufe |
+<!-- end-feature -->
 
-Fragen oder Fehler, die hier nicht beschrieben sind? Melde sie bei der Admin-Person.
+Fragen oder Fehler, die hier nicht beschrieben sind: Melde sie der Admin-Person.

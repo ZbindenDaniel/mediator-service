@@ -1,295 +1,368 @@
 # Erste Schritte
 
-Willkommen! Diese Seite erklärt die wichtigsten Abläufe im System — vom ersten Artikel bis zur Einlagerung.
+Diese Seite erklärt die Grundfunktionen: Navigation, Artikel anlegen, suchen und umlagern.
 
-Beim ersten Aufruf wirst du nach deinem **Benutzernamen** gefragt. Damit kann man besser nachvollziehen, wer was macht. Du kannst ihn jederzeit ändern — einfach oben rechts im Header auf deinen Namen **klicken**. Dort findest du auch den einfachen Modus, das Farbschema (Hell/Dunkel) und, wenn du angemeldet bist, „Abmelden“.
+## Benutzername und Einstellungen
 
-**Einfacher Modus:** Im gleichen Dialog (Klick auf deinen Namen) kannst du **Einfacher Modus (weniger anzeigen)** einschalten. Dann siehst du nur die wichtigsten Menüpunkte und Tabs — praktisch, wenn du vor allem erfasst und einlagerst. Die Einstellung gilt nur für deinen Browser.
+Beim ersten Aufruf fragt das System nach deinem **Benutzernamen**. Er wird bei jeder Aktion gespeichert, damit nachvollziehbar ist, wer was geändert hat.
+
+Klick oben rechts auf deinen Namen, um die Einstellungen zu öffnen. Dort kannst du:
+
+- den Namen ändern,
+- den **Einfachen Modus (weniger anzeigen)** einschalten: Es werden nur die Menüpunkte und Tabs zum Erfassen und Einlagern angezeigt,
+- das Farbschema wählen (Hell/Dunkel),
+- dich abmelden, wenn du mit einem Firmenkonto angemeldet bist.
+
+Diese Einstellungen gelten nur für den Browser, in dem du sie setzt.
 
 ---
 
-## 1. Die Navigation auf einen Blick
+## Navigation
 
-Oben im Bildschirm findest du die Navigation (auf dem Handy hinter dem **#**-Symbol):
+Die Navigation ist oben. Auf dem Handy öffnest du sie über das **#**-Symbol.
 
-| Symbol | Was du dort findest |
-|--------|---------------------|
+| Symbol | Funktion |
+|--------|----------|
 | **+** | Neuen Artikel erfassen |
-| Listen-Symbol | Alle Artikel |
-| Karton-Symbol | Alle Behälter und Regale |
-| Log-Symbol | Letzte Aktivitäten |
-| Geschenk-Symbol | **Fundsachen** — Sachen im Lager, die noch nicht erfasst sind (siehe Abschnitt 7) |
-| Werkzeug-Symbol | Administration |
-| Fragezeichen | Diese Hilfeseite |
+| Listen-Symbol | Artikelliste |
+| Karton-Symbol | Behälter und Regale |
+<!-- if-feature: agentic -->
+| Roboter-Symbol | KI-Cockpit: Übersicht und Einstellungen für alle KI-Läufe ([KI-Cockpit](/hilfe?doc=10_KI-Cockpit)) |
+<!-- end-feature -->
+<!-- if-feature: logs -->
+| Log-Symbol | Protokoll aller Aktionen ([Aktivitäten](/hilfe?doc=9_Aktivitaeten)) |
+<!-- end-feature -->
+<!-- if-feature: stubs -->
+| Geschenk-Symbol | Notizen zu noch nicht erfassten Sachen im Lager ([Fundsachen](/hilfe?doc=8_Fundsachen)) |
+<!-- end-feature -->
+| Werkzeug-Symbol | Administration, nur für Admins ([Administration](/hilfe?doc=7_Administration)) |
+| Fragezeichen | Diese Hilfe |
+<!-- if-feature: qr-scan -->
 | Kamera-Symbol | QR-Code scannen |
-| Suchfeld | Direkt nach Artikel, Behälter-ID oder Beschreibung suchen |
+<!-- end-feature -->
+| Suchfeld | Artikel oder Behälter suchen |
 
 ---
 
-## 2. Die Tabs in der Detailansicht
+## Tabs in der Detailansicht
 
-Wenn du einen **Artikel** öffnest, siehst du oben verschiedene Tabs:
+Ein **Artikel** hat diese Tabs:
 
-| Tab | Was du dort findest |
-|-----|---------------------|
-| **Vorrat** | Lagerort, Qualität, Umlagern, Etikett drucken, Finden, Instanz bearbeiten (Seriennummer, Spezifikationen dieses Geräts) |
-| **Referenz** | Grunddaten, Artikelnummer, Spezifikationen, Preis |
-| **KI** | KI-Anreicherung starten, Review, frühere Versionen |
-| **Bilder** | Fotos hochladen, mit der Kamera aufnehmen, anzeigen |
-| **Anhänge** | Dokumente und Dateien (z. B. Löschprotokolle) |
-| **Zubehör** | Verknüpfte Artikel, Ersatzteile (Zerlegen) |
-| **Aktivitäten** | Was mit diesem Artikel passiert ist und wer es gemacht hat |
-| **Markierung** | Artikel für dich merken und eine Notiz hinterlassen |
+| Tab | Inhalt |
+|-----|--------|
+| **Vorrat** | Dieses Exemplar: Lagerort, Qualität, Preis, Seriennummer, Umlagern, Label drucken, Finden |
+| **Referenz** | Gemeinsame Daten aller Exemplare: Beschreibung, Artikelnummer, Spezifikationen, Basispreis |
+<!-- if-feature: agentic -->
+| **KI** | KI-Lauf starten, Ergebnis prüfen, frühere Versionen |
+<!-- end-feature -->
+<!-- if-feature: item-images -->
+| **Bilder** | Fotos hochladen oder mit der Kamera aufnehmen |
+<!-- end-feature -->
+<!-- if-feature: item-attachments -->
+| **Anhänge** | Dateien, z. B. Löschprotokolle |
+<!-- end-feature -->
+| **Zubehör** | Verknüpftes Zubehör und Einzelteile (Zerlegen) |
+<!-- if-feature: logs -->
+| **Aktivitäten** | Alle Aktionen an diesem Artikel mit Person und Zeit |
+<!-- end-feature -->
+<!-- if-feature: item-marks -->
+| **Markierung** | Artikel markieren und eine Notiz hinterlassen |
+<!-- end-feature -->
 
-Ein **Behälter** oder **Regal** hat die Tabs **Info**, **Notizen**, **Artikel** und **Aktivitäten**, ein Regal zusätzlich **Fundsachen**.
+Ein **Behälter** oder **Regal** hat diese Tabs:
+
+| Tab | Inhalt |
+|-----|--------|
+| **Info** | Box-ID, Standort, Umlagern |
+<!-- if-feature: box-notes -->
+| **Notizen** | Freitext; bei Regalen auch Name und Farbe |
+<!-- end-feature -->
+<!-- if-feature: box-items -->
+| **Artikel** | Inhalt des Behälters |
+<!-- end-feature -->
+<!-- if-feature: logs -->
+| **Aktivitäten** | Alle Aktionen an diesem Behälter |
+<!-- end-feature -->
+<!-- if-feature: stubs -->
+| **Fundsachen** | Nur bei Regalen: notierte, noch nicht erfasste Sachen |
+<!-- end-feature -->
 
 ---
 
-## 3. Artikel anlegen
+## Artikel anlegen
 
-1. Klick auf das **+**-Symbol oben links.
-2. Gib eine **Artikelnummer** ein (Pflichtfeld).
-3. Wähle eine **Kategorie** und **Unterkategorie**.
-4. Wähle die **Einheit**: **Stück** für Einzelgeräte (mit Seriennummer), **Menge** für Massenware (RAM, Netzteile, Kabel, ...).
-5. Optional: Maße und Gewicht eintragen — das hilft bei der KI-Suche.
-6. Klick auf **Weiter** — die Qualitätsprüfung öffnet sich.
-7. Beantworte die Qualitätsfragen und bestätige.
+1. Klick auf **+**.
+2. Gib die **Artikelnummer** ein (Pflichtfeld).
+3. Wähle **Kategorie** und **Unterkategorie**.
+4. Wähle die **Einheit**: **Stück** für Einzelgeräte mit Seriennummer, **Menge** für Massenware wie RAM, Netzteile oder Kabel.
+5. Optional: Masse und Gewicht eintragen.
+6. Klick auf **Weiter**. Die Qualitätsprüfung öffnet sich.
+7. Beantworte die Fragen und bestätige.
 8. Klick auf **Speichern**.
 
-Der Artikel erscheint jetzt in der Artikelliste. Du kannst direkt danach ein QR-Etikett drucken.
+Der Artikel steht danach in der Artikelliste.
+<!-- if-feature: printing -->
+Drucke anschliessend das Label (Tab **Vorrat** → **Label drucken**).
+<!-- end-feature -->
 
-**Fotos:** Tab **Bilder** → Datei hochladen, oder auf dem Handy/Tablet **Foto aufnehmen** und direkt mit der Kamera fotografieren.
-
----
-
-## 4. QR-Code scannen
-
-Mit dem Scan-Symbol navigierst du blitzschnell zu einem Artikel oder Behälter.
-
-1. Öffne die App auf deinem Handy.
-2. Tipp auf das **Scan**-Symbol in der Navigation.
-3. Halte die Kamera auf das QR-Etikett.
-4. Die Detailansicht öffnet sich automatisch.
-
-**Artikel physisch suchen (Finden-Funktion):** Wenn du einen bestimmten Artikel im Lager suchen willst, öffne ihn in der Liste → Tab **Vorrat** → **Finden**. Dann scannst du QR-Codes im Lager, bis das Gerät vibriert und ein Ton ertönt — das bedeutet: gefunden!
-
-> Damit die Suche zuverlässig funktioniert, muss der Lagerort immer aktuell sein. Halte die Standorte daher beim Umlagern immer aktuell und nutze die Inventur-Funktion, um Abweichungen zu finden.
+<!-- if-feature: item-images -->
+**Fotos:** Tab **Bilder** → Datei hochladen. Auf Handy oder Tablet kannst du mit **Foto aufnehmen** direkt die Kamera verwenden.
+<!-- end-feature -->
 
 ---
 
-## 5. Artikel finden
+<!-- if-feature: qr-scan -->
+## QR-Code scannen
 
-### Welche Suche passt zu deiner Aufgabe?
+1. Öffne die App auf dem Handy.
+2. Tipp in der Navigation auf das **Kamera-Symbol**.
+3. Halte die Kamera auf das QR-Label.
+4. Der Artikel oder Behälter öffnet sich.
 
-| Wo? | Was wird gesucht? | Wie startest du? |
+**Artikel im Lager suchen (Finden):** Artikel öffnen → Tab **Vorrat** → **Finden**. Scanne dann Labels im Lager. Beim gesuchten Artikel vibriert das Handy und es ertönt ein Ton.
+
+> Finden funktioniert nur, wenn der Lagerort im System stimmt. Erfasse deshalb jede Umlagerung im System.
+
+---
+<!-- end-feature -->
+
+## Artikel finden
+
+### Welche Suche für welchen Zweck
+
+| Wo | Was wird durchsucht | Bedienung |
 |-----|------------------|-----------------|
-| Suchfeld **Suchen…** oben | Artikel sowie Behälter und Regale | Begriff eingeben → Enter oder Lupe |
-| Artikelliste, Feld **Suche** | Name, Nummer, Hersteller, Seriennummer, Spezifikationen und weitere Artikeldaten | Text eingeben → Enter |
-| Behälterliste, Feld **Suche** | Box-ID, Behältername, Standort-ID oder Regalname | Text eingeben; die Liste wird beim Tippen gefiltert |
+| Suchfeld **Suchen…** oben | Artikel, Behälter und Regale | Begriff eingeben → Enter oder Lupe |
+| Artikelliste, Feld **Suche** | Beschreibung, Nummer, Hersteller, Seriennummer, Spezifikationen und weitere Artikeldaten | Text eingeben → Enter |
+| Behälterliste, Feld **Suche** | Box-ID, Behältername, Standort-ID, Regalname | Text eingeben; die Liste filtert beim Tippen |
 | Dialog **Artikel umlagern**, Feld **Ziel wählen** | Box-ID oder Behältername | Mindestens zwei Zeichen eingeben → Treffer auswählen |
 
-### Oben nach einem Artikel oder Behälter suchen
+### Suchfeld oben
 
-1. Gib deinen Begriff in **Suchen…** ein.
-2. Drück **Enter** oder klick auf die **Lupe**.
-3. Klick in der Ergebnisliste auf den gewünschten Artikel oder Behälter, um ihn zu öffnen.
+1. Begriff in **Suchen…** eingeben.
+2. **Enter** drücken oder auf die **Lupe** klicken.
+3. Treffer anklicken.
 
-Bei Artikeln werden **Artikelnummer**, **Artikelbeschreibung**, der hinterlegte **Suchbegriff**, **Kurzbeschreibung**, **Referenz-Spezifikationen**, **Hersteller**, **Seriennummer**, **MAC-Adresse**, **EAN**, **ItemUUID** und **Box-ID** berücksichtigt. Die Spezifikationen des einzelnen Exemplars unter **Vorrat** werden hier nicht mit durchsucht.
+Bei Artikeln durchsucht das Feld: **Artikelnummer**, **Artikelbeschreibung**, **Suchbegriff**, **Kurzbeschreibung**, **Referenz-Spezifikationen**, **Hersteller**, **Seriennummer**, **MAC-Adresse**, **EAN**, **ItemUUID** und **Box-ID**. Die Spezifikationen des einzelnen Exemplars (Tab **Vorrat**) werden hier nicht durchsucht.
 
-Bei Behältern und Regalen werden **Box-ID** und **Name** durchsucht. Für eine Suche nach der Standort-ID oder dem zugehörigen Regalnamen benutze die **Behälterliste**.
+Bei Behältern und Regalen durchsucht es **Box-ID** und **Name**. Für Standort-ID oder Regalname nimm die **Behälterliste**.
 
-**Beispiele:** Suche nach einer Artikelnummer wie `000001`, einem Hersteller oder einer bekannten Seriennummer. Einen benannten Behälter kannst du über seinen Namen suchen, zum Beispiel **Kabelkiste**.
+Gross-/Kleinschreibung spielt keine Rolle. Mehrere Wörter werden einzeln gesucht, die Reihenfolge ist egal. Gibt es keinen genauen Treffer, zeigt die Suche ähnliche Artikel. Prüf vor dem Öffnen die Artikelnummer bzw. Box-ID.
 
-Groß- und Kleinschreibung werden bei der Textsuche nicht unterschieden. Mehrere durch Leerzeichen getrennte Wörter werden einzeln berücksichtigt; ein Treffer muss daher nicht die gesamte Eingabe als zusammenhängenden Text enthalten. Gibt es keinen genauen Treffer, zeigt die Suche die ähnlichsten Artikel an — prüf dann genau, ob der richtige dabei ist. Prüfe die angezeigte Artikelnummer beziehungsweise Box-ID vor der Auswahl.
+> Das Suchfeld oben zeigt nur eine begrenzte Anzahl Treffer. Für längere Listen nimm die Artikel- oder Behälterliste.
 
-> Die obere Suche zeigt eine begrenzte Auswahl von Treffern. Benutze für die Arbeit mit einer längeren Liste die Artikel- oder Behälterliste und deren Filter.
+### Direkt mit einer ID öffnen
 
-### Mit einer vollständigen ID direkt öffnen
+Beginnt die Eingabe oben mit **I-**, **B-** oder **S-**, öffnet das System direkt den passenden Eintrag:
 
-Wenn die Eingabe oben mit **I-**, **B-** oder **S-** beginnt, behandelt das System sie beim Absenden als direkte ID:
+- **I-…** öffnet ein Exemplar, z. B. `I-000001-0001`.
+- **B-…** öffnet einen Behälter, z. B. `B-281026-0001`.
+- **S-…** öffnet ein Regal.
 
-- **I-…:** öffnet die Artikelinstanz, zum Beispiel `I-000001-0001`.
-- **B-…:** öffnet den Behälter, zum Beispiel `B-281026-0001`.
-- **S-…:** öffnet das Regal.
+Die ID muss vollständig sein. Für Teile einer ID nimm die Behälterliste, die Zielsuche beim Umlagern oder das Feld **Suche** in der Artikelliste.
 
-Gib dafür die **vollständige ID** ein. Eine unvollständige ID mit einem dieser Präfixe öffnet keine Liste ähnlicher IDs. Teile einer Box-ID kannst du in der Behälterliste oder in der Zielsuche beim Umlagern suchen. Für Teile einer Artikelnummer eignet sich das Feld **Suche** in der Artikelliste.
+### Artikelliste filtern
 
-### Die Artikelliste eingrenzen
+1. Artikelliste öffnen (Listen-Symbol).
+2. Im Feld **Suche** Begriff eingeben → **Enter**. Feld leeren zeigt wieder alle Artikel.
+3. Weitere Filter: **Behälter**, **Unterkategorie**. Unter **Weitere Filter**: **Qualität**, **Ki-Status**, **Bilder**, **Preis** (Alle / Ohne Preis / Mit Preis) u. a.
 
-1. Öffne die Artikelliste über das **Listen-Symbol**.
-2. Gib im Feld **Suche** deinen Begriff ein und drück **Enter**. Leerst du das Feld, zeigt die Liste sofort wieder alles.
-3. Ergänze bei Bedarf weitere Filter, zum Beispiel **Behälter** oder **Unterkategorie**. **Qualität**, **Ki-Status**, **Bilder**, **Preis** (Alle / Ohne Preis / Mit Preis) und weitere findest du unter **Weitere Filter**.
+Das Feld **Suche** findet Artikel, in denen jedes eingegebene Wort vorkommt, in beliebiger Reihenfolge. Akzente und Umlaute werden ignoriert. Beispiel: `7490 dell` findet ein Dell Latitude 7490. Durchsucht werden Beschreibung, Kurzbeschreibung, Hersteller, Artikelnummer, ItemUUID, Seriennummer, EAN, Suchbegriff, Langtext und die Spezifikationen des Exemplars. MAC-Adressen findest du nur über das Suchfeld oben.
 
-Das Feld **Suche** findet Artikel, bei denen jedes eingegebene Wort irgendwo vorkommt — in beliebiger Reihenfolge, Akzente und Umlaute spielen keine Rolle. `7490 dell` findet also auch einen Dell Latitude 7490. Durchsucht werden Beschreibung, Kurzbeschreibung, Hersteller, Artikelnummer, ItemUUID, Seriennummer, EAN, Suchbegriff, Langtext und die Spezifikationen des Exemplars. Eine MAC-Adresse suchst du über die **obere Suche**.
+Beim Sortieren nach **Preis** stehen Artikel ohne Preis am Ende. Filter und Sortierung verwenden den Basispreis.
 
-Beim Sortieren nach **Preis** stehen Artikel ohne Preis immer am Ende. Gefiltert und sortiert wird nach dem Basispreis.
+Das Feld **Behälter** filtert nach Box-ID oder Standort, nicht nach Behältername. Der Filter gilt nach **Enter** oder beim Verlassen des Felds.
 
-Im separaten Feld **Behälter** kannst du eine Box-ID oder Standortangabe eingeben. Übernimm den Filter mit **Enter** oder indem du das Feld verlässt. Dieses Feld sucht nicht nach dem Behälternamen.
+**Weniger Treffer als erwartet?** Prüf die gesetzten Filter. **Filter zurücksetzen** stellt alle Filter auf Standard. Artikel ohne Lagerbestand sind standardmässig ausgeblendet; mit der vollständigen ItemUUID findest du sie über das Suchfeld oben.
 
-**Zu wenige Treffer?** Prüfe zusätzlich gesetzte Filter. Wenn **Filter zurücksetzen** angezeigt wird, kannst du damit die Listenfilter auf ihre Standardwerte zurückstellen. Artikel ohne Lagerbestand sind in der Standardliste ausgeblendet; eine bekannte vollständige ItemUUID kannst du weiterhin über die obere Suche öffnen.
+### Behälterliste
 
-### Behälter suchen und ein Umlagerungsziel wählen
+Das Suchfeld der **Behälterliste** findet Box-IDs, Behälter- und Regalnamen sowie Standort-IDs (auch wenn der Platzhalter nur **Box-ID suchen** sagt). Typ- und Standortfilter gelten zusätzlich.
 
-In der **Behälterliste** findet das Suchfeld trotz des Platzhalters **Box-ID suchen** auch Behälter- und Regalnamen sowie Standort-IDs. Die übrigen Filter, etwa Typ und Standort, gelten zusätzlich.
+<!-- if-feature: item-marks -->
+### Markieren
 
-Beim **Umlagern** kannst du nach **Box-ID oder Behältername** suchen. Wähle einen Vorschlag aus; erst dann wird dessen Box-ID als Ziel übernommen. Alternativ gibst du eine bekannte Box-ID vollständig ein oder scannst den Zielbehälter. Den Ablauf erklärt Abschnitt 6.
+Tab **Markierung** → **Merken**, optional mit Notiz. Markierungen und Notizen sind für alle sichtbar. In der Artikelliste filterst du mit **Markiert** danach.
+<!-- end-feature -->
 
-**Markierte Artikel:** Im Tab **Markierung** auf **Merken** klicken (optional mit Notiz). Markierungen und Notizen sehen alle — so kannst du Kolleg:innen auf einen Artikel hinweisen.
+### Preise
 
-### Preise, Mietware und Shop
+- In der Referenz steht der **Basispreis**: der Preis eines neuwertigen Geräts.
+- Der Preis eines Exemplars hängt vom Zustand ab: Zustand 5 = 100 %, 4 = 80 %, 3 = 60 %, 2 = 40 %, 1 oder unbekannt = 20 % des Basispreises, gerundet auf 5 Franken. Er steht im Tab **Vorrat**.
+- Ausnahmen: **Instanz bearbeiten** → **Fixer Preis (CHF)**. Feld leeren setzt den Preis wieder nach Zustand.
+<!-- if-feature: shopware -->
+- **Mietware:** Schalter im Referenz-Formular. Der Artikel bekommt im Shop den Tag „rental“ und bleibt kaufbar.
+- **Sofort in den Shop (nur Admins):** Dialog **Shopstatus setzen** → **Jetzt mit Shop synchronisieren**. Überträgt den gespeicherten Stand, ohne Felder zu ändern. Im Shop sichtbar nach etwa 10 Sekunden.
+<!-- end-feature -->
 
-- **Preise:** In der Referenz steht der **Basispreis** — der Preis eines neuwertigen Geräts. Jedes Exemplar kostet je nach Zustand einen Anteil davon (Zustand 5 = 100 %, 4 = 80 %, 3 = 60 %, 2 = 40 %, 1 oder unbekannt = 20 %, auf 5 Franken gerundet). Der Preis des Exemplars steht im Tab **Instanz**. Nur für Ausnahmen: unter **Instanz bearbeiten → Fixer Preis** einen eigenen Preis setzen (leer = wieder nach Zustand).
-- **Mietware:** Im Referenz-Formular den Schalter **Mietware** setzen — der Artikel bekommt im Shop den Tag „rental“ und bleibt trotzdem kaufbar.
-- **Sofort in den Shop (Admins):** Im Dialog **Shopstatus setzen** eines Artikels überträgt **Jetzt mit Shop synchronisieren** den gespeicherten Stand an den Shop, ohne Felder zu ändern (nach etwa 10 Sekunden sichtbar).
-
-Zum Verständnis von Artikelnummer, ItemUUID und Spezifikationen siehe die Hilfeseite [Artikel](/hilfe?doc=6_Artikel).
-
----
-
-## 6. Artikel und Behälter umlagern
-
-### Was macht Umlagern?
-
-Mit **Umlagern** hältst du fest, wo ein Artikel oder Behälter im Lager liegt:
-
-- **Artikel umlagern:** Der geöffnete Artikel wird dem gewählten Zielbehälter zugeordnet. Dabei übernimmt er dessen hinterlegten Standort. Hat der Zielbehälter noch keinen Standort, bleibt diese Angabe beim Artikel leer.
-- **Behälter umlagern:** Du ordnest den Behälter einem neuen Standort, zum Beispiel einem Regal, zu.
-
-> Lege den Artikel beziehungsweise Behälter auch tatsächlich an den gewählten Platz. Die Zuordnung im System und der physische Lagerort sollen übereinstimmen.
-
-### Artikel in einen vorhandenen Behälter verschieben
-
-1. Öffne den gewünschten Artikel und wechsle auf den Tab **Vorrat**.
-2. Klick auf **Umlagern**. Der Dialog **Artikel umlagern** öffnet sich.
-3. Gib unter **Ziel wählen** die **Box-ID** oder den **Namen des Behälters** ein. Ab zwei Zeichen erscheinen Suchvorschläge.
-4. Wähle den passenden Treffer aus der Liste. Die Vorschläge zeigen die Box-ID und, falls vorhanden, den Behälternamen. Nach der Auswahl steht die Box-ID im Eingabefeld.
-5. Prüfe die Ziel-ID und klick auf **Verschieben**.
-6. Nach erfolgreichem Verschieben schließt sich der Dialog. Prüfe die neue Zuordnung unter **Behälter** im Tab **Vorrat**.
-
-**Beispiel:** Dein Zielbehälter heißt **Kabelkiste** und hat die ID `B-281026-0001`. Suche nach **Kabelkiste**, wähle den Treffer mit der passenden ID und klick auf **Verschieben**.
-
-**Alternativ per QR-Code:** Klick neben dem Suchfeld auf **Zielbehälter scannen** und scanne das Etikett des Zielbehälters. Die Box-ID wird übernommen. Prüfe sie und bestätige mit **Verschieben**. Du kannst eine bekannte Box-ID auch direkt vollständig eingeben.
-
-> Bei einer Suche nach dem Namen musst du einen Treffer auswählen. Der Name allein im Eingabefeld wählt noch keinen Zielbehälter aus.
-
-### Artikel in einen neuen Behälter verschieben
-
-1. Öffne den Artikel → Tab **Vorrat** → **Umlagern**.
-2. Klick auf **In neuen Behälter verschieben**. Das System erstellt einen Behälter mit einer neuen Box-ID und ordnet den Artikel diesem Behälter zu.
-3. Prüfe nach dem Schließen des Dialogs die neue Zuordnung unter **Behälter** und öffne den verlinkten Behälter.
-4. Drucke dort bei Bedarf das Behälteretikett und ordne den neuen Behälter über **Umlagern** seinem Standort zu.
-
-### Behälter auf ein anderes Regal verschieben
-
-1. Öffne den Behälter und klick auf **Umlagern**.
-2. Wähle im Feld **Neuer Ort** den gewünschten Standort aus.
-3. Klick auf **Verschieben** und prüfe anschließend den angezeigten Standort des Behälters.
-
-**Alternativ per QR-Code:** Wähle **Standort scannen** und scanne das Etikett des Zielregals. Falls der Dialog anschließend noch geöffnet ist, bestätige mit **Verschieben**.
-
-### Ergebnis prüfen und Fehler korrigieren
-
-Prüfe nach jeder Bewegung die Zuordnung beim Artikel beziehungsweise den Standort beim Behälter. Die Bewegung wird mit deinem Benutzernamen in den Aktivitäten protokolliert. Falls noch kein Benutzername gesetzt ist, wirst du vor dem Verschieben danach gefragt.
-
-**Falsches Ziel gewählt?** Öffne **Umlagern** erneut und verschiebe den Artikel oder Behälter an den richtigen Ort. Bei einer Fehlermeldung prüfe zuerst die Ziel-ID und ob der Zielbehälter bereits existiert.
-
-**Viele Artikel auf einmal einscannen (Handy):** Behälter öffnen → **Einscannen** → **▶ Scannen starten**. Scanne einen Artikel nach dem anderen; nach jedem Scan kommst du automatisch zurück. Liegt ein Artikel laut System woanders, fragt das System **Verschieben** oder **Überspringen**. Mit **Fertig** beendest du die Runde. Artikel, die laut System im Behälter sein sollten, aber nicht gescannt wurden, werden dann aufgelistet — wähle für jeden **Bestand entfernen** (Artikel ist weg) oder **Standort entfernen** (Artikel ist woanders).
-
-**Behälter auf ein Regal einlagern (Handy):** Regal öffnen → **Behälter einlagern** und die Behälter nacheinander scannen — gleicher Ablauf.
-
-**Regalfarbe:** Im Tab **Notizen** eines Regals kannst du unter **Regal-Details** eine Farbe wählen. Sie erscheint als Markierung in der Behälterliste, damit man Regale schneller wiederfindet.
+Erklärung von Artikelnummer, ItemUUID und Spezifikationen: [Artikel](/hilfe?doc=6_Artikel).
 
 ---
 
-## 7. Fundsachen
+## Artikel und Behälter umlagern
 
-Im Lager gibt es Kisten und lose Sachen ohne QR-Code, die noch nicht erfasst sind. Damit sie nicht vergessen gehen, kannst du sie als **Fundsache** notieren, ohne sie gleich zu erfassen:
+**Umlagern** speichert, wo ein Artikel oder Behälter liegt:
 
-1. Geschenk-Symbol in der Navigation → **was gefunden?** (oder im Regal den Tab **Fundsachen** öffnen).
-2. Regal, kurze Beschreibung (z. B. „ein paar alte Laptops und Modems") und ungefähre Anzahl eintragen.
-3. Sobald die Sachen erfasst oder weggeräumt sind, den Fund **löschen**.
+- **Artikel umlagern:** Der Artikel wird einem Behälter zugeordnet und übernimmt dessen Standort. Hat der Behälter keinen Standort, bleibt der Standort des Artikels leer.
+- **Behälter umlagern:** Der Behälter wird einem Standort zugeordnet, z. B. einem Regal.
+
+> Lege den Artikel oder Behälter auch wirklich an den gewählten Platz. Sonst stimmen System und Lager nicht überein.
+
+### Artikel in einen vorhandenen Behälter
+
+1. Artikel öffnen → Tab **Vorrat** → **Umlagern**.
+2. Unter **Ziel wählen** Box-ID oder Behältername eingeben. Ab zwei Zeichen erscheinen Vorschläge.
+3. Vorschlag auswählen. Die Box-ID steht danach im Feld.
+4. Box-ID prüfen → **Verschieben**.
+5. Der Dialog schliesst sich. Im Tab **Vorrat** steht unter **Behälter** die neue Box-ID.
+
+**Beispiel:** Der Behälter **Kabelkiste** hat die ID `B-281026-0001`. Suche nach **Kabelkiste**, wähle den Treffer mit dieser ID und klick auf **Verschieben**.
+
+> Wenn du nach dem Namen suchst, musst du einen Vorschlag auswählen. Nur den Namen einzutippen reicht nicht.
+
+Du kannst auch eine vollständige Box-ID direkt eingeben.
+<!-- if-feature: qr-scan -->
+Oder: **Zielbehälter scannen** neben dem Suchfeld und das Label des Behälters scannen. Box-ID prüfen → **Verschieben**.
+<!-- end-feature -->
+
+### Artikel in einen neuen Behälter
+
+1. Artikel öffnen → Tab **Vorrat** → **Umlagern**.
+2. **In neuen Behälter verschieben** klicken. Das System legt einen Behälter mit neuer Box-ID an und ordnet den Artikel zu.
+3. Unter **Behälter** den neuen Behälter öffnen.
+4. Dort das Label drucken und den Behälter über **Umlagern** einem Standort zuordnen.
+
+### Behälter auf ein anderes Regal
+
+1. Behälter öffnen → **Umlagern**.
+2. Unter **Neuer Ort** den Standort wählen.
+3. **Verschieben** klicken und den angezeigten Standort prüfen.
+
+<!-- if-feature: qr-scan -->
+Oder: **Standort scannen** und das Label des Regals scannen. Ist der Dialog danach noch offen, mit **Verschieben** bestätigen.
+<!-- end-feature -->
+
+### Fehler korrigieren
+
+Falsches Ziel gewählt: **Umlagern** erneut öffnen und an den richtigen Ort verschieben. Bei einer Fehlermeldung prüfen, ob die Ziel-ID stimmt und der Behälter existiert.
+
+Jede Umlagerung wird mit deinem Benutzernamen gespeichert. Ist noch keiner gesetzt, fragt das System vor dem Verschieben danach.
+
+<!-- if-feature: qr-scan -->
+### Mehrere Artikel scannen (Handy)
+
+1. Behälter öffnen → **Einscannen** → **▶ Scannen starten**.
+2. Artikel nacheinander scannen. Nach jedem Scan kehrt die Ansicht zurück.
+3. Liegt ein Artikel laut System woanders, wähle **Verschieben** oder **Überspringen**.
+4. **Fertig** beendet den Scan.
+5. Das System listet Artikel, die im Behälter sein sollten, aber nicht gescannt wurden. Wähle pro Artikel:
+   - **Bestand entfernen**: Artikel ist nicht mehr vorhanden.
+   - **Standort entfernen**: Artikel liegt woanders.
+
+**Behälter auf ein Regal scannen:** Regal öffnen → **Behälter einlagern** → Behälter nacheinander scannen. Ablauf wie oben.
+<!-- end-feature -->
+
+<!-- if-feature: box-notes -->
+**Regalfarbe:** Regal öffnen → Tab **Notizen** → **Regal-Details** → Farbe wählen. Die Farbe erscheint in der Behälterliste beim Regal.
+<!-- end-feature -->
 
 ---
 
-## 8. Etiketten drucken
+<!-- if-feature: stubs -->
+## Fundsachen
 
-Jeder Artikel und jeder Behälter hat ein QR-Etikett.
-
-- **Artikeletikett:** Artikel öffnen → Tab **Vorrat** → **Etikett drucken**.
-- **Behälteretikett:** Behälter öffnen → **Etikett drucken**.
-
-Bei Problemen → siehe **Fehlerbehebung** oder wende dich an die Person, die den Drucker verwaltet.
+Sachen ohne QR-Code, die noch nicht erfasst sind, notierst du als **Fundsache**: Geschenk-Symbol → **was gefunden?** → Regal-ID, Beschreibung und ungefähre Anzahl → **Speichern**. Details: [Fundsachen](/hilfe?doc=8_Fundsachen).
 
 ---
+<!-- end-feature -->
 
-## 9. KI-Unterstützung
+<!-- if-feature: printing -->
+## Labels drucken
 
-Die KI sucht im Internet nach dem Gerät und füllt Beschreibung, Kurztext, Spezifikationen, Masse, Gewicht und einen Preisvorschlag aus.
+- **Artikel:** Artikel öffnen → Tab **Vorrat** → **Label drucken** → Grösse wählen: **Gross**, **Klein** oder **A4 Produktblatt**.
+- **Behälter:** Behälter öffnen → **Label drucken**.
 
-1. Artikel öffnen → Tab **KI** → **Starten**. Der Lauf kommt in eine Warteschlange und startet, sobald ein Platz frei ist.
-2. Ist die KI fertig, erscheint **Review**. Klick darauf — das Review führt dich Schritt für Schritt durch:
-   **Artikelbeschreibung → Kurztext → Spezifikationen → Dimensionen → Preis**.
-   In jedem Schritt kannst du die Werte **direkt korrigieren** und im Feld **Feedback** notieren, was falsch war. Mit **Zurück** / **Weiter** blätterst du.
-3. Am Ende siehst du eine Zusammenfassung und entscheidest: **Freigeben** oder **Ablehnen**.
-   - **Freigeben:** Deine Korrekturen werden gespeichert. Danach fragt das System **Artikel in den Shop stellen?**
-   - **Ablehnen:** Deine Korrekturen und dein Feedback gehen an den nächsten KI-Lauf — die KI lernt daraus. Je genauer das Feedback, desto besser der nächste Versuch.
+Nach dem Drucken steht **Gesendet an Drucker**. Konnte nicht gedruckt werden, erscheint **Label als PDF öffnen**: Damit kannst du das Label über einen anderen Drucker ausdrucken. Weitere Hilfe: [Fehlerbehebung](/hilfe?doc=2_Fehlerbehebung).
+
+---
+<!-- end-feature -->
+
+<!-- if-feature: agentic -->
+## KI-Lauf
+
+Ein KI-Lauf sucht im Web nach Informationen zum Gerät und schlägt Werte vor für: Beschreibung, Kurztext, Spezifikationen, Masse, Gewicht und Preis. Die Vorschläge werden erst nach deiner Prüfung übernommen.
+
+1. Artikel öffnen → Tab **KI** → **Starten**. Der Lauf wartet in der Warteschlange, bis ein Platz frei ist.
+2. Ist der Lauf fertig, erscheint **Review**. Das Review zeigt nacheinander: **Artikelbeschreibung → Kurztext → Spezifikationen → Dimensionen → Preis**. In jedem Schritt kannst du Werte korrigieren und im Feld **Feedback** notieren, was falsch war. **Zurück** / **Weiter** wechselt den Schritt.
+3. Am Ende wählst du **Freigeben** oder **Ablehnen**.
+
+| Entscheidung | Was passiert |
+|---|---|
+| **Freigeben** | Die Werte mit deinen Korrekturen werden gespeichert. |
+| **Ablehnen** | Der Artikel wird für einen neuen Lauf vorgemerkt. Dein Feedback wird diesem Lauf als Anweisung mitgegeben. |
+
+<!-- if-feature: shopware -->
+Nach **Freigeben** fragt das System **Artikel in den Shop stellen?**
+<!-- end-feature -->
+
+Konkretes Feedback („Prozessor steht auf dem Typenschild: i5-8250U“) hilft dem nächsten Lauf mehr als allgemeines („falsch“). Wann der neue Lauf startet, steht im [KI-Cockpit](/hilfe?doc=10_KI-Cockpit).
 
 Weitere Knöpfe im Tab **KI**:
 
-| Knopf | Wofür |
+| Knopf | Funktion |
 |---|---|
 | **Wiederholen** | Lauf neu starten, z. B. nach einem Fehler |
-| **KI Überarbeitung** | Nur einzelne Felder neu machen lassen, mit einer Anweisung (z. B. „ins Deutsche übersetzen") — alles andere bleibt |
+| **KI Überarbeitung** | Nur ausgewählte Felder neu erstellen, mit einer Anweisung (z. B. „ins Deutsche übersetzen“). Die übrigen Felder bleiben. |
 | **Abbrechen** | Laufenden Lauf stoppen |
-| **Abschliessen** | Lauf als erledigt markieren (Freigegeben) |
+| **Abschliessen** | Lauf ohne Review als freigegeben markieren |
 
-Unter den Knöpfen siehst du die **gespeicherten Suchergebnisse** (welche Webseiten die KI benutzt hat — schlechte kannst du entfernen) und den **Verlauf**: frühere Versionen des Artikels mit den Unterschieden zur aktuellen. Hat ein Lauf etwas verschlechtert, kannst du eine frühere Version **wiederherstellen**.
+Darunter:
 
-Nach der Freigabe ist der Artikel bereit für den ERP-Export.
+- **Gespeicherte Suchergebnisse:** Die Webseiten, die der Lauf verwendet hat. Unpassende Quellen kannst du entfernen.
+- **Verlauf:** Frühere Versionen des Artikels mit den Unterschieden zur aktuellen. Eine frühere Version lässt sich **wiederherstellen**.
 
 ---
+<!-- end-feature -->
 
-## 10. ERP-Synchronisation
+<!-- if-feature: erp-sync -->
+## ERP-Synchronisation
 
-Den ERP-Sync bitte nicht eigenständig ausführen — erst mit dem Admin absprechen. Wenn du zur Synchronisation berechtigt bist:
+Sprich die ERP-Synchronisation vorher mit einer Admin-Person ab.
 
-1. In der Artikelliste einen oder mehrere Artikel per Checkbox auswählen.
-2. In der Aktionsleiste auf **ERP-Sync** klicken.
+1. In der Artikelliste Artikel per Checkbox auswählen.
+2. In der Aktionsleiste **Kivi Sync 🥝** klicken.
 3. Dialog bestätigen.
 
 ---
+<!-- end-feature -->
 
-## 11. Abläufe im Überblick
+## Typische Abläufe
 
-### Neues Gerät ohne Artikelnummer
+### Neues Gerät, Artikelnummer noch nicht im System
 
-Ein Gerät kommt rein, das noch nicht im System ist:
-
-1. **Erfassen:** Klick auf **+**, Artikelnummer eingeben (z. B. die aufgedruckte Seriennummer oder eine interne Nummer), Kategorie und Einheit wählen.
-2. **Qualität bewerten:** Direkt im nächsten Schritt oder später über Tab **Vorrat** → **Qualität bewerten**. Die Antworten bestimmen Qualitätsstufe und Spezifikationen.
-3. **KI läuft gleichzeitig:** Während du bewertest, kann die KI bereits im Hintergrund starten. Im Tab **KI** siehst du den Fortschritt.
-4. **Review:** Wenn die KI fertig ist, erscheint **Review**. Schritte durchgehen, Fehler direkt korrigieren, am Ende **Freigeben** (siehe Abschnitt 9).
-5. **Alle Infos vollständig?** Im Tab **Referenz** prüfen, ob Spezifikationen und Preis eingetragen sind. Fehlende Felder ergänzen.
+1. **Erfassen:** **+** → Artikelnummer (z. B. aufgedruckte Nummer oder interne Nummer), Kategorie und Einheit.
+2. **Qualität bewerten:** direkt beim Anlegen oder später über Tab **Vorrat** → **Jetzt bewerten** (bzw. **Neu bewerten**). Die Antworten ergeben Qualitätsstufe und einen Teil der Spezifikationen.
+<!-- if-feature: agentic -->
+3. **KI-Lauf:** kann schon während der Bewertung starten. Status im Tab **KI**.
+4. **Review:** Werte prüfen, korrigieren, **Freigeben** (siehe **KI-Lauf**).
+<!-- end-feature -->
+5. **Vollständigkeit prüfen:** Tab **Referenz** → Spezifikationen und Preis vorhanden? Fehlendes ergänzen.
+<!-- if-feature: shopware -->
 6. **Shop:** Beim Freigeben **Artikel in den Shop stellen?** bestätigen, wenn er verkauft werden soll.
-7. **Einlagern:** Artikel in den richtigen Behälter legen → Tab **Vorrat** → **Umlagern**, Zielbehälter per Box-ID oder Name suchen und auswählen oder den QR-Code scannen → **Verschieben**. Details findest du in Abschnitt 6.
-
----
+<!-- end-feature -->
+7. **Einlagern:** Artikel in den Behälter legen → Tab **Vorrat** → **Umlagern** → Behälter wählen → **Verschieben** (siehe **Artikel und Behälter umlagern**).
 
 ### Gerät mit bekannter Artikelnummer
 
-Wenn das Gerät eine bekannte Artikelnummer hat, die bereits im System existiert:
-
-1. Klick auf **+**.
-2. Tippe die Artikelnummer ins Feld **Artikelbeschreibung** und drück Enter.
-3. Das System findet die vorhandene Referenz und befüllt Kategorie, Unterkategorie und Beschreibung automatisch.
-4. Nur noch Einheit bestätigen, Qualitätsprüfung ausfüllen und speichern.
+1. **+** klicken.
+2. Artikelnummer ins Feld **Artikelbeschreibung** eingeben → **Enter**.
+3. Das System findet die Referenz und füllt Kategorie, Unterkategorie und Beschreibung aus.
+4. Einheit bestätigen, Qualitätsprüfung ausfüllen, speichern.
 
 ---
 
-## 12. Hilfe und Support
+## Weitere Hilfe
 
-Bei Fragen schau hier in der Hilfe nach — alle Themen findest du in der Seitenleiste.
-
-Für häufige Probleme (Drucker, Bilder, WebDAV, versehentliche Fehler) → **Fehlerbehebung**.
-
-Wenn du etwas nicht lösen kannst: Screenshot machen, Artikelnummer notieren, Systemadministration kontaktieren.
+- Alle Hilfeseiten stehen in der Seitenleiste links.
+- Probleme mit Drucker, Bildern, Speicher oder falschen Eingaben: [Fehlerbehebung](/hilfe?doc=2_Fehlerbehebung).
+- Nicht gelöst: Screenshot machen, Artikelnummer notieren, Systemadministration kontaktieren.

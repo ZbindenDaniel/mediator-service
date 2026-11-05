@@ -20,6 +20,7 @@ Domain service utilities — the shared logic layer between action handlers and 
 - `alt-doc-resolver.ts` — resolves alternative external-document directory paths (ALT_DOC_DIRS_FILE)
 - `path-guard.ts` — prevents path traversal in file serving
 - `features.ts` — deployment feature flags: parses `FEATURES`/`FEATURES_FILE` (fail-fast on typos), `isFeatureEnabled()` for the action gate and background jobs
+- `userDocs.ts` — feature gating for `docs/user/*.md`: page/section markers, server-side stripping, numeric sort
 - `identity.ts` — resolves forward-auth headers into `{ username, groups, tenant, role }`
 - `ownership.ts` — tenancy rules: `owner = TenantId ?? defaultTenant`, `canWrite`/`canCreate`, unrestricted for no-login requests + platform admins + background jobs; request context (`runWithIdentity`) for the DB safety net; `canSeePrivate` for reads
 - `redaction.ts` — applies the read rule to row shapes: another org's item location → owner name, its boxes/stubs filtered out, person fields cleared; no-op when unrestricted
