@@ -140,6 +140,7 @@ export interface ShelfLabelPayload {
   categoryLabel?: string | null;
   location?: string | null;
   floor?: string | null;
+  color?: string | null;
 }
 
 export interface ShelfLabelOptions {

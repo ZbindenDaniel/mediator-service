@@ -233,7 +233,8 @@ function buildShelfLabelPayload(box: Box): ShelfLabelPayload {
     category: shelfCategory.label ?? null,
     categoryLabel: shelfCategory.label ?? null,
     location: shelfSegments?.location ?? null,
-    floor: shelfSegments?.floor ?? null
+    floor: shelfSegments?.floor ?? null,
+    color: box?.Color ?? null
   };
 }
 

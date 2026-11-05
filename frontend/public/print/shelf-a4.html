@@ -63,6 +63,14 @@
       color: #1f2937;
     }
 
+    .color {
+      position: fixed;
+      width: 96px;
+      height: 96px;
+      justify-self: end;
+      background-color: grey;
+    }
+
     .qr {
       flex: 1;
       display: flex;
@@ -113,6 +121,7 @@
     <div class="meta">
       <div class="labelText" id="labelText">labeltext</div>
       <div class="category" id="category">Kategorie</div>
+      <div class="color" id="color"></div>
     </div>
     <div class="qr">
       <img id="qrImage" alt="QR-Code" href="testQR.png" />
@@ -129,6 +138,7 @@
       const qrCanvas = document.getElementById('qrCanvas');
       const shelfIdEl = document.getElementById('shelfId');
       const categoryEl = document.getElementById('category');
+      const colorEl = document.getElementById('color');
       const labelTextEl = document.getElementById('labelText');
       const errorEl = document.getElementById('error');
 
@@ -175,9 +185,11 @@
           const shelfId = payload.shelfId || payload.id || '';
           const label = payload.labelText || payload.label || '';
           const notes = payload.notes || payload.description || '';
+          const color = payload.color || '';
         
           if (labelTextEl && label) labelTextEl.textContent = `${label}`;
           if (categoryEl && notes) categoryEl.textContent = `${notes}`;
+          if (colorEl) colorEl.style.backgroundColor = `${color}`;
           if (shelfIdEl && shelfId) shelfIdEl.textContent = `${shelfId}`;
           if (printLabelEl) printLabelEl.hidden = false;
 
