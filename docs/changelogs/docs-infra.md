@@ -4,6 +4,10 @@ Covers: documentation updates, CLAUDE.md/OVERVIEW.md changes, environment config
 
 ---
 
+## 1077. ✅ Merged Gitea `main` into `main` again (Iyed's Sass build fix)
+**Why:** `git push gitea main` was rejected: Gitea had one commit (`85415ab4`, ui #1022) that `main` lacked, while `main` was 87 commits ahead. Same approach as #1021: one real merge, because a rebase would rewrite published `origin/main` and a force push would drop Iyed's commit. Both sides had fixed the same undefined `$overview-color`; kept Iyed's `var(--c-overview)` over `var(--acc)` because it is the direct successor of the old variable and matches the other help-page accents.
+**Deferred:** Changelog number 1022 now exists in `ui.md`, `agentic.md` and this file; left as is, as with 962–966 in #1021, since each is unique within its topic file.
+
 ## 1031. ✅ Plan refinement: slotted components (RAM/disk/battery) are ASSEMBLY, not flat instance-specs
 **Why:** Operator realized a RAM slot that's filled-or-not is best modelled as an **assembly part** — and verified it already is: `contracts/assembly/201.json` (laptops) + `102.json` (PCs) define a `ram` part (`multipleAllowed`, `targetSubcategory` 603 = RAM module), filled per unit via `item_relations` `Zerlegt_aus`/`SlotKey` and already scored by the condition quality-score. So the data model has **three schema homes**, not two: reference **capability** contract (what the model supports), **assembly** contract (the slots/structure, filled per unit), and the `scope:'instance'` field (L7) for **non-slotted** measured values only (OS, serial, battery wear) or a slot's `allowSpecOnly` answer. Installed RAM/disk are **slot fill-state**, which narrows what L7's scope field must carry. Recorded in `PLANNING_agentic_information_model.md` §3/§6 and the instance-flow §17 scope decision.
 **Deferred:** No code — plan refinement. Deriving an advertised "installed RAM" figure from slot fill-state (sum of fitted modules) is part of the instance arm (L7), not done.
