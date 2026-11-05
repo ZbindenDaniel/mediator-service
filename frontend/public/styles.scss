@@ -4630,7 +4630,7 @@ button:focus {
     blockquote {
         margin: 16px 0;
         padding: 14px 16px;
-        border-left: 4px solid var(--info);
+        border-left: 4px solid var(--info); // pairs with --info-bg below (main's --c-overview fix predates the note styling)
         border-radius: 0 10px 10px 0;
         // Was var(--surface2, #f5f5f5): the token doesn't exist, so the white fallback sat under
         // light text in dark mode. --info-bg is themed and marks the block as a note.
