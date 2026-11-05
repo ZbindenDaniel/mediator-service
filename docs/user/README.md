@@ -23,7 +23,12 @@ Pages and sections follow the deployment's feature flags ([`docs/detailed/featur
 - Unknown keys count as off; `backend/__tests__/user-docs.test.ts` fails on typos and unbalanced markers.
 
 ## Rules
-- Write in informal German ("du"), name UI labels exactly as the UI shows them (in **bold**).
+- Write in informal German ("du"), name UI labels exactly as the UI shows them (in **bold**). Swiss spelling: `ss`, not `ß` (except inside a quoted UI label).
+- **Information first, plain words.** Say what a thing is, when to use it, the steps, and the result. Short sentences; one fact per sentence; tables for "field → meaning".
+- **No filler or mood:** no "Willkommen!", "Keine Panik", "praktisch", "blitzschnell", "gratuliere", jokes or rhetorical questions. No em-dash asides — use a period or colon.
+- **Don't anthropomorphise the AI.** Not "die KI lernt / denkt / weiss", but what happens: "Das Feedback wird dem nächsten Lauf als Anweisung mitgegeben." Call it a **KI-Lauf**, not "die KI".
+- Explain internal terms once (e.g. Self-Heal, Queue, veraltet) in a short "Begriffe" table instead of using them unexplained.
+- Check every label and number against the component before writing it down.
 - Don't number `##` sections on pages with gated sections, and refer to other sections by name — a hidden section would leave a gap ("Abschnitt 7" pointing to nothing).
 - Link other pages as `[Titel](/hilfe?doc=N_Name)`; if the target page is gated, gate the link too.
 

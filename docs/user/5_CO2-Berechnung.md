@@ -1,13 +1,13 @@
 # CO₂-Einsparung: Wie wird gerechnet?
 <!-- feature: statistics -->
 
-Gebrauchte IT-Geräte zu kaufen statt neue zu produzieren spart erheblich CO₂. Diese Seite erklärt, wie das System den Einsparungswert für jeden Artikel schätzt.
+Diese Seite erklärt, wie das System schätzt, wie viel CO₂ ein gebrauchtes Gerät gegenüber einem Neugerät einspart.
 
 ---
 
-## Warum spart Secondhand-IT CO₂?
+## Grundlage
 
-Über 70–80 % des CO₂-Fußabdrucks eines Geräts (Laptop, PC, Server usw.) entsteht bei der **Herstellung** — nicht im Betrieb. Wenn ein funktionsfähiges Gerät weiterverwendet wird, muss kein neues produziert werden. Damit entfällt der größte Teil des Lebenszyklus-CO₂.
+Bei IT-Geräten (Laptop, PC, Server usw.) entstehen etwa 70–80 % der CO₂-Emissionen bei der **Herstellung**, nicht im Betrieb. Wird ein Gerät weiterverwendet, muss kein neues hergestellt werden. Diese Herstellungsemissionen werden eingespart.
 
 ---
 
@@ -19,10 +19,10 @@ CO₂_gespart = E_neu × R_wiederverw × L_Faktor − O_aufarbeit
 
 | Variable | Bedeutung |
 |---|---|
-| **E_neu** | CO₂-Ausstoß bei Herstellung eines neuen Geräts gleicher Kategorie (kg CO₂e) |
-| **R_wiederverw** | Faktor für die Nutzungseffizienz bei Wiederverwendung (0,85 nach ADEME) |
-| **L_Faktor** | Anteil der typischen Nutzungsdauer, die noch verbleibt (0–1) |
-| **O_aufarbeit** | CO₂ für Aufarbeitung / Reinigung / Test je nach Zustand (5–20 kg) |
+| **E_neu** | CO₂-Ausstoss bei Herstellung eines neuen Geräts gleicher Kategorie (kg CO₂e) |
+| **R_wiederverw** | Anteil, der bei Wiederverwendung tatsächlich angerechnet wird (0,85 nach ADEME) |
+| **L_Faktor** | Anteil der typischen Nutzungsdauer, der noch übrig ist (0–1) |
+| **O_aufarbeit** | CO₂ für Aufarbeitung, Reinigung und Test, je nach Zustand (5–20 kg) |
 
 ### L_Faktor im Detail
 
@@ -31,7 +31,7 @@ verbleibende_Jahre = max(0, Gesamtlebensdauer − Gerätealter)
 L_Faktor           = min(1, verbleibende_Jahre / typische_Neulebensdauer)
 ```
 
-Das Gerätealter ergibt sich aus dem Erfassungsdatum. Fehlt dieses, wird ein Standardwert von 4 Jahren angesetzt.
+Das Gerätealter wird aus dem Erfassungsdatum berechnet. Fehlt es, rechnet das System mit 4 Jahren.
 
 ### Aufarbeitungsaufwand nach Qualität
 
@@ -55,13 +55,13 @@ Das Gerätealter ergibt sich aus dem Erfassungsdatum. Fehlt dieses, wird ein Sta
 
 **CO₂_gespart = 180 × 0,85 × 1,0 − 10 = 143 kg CO₂e**
 
-Das entspricht etwa **430 km Autofahrt** (Pkw mit ~33 g CO₂/km Strecke).
+Das entspricht etwa **1000 km Autofahrt** (Benzin-Pkw mit rund 140 g CO₂/km).
 
 ---
 
 ## Unterstützte Gerätekategorien
 
-Die Berechnung ist für folgende Kategorien hinterlegt:
+Die Berechnung ist für diese Kategorien hinterlegt:
 
 Laptops, Netbooks, Tablets, Komplettsysteme, Standard-PCs, Barebones/Mini-PCs, MACs, Workstations, Thin-Clients, Server, Drucker, Multifunktionsgeräte, Flachbildschirme, Grafikkarten, Netzwerkkarten, Switches/Hubs, Router/DSL.
 
@@ -71,16 +71,16 @@ Für Kabel, Verbrauchsmaterialien, Kleinzubehör und nicht zugeordnete Artikel w
 
 ## Was das System aktuell anzeigt
 
-Im System siehst du pro Artikel kein genaues CO₂-Gewicht, sondern eine vereinfachte Einstufung: **Irrelevant**, **Niedrig**, **Mittel** oder **Hoch**. Die Einstufung basiert auf einer verkürzten Formel:
+Pro Artikel zeigt das System keinen kg-Wert, sondern eine Einstufung: **Irrelevant**, **Niedrig**, **Mittel** oder **Hoch**. Sie wird mit einer vereinfachten Formel berechnet:
 
 ```
 Punkte = E_neu × (Qualität / 5)
 ```
 
-Wobei `Qualität` die Qualitätsstufe 1–5 aus der Bewertung ist. Je besser die Qualität des Geräts, desto höher das eingeschätzte CO₂-Einsparpotenzial. Die genaue Rechnung (ADEME-Formel mit Lebensdauer, Aufarbeitungsaufwand usw.) steckt im Hintergrund; die Einstufung soll vor allem eine schnelle Orientierung geben — kein zertifizierter Nachweis.
+`Qualität` ist die Qualitätsstufe 1–5. Bessere Qualität ergibt eine höhere Einstufung. Lebensdauer und Aufarbeitungsaufwand aus der ADEME-Formel fliessen in die Einstufung nicht ein.
 
 ---
 
-## Wichtiger Hinweis
+## Genauigkeit
 
-Die Werte sind **Schätzungen** auf Basis von Gerätekategorie-Medianen ([ADEME 2022](https://data.europa.eu/data/datasets/5db1a0f46f444104866d1b43?locale=en), Herstellerdaten). Die tatsächliche Einsparung kann ±20–50 % abweichen, je nach Modell, Betriebsland und Nutzungsweise. Die Zahlen dienen zur **internen Orientierung** und sind kein zertifizierter CO₂-Nachweis.
+Die Werte sind **Schätzungen** auf Basis von Medianwerten pro Gerätekategorie ([ADEME 2022](https://data.europa.eu/data/datasets/5db1a0f46f444104866d1b43?locale=en), Herstellerdaten). Die tatsächliche Einsparung kann je nach Modell, Land und Nutzung um 20–50 % abweichen. Die Zahlen sind für die **interne Orientierung** gedacht und kein zertifizierter CO₂-Nachweis.

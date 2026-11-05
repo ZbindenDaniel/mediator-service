@@ -1,6 +1,6 @@
 # Artikel
 
-Diese Seite erklärt die Felder und Abläufe in der Artikeldetailansicht: gemeinsame Referenzdaten, das einzelne Exemplar, Qualität, Spezifikationen und Komponenten.
+Felder und Abläufe in der Artikelansicht: gemeinsame Referenzdaten, einzelnes Exemplar, Qualität, Spezifikationen und Komponenten.
 
 ## 1. Artikelnummer und einzelnes Exemplar
 
@@ -11,14 +11,14 @@ Ein Artikel hat zwei Datenebenen:
 | **Referenz** | **Artikelnummer**, zum Beispiel `000001` | Gemeinsame Daten wie Beschreibung, Hersteller, Kategorie, Referenz-Spezifikationen und Verkaufspreis |
 | **Instanz** – das einzelne Exemplar | **ItemUUID**, zum Beispiel `I-000001-0001` | Behälter, Seriennummer, MAC-Adresse, Qualitätsbewertung, Bestand und eigene Spezifikationen |
 
-Mehrere Exemplare können dieselbe Artikelnummer haben. Ihre ItemUUIDs unterscheiden sie voneinander. Eine Änderung an den Referenzdaten betrifft die gemeinsame Referenz dieser Exemplare. Angaben zum konkreten Gerät bearbeitest du im Tab **Vorrat**.
+Mehrere Exemplare können dieselbe Artikelnummer haben; die ItemUUID unterscheidet sie. Änderungen an der Referenz gelten für alle Exemplare mit dieser Artikelnummer. Angaben zum einzelnen Gerät bearbeitest du im Tab **Vorrat**.
 
 ## 2. Wo findest du welche Informationen?
 
 | Tab | Inhalt |
 |-----|--------|
 | **Vorrat** | Daten des geöffneten Exemplars, eigene Spezifikationen, Bestandsaktionen, Umlagern und die Vorratstabelle |
-| **Referenz** | Gemeinsame Beschreibungen, Kategorien, Referenz-Spezifikationen, Maße, Gewicht und Verkaufspreis; Aktionen **Bearbeiten** und **Shopartikel** |
+| **Referenz** | Gemeinsame Beschreibungen, Kategorien, Referenz-Spezifikationen, Masse, Gewicht und Verkaufspreis; Aktionen **Bearbeiten** und **Shopartikel** |
 <!-- if-feature: agentic -->
 | **KI** | Status und Bedienung der KI-Anreicherung |
 <!-- end-feature -->
@@ -36,7 +36,7 @@ Mehrere Exemplare können dieselbe Artikelnummer haben. Ihre ItemUUIDs untersche
 | **Markierung** | Eigene Markierung und Notiz sowie angezeigte Kommentare zu diesem Artikel |
 <!-- end-feature -->
 
-> Im vereinfachten Modus sind **KI**, **Anhänge** und **Zubehör** ausgeblendet. Den Modus kannst du über die Benutzereinstellungen ändern, die sich per Klick auf deinen Namen im Header öffnen.
+> Im Einfachen Modus sind **KI**, **Anhänge** und **Zubehör** ausgeblendet. Ein- und ausschalten: oben rechts auf deinen Namen klicken.
 
 ## 3. Felder im Tab Vorrat
 
@@ -46,19 +46,19 @@ Die Karte **dieser Artikel** beschreibt das gerade geöffnete Exemplar.
 |------|-----------|
 | **ItemUUID** | Eindeutige Kennung dieses Exemplars |
 | **Behälter** | Zugeordnete Box-ID; über die angezeigte ID öffnest du den Behälter |
-| **Seriennummer** | Hinterlegte Seriennummer des Geräts |
-| **MAC-Adresse** | Hinterlegte MAC-Adresse des Geräts |
-| **Qualität** | Qualitätsstufe von 1 bis 5; **?** steht für einen fehlenden beziehungsweise unbekannten Wert |
+| **Seriennummer** | Seriennummer des Geräts |
+| **MAC-Adresse** | MAC-Adresse des Geräts |
+| **Qualität** | Qualitätsstufe 1 bis 5; **?** = noch nicht bewertet |
 <!-- if-feature: agentic -->
-| **Ki Status** | Zustand der KI-Verarbeitung. **Fehlgeschlagen** bezieht sich hier auf den KI-Vorgang. |
+| **Ki Status** | Status des KI-Laufs. **Fehlgeschlagen** heisst: der KI-Lauf ist fehlgeschlagen, nicht das Gerät. |
 <!-- end-feature -->
-| **EAN** | Produktkennung aus den gemeinsamen Referenzdaten, auch wenn sie hier im Vorrat angezeigt wird |
-| **Menge** | Hinterlegter Bestand bei Einheit **Menge**; diese Zeile erscheint für Mengenartikel |
-| **Erfasst am** | Erfassungszeitpunkt dieses Exemplars |
-| **Aktualisiert am** | Hinterlegter Aktualisierungszeitpunkt dieses Exemplars |
-| **Spezifikationen** | Zusätzliche Angaben zu diesem Exemplar, soweit vorhanden, etwa Verfärbungen, Kratzer oder eine erfasste RAM-Ausstattung |
+| **EAN** | Barcode-Nummer des Produkts. Gehört zur Referenz, wird aber hier angezeigt |
+| **Menge** | Bestand; nur bei Einheit **Menge** |
+| **Erfasst am** | Wann dieses Exemplar erfasst wurde |
+| **Aktualisiert am** | Letzte Änderung an diesem Exemplar |
+| **Spezifikationen** | Angaben nur zu diesem Exemplar, z. B. Verfärbungen, Kratzer, eingebauter RAM |
 
-Eine leere Angabe wird als Platzhalter dargestellt. Die darunterliegende Tabelle **Vorrat** zeigt Instanzen mit Lagerbestand und die Spalten **UUID**, **Qualität**, **Behälter**, **Standort**, **Aktualisiert** und **Erfasst**. Klick auf eine Zeile, um das jeweilige Exemplar zu öffnen. Instanzen ohne Lagerbestand werden in dieser Tabelle ausgeblendet.
+Darunter listet die Tabelle **Vorrat** alle Exemplare mit Lagerbestand (Spalten **UUID**, **Qualität**, **Behälter**, **Standort**, **Aktualisiert**, **Erfasst**). Klick auf eine Zeile öffnet das Exemplar. Exemplare ohne Bestand fehlen in dieser Tabelle.
 
 ### Seriennummer, MAC-Adresse oder eigene Spezifikationen ändern
 
@@ -67,7 +67,7 @@ Eine leere Angabe wird als Platzhalter dargestellt. Die darunterliegende Tabelle
 3. Im Bereich **Spezifikationen** bearbeitest du Feldnamen und Werte. Mit **+ Feld hinzufügen** ergänzt du eine Zeile; mit **✕** entfernst du sie.
 4. Klick auf **Speichern**.
 
-Gespeichert werden Spezifikationszeilen mit ausgefülltem Feldnamen und Wert. Entfernte oder geleerte Zeilen werden aus den Spezifikationen dieses Exemplars entfernt.
+Gespeichert werden nur Zeilen mit Feldname und Wert. Entfernte oder leere Zeilen werden gelöscht.
 
 ## 4. Felder im Tab Referenz
 
@@ -79,14 +79,14 @@ Gespeichert werden Spezifikationszeilen mit ausgefülltem Feldnamen und Wert. En
 | **Kategorie** | Bezeichnung der zugeordneten Unterkategorie A |
 | **Unterkategorie B** | Weitere Kategoriezuordnung, sofern vorhanden |
 | **Referenz-Spezifikationen** | Gemeinsame technische Merkmale; strukturierte Einträge erscheinen unter ihrem jeweiligen Feldnamen |
-| **Hersteller** | Hinterlegter Hersteller |
-| **Länge (mm)**, **Breite (mm)**, **Höhe (mm)** | Hinterlegte Abmessungen in Millimetern |
-| **Gewicht (kg)** | Hinterlegtes Gewicht in Kilogramm |
+| **Hersteller** | Hersteller |
+| **Länge (mm)**, **Breite (mm)**, **Höhe (mm)** | Abmessungen |
+| **Gewicht (kg)** | Gewicht |
 | **Einheit** | **Stk** für Stückartikel oder **Menge** für einen Mengenbestand |
-| **Verkaufspreis** | Hinterlegter Verkaufspreis |
-| **CO₂ Potenzial** | Berechnete Potenzialanzeige, wenn für den geöffneten Artikel eine Einstufung außer **Irrelevant** vorliegt |
+| **Verkaufspreis** | Basispreis eines neuwertigen Geräts; der Preis pro Exemplar steht im Tab **Vorrat** |
+| **CO₂ Potenzial** | Einstufung der CO₂-Einsparung; wird nur angezeigt, wenn sie nicht **Irrelevant** ist |
 
-Die Felder der Referenz stehen allen Exemplaren mit dieser Artikelnummer gemeinsam zur Verfügung. **EAN** wird ebenfalls an der Referenz gespeichert und über **Referenz → Bearbeiten** geändert; die Detailansicht zeigt sie im Tab **Vorrat**.
+Diese Felder gelten für alle Exemplare mit derselben Artikelnummer. Auch die **EAN** gehört zur Referenz: ändern über **Referenz → Bearbeiten**, angezeigt im Tab **Vorrat**.
 
 <!-- if-feature: shopware -->
 Die Anzeige **Shop/Veröffentlichung** und die Aktion **Shopartikel** gehören ebenfalls zum Tab **Referenz**.
@@ -110,11 +110,13 @@ Die Anzeige **Shop/Veröffentlichung** und die Aktion **Shopartikel** gehören e
 3. Die **Vorschau** zeigt die aus den aktuellen Antworten abgeleitete Stufe.
 4. Klick auf **Weiter →**, um die Bewertung zu speichern.
 
-Die Fragen können ausgelassen werden. Jede gewertete Antwort fließt mit ihrem Gewicht in einen Prozentwert ein: Eine einzelne schlechte Antwort zieht den Wert nach unten, bestimmt die Stufe aber nicht allein. Die Stufe ergibt sich aus dem sicher erreichten Wert: ab 95 % **5**, ab 85 % **4**, ab 60 % **3**, ab 40 % **2**, darunter **1**. Bleiben zu viele Fragen offen, ist die Spanne zu breit und es wird noch keine Stufe abgeleitet. Ein angezeigtes **?** bedeutet, dass noch kein bekannter Qualitätswert vorliegt.
+Fragen können ausgelassen werden. Jede beantwortete Frage fliesst gewichtet in einen Prozentwert ein. Eine einzelne schlechte Antwort senkt den Wert, bestimmt die Stufe aber nicht allein.
 
-**Ausnahme:** Bei schweren Mängeln greift ein K.-o.-Kriterium. Die Stufe wird dann gedeckelt, auch wenn alle anderen Antworten gut sind.
+Die Stufe richtet sich nach dem Mindestwert, der sicher erreicht ist: ab 95 % **5**, ab 85 % **4**, ab 60 % **3**, ab 40 % **2**, darunter **1**. Sind zu viele Fragen offen, ist die Spanne zu gross und es wird noch keine Stufe berechnet (Anzeige **?**).
 
-Antworten können außerdem Spezifikationen wie **Verfärbungen** und **Kratzer** für das einzelne Exemplar liefern. Die Qualitätsstufe und diese Merkmale werden deshalb getrennt angezeigt.
+**Ausnahme:** Bei schweren Mängeln (K.-o.-Kriterium) wird die Stufe nach oben begrenzt, auch wenn alle anderen Antworten gut sind.
+
+Manche Antworten erzeugen zusätzlich Spezifikationen des Exemplars, z. B. **Verfärbungen** oder **Kratzer**. Diese stehen getrennt von der Qualitätsstufe.
 
 ## 6. Wie funktionieren Spezifikationen?
 
@@ -129,7 +131,7 @@ Antworten können außerdem Spezifikationen wie **Verfärbungen** und **Kratzer*
 
 1. Öffne **Referenz → Bearbeiten**.
 2. Im Bereich **Spezifikationen** kannst du die vorhandenen Werte ändern.
-3. Bei strukturierten Daten ergänzt du über **Neuer Schlüssel** und **+** ein Merkmal und trägst anschließend seinen Wert ein. Mit **−** entfernst du einen Eintrag.
+3. Bei strukturierten Daten ergänzt du über **Neuer Schlüssel** und **+** ein Merkmal und trägst anschliessend seinen Wert ein. Mit **−** entfernst du einen Eintrag.
 4. Klick auf **Speichern**.
 
 Bei älteren, als Text gespeicherten Angaben zeigt das Formular stattdessen ein Textfeld. Beim Speichern können erwartete Merkmale aus der Kategorievorlage als leere Felder ergänzt werden. Ein leeres Feld enthält noch keinen bestätigten Wert.
@@ -150,12 +152,12 @@ Eine erneute Qualitätsbewertung kann die aus beantworteten Fragen abgeleiteten 
 
 Die allgemeinen Qualitätsfragen werden mit den verfügbaren Komponenten- und Kategoriefragen kombiniert. Daher sieht die Bewertung je nach Unterkategorie unterschiedlich aus. Komponenten erscheinen nur, wenn eine passende Komponentenvorlage vorhanden ist.
 
-Die Vorlage beschreibt, welche Angaben erwartet werden. Die tatsächliche Ausstattung und den Zustand des Geräts musst du anhand des Exemplars prüfen. Für die normale Bedienung musst du keine Contract-Dateien bearbeiten.
+Die Vorlage legt fest, welche Angaben erwartet werden. Ausstattung und Zustand prüfst du am Gerät selbst. Contract-Dateien musst du für die normale Arbeit nicht bearbeiten.
 
 ## 8. Einzelteile und Komponenten
 
 Geräte mit einer Komponentenvorlage nimmst du auf der Seite **Einzelteile** auseinander. Du öffnest sie im Tab **Vorrat** über **Einzelteile** oder im Tab **Zubehör** über **Einzelteile öffnen**. Links siehst du den Aufbau des Geräts, rechts die Bewertung des gewählten Teils. Dort hältst du fest, welche Teile vorhanden sind, bewertest sie einzeln und entnimmst sie.
 
-> **Entnehmen** bei einem Einzelteil legt es in einen Behälter. **Entnehmen** im Tab **Vorrat** eines Stückartikels bucht dagegen den geöffneten Artikel aus dem Bestand aus. Bei Mengenartikeln heißt die Bestandsaktion **Menge reduzieren**.
+> **Entnehmen** bei einem Einzelteil legt es in einen Behälter. **Entnehmen** im Tab **Vorrat** eines Stückartikels bucht dagegen den geöffneten Artikel aus dem Bestand aus. Bei Mengenartikeln heisst die Bestandsaktion **Menge reduzieren**.
 
 Den ganzen Ablauf erklärt [Ersatzteile erfassen](/hilfe?doc=4_Ersatzteile-erfassen). Das Umlagern findest du in [Erste Schritte](/hilfe?doc=1_Erste-Schritte) unter **Artikel und Behälter umlagern**.

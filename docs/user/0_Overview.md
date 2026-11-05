@@ -1,30 +1,30 @@
 # Übersicht
 
-Hier findest du die Anleitungen zum System. Fang mit **Erste Schritte** an, wenn du neu bist.
+Anleitungen zum System. Neu hier: Beginne mit **Erste Schritte**.
 
-Die Hilfe zeigt nur, was in diesem System eingeschaltet ist — fehlt eine Seite oder ein Abschnitt, gibt es die Funktion hier nicht.
+Die Hilfe zeigt nur Funktionen, die in diesem System eingeschaltet sind.
 
 | Seite | Worum geht's? |
 |---|---|
-| **Erste Schritte** | Navigation, Artikel anlegen und finden, umlagern und die wichtigsten Abläufe |
-| **Fehlerbehebung** | Was tun, wenn etwas nicht klappt |
+| **Erste Schritte** | Navigation, Artikel anlegen, suchen, umlagern, typische Abläufe |
+| **Fehlerbehebung** | Häufige Probleme und wie du sie löst |
 <!-- if-feature: printing -->
-| **Drucker einrichten** | Etikettendrucker (Brother QL) anschliessen und im System einrichten |
+| **Drucker einrichten** | Etikettendrucker anschliessen und einrichten (für Admins) |
 <!-- end-feature -->
 | **Artikel** | Referenzdaten und Exemplare, Qualität, Spezifikationen und Vorlagen |
-| **Ersatzteile erfassen (Zerlegen)** | Geräte zerlegen und Teile als eigene Artikel erfassen |
+| **Einzelteile erfassen** | Geräte zerlegen und Teile als eigene Artikel erfassen |
 <!-- if-feature: statistics -->
-| **CO₂-Einsparung** | Wie der CO₂-Wert eines Artikels berechnet wird |
+| **CO₂-Einsparung** | Berechnung des CO₂-Werts |
 <!-- end-feature -->
-| **Administration** | Was die Karten in der Administration tun und wer sie benutzen darf |
+| **Administration** | Karten der Administration und wer Zugriff hat |
 <!-- if-feature: stubs -->
-| **Fundsachen** | Noch nicht erfasste Sachen im Lager notieren und abhaken |
+| **Fundsachen** | Noch nicht erfasste Sachen im Lager notieren |
 <!-- end-feature -->
 <!-- if-feature: logs -->
-| **Aktivitäten** | Nachvollziehen, wer was wann gemacht hat — mit Filtern |
+| **Aktivitäten** | Protokoll: wer hat was wann gemacht |
 <!-- end-feature -->
 <!-- if-feature: agentic -->
-| **KI-Cockpit** | Die KI als Ganzes steuern: Hebel, Pipeline-Verhalten, systematische Befunde |
+| **KI-Cockpit** | Übersicht und Einstellungen für alle KI-Läufe |
 <!-- end-feature -->
 
-Fragen oder Fehler, die hier nicht beschrieben sind? Melde sie bei der Admin-Person.
+Fragen oder Fehler, die hier nicht beschrieben sind: Melde sie der Admin-Person.

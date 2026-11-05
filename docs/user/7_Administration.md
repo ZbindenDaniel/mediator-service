@@ -1,17 +1,17 @@
 # Administration
 
-Die Administration (Werkzeug-Symbol in der Navigation) bündelt alles, was das ganze System betrifft — nicht einzelne Artikel. Diese Seite erklärt, welche Karte wofür da ist.
+Die Administration (Werkzeug-Symbol in der Navigation) enthält Einstellungen und Aktionen für das ganze System. Diese Seite beschreibt jede Karte.
 
-> Hier wird am System selbst geschraubt. Wenn du nicht sicher bist, was eine Aktion auslöst: erst fragen, dann klicken.
+> Aktionen in der Administration wirken auf alle Artikel oder auf das ganze System. Frag nach, wenn du nicht sicher bist, was eine Aktion bewirkt.
 
 ---
 
-## Wer kommt hinein?
+## Zugang
 
-- **Mit Login (Firmenkonto):** Plattform-Admins sehen alles. Admins einer Organisation sehen die Karten für den laufenden Betrieb (in der Tabelle unten mit „Admins“ markiert). Alle anderen sehen das Werkzeug-Symbol gar nicht oder bekommen **Kein Zugriff**.
-- **Ohne Login (lokale Installation):** Die Seite fragt nach dem **Administrationszugang**. Gib das Admin-Passwort ein und klick auf **Anmelden**. Das Passwort gilt, bis du den Browser-Tab schliesst.
+- **Mit Login (Firmenkonto):** Plattform-Admins sehen alle Karten. Admins einer Organisation sehen die Karten, die in der Tabelle unten mit „Admins“ markiert sind. Alle anderen sehen das Werkzeug-Symbol nicht oder erhalten **Kein Zugriff**.
+- **Ohne Login (lokale Installation):** Die Seite zeigt **Administrationszugang**. Admin-Passwort eingeben → **Anmelden**. Die Anmeldung gilt, bis du den Browser-Tab schliesst.
 
-Einige Schalter ausserhalb der Administration (z. B. im KI-Cockpit oder **Jetzt mit Shop synchronisieren**) funktionieren ebenfalls nur für Admins.
+Auch einige Funktionen ausserhalb der Administration sind nur für Admins, z. B. die Schalter im KI-Cockpit oder **Jetzt mit Shop synchronisieren**.
 
 ---
 
@@ -58,22 +58,22 @@ Daneben liegt **Taxonomie verwalten**.
 
 ### ZIP Import
 
-1. Klick auf das Dateifeld und wähle die ZIP- oder CSV-Datei.
-2. Klick zuerst auf **Validieren**. Das System prüft die Datei, ohne etwas zu ändern, und zeigt, wie viele Artikel und Behälter neu oder geändert wären.
-3. Steht dort **Validierung erfolgreich**, klick auf **Upload**. Nach **Import abgeschlossen** lädt die Seite neu.
+1. ZIP- oder CSV-Datei auswählen.
+2. **Validieren** klicken. Das System prüft die Datei, ohne etwas zu ändern, und zeigt, wie viele Artikel und Behälter neu oder geändert würden.
+3. Bei **Validierung erfolgreich**: **Upload** klicken. Nach **Import abgeschlossen** lädt die Seite neu.
 
-> Immer zuerst validieren. Bei **Validierung fehlgeschlagen** steht unter **Fehler:**, welche Zeile das Problem ist — Datei korrigieren und erneut prüfen.
+> Immer zuerst validieren. Bei **Validierung fehlgeschlagen** steht unter **Fehler:** die fehlerhafte Zeile. Datei korrigieren und erneut validieren.
 
 ### Datenexport
 
 1. Wähle das Format:
-   - **Backup** — vollständiges, wiederherstellbares Archiv mit Artikeln, Behältern, KI-Läufen und Ereignissen. Das ist die Sicherung, die der ZIP Import wieder einlesen kann.
-   - **ERP-Export** — ERP-kompatibles Format mit formatiertem Langtext.
-   - **Manuelle Übernahme** — Partner-CSV mit einfachem Langtext.
-   - **Automatischer Import** — Format für den automatischen ERP-Import.
+   - **Backup**: alle Artikel, Behälter, KI-Läufe und Ereignisse. Kann mit dem ZIP Import wieder eingelesen werden.
+   - **ERP-Export**: Format für das ERP, Langtext mit Formatierung.
+   - **Manuelle Übernahme**: Partner-CSV, Langtext ohne Formatierung.
+   - **Automatischer Import**: Format für den automatischen ERP-Import.
 2. Klick auf **Herunterladen**.
 
-Nur ein paar Artikel? In der Artikelliste auswählen → **Export CSV** in der Aktionsleiste.
+Einzelne Artikel exportieren: in der Artikelliste auswählen → **Export CSV** in der Aktionsleiste.
 
 ---
 <!-- end-feature -->
@@ -85,7 +85,7 @@ Nur ein paar Artikel? In der Artikelliste auswählen → **Export CSV** in der A
 2. Optional einen **Regalnamen** und **Zusätzliche Hinweise** eintragen.
 3. **Regal erstellen** klicken. Das System vergibt die Regal-ID (`S-‹Standort›-‹Stockwerk›-‹Nr›`).
 
-Danach das Regal-Etikett drucken und am Regal anbringen.
+Danach das Regal-Label drucken und am Regal anbringen.
 
 ---
 <!-- end-feature -->
@@ -93,9 +93,9 @@ Danach das Regal-Etikett drucken und am Regal anbringen.
 <!-- if-feature: printing -->
 ## Drucker
 
-- **Druckwarteschlange:** Zeigt, ob der Drucker **Online** ist, wie viele Aufträge **Ausstehend** und **Fehlgeschlagen** sind und die **Letzten Fehler**. Erster Blick, wenn „nichts rauskommt“.
-- **CUPS-Queues verwalten:** Drucker hinzufügen (**Queue hinzufügen** → **Scannen**), aktivieren, Aufträge abbrechen, Diagnose ansehen. Eine Schritt-für-Schritt-Anleitung steht auf der Seite [Drucker einrichten](/hilfe?doc=3_Drucker-Einrichtung).
-- **Drucker-Einstellungen:** Pro Etikettentyp (Artikel-Etiketten, Box-Etiketten, Regal A4, Produktblatt A4 …) die passende Queue wählen, plus eine **Standard-Queue** als Rückfall.
+- **Druckwarteschlange:** Ob der Drucker **Online** ist, Anzahl **Ausstehend** und **Fehlgeschlagen**, **Letzte Fehler**. Hier zuerst nachsehen, wenn nicht gedruckt wird.
+- **CUPS-Queues verwalten:** Drucker hinzufügen, aktivieren, Aufträge abbrechen, Diagnose. Anleitung: [Drucker einrichten](/hilfe?doc=3_Drucker-Einrichtung).
+- **Drucker-Einstellungen:** Pro Label-Typ (Artikel-Etiketten, Box-Etiketten, Regal (A4), Produktblatt (A4) …) eine Queue wählen, dazu eine **Standard-Queue (Fallback)**.
 
 ---
 <!-- end-feature -->
@@ -104,10 +104,10 @@ Danach das Regal-Etikett drucken und am Regal anbringen.
 ## KI-Karten
 
 - **KI-Warteschlange:** Wie viele Läufe **Wartend**, **Zu prüfen**, **Abgeschlossen** und **Fehlgeschlagen** sind. Mit **… Fehlgeschlagene neu starten** startest du alle fehlgeschlagenen Läufe neu.
-- **Agentische Auto-Verteilung:** **Aktiviert** = sobald ein KI-Platz frei ist, wird automatisch ein noch nicht angereicherter Artikel gestartet. **Deaktiviert** = die KI läuft nur, wenn jemand sie startet.
-- **Self-Heal Vorschau:** Zeigt, welche Artikel veraltet sind (z. B. weil sich die Regeln für Spezifikationen geändert haben) und was der Self-Heal mit ihnen machen würde. **Jetzt ausführen** startet den Durchlauf sofort.
+- **Agentische Auto-Verteilung:** **Aktiviert**: Wird ein Platz frei, startet automatisch ein Lauf für einen Artikel, der noch keinen KI-Lauf hatte. **Deaktiviert**: Läufe starten nur, wenn jemand sie startet.
+- **Self-Heal Vorschau:** Liste der veralteten Artikel (z. B. nach geänderten Regeln für Spezifikationen) und was die automatische Nachbearbeitung mit ihnen machen würde. **Jetzt ausführen** startet die Nachbearbeitung sofort.
 
-Die gleichen Schalter und mehr findest du übersichtlicher im [KI-Cockpit](/hilfe?doc=10_KI-Cockpit).
+Dieselben Schalter und weitere Auswertungen sind im [KI-Cockpit](/hilfe?doc=10_KI-Cockpit).
 
 ---
 <!-- end-feature -->
@@ -115,7 +115,7 @@ Die gleichen Schalter und mehr findest du übersichtlicher im [KI-Cockpit](/hilf
 <!-- if-feature: admin-system-status -->
 ## Systemstatus
 
-Eine Zeile pro Baustein: **API**, **Drucker**, **Medienspeicher** (Bilder, WebDAV), ERP und Shop. Steht irgendwo **Fehler** oder **WebDAV fehlt**, ist das der Ausgangspunkt für die [Fehlerbehebung](/hilfe?doc=2_Fehlerbehebung). Darunter stehen Kennzahlen wie Anzahl **Artikel**, **Behälter** und **Bilder**.
+Eine Zeile pro Dienst: **API**, **Drucker**, **Medienspeicher** (Bilder, WebDAV), ERP und Shop. **Fehler** oder **WebDAV fehlt** zeigt, welcher Dienst nicht erreichbar ist; weiter mit der [Fehlerbehebung](/hilfe?doc=2_Fehlerbehebung). Darunter stehen die Anzahl **Artikel**, **Behälter** und **Bilder**.
 
 ---
 <!-- end-feature -->
@@ -123,7 +123,7 @@ Eine Zeile pro Baustein: **API**, **Drucker**, **Medienspeicher** (Bilder, WebDA
 <!-- if-feature: erp-sync -->
 ## Nächtliche ERP-Synchronisation
 
-Ist sie **Aktiviert**, gleicht das System jede Nacht die Artikel mit dem ERP ab. **Deaktivieren**, wenn das ERP gewartet wird oder ein Fehler die Daten durcheinanderbringt — und danach nicht vergessen, wieder einzuschalten.
+**Aktiviert**: Das System gleicht jede Nacht die Artikel mit dem ERP ab. **Deaktivieren**, wenn das ERP gewartet wird oder fehlerhafte Daten übertragen werden. Danach wieder aktivieren.
 
 ---
 <!-- end-feature -->
@@ -133,19 +133,19 @@ Ist sie **Aktiviert**, gleicht das System jede Nacht die Artikel mit dem ERP ab.
 
 - **Status** und **Sync-Warteschlange** zeigen, ob der Shop erreichbar ist und wie viele Artikel auf die Übertragung warten.
 - **Verbindung testen** prüft die Zugangsdaten.
-- **Alle synchronisieren** reiht *alle* Shop-Artikel neu ein. Das dauert und ist nur für den Abgleich nach Störungen gedacht — für einzelne Artikel nimm **Shop Sync** in der Artikelliste.
+- **Alle synchronisieren** überträgt *alle* Shop-Artikel neu. Das dauert lange und ist für den Abgleich nach einer Störung gedacht. Für einzelne Artikel: **Shop Sync** in der Artikelliste.
 
 ---
 <!-- end-feature -->
 
 ## Organisationen verwalten (Plattform-Admins)
 
-Unter **Organisationen verwalten** legst du Organisationen an (Name, Kontakt-E-Mail für Bestellungen, Authentik-Gruppen für Benutzer und Admins) und ihre **Standorte** mit **Stockwerken**. Die Standort-ID steht später in jeder Regal-ID und lässt sich nicht mehr ändern — also gut überlegen.
+Unter **Organisationen verwalten** legst du Organisationen an (Name, Kontakt-E-Mail für Bestellungen, Authentik-Gruppen für Benutzer und Admins) und ihre **Standorte** mit **Stockwerken**. Die Standort-ID wird Teil jeder Regal-ID und kann nicht mehr geändert werden.
 
 <!-- if-feature: admin-taxonomy -->
 ## Taxonomie verwalten (Plattform-Admins)
 
 Unter **Taxonomie verwalten** pflegst du Haupt- und Unterkategorien: Anzeigename, Code, Aliasse, ob die Kategorie **aktiv** ist und ob sie **im Intake-Menü** erscheint. Unter **Erweitert** liegen die Regeln für Qualität, Spezifikationen und Zerlegung.
 
-> Änderungen an der Taxonomie wirken auf alle Artikel dieser Kategorie. Im Zweifel erst mit den Entwickler:innen absprechen.
+> Änderungen an der Taxonomie gelten für alle Artikel der Kategorie. Sprich grössere Änderungen vorher mit den Entwickler:innen ab.
 <!-- end-feature -->

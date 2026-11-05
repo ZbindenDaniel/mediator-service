@@ -1,108 +1,127 @@
 # KI-Cockpit
 <!-- feature: agentic -->
 
-Im Tab **KI** eines Artikels steuerst du *einen* KI-Lauf. Das **KI-Cockpit** ist die Sicht von oben: Wie läuft die KI insgesamt, was fehlt systematisch, und welche Schalter steuern das Ganze? Du öffnest es über das **Roboter-Symbol** (KI-Läufe) in der Navigation.
+Das **KI-Cockpit** zeigt alle KI-Läufe zusammen: wie viele in welchem Status sind, welche Fehler sich häufen, und welche automatischen Abläufe eingeschaltet sind. Öffnen über das **Roboter-Symbol** in der Navigation.
 
-> Faustregel: Ein falsches Feld bei einem Artikel → im Artikel korrigieren. Dasselbe Problem bei 40 Artikeln → im Cockpit als Klasse angehen.
+Einzelne Artikel bearbeitest du weiterhin im Tab **KI** des Artikels. Das Cockpit ist für Probleme, die viele Artikel gleichzeitig betreffen.
 
-Ansehen kann das Cockpit jede:r. Die **Hebel** umlegen dürfen nur Admins — alle anderen sehen sie gesperrt mit dem Hinweis **Nur für Admins**.
+Ansehen können alle. Die Schalter umlegen können nur Admins; für alle anderen sind sie gesperrt (**Nur für Admins**).
 
 ---
 
-## 1. Hebel
+## Begriffe
+
+| Begriff | Bedeutung |
+|---|---|
+| **KI-Lauf** | Ein Durchgang für einen Artikel: Webseiten durchsuchen, Werte vorschlagen, Ergebnis prüfen |
+| **Warteschlange** | Läufe, die auf einen freien Platz warten. Es laufen nur wenige gleichzeitig. |
+| **Veraltet** | Der letzte Lauf eines Artikels wurde nach Regeln erstellt, die sich seither geändert haben (z. B. neue Pflicht-Spezifikationen für die Kategorie) |
+| **Self-Heal** | Automatische Nachbearbeitung veralteter Artikel |
+| **Befund** | Ein Problem, das das System nach einem Lauf im Ergebnis festgestellt hat |
+
+---
+
+## 1. Hebel (Schalter)
 
 Vier Schalter, jeweils **An** oder **Aus**:
 
-| Hebel | Was er tut, wenn er an ist |
+| Schalter | Wenn eingeschaltet |
 |---|---|
-| **Auto-Freigabe** | Saubere Läufe mit hoher Datenqualität werden ohne Review freigegeben. Die Mindest-Qualität steht unter den Hebeln (z. B. „Auto-Freigabe ab Datenqualität 4/5“). |
-| **Auto-Rework** | Veraltete, schon freigegebene Artikel werden im Leerlauf neu angereichert. Arbeitet auch die abgelehnten Artikel mit Notiz ab (siehe unten). |
-| **Auto-Review** | Veraltete Artikel, die noch auf ein Review warten, werden neu beurteilt — die Review-Warteschlange schrumpft. |
-| **Auto-Verteilung** | Freie KI-Plätze werden automatisch mit Artikeln gefüllt, die noch nie angereichert wurden. |
+| **Auto-Freigabe** | Läufe ohne blockierende Befunde und mit ausreichender Datenqualität werden ohne Review freigegeben. Die Mindestqualität steht unter den Schaltern (z. B. „ab Datenqualität 4/5“). |
+| **Auto-Rework** | Veraltete, bereits freigegebene Artikel werden neu bearbeitet, wenn Plätze frei sind. Ausserdem werden im Review abgelehnte Artikel mit Notiz neu bearbeitet (siehe Abschnitt 2). |
+| **Auto-Review** | Veraltete Artikel, die noch auf ein Review warten, werden neu bearbeitet. |
+| **Auto-Verteilung** | Freie Plätze werden automatisch mit Artikeln gefüllt, die noch nie einen KI-Lauf hatten. |
 
-Die Hebel wirken ab dem nächsten Durchlauf der Warteschlange (wenige Sekunden) und bleiben auch nach einem Neustart so, wie du sie gestellt hast. Jedes Umlegen wird mit deinem Namen in den Aktivitäten protokolliert.
+Änderungen gelten nach wenigen Sekunden und bleiben auch nach einem Neustart bestehen. Jede Änderung wird mit deinem Namen in den Aktivitäten gespeichert.
 
-**Sweep jetzt** startet den Self-Heal sofort, statt auf den nächsten Leerlauf zu warten. Danach steht daneben, was passiert ist, z. B. „3 neu eingereiht · 12 neu gestempelt“ oder „Keine Aktion: Auto-Rework/Auto-Review sind aus.“
+**Sweep jetzt** startet die Nachbearbeitung veralteter Artikel sofort, statt auf freie Plätze zu warten. Danach steht das Ergebnis daneben, z. B. „3 neu eingereiht · 12 neu gestempelt“. „Keine Aktion: Auto-Rework/Auto-Review sind aus.“ heisst: Beide Schalter sind aus, es passiert nichts.
 
-**Aktualisieren** lädt alle Zahlen neu.
+**Aktualisieren** lädt die Zahlen neu.
 
-> Die Zeile unter den Hebeln zeigt die festen Grenzen: ab welcher Qualität automatisch freigegeben wird, wie viele Läufe höchstens gleichzeitig warten und wie lange der Self-Heal bei einem Artikel Pause macht, bevor er ihn erneut anfasst.
+Die Zeile unter den Schaltern zeigt feste Grenzwerte: Mindestqualität für Auto-Freigabe, maximale Anzahl wartender Läufe, und wie lange ein Artikel nach einer Nachbearbeitung gesperrt bleibt, bevor er erneut bearbeitet werden kann.
 
-### Was heisst „veraltet“?
+### Was die Nachbearbeitung mit einem veralteten Artikel macht
 
-Ein Artikel ist veraltet, wenn sich seit seinem letzten KI-Lauf die Regeln geändert haben — zum Beispiel welche Spezifikationen für seine Kategorie Pflicht sind oder wie Werte geschrieben werden. Der Self-Heal bringt solche Artikel auf den neuen Stand, und zwar so sparsam wie möglich: nur die betroffenen Felder neu, nur die Formulierung neu, oder — wenn sich inhaltlich nichts ändert — nur die Version neu stempeln.
+Es wird nur so viel neu gemacht wie nötig:
+
+| Aktion | Wann |
+|---|---|
+| Betroffene Felder neu | Nur einzelne Felder sind von der Regeländerung betroffen |
+| Formulierung neu | Nur Schreibweise oder Wortlaut haben sich geändert |
+| Ganzer Lauf neu | Die Änderung betrifft den ganzen Artikel |
+| Nur Version aktualisieren | Inhaltlich ändert sich nichts; der Artikel wird nur als aktuell markiert („neu gestempelt“) |
 
 ---
 
 ## 2. Verhalten der Pipeline
 
-Ein Balkendiagramm zeigt, wie viele Artikel in welchem KI-Status sind: **Nicht gestartet**, **Wartet**, **Läuft**, **Review nötig**, **Freigegeben**, **Auto-freigegeben**, **Abgelehnt**, **Fehlgeschlagen**, **Abgebrochen**. Grün ist erledigt, orange wartet auf Menschen, rot braucht Aufmerksamkeit.
+Das Balkendiagramm zeigt, wie viele Artikel in welchem KI-Status sind: **Nicht gestartet**, **Wartet**, **Läuft**, **Review nötig**, **Freigegeben**, **Auto-freigegeben**, **Abgelehnt**, **Fehlgeschlagen**, **Abgebrochen**. Grün = erledigt, orange = wartet auf eine Person, rot = Fehler oder abgelehnt.
 
 Darunter zwei Zahlen:
 
-- **veraltet (Self-Heal)** — so viele Artikel würde der Self-Heal anfassen.
-- **zur Korrektur (abgelehnt + Notiz)** — so viele Artikel wurden im Review mit einer Notiz abgelehnt und warten auf einen korrigierten Lauf.
+- **veraltet (Self-Heal)**: Anzahl veralteter Artikel.
+- **zur Korrektur (abgelehnt + Notiz)**: Artikel, die im Review mit einer Notiz abgelehnt wurden und noch keinen neuen Lauf hatten.
 
-### Ablehnen mit Notiz — so lernt die KI
+### Ablehnen mit Notiz
 
-1. Im Review eines Artikels die Fehler korrigieren und im Feld **Feedback** notieren, was falsch war (z. B. „Prozessor fehlt, steht auf dem Typenschild“).
+1. Im Review eines Artikels die Werte korrigieren und im Feld **Feedback** beschreiben, was falsch war (z. B. „Prozessor fehlt, steht auf dem Typenschild“).
 2. **Ablehnen** klicken.
-3. Ist **Auto-Rework** an, startet der Self-Heal später einen neuen Lauf und gibt der KI deine Notiz als Anweisung mit. Abgelehnte Artikel mit Notiz kommen dabei vor den nur veralteten dran.
-4. Sobald der neue Lauf da ist, verschwindet der Artikel aus **zur Korrektur**.
+3. Ist **Auto-Rework** eingeschaltet, startet das System später einen neuen Lauf. Die Notiz wird diesem Lauf als Anweisung mitgegeben. Abgelehnte Artikel mit Notiz kommen vor den veralteten an die Reihe.
+4. Nach dem neuen Lauf zählt der Artikel nicht mehr zu **zur Korrektur**.
 
-Ist **Auto-Rework** aus, bleibt die Zahl stehen — dann musst du die Artikel einzeln im Tab **KI** neu starten.
+Ist **Auto-Rework** ausgeschaltet, bleiben diese Artikel liegen. Du musst sie dann einzeln im Tab **KI** neu starten.
 
 ---
 
-## 3. Offene Befunde — was systematisch fehlt
+## 3. Offene Befunde
 
-Nach jedem Lauf prüft das System das Ergebnis und hält **Befunde** fest. Das Cockpit fasst sie zu **Klassen** zusammen: gleicher Befund × gleiches Feld × gleiche Kategorie. So siehst du zum Beispiel „Pflichtfeld fehlt · Prozessor · Laptops — 37“ statt 37 einzelne Artikel.
+Nach jedem Lauf prüft das System das Ergebnis und speichert gefundene Probleme als **Befunde**. Das Cockpit fasst gleiche Befunde zu **Befundklassen** zusammen: gleiche Art × gleiches Feld × gleiche Kategorie. Beispiel: „Pflichtfeld fehlt · Prozessor · Laptops — 37“ heisst, bei 37 Laptops fehlt der Prozessor.
 
-Oben stehen die Zahlen: Artikel mit **blockierendem Befund**, **mit Warnung** und **mit Hinweis**.
+Oben stehen die Anzahl Artikel mit **blockierendem Befund**, **mit Warnung** und **mit Hinweis**.
 
-| Befund | Bedeutung |
+| Art des Befunds | Bedeutung |
 |---|---|
-| **Pflichtfeld fehlt** | Eine Spezifikation, die für diese Kategorie Pflicht ist, ist leer |
-| **Unerwünschter Text** | Werbe- oder Füllfloskeln, die nicht in den Artikel gehören |
-| **Intake-Konflikt** | Die KI widerspricht dem, was bei der Erfassung festgehalten wurde |
-| **Standards-Verstoß** | Ein Wert ist nicht im vorgeschriebenen Format |
+| **Pflichtfeld fehlt** | Eine Pflicht-Spezifikation dieser Kategorie ist leer |
+| **Unerwünschter Text** | Text, der nicht in einen Artikel gehört, z. B. Werbeformulierungen |
+| **Intake-Konflikt** | Das Ergebnis widerspricht den Angaben bei der Erfassung |
+| **Standards-Verstoß** | Ein Wert hat nicht das vorgeschriebene Format |
 
 | Schwere | Bedeutung |
 |---|---|
-| **Blockierend** | Der Artikel darf so nicht automatisch freigegeben werden |
-| **Warnung** | Sollte behoben werden |
-| **Hinweis** | Schönheitsfehler |
+| **Blockierend** | Keine Auto-Freigabe möglich |
+| **Warnung** | Sollte korrigiert werden |
+| **Hinweis** | Geringfügig |
 
-### Eine Klasse bearbeiten
+### Eine Befundklasse bearbeiten
 
-1. Klick auf den Befund (**▸**). Es klappen **Beispiele** und die betroffenen Artikelnummern auf — ein Klick auf eine Nummer öffnet den Artikel.
-2. Schau dir zwei, drei Beispiele an: Ist das wirklich ein KI-Fehler oder fehlt die Information schlicht (z. B. kein Typenschild-Foto)?
-3. Klick auf **Überarbeiten (max 25)**. Bis zu 25 Artikel dieser Klasse werden neu eingereiht — und zwar nur für das betroffene Feld, der Rest bleibt.
-4. Gibt es mehr als 25, steht das in der Meldung („von 37, Rest beim nächsten Durchlauf“). Klick später nochmal.
+1. Auf den Befund (**▸**) klicken. Es erscheinen **Beispiele** und die betroffenen Artikelnummern. Klick auf eine Nummer öffnet den Artikel.
+2. Zwei, drei Beispiele prüfen: Hat der Lauf einen Fehler gemacht, oder fehlt die Information tatsächlich (z. B. kein Foto vom Typenschild)?
+3. **Überarbeiten (max 25)** klicken. Bis zu 25 Artikel dieser Klasse kommen in die Warteschlange. Neu bearbeitet wird nur das betroffene Feld.
+4. Bei mehr als 25 Artikeln zeigt die Meldung den Rest an (z. B. „von 37, Rest beim nächsten Durchlauf“). Später erneut klicken.
 
-Die Befunde aktualisieren sich erst, wenn die Läufe fertig sind. Bei vielen Klassen siehst du die grössten zuerst.
+Die Befunde aktualisieren sich erst, wenn die Läufe fertig sind. Die grössten Klassen stehen oben.
 
-> Für **Überarbeiten** brauchst du einen gesetzten Benutzernamen. Kommt dieselbe Klasse nach dem Überarbeiten wieder, liegt das Problem eher an den Regeln oder Quellen als am einzelnen Lauf — dann den Entwickler:innen melden.
+> Für **Überarbeiten** muss ein Benutzername gesetzt sein. Tritt dieselbe Klasse nach dem Überarbeiten wieder auf, liegt die Ursache wahrscheinlich in den Regeln oder Quellen. Melde das den Entwickler:innen.
 
 ---
 
 ## 4. Letzte KI-Ereignisse
 
-Unten im Cockpit stehen die letzten 15 KI-Ereignisse: umgelegte Hebel, Self-Heal-Durchläufe, Auto-Freigaben und Fehler — mit wer und wann.
+Die letzten 15 KI-Ereignisse mit Person und Zeit: geänderte Schalter, Nachbearbeitungen, Auto-Freigaben, Fehler.
 <!-- if-feature: logs -->
-**Alle KI-Ereignisse →** öffnet die [Aktivitäten](/hilfe?doc=9_Aktivitaeten), gefiltert auf das Thema **KI**.
+**Alle KI-Ereignisse →** öffnet die [Aktivitäten](/hilfe?doc=9_Aktivitaeten), gefiltert auf Thema **KI**.
 <!-- end-feature -->
 
-Die Einzelschritte pro Lauf (eingereiht, Ergebnis erhalten …) stehen nicht hier, sondern in der Geschichte des jeweiligen Artikels.
+Die einzelnen Schritte eines Laufs (eingereiht, Ergebnis erhalten …) stehen in der Geschichte des jeweiligen Artikels, nicht hier.
 
 ---
 
-## Wenn's hakt
+## Probleme
 
-| Problem | Was tun |
+| Problem | Lösung |
 |---|---|
-| Hebel lassen sich nicht umlegen | Du bist nicht als Admin angemeldet — in der Administration anmelden oder eine Admin-Person fragen |
-| „Dispatcher noch nicht bereit“ nach **Sweep jetzt** | Das System ist gerade gestartet. Der Sweep läuft automatisch beim nächsten Durchlauf |
+| Schalter lassen sich nicht umlegen | Du bist nicht als Admin angemeldet. In der Administration anmelden oder eine Admin-Person fragen. |
+| „Dispatcher noch nicht bereit“ nach **Sweep jetzt** | Das System wurde gerade gestartet. Die Nachbearbeitung startet automatisch beim nächsten Durchlauf. |
 | **zur Korrektur** sinkt nicht | **Auto-Rework** einschalten |
-| Viele **Fehlgeschlagen** im Diagramm | Siehe [Fehlerbehebung](/hilfe?doc=2_Fehlerbehebung), Abschnitt *KI-Anreicherung hängt* |
-| „Cockpit konnte nicht geladen werden.“ | Seite neu laden; hilft das nicht, Systemstatus in der Administration prüfen |
+| Viele **Fehlgeschlagen** im Diagramm | Siehe [Fehlerbehebung](/hilfe?doc=2_Fehlerbehebung), Abschnitt **KI-Lauf bleibt hängen** |
+| „Cockpit konnte nicht geladen werden.“ | Seite neu laden. Hilft das nicht: Systemstatus in der Administration prüfen. |

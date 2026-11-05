@@ -1,13 +1,13 @@
 # Aktivitäten
 <!-- feature: logs -->
 
-Alles, was im System passiert — umlagern, bearbeiten, drucken, KI-Läufe, Exporte — wird mit **wer**, **was** und **wann** protokolliert. Die Aktivitäten beantworten Fragen wie: *Wer hat diesen Laptop verschoben?* oder *Was ist gestern Abend schiefgelaufen?*
+Das System speichert jede Aktion (umlagern, bearbeiten, drucken, KI-Läufe, Exporte) mit Person, Aktion und Zeit. In den Aktivitäten siehst du z. B., wer einen Artikel verschoben hat oder welche Fehler in der Nacht aufgetreten sind.
 
 ---
 
-## Wo finde ich die Aktivitäten?
+## Wo
 
-| Wo | Was du siehst |
+| Ort | Inhalt |
 |---|---|
 | **Log-Symbol** in der Navigation | **Letzte Aktivitäten** im ganzen System, mit Filtern |
 | Artikel → Tab **Aktivitäten** | Die vollständige Geschichte dieses einen Artikels |
@@ -18,22 +18,22 @@ Alles, was im System passiert — umlagern, bearbeiten, drucken, KI-Läufe, Expo
 
 ---
 
-## Die Liste lesen
+## Aufbau der Liste
 
-Jede Zeile hat die Spalten **Typ** (Artikel, Behälter oder Sammelaktion), **ID**, **Artikelbezeichnung**, **Akteur** (wer), **Aktion** (was) und **Datum**. Ein Klick auf eine Artikel- oder Behälter-Zeile öffnet den Eintrag.
+Spalten: **Typ** (Artikel, Behälter oder Sammelaktion), **ID**, **Artikelbezeichnung**, **Akteur** (Person), **Aktion** und **Datum**. Klick auf eine Artikel- oder Behälter-Zeile öffnet den Eintrag.
 
 - **Tagesüberschriften** (**Heute**, **Gestern**, dann mit Datum) gliedern die Liste.
-- **Zusammengefasste Zeilen:** Macht dieselbe Person mindestens dreimal kurz hintereinander (innerhalb von 10 Minuten) dasselbe, steht das als eine Zeile mit **×Anzahl** da, z. B. „Verschoben ×12“. Klick auf **▸**, um die einzelnen Einträge aufzuklappen.
-- **Farbiger Rand links** zeigt die Wichtigkeit (die Legende steht über der Liste):
+- **Zusammengefasste Zeilen:** Führt dieselbe Person dieselbe Aktion mindestens dreimal innerhalb von 10 Minuten aus, erscheint eine Zeile mit **×Anzahl**, z. B. „Verschoben ×12“. **▸** klappt die einzelnen Einträge auf.
+- **Farbiger Rand links** zeigt die Stufe (Legende über der Liste):
 
 | Stufe | Bedeutung |
 |---|---|
-| **Fehler** (rot, leicht hinterlegt) | Etwas ist schiefgegangen — anschauen |
+| **Fehler** (rot, leicht hinterlegt) | Eine Aktion ist fehlgeschlagen |
 | **Wichtig** (orange) | Bewegungen und Eingriffe: verschoben, entnommen, gelöscht, KI-Ergebnis abgelehnt, Schalter umgelegt |
 | **Info** (hellblau) | Normale Arbeit: anlegen, bearbeiten, drucken |
 | **Technisch** (blass) | Einzelschritte von Hintergrundjobs, nur in der Ansicht **Alles** |
 
-Die Stufe steht auch im Tooltip, wenn du mit der Maus über die Zeile fährst.
+Die Stufe steht auch im Tooltip der Zeile.
 
 ---
 
@@ -43,38 +43,38 @@ Die Stufe steht auch im Tooltip, wenn du mit der Maus über die Zeile fährst.
 
 | Knopf | Zeigt |
 |---|---|
-| **Wichtig** | Nur wichtige Ereignisse und Fehler — der schnelle Blick „ist was passiert?“ |
+| **Wichtig** | Nur Stufen Wichtig und Fehler |
 | **Standard** | Alles ausser technischen Einzelereignissen (voreingestellt) |
 | **Alles** | Inklusive technischer Einzelereignisse, z. B. Shop-Sync pro Artikel |
 
-Sammelaktionen (z. B. 200 Artikel in den Shop) stehen in **Standard** als *eine* Zeile; die Schritte pro Artikel findest du unter **Alles** oder in der Geschichte des Artikels.
+Sammelaktionen (z. B. 200 Artikel in den Shop) erscheinen in **Standard** als eine Zeile. Die Einträge pro Artikel stehen unter **Alles** und im Tab **Aktivitäten** des Artikels.
 
 ### Thema
 
-Die Knöpfe **Logistik**, **Daten**, **Export**, **Druck** und **KI** grenzen auf ein Thema ein. Mehrere gleichzeitig sind möglich; nochmal klicken schaltet ein Thema wieder aus.
+Die Knöpfe **Logistik**, **Daten**, **Export**, **Druck** und **KI** filtern nach Thema. Mehrere gleichzeitig sind möglich. Erneuter Klick hebt den Filter auf.
 
 ### Suche und Akteur
 
-- Feld **Artikelnummer, UUID, Box-ID oder Regal-ID** — findet alles zu diesem Artikel oder Behälter.
-- Feld **Akteur** — nur Einträge dieser Person (Teil des Namens reicht).
+- Feld **Artikelnummer, UUID, Box-ID oder Regal-ID**: alle Einträge zu diesem Artikel oder Behälter.
+- Feld **Akteur**: nur Einträge dieser Person. Ein Teil des Namens genügt.
 - Mit **Enter** oder **Suchen** anwenden. **✕ Zurücksetzen** löscht alle Filter.
 
-Die Filter stehen in der Adresszeile — du kannst eine gefilterte Ansicht also als Link an Kolleg:innen schicken.
+Die Filter stehen in der Adresszeile. Eine gefilterte Ansicht lässt sich deshalb als Link verschicken.
 
 ### Mehr laden
 
-Die Liste lädt jeweils 100 Einträge. Unten steht, wie viele geladen sind; mit **Weitere 100 laden** gehst du weiter zurück. Steht dort **Ende der Liste**, gibt es nichts Älteres mehr.
+Die Liste lädt 100 Einträge auf einmal. **Weitere 100 laden** lädt ältere Einträge. **Ende der Liste** heisst: Es gibt keine älteren Einträge.
 
 ---
 
-## Typische Fragen
+## Beispiele
 
 **Wo ist der Artikel hin?** Artikel öffnen → Tab **Aktivitäten** → der letzte Eintrag **Verschoben** zeigt Ziel und Person.
 
 **Wer hat das geändert?** Artikelnummer ins Suchfeld, Thema **Daten**.
 
-**Ist heute Nacht etwas schiefgelaufen?** Detailgrad **Wichtig** und nach roten Zeilen unter **Heute** schauen.
+**Fehler in der Nacht?** Detailgrad **Wichtig**, unter **Heute** nach roten Zeilen suchen.
 
 **Was hat Person X heute gemacht?** Namen ins Feld **Akteur**.
 
-> Steht als Akteur **[?]**, wurde die Aktion ohne Benutzernamen ausgeführt. Setz deinen Namen (Klick auf deinen Namen oben rechts), damit deine Arbeit dir zugeordnet wird.
+> Akteur **[?]** heisst: Die Aktion wurde ohne Benutzernamen ausgeführt. Setz deinen Namen (oben rechts), damit deine Aktionen dir zugeordnet werden.

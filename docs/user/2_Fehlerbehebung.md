@@ -1,252 +1,193 @@
 # Fehlerbehebung
 
-Hier findest du Hilfe bei den häufigsten Problemen. Geh die Schritte der Reihe nach durch und prüf nach jedem Schritt, ob's wieder funktioniert.
+Häufige Probleme und was du selbst prüfen kannst. Geh die Schritte der Reihe nach durch und prüf nach jedem Schritt, ob das Problem behoben ist.
 
 ---
 
 <!-- if-feature: printing -->
-## Drucker funktioniert nicht
+## Drucker druckt nicht
 
-### Symptome
-- Die Meldung „Kein Drucker konfiguriert" erscheint nach dem Drucken.
-- Das Etikett wird nicht gedruckt, obwohl kein Fehler angezeigt wird.
-- Die Vorschau erscheint, aber der Druckauftrag kommt nicht an.
+### Anzeichen
+- Meldung „Kein Drucker konfiguriert“ nach **Label drucken**.
+- Es kommt kein Label, obwohl kein Fehler angezeigt wird.
+- Statt **Gesendet an Drucker** erscheint **Label als PDF öffnen**.
 
-### Was du prüfen kannst
+### Prüfen
 
-**Schritt 1 — Ist der Drucker eingeschaltet?**
-Schau, ob der Etikettendrucker an ist und keine Fehleranzeige hat (rotes Lämpchen, Papierstau).
+1. **Drucker an?** Gerät eingeschaltet, keine Fehleranzeige (rotes Lämpchen, Papierstau).
+2. **Etiketten eingelegt?** Druckerfach öffnen, Rolle prüfen.
+3. **Verbindung?** Kabel bzw. WLAN-Anzeige prüfen. Drucker aus- und wieder einschalten.
+4. **Ausweichen:** **Label als PDF öffnen** klicken und das PDF über einen anderen Drucker ausdrucken.
+5. **Melden:** Gib der Systemadministration diese Angaben:
+   - welches Label (Artikel oder Behälter),
+   - seit wann das Problem besteht,
+   - Fehlermeldung (Screenshot).
 
-**Schritt 2 — Papier und Etikettenrolle**
-Öffne das Druckerfach und prüf, ob Etiketten eingelegt sind und die Rolle richtig sitzt.
-
-**Schritt 3 — Netzwerkverbindung**
-Stell sicher, dass der Drucker mit dem Netzwerk verbunden ist (Kabel oder WLAN-Anzeige leuchtet). Versuch, den Drucker neu zu starten.
-
-**Schritt 4 — Druckervorschau nutzen**
-Wenn der Drucker nicht erreichbar ist, erzeugt das System automatisch eine Vorschau-Datei. Lad sie herunter und drucke manuell über deinen Computer.
-
-**Schritt 5 — Sysadmin kontaktieren**
-Wenn nichts davon hilft, gib der Systemadministration folgende Infos:
-- Welcher Drucker (Artikel- oder Behälteretikett)?
-- Wann ist das Problem zuerst aufgetreten?
-- Gibt es eine Fehlermeldung? (bitte Screenshot)
+Admins finden den Status in der Administration unter **Druckwarteschlange**.
 
 ---
 <!-- end-feature -->
 
-## WebDAV ist nicht erreichbar
+## Medienspeicher (WebDAV) nicht erreichbar
 
-### Was ist WebDAV?
-WebDAV ist ein gemeinsam genutzter Netzwerkspeicher für Artikelbilder und Dokumente. Wenn er nicht erreichbar ist, können Bilder nicht gespeichert oder angezeigt werden.
+WebDAV ist der Netzwerkspeicher für Bilder und Dokumente.
 
-### Symptome
-- Bilder können nicht hochgeladen werden.
-- Bereits hochgeladene Bilder werden nicht angezeigt.
-- Beim ERP-Sync erscheint eine Fehlermeldung zur Medienübertragung.
+### Anzeichen
+- Bilder lassen sich nicht hochladen.
+- Vorhandene Bilder werden nicht angezeigt.
+<!-- if-feature: erp-sync -->
+- Beim ERP-Sync erscheint ein Fehler zur Medienübertragung.
+<!-- end-feature -->
 
-### Was du prüfen kannst
+### Prüfen
 
-**Schritt 1 — Netzwerkverbindung**
-Stell sicher, dass dein Gerät mit dem Firmennetzwerk verbunden ist. Probier kurz einen anderen internen Dienst, um zu sehen, ob das Netzwerk generell funktioniert.
+1. **Netzwerk:** Ist dein Gerät im Firmennetz? Teste einen anderen internen Dienst.
+2. **2–3 Minuten warten** und erneut versuchen. Nach einem Neustart ist der Speicher kurz nicht erreichbar.
+3. **Melden**, wenn es länger als 5 Minuten dauert. Angaben: seit wann, was du tun wolltest (z. B. Bild hochladen), Fehlermeldung.
 
-**Schritt 2 — Kurz warten und nochmal versuchen**
-Manchmal ist der WebDAV-Server kurz nicht erreichbar (z. B. nach einem Neustart). Wart 2–3 Minuten und versuch's dann nochmal.
-
-**Schritt 3 — Sysadmin benachrichtigen**
-Wenn das Problem länger als 5 Minuten anhält, meld es der Systemadministration:
-- Seit wann ist das bekannt?
-- Was hast du versucht zu tun (Bild hochladen, ERP-Sync, …)?
-- Gibt es eine Fehlermeldung im System?
-
-> **Hinweis:** Das System speichert Artikeldaten (Beschreibung, Spezifikationen, Preis, ...) auch dann korrekt, wenn WebDAV nicht verfügbar ist. Bilder und Mediendateien sind betroffen: Uploads schlagen fehl und die Dateien gehen verloren — es gibt keinen lokalen Zwischenspeicher. Falls du ein Bild hochgeladen hast und direkt danach ein WebDAV-Fehler aufgetaucht ist, lade das Bild erneut hoch, sobald WebDAV wieder erreichbar ist.
+> Artikeldaten (Beschreibung, Spezifikationen, Preis) werden auch ohne WebDAV gespeichert. Bilder und Dateien nicht: Ein fehlgeschlagener Upload ist verloren, es gibt keine Zwischenspeicherung. Lade das Bild erneut hoch, sobald WebDAV wieder erreichbar ist.
 
 ---
 
 <!-- if-feature: item-images -->
 ## Bilder werden nicht angezeigt
 
-### Symptome
-- Im Bild-Tab erscheint ein leeres Feld oder ein defektes Bild-Symbol.
-- Bilder wurden hochgeladen, aber nach dem Neuladen sind sie weg.
+### Prüfen
 
-### Was du prüfen kannst
-
-**Schritt 1 — Seite neu laden**
-Drück `F5` oder `Strg + R` (Windows) bzw. `Cmd + R` (Mac).
-
-**Schritt 2 — Anderen Browser oder Gerät testen**
-Öffne den Artikel auf einem anderen Gerät oder Browser. Wenn die Bilder dort erscheinen, liegt's am ersten Browser (z. B. Cache-Problem).
-
-**Schritt 3 — Browser-Cache leeren**
-- Chrome: `Strg + Umschalt + Entf` → „Bilder und Dateien im Cache" → „Daten löschen"
-- Firefox: `Strg + Umschalt + Entf` → „Cache" → „Jetzt löschen"
-
-**Schritt 4 — WebDAV prüfen**
-Bilder liegen auf dem WebDAV-Server. Wenn der nicht erreichbar ist, können keine Bilder geladen werden → siehe **WebDAV ist nicht erreichbar**.
-
-**Schritt 5 — Sysadmin benachrichtigen**
-Wenn Bilder dauerhaft fehlen, könnte ein Konfigurationsproblem vorliegen. Meld es mit Artikelnummer und Zeitpunkt des letzten Uploads.
+1. **Seite neu laden:** `F5` oder `Strg + R` (Windows) bzw. `Cmd + R` (Mac).
+2. **Anderes Gerät oder anderen Browser** testen. Erscheinen die Bilder dort, liegt das Problem am ersten Browser (meist am Cache).
+3. **Browser-Cache leeren:**
+   - Chrome: `Strg + Umschalt + Entf` → „Bilder und Dateien im Cache“ → „Daten löschen“
+   - Firefox: `Strg + Umschalt + Entf` → „Cache“ → „Jetzt löschen“
+4. **WebDAV prüfen:** siehe **Medienspeicher (WebDAV) nicht erreichbar**.
+5. **Melden**, wenn Bilder dauerhaft fehlen. Angaben: Artikelnummer, Zeitpunkt des letzten Uploads.
 
 ---
 <!-- end-feature -->
 
 ## Veraltete Daten im Browser
 
-### Symptome
-- Du siehst eine alte Version eines Artikels oder eine leere Liste, obwohl Daten vorhanden sein müssten.
-- Ein anderes Gerät zeigt andere Daten als deins.
+### Anzeichen
+- Ein Artikel zeigt alte Werte, oder eine Liste ist leer, obwohl Daten vorhanden sind.
+- Ein anderes Gerät zeigt andere Daten.
 
-### Was du tun kannst
+### Prüfen
 
-**Schritt 1 — Hard Refresh**
-`Strg + Umschalt + R` (Windows/Linux) oder `Cmd + Umschalt + R` (Mac) — erzwingt ein vollständiges Neuladen ohne Cache.
-
-**Schritt 2 — Cache komplett leeren**
-Wenn Hard Refresh nicht hilft, lösche den Browser-Cache vollständig:
-- Chrome: `Strg + Umschalt + Entf` → „Bilder und Dateien im Cache" → „Daten löschen"
-- Firefox: `Strg + Umschalt + Entf` → „Cache" → „Jetzt löschen"
-
-**Schritt 3 — Inkognito-Tab testen**
-Öffne die App in einem Inkognito-/Privatfenster. Wenn die Daten dort stimmen, liegt es am Cache oder an Extensions in deinem normalen Browser.
+1. **Neu laden ohne Cache:** `Strg + Umschalt + R` (Windows/Linux) bzw. `Cmd + Umschalt + R` (Mac).
+2. **Cache leeren**, wenn das nicht hilft:
+   - Chrome: `Strg + Umschalt + Entf` → „Bilder und Dateien im Cache“ → „Daten löschen“
+   - Firefox: `Strg + Umschalt + Entf` → „Cache“ → „Jetzt löschen“
+3. **Privates Fenster** testen. Stimmen die Daten dort, liegt es am Cache oder an einer Browser-Erweiterung.
 
 ---
 
-## Seite lädt nicht / reagiert nicht
+## Seite lädt nicht oder reagiert nicht
 
-### Symptome
-- Die App lädt ewig oder zeigt nur eine leere Seite.
-- Schaltflächen reagieren nicht.
+### Anzeichen
+- Die App lädt nicht fertig oder bleibt leer.
+- Knöpfe reagieren nicht.
 
-### Was du prüfen kannst
+### Prüfen
 
-**Schritt 1 — Netzwerk**
-Ist dein Gerät mit dem Internet/Firmennetzwerk verbunden?
-
-**Schritt 2 — Anderen Browser testen**
-Öffne die App in Chrome oder Firefox (je nachdem, was du normalerweise nicht nutzt).
-
-**Schritt 3 — Browser-Konsole prüfen**
-Drück `F12` → Tab „Konsole". Siehst du rote Fehlermeldungen? Mach einen Screenshot davon — das hilft der Sysadmin bei der Diagnose.
-
-**Schritt 4 — Sysadmin benachrichtigen**
-Wenn die App dauerhaft nicht reagiert, ist wahrscheinlich der Server nicht erreichbar. Meld es mit Screenshot der Fehlermeldung und ungefährem Zeitpunkt.
+1. **Netzwerk:** Ist dein Gerät verbunden?
+2. **Anderen Browser** testen (Chrome oder Firefox).
+3. **Browser-Konsole:** `F12` → Tab „Konsole“. Rote Fehlermeldungen als Screenshot sichern.
+4. **Melden**, wenn die App weiterhin nicht reagiert. Wahrscheinlich ist der Server nicht erreichbar. Angaben: Screenshot, ungefährer Zeitpunkt.
 
 ---
 
 <!-- if-feature: agentic -->
-## KI-Anreicherung hängt
+## KI-Lauf bleibt hängen
 
-### Symptome
-- Im KI-Tab steht seit Minuten „Wird ausgeführt…" ohne Fortschritt.
+### Anzeichen
+- Im Tab **KI** steht seit Minuten „Wird ausgeführt…“ ohne Änderung.
 - Der Lauf bleibt lange in der Warteschlange oder wechselt nicht zu **Review**.
 
-### Was du tun kannst
+### Prüfen
 
-**Schritt 1 — Kurz warten**
-Ein Lauf dauert je nach Artikel einige Minuten. Läufe warten ausserdem in einer Warteschlange, bis ein Platz frei ist — wenn viele Artikel gleichzeitig laufen, kann das dauern.
+1. **Warten:** Ein Lauf dauert einige Minuten. Sind viele Läufe in der Warteschlange, dauert es länger.
+2. **Seite neu laden** (`F5`). Der Status aktualisiert sich nicht immer automatisch.
+3. **Neu starten:** Läuft der Lauf nach 10 Minuten noch, im Tab **KI** **Abbrechen** und dann **Wiederholen**. Hängende Läufe werden nach einiger Zeit auch automatisch abgebrochen.
+4. **Melden**, wenn Neustarts nicht helfen. Angaben: Artikelnummer, seit wann.
 
-**Schritt 2 — Seite neu laden**
-Lade die Seite neu (`F5`). Manchmal aktualisiert sich der Status nicht automatisch.
-
-**Schritt 3 — Lauf neu starten**
-Wenn der Lauf nach 10 Minuten noch läuft: im KI-Tab **Abbrechen**, dann **Wiederholen**. Hängengebliebene Läufe werden nach einiger Zeit auch automatisch abgebrochen.
-
-**Ergebnis ist falsch statt hängig?** Nicht neu starten, sondern im **Review** korrigieren und **Ablehnen** mit Feedback — oder einzelne Felder mit **KI Überarbeitung** neu machen lassen. Hat ein Lauf gute Daten überschrieben, kannst du im KI-Tab unter **Verlauf** eine frühere Version wiederherstellen.
-
-**Schritt 4 — Sysadmin benachrichtigen**
-Wenn Neustarts nichts bringen, könnte ein Problem mit dem KI-Dienst vorliegen. Nenn Artikelnummer und seit wann der Lauf hängt.
+**Ergebnis falsch, aber nicht hängend?** Nicht neu starten. Im **Review** korrigieren und mit Feedback **Ablehnen**, oder einzelne Felder mit **KI Überarbeitung** neu erstellen lassen. Hat ein Lauf korrekte Daten überschrieben: Tab **KI** → **Verlauf** → frühere Version wiederherstellen.
 
 ---
 <!-- end-feature -->
 
-## Ein Fehler ist passiert — was tun?
+## Falsche Eingabe korrigieren
 
-Keine Panik. Die meisten Aktionen lassen sich korrigieren.
+Die meisten Aktionen lassen sich korrigieren.
 
 ### Falscher Lagerort
 
-**Problem:** Ein Artikel oder Behälter wurde falsch umgelagert.
+Artikel oder Behälter wurde an den falschen Ort gebucht. Lösung: nochmals umlagern.
 
-**Lösung:** Einfach nochmal umlagern.
 1. Artikel öffnen → Tab **Vorrat** → **Umlagern**.
 2. Richtigen Behälter wählen.
-3. Bestätigen.
+3. **Verschieben**.
 
-Für Behälter: Behälter öffnen → **Umlagern** → richtiges Regal wählen.
+Behälter: Behälter öffnen → **Umlagern** → richtiges Regal wählen.
 
 <!-- if-feature: logs -->
-> Alle Bewegungen werden in den [Aktivitäten](/hilfe?doc=9_Aktivitaeten) protokolliert — du kannst jederzeit nachvollziehen, wer was wann verschoben hat.
+> Alle Umlagerungen stehen in den [Aktivitäten](/hilfe?doc=9_Aktivitaeten), mit Person und Zeit.
 <!-- end-feature -->
 
-**Lagerort unklar?** Wenn du dir nicht sicher bist, wo ein Artikel wirklich liegt, kannst du einen Behälter oder ein Regal öffnen und alle enthaltenen Artikel auf einen Blick sehen. So kannst du schnell prüfen, ob etwas fehlt oder am falschen Ort ist — und den Standort direkt korrigieren.
+**Wo liegt der Artikel wirklich?** Öffne den Behälter oder das Regal: Dort siehst du alle zugeordneten Artikel und kannst vergleichen.
 
 ---
 
 ### Falsche Artikeldaten
 
-**Problem:** Beim Erfassen wurden falsche Daten eingegeben.
-
-**Lösung:** Artikel bearbeiten.
 1. Artikel öffnen → Tab **Referenz** → **Bearbeiten**.
-2. Fehlerhafte Felder korrigieren.
-3. Speichern.
+2. Felder korrigieren.
+3. **Speichern**.
 
-> **Achtung:** Artikelnummern sollte man nur ändern, wenn sie wirklich falsch sind und der Artikel noch nicht synchronisiert wurde. Im Zweifel erst mit der vorgesetzten Person absprechen.
+> Ändere eine Artikelnummer nur, wenn sie falsch ist und der Artikel noch nicht ins ERP übertragen wurde. Im Zweifel vorher nachfragen.
 
 ---
 
 <!-- if-feature: printing -->
-### Falscher QR-Code aufgeklebt / Etikett fehlt
+### Falsches Label aufgeklebt oder Label fehlt
 
-**Problem:** Ein Etikett wurde auf dem falschen Artikel befestigt, oder es ist verloren gegangen.
-
-**Lösung:** Neues Etikett drucken.
-1. Richtigen Artikel öffnen → Tab **Vorrat** → **Etikett drucken**.
-2. Neues Etikett aufkleben — das alte bitte entfernen oder unkenntlich machen.
+1. Richtigen Artikel öffnen → Tab **Vorrat** → **Label drucken**.
+2. Neues Label aufkleben. Altes Label entfernen oder unleserlich machen.
 
 ---
 <!-- end-feature -->
 
 ### Artikel versehentlich gelöscht
 
-**Problem:** Ein Artikel wurde über **Löschen** entfernt.
+Löschen kannst du nicht selbst rückgängig machen. Melde es sofort der Systemadministration, mit Artikelnummer. Löschungen werden protokolliert; eine Wiederherstellung aus dem Backup ist möglich.
 
-**Lösung:** Das Löschen kann nicht selbst rückgängig gemacht werden.
-- Sofort die Systemadministration kontaktieren.
-- Artikelnummer bereithalten — das System protokolliert Löschvorgänge, und eine Wiederherstellung aus dem Backup ist möglich.
-
-> **Tipp:** Nutze die Lösch-Funktion nur, wenn ein Artikel wirklich nicht existiert. Artikel, die einfach nicht mehr verkauft werden, einfach im Shop-Status auf „kein Shopartikel" setzen — dann bleiben sie im System.
+> Lösch nur Artikel, die es nicht gibt (z. B. doppelt erfasst).
+<!-- if-feature: shopware -->
+> Artikel, die nicht mehr verkauft werden sollen, setzt du im Shopstatus auf „kein Shopartikel“. Sie bleiben dann im System.
+<!-- end-feature -->
 
 ---
 
 <!-- if-feature: agentic -->
-### KI hat falsche Daten eingetragen
+### KI-Lauf hat falsche Werte eingetragen
 
-**Problem:** Nach der KI-Anreicherung sind falsche Spezifikationen oder ein falscher Preis im Artikel.
-
-**Lösung:**
-- **Vor der Freigabe:** Im Review-Schritt die falschen Felder ablehnen oder den Preis direkt korrigieren.
-- **Nach der Freigabe:** Artikel öffnen → Tab **Referenz** → **Bearbeiten** und die Felder manuell korrigieren. Alternativ im Tab **KI** die Anreicherung neu starten.
+- **Vor der Freigabe:** Im Review korrigieren oder **Ablehnen**.
+- **Nach der Freigabe:** Tab **Referenz** → **Bearbeiten** und Felder korrigieren. Oder im Tab **KI** einen neuen Lauf starten.
 
 ---
 <!-- end-feature -->
 
 <!-- if-feature: erp-sync -->
-### Falscher ERP-Export
+### Falsche Daten ins ERP übertragen
 
-**Problem:** Beim ERP-Sync wurden die falschen Artikel ausgewählt oder mit falschen Daten übertragen.
-
-**Lösung:** Falls die Daten im System inzwischen korrigiert wurden, kannst du die Artikel erneut auswählen und nochmal per **Kivi Sync 🥝** übertragen — das überschreibt den vorherigen Export. Bei größeren Fehlern oder wenn Daten direkt im ERP geändert werden müssen, bitte die ERP-verantwortliche Person kontaktieren.
+Sind die Daten im System inzwischen korrigiert, Artikel erneut auswählen und mit **Kivi Sync 🥝** übertragen. Das überschreibt die vorherige Übertragung. Muss etwas direkt im ERP geändert werden, die ERP-verantwortliche Person kontaktieren.
 
 ---
 <!-- end-feature -->
 
-## Noch immer ein Problem?
+## Problem nicht gelöst
 
-Wenn du dein Problem hier nicht findest oder die Schritte nicht geholfen haben:
+Melde es der **Systemadministration** mit:
 
-1. Mach einen **Screenshot** der Fehlermeldung oder des betroffenen Bildschirms.
-2. Notiere die **Artikelnummer** oder **Behälter-ID** (falls vorhanden).
-3. Notiere **Datum und Uhrzeit** des Vorfalls.
-4. Wende dich mit diesen Infos an die **Systemadministration**.
+1. **Screenshot** der Fehlermeldung oder des Bildschirms,
+2. **Artikelnummer** oder **Box-ID**,
+3. **Datum und Uhrzeit**.
