@@ -196,10 +196,14 @@ describe('ShopwareAdminClient variant sync', () => {
     const admin = createShopwareAdminClient(cfg, { logger: log, fetchImpl: mkFetch([
       tokenRoute, taxRoute, salesChannelRoute,
       { match: (u) => /\/api\/search\/property-group$/.test(u), res: () => ({ status: 200, body: { data: [{ id: 'GRAM' }] } }) },
+      // ensurePropertyGroup heals a group whose filterable flag differs (PATCH), added after this test was written.
+      { match: (u, i) => /\/api\/property-group\/GRAM$/.test(u) && i.method === 'PATCH', res: () => ({ status: 204 }) },
       { match: (u) => /\/api\/search\/property-group-option$/.test(u), res: () => ({ status: 200, body: { data: [] } }) },
       { match: (u, i) => /\/api\/property-group-option$/.test(u) && i.method === 'POST', res: () => ({ status: 204 }) },
+      { match: (u) => u.includes('/api/search/product-configurator-setting'), res: () => ({ status: 200, body: { data: [] } }) },
       { match: (u) => u.includes('/api/search/product'), res: (_u, i) => {
           const body = i.body ? JSON.parse(i.body) : undefined;
+          if (filterVal(body, 'productNumber') === 'A.existing00') return { status: 200, body: { data: [] } };
           if (filterVal(body, 'parentId') === 'PAR') return { status: 200, body: { data: [{ id: 'STALE', productNumber: 'A.oldhash00' }] } };
           if (filterVal(body, 'productNumber') === 'A') return { status: 200, body: { data: [{ id: 'PAR' }] } };
           return { status: 200, body: { data: [] } };
@@ -211,7 +215,7 @@ describe('ShopwareAdminClient variant sync', () => {
     const result = await admin.upsertProduct({
       productNumber: 'A', name: 'N', stock: 3, grossPrice: 100, active: true, shopEligible: true,
       variants: [
-        { key: 'RAM=8 GB', options: { RAM: '8 GB' }, stock: 1, instanceIds: ['i1'] },
+        { key: 'RAM=8 GB', options: { RAM: '8 GB' }, stock: 1, instanceIds: ['i1'], grossPrice: 60 },
         { key: 'RAM=16 GB', options: { RAM: '16 GB' }, stock: 2, instanceIds: ['i2', 'i3'] }
       ]
     });
@@ -227,6 +231,43 @@ describe('ShopwareAdminClient variant sync', () => {
     expect(stale?.body.stock).toBe(0);
     expect(result.variantAssignments?.length).toBe(2);
     expect((result.variantAssignments || []).flatMap((a) => a.instanceIds).sort()).toEqual(['i1', 'i2', 'i3']);
+    // Instance price: a priced variant gets its own price, an unpriced one inherits the parent's.
+    const priced = childCreates.find((c) => c.body.stock === 1);
+    expect(priced?.body.price?.[0]).toMatchObject({ gross: 60, net: 50.4202, linked: true });
+    expect(childCreates.find((c) => c.body.stock === 2)?.body.price).toBeUndefined();
+  });
+});
+
+describe('ShopwareAdminClient tag sync', () => {
+  test('adds missing managed tags (creating the tag), removes stale managed ones, leaves manual tags alone', async () => {
+    const calls: Call[] = [];
+    const admin = createShopwareAdminClient(cfg, { logger: log, fetchImpl: mkFetch([
+      tokenRoute,
+      { match: (u, i) => /\/api\/product\/P1\/tags/.test(u) && (i.method || 'GET') === 'GET', res: () => ({ status: 200, body: { data: [{ id: 'T_MANUAL', name: 'Aktion' }, { id: 'T_OLD', name: 'legacy' }] } }) },
+      { match: (u) => u.includes('/api/search/tag'), res: () => ({ status: 200, body: { data: [] } }) },
+      { match: (u, i) => /\/api\/tag$/.test(u) && i.method === 'POST', res: () => ({ status: 204 }) },
+      { match: (u, i) => /\/api\/product\/P1$/.test(u) && i.method === 'PATCH', res: () => ({ status: 204 }) },
+      { match: (u, i) => /\/api\/product\/P1\/tags\//.test(u) && i.method === 'DELETE', res: () => ({ status: 204 }) }
+    ], calls) });
+
+    await admin.syncProductTags('P1', ['rental'], ['rental', 'legacy']);
+
+    const created = calls.find((c) => c.method === 'POST' && /\/api\/tag$/.test(c.url));
+    expect(created?.body.name).toBe('rental');
+    const patch = calls.find((c) => c.method === 'PATCH' && /\/api\/product\/P1$/.test(c.url));
+    expect(patch?.body.tags).toEqual([{ id: created?.body.id }]);
+    const deletes = calls.filter((c) => c.method === 'DELETE').map((c) => c.url);
+    expect(deletes).toEqual([expect.stringContaining('/api/product/P1/tags/T_OLD')]);
+  });
+
+  test('a product that already carries the tag needs no write', async () => {
+    const calls: Call[] = [];
+    const admin = createShopwareAdminClient(cfg, { logger: log, fetchImpl: mkFetch([
+      tokenRoute,
+      { match: (u) => /\/api\/product\/P2\/tags/.test(u), res: () => ({ status: 200, body: { data: [{ id: 'T_R', name: 'rental' }] } }) }
+    ], calls) });
+    await admin.syncProductTags('P2', ['rental'], ['rental']);
+    expect(calls.filter((c) => c.method !== 'GET' && !c.url.includes('oauth'))).toEqual([]);
   });
 });
 

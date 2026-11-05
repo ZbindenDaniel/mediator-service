@@ -1,3 +1,5 @@
+import type { PricingConfig } from './pricing';
+
 export type QualityQuestionType = 'select' | 'boolean' | 'text' | 'multi';
 
 /** Makes a question conditionally visible based on another question's answer. */
@@ -132,6 +134,8 @@ export interface QualityContract {
   scale?: Record<string, number | null>;
   /** general.json only: how the percentage maps onto the 1–5 grade. */
   grading?: QualityGrading;
+  /** general.json only (for now): base price × grade factor (models/pricing.ts). */
+  pricing?: PricingConfig;
   questions: QualityQuestion[];
   /** Reserved for future document integration (e.g. wipeReport, systemTest) */
   documents?: string[];

@@ -358,7 +358,7 @@ export function AgenticReviewWizard({ data, onResolve }: Props) {
       title = contentTitle('preis', 'Preis');
       body = (
         <div className="review-dialog__contract-fields">
-          {numberField('preis', 'Verkaufspreis', price, setPrice, 'z. B. 199.99')}
+          {numberField('preis', 'Basispreis neuwertig', price, setPrice, 'z. B. 199.99')}
         </div>
       );
     }

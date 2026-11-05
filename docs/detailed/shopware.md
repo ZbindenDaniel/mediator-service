@@ -75,9 +75,18 @@ This document captures the current architecture, required configuration, and ope
   `uniq.product_configurator_setting`; only genuinely-new options get a deterministic `sha1(parentId:optionId)` id,
   and stale axes are deleted 404-tolerantly), and upserts one
   **child product** per instance (`productNumber = parent.<sha1(sig)>`, `parentId` + `options` + the instance's
-  stock, inheriting price/tax/visibility from the parent). Existing children get stock/active updated; an instance
+  stock + the **instance price**, inheriting tax/visibility from the parent). Existing children get stock/active/price
+  updated; a child without a price (`price: null`) inherits the parent's. An instance
   that no longer exists is retired (`active:false, stock:0`). Each instance's `ShopwareVariantId` is persisted.
-  A single-instance ref → the single-product path (summed stock on the ref product). The operator switches the
+  A single-instance ref → the single-product path (summed stock on the ref product, priced at that instance's price).
+- **Prices.** The parent product carries the reference **base price** (`Verkaufspreis` = like-new); each variant
+  child its instance price from `models/pricing.ts` (base × grade factor, or `items.PreisOverride`). A grade change
+  (instance edit or quality recompute), an override change and a base-price change each enqueue an `item-upsert`.
+  After changing the `pricing` block in `general.json`, re-sync all shop refs from the admin panel.
+- **Tags.** `syncProductTags` (after categories) brings the product's **mediator-managed** tags in line with the
+  snapshot: rules in `models/shop-tags.ts` derive the desired tags (today only `Mietware` → `rental`); a missing tag
+  is created (`/api/search/tag`, cached), stale managed tags are removed 404-tolerantly, and any tag not in
+  `MANAGED_SHOP_TAGS` is never touched, so tags set by hand in the shop admin survive. Tags go on the parent. The operator switches the
   storefront configurator on `itemUUID` and groups the spec axes as descriptive (they aren't customer-configurable).
 - Failure classification: 4xx (except 408/429) is terminal; network / 408 / 429 / 5xx retry with exponential
   backoff. A deleted reference (no snapshot) drains as success.

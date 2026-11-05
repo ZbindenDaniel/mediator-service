@@ -34,7 +34,8 @@ module.exports = {
     // Ignored for the same reason as the other shopware-*.test.ts files (harness cannot resolve
     // the client module graph — todo.md #52). Logic verified via mock fetch; runs once the gap closes.
     '/test/shopware-connection-check.test.ts',
-    '/test/shopware-admin-sync.test.ts',
+    // Rewritten and active — removed from ignore list:
+    // /test/shopware-admin-sync.test.ts (resolves fine under jest; stale variant fixture fixed, tag + variant-price tests added)
     // Rewritten and active — removed from ignore list:
     // /test/resolve-agentic-api-base.test.ts (resolveAgenticApiBase removed; rewrote as tests for extractAgenticFailureReason/describeAgenticFailureReason)
     '/test/remove-item.test.ts',

@@ -6,6 +6,7 @@
 // TODO(reference-only-edit): Revalidate reference-only edit payload expectations against item_refs when schemas shift.
 import type { AgenticRunStatus } from './agentic-statuses';
 import type { QualityAssessment, QualityValue } from './quality';
+import type { InstancePriceSource } from './pricing';
 export enum ItemEinheit {
   Stk = 'Stk',
   Menge = 'Menge'
@@ -74,6 +75,11 @@ export interface ItemInstance {
   QualityScoreMax?: number | null;
   // Grade set by hand (instance edit / spare donor); derived again after the next assessment.
   QualityManual?: boolean;
+  // Fixed price for this unit; null = base price × grade factor (models/pricing.ts).
+  PreisOverride?: number | null;
+  // Read-only, computed by the API from base price + grade + override (models/pricing.ts).
+  InstancePrice?: number | null;
+  InstancePriceSource?: InstancePriceSource;
   // Subcategory the item is assessed with: the reference's, else the slot it sits in (article-less parts).
   EffectiveSubCategory?: number | null;
   // Owning tenant for private-logistics isolation (docs/PLANNING_TENANCY.md Phase 2). Nullable:
@@ -113,6 +119,8 @@ export interface ItemRef {
   Unterkategorien_B?: number;
   Veröffentlicht_Status?: boolean | string;
   Shopartikel?: number;
+  // Rental item: published to Shopware as the "rental" tag (models/shop-tags.ts); still buyable.
+  Mietware?: boolean;
   Artikeltyp?: string;
   Einheit?: ItemEinheit;
   EntityType?: string;

@@ -151,6 +151,17 @@ async function dropLockedSpecs(itemUUID: string, lockedSpecs: Record<string, str
   await db.execute(`UPDATE items SET "InstanceSpecs" = $2 WHERE "ItemUUID" = $1`, [itemUUID, Object.keys(next).length > 0 ? stringifyLangtext(next) : null]);
 }
 
+// The grade drives the instance price and the Zustand variant axis, so a grade change must reach the shop
+// even when the caller wires no hook. Lazy import: db.ts is heavy and the scoring tests inject their own db.
+async function enqueueShopSyncForGrade(itemUUID: string, grade: number | null, actor: string | null): Promise<void> {
+  const { enqueueShopwareSyncJob, generateShopwareCorrelationId } = await import('../db');
+  await enqueueShopwareSyncJob({
+    CorrelationId: generateShopwareCorrelationId('quality-grade', itemUUID),
+    JobType: 'item-upsert',
+    Payload: JSON.stringify({ itemUUID, actor, trigger: 'quality-grade', quality: grade })
+  });
+}
+
 export interface RecomputeOptions {
   actor?: string | null;
   logEvent?: (payload: { Actor: string | null; EntityType: string; EntityId: string; Event: string; Meta: string }) => Promise<void> | void;
@@ -250,7 +261,7 @@ export async function recomputeQualityScoreUpward(itemUUID: string, opts: Recomp
       }
       if (gradeChanged) {
         try {
-          await opts.onGradeChange?.(current, grade);
+          await (opts.onGradeChange ?? ((id: string, g: number | null) => enqueueShopSyncForGrade(id, g, opts.actor ?? null)))(current, grade);
         } catch (err) {
           console.error('[quality-score] onGradeChange failed', { itemUUID: current, error: err });
         }

@@ -45,6 +45,10 @@ export interface ShopwareProductSnapshot {
   // Category display names to link the product to. Only EXISTING Shopware categories of these names are
   // linked (never created); an unmatched name is skipped. Additive — existing links are not removed.
   categories?: string[];
+  // Tags the product should carry, and every tag the mediator manages (models/shop-tags.ts). Only managed
+  // tags are ever added or removed, so tags set by hand in the shop admin survive. Omitted ⇒ tags untouched.
+  tags?: string[];
+  managedTags?: string[];
 }
 
 // One product image: uploadable bytes + a deterministic Shopware media file name (extension separate).
@@ -61,6 +65,8 @@ export interface ShopwareVariantInput {
   options: Record<string, string>;
   stock: number;
   instanceIds: string[];
+  // The variant's own gross price (instance price). null/undefined ⇒ inherit the parent's price.
+  grossPrice?: number | null;
 }
 
 export interface ShopwareUpsertResult {
@@ -100,6 +106,8 @@ export class ShopwareAdminClient {
   private readonly optionCache = new Map<string, string>();
   // Category-name → id (or null when no such category exists). Cached across jobs; the tree is user-owned.
   private readonly categoryCache = new Map<string, string | null>();
+  // Tag name → id; tags are global in Shopware, so one lookup per name per client lifetime.
+  private readonly tagCache = new Map<string, string>();
 
   constructor(private readonly config: ShopwareConfig, options: ShopwareAdminClientOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
@@ -309,15 +317,19 @@ export class ShopwareAdminClient {
 
   // The mediator-authoritative product fields (everything but stock's identity), shared by create+update
   // so an existing product is refreshed with the same data a new one is created with — not just stock.
-  private async buildProductFields(snapshot: ShopwareProductSnapshot): Promise<Record<string, unknown>> {
+  // Shopware price entry (gross is mediator-authoritative; net derived from the resolved tax rate).
+  private async buildPriceEntry(gross: number): Promise<Array<Record<string, unknown>>> {
     const [{ rate }, currencyId] = await Promise.all([this.resolveTaxId(), this.resolveCurrencyId()]);
-    const gross = snapshot.grossPrice ?? 0;
     const net = rate > 0 ? Number((gross / (1 + rate / 100)).toFixed(4)) : gross;
+    return [{ currencyId, gross, net, linked: true }];
+  }
+
+  private async buildProductFields(snapshot: ShopwareProductSnapshot): Promise<Record<string, unknown>> {
     const fields: Record<string, unknown> = {
       name: snapshot.name || snapshot.productNumber,
       stock: Math.max(0, Math.trunc(snapshot.stock)),
       active: snapshot.active ?? false,
-      price: [{ currencyId, gross, net, linked: true }]
+      price: await this.buildPriceEntry(snapshot.grossPrice ?? 0)
     };
     // Only send description when we have one, so an empty mediator value doesn't clobber the product.
     if (snapshot.description) {
@@ -474,6 +486,52 @@ export class ShopwareAdminClient {
     });
   }
 
+  // Tag id for `name`, created when missing (tags are plain global labels, unlike categories).
+  private async ensureTag(name: string): Promise<string> {
+    const key = name.trim();
+    const cached = this.tagCache.get(key);
+    if (cached) return cached;
+    const found = await this.request<{ data?: Array<{ id: string }> }>('POST', '/api/search/tag', {
+      filter: [{ type: 'equals', field: 'name', value: key }],
+      includes: { tag: ['id'] },
+      limit: 1
+    });
+    let id = found?.data?.[0]?.id ?? null;
+    if (!id) {
+      id = uuid32();
+      await this.request('POST', '/api/tag', { id, name: key });
+    }
+    this.tagCache.set(key, id);
+    return id;
+  }
+
+  // Bring the mediator-managed tags of a product in line with `desired`. Tags outside `managed` are never
+  // touched, so a tag set by hand in the shop admin survives every sync.
+  async syncProductTags(productId: string, desired: string[], managed: string[]): Promise<void> {
+    const managedSet = new Set(managed.map((t) => t.trim()).filter(Boolean));
+    const desiredNames = new Set(desired.map((t) => t.trim()).filter((t) => t && managedSet.has(t)));
+    const current = await this.request<{ data?: Array<{ id: string; name?: string }> }>('GET', `/api/product/${productId}/tags?limit=500`);
+    const currentRows = current?.data ?? [];
+    const currentNames = new Set(currentRows.map((t) => (t.name ?? '').trim()));
+
+    const toAdd: string[] = [];
+    for (const name of desiredNames) {
+      if (!currentNames.has(name)) toAdd.push(await this.ensureTag(name));
+    }
+    if (toAdd.length) {
+      await this.request('PATCH', `/api/product/${productId}`, { id: productId, tags: toAdd.map((id) => ({ id })) });
+    }
+    for (const tag of currentRows) {
+      const name = (tag.name ?? '').trim();
+      if (!managedSet.has(name) || desiredNames.has(name)) continue;
+      try {
+        await this.request('DELETE', `/api/product/${productId}/tags/${tag.id}`);
+      } catch (err) {
+        if ((err as { status?: number }).status !== 404) throw err;
+      }
+    }
+  }
+
   // Ensure a Shopware media entity exists for the image (search by fileName; create + upload the binary
   // if missing), returning its media id. Idempotent: a re-sync reuses the existing media.
   private async ensureMedia(image: ShopwareImageInput): Promise<string | null> {
@@ -580,6 +638,9 @@ export class ShopwareAdminClient {
     if (result.productId && snapshot.categories && snapshot.categories.length > 0) {
       await this.syncProductCategories(result.productId, snapshot.categories);
     }
+    if (result.productId && snapshot.managedTags && snapshot.managedTags.length > 0) {
+      await this.syncProductTags(result.productId, snapshot.tags ?? [], snapshot.managedTags);
+    }
     if (result.productId && snapshot.images && snapshot.images.length > 0) {
       await this.syncProductImages(result.productId, snapshot.images);
     }
@@ -600,8 +661,8 @@ export class ShopwareAdminClient {
   }
 
   // Turn the product into a variant parent: declare the InstanceSpecs axes on the parent's configurator,
-  // then upsert one child product per variant group (parentId + options + stock, inheriting price/tax/
-  // visibility from the parent). Stale children (a spec combo that no longer exists) are deactivated +
+  // then upsert one child product per variant group (parentId + options + stock + its own instance price,
+  // inheriting tax/visibility — and the price when it has none — from the parent). Stale children (a spec combo that no longer exists) are deactivated +
   // zeroed. Returns instance→child-id assignments for ShopwareVariantId persistence.
   private async syncVariants(
     parentId: string,
@@ -611,7 +672,7 @@ export class ShopwareAdminClient {
     filterableKeys?: Set<string>
   ): Promise<Array<{ instanceIds: string[]; variantId: string }>> {
     const allOptionIds = new Set<string>();
-    const desired: Array<{ productNumber: string; optionIds: string[]; stock: number; instanceIds: string[] }> = [];
+    const desired: Array<{ productNumber: string; optionIds: string[]; stock: number; instanceIds: string[]; price: Array<Record<string, unknown>> | null }> = [];
     for (const v of variants) {
       const optionIds: string[] = [];
       for (const [group, value] of Object.entries(v.options)) {
@@ -627,7 +688,9 @@ export class ShopwareAdminClient {
       }
       // Deterministic child productNumber so a re-sync finds the same variant.
       const suffix = createHash('sha1').update(v.key).digest('hex').slice(0, 10);
-      desired.push({ productNumber: `${parentNumber}.${suffix}`, optionIds, stock: v.stock, instanceIds: v.instanceIds });
+      // Each instance has its own price (grade/override); null makes the child inherit the parent's price.
+      const price = v.grossPrice != null && v.grossPrice > 0 ? await this.buildPriceEntry(v.grossPrice) : null;
+      desired.push({ productNumber: `${parentNumber}.${suffix}`, optionIds, stock: v.stock, instanceIds: v.instanceIds, price });
     }
 
     // Declare which options participate as variant axes. uniq.product_configurator_setting is on
@@ -667,8 +730,8 @@ export class ShopwareAdminClient {
     for (const d of desired) {
       const existingId = await this.findProductIdByNumber(d.productNumber);
       if (existingId) {
-        // A variant's identity (its options) is fixed by its key; only stock/active change on update.
-        await this.request('PATCH', `/api/product/${existingId}`, { id: existingId, stock: Math.max(0, Math.trunc(d.stock)), active });
+        // A variant's identity (its options) is fixed by its key; only stock/active/price change on update.
+        await this.request('PATCH', `/api/product/${existingId}`, { id: existingId, stock: Math.max(0, Math.trunc(d.stock)), active, price: d.price });
         assignments.push({ instanceIds: d.instanceIds, variantId: existingId });
       } else {
         const id = uuid32();
@@ -678,6 +741,7 @@ export class ShopwareAdminClient {
           parentId,
           stock: Math.max(0, Math.trunc(d.stock)),
           active,
+          ...(d.price ? { price: d.price } : {}),
           options: d.optionIds.map((oid) => ({ id: oid }))
         });
         assignments.push({ instanceIds: d.instanceIds, variantId: id });

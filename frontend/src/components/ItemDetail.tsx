@@ -132,6 +132,13 @@ interface Props {
 
 const ITEM_LIST_DEFAULT_FILTERS = getDefaultItemListFilters();
 
+// The API computes the unit's price (models/pricing.ts); the UI only says where it comes from.
+function formatInstancePrice(item: Item): string | null {
+  const price = item.InstancePrice;
+  if (typeof price !== 'number' || !Number.isFinite(price)) return null;
+  const amount = `CHF ${price.toFixed(2)}`;
+  return item.InstancePriceSource === 'override' ? `${amount} (fixer Preis)` : `${amount} (nach Zustand)`;
+}
 
 
 
@@ -679,7 +686,9 @@ export default function ItemDetail({ itemId }: Props) {
     rows.push(
       ['Erfasst am', item.Datum_erfasst ? formatDateTime(item.Datum_erfasst) : null],
       ['Aktualisiert am', item.UpdatedAt ? formatDateTime(item.UpdatedAt) : null],
-      ['Verkaufspreis', item.Verkaufspreis ?? null]
+      ['Basispreis (neuwertig)', item.Verkaufspreis ?? null],
+      ['Preis', formatInstancePrice(item)],
+      ['Mietware', item.Mietware ? 'Ja' : null]
     );
 
     if (statisticsEnabled && co2Impact && co2Impact.label !== 'irrelevant') {
@@ -709,6 +718,7 @@ export default function ItemDetail({ itemId }: Props) {
         'Menge',
         'Erfasst am',
         'Aktualisiert am',
+        'Preis',
         'CO₂ Einsparung'
       ]);
       for (const row of detailRows) {
@@ -2563,6 +2573,7 @@ export default function ItemDetail({ itemId }: Props) {
           shopartikel: shopValues.shopartikel,
           veröffentlicht: shopValues.veröffentlicht,
           verkaufspreis: shopValues.verkaufspreis,
+          ...(typeof shopValues.mietware === 'boolean' ? { mietware: shopValues.mietware } : {}),
           actor,
           confirm: true,
         })

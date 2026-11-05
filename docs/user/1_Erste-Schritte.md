@@ -80,7 +80,9 @@ Mit dem Scan-Symbol navigierst du blitzschnell zu einem Artikel oder Behälter.
 ## 5. Artikel finden
 
 - **Suche:** Artikelnummer, Beschreibung, Seriennummer, MAC-Adresse oder EAN ins Suchfeld oben eingeben. Gibt es keinen genauen Treffer, zeigt die Suche die ähnlichsten Artikel an — prüf dann genau, ob der richtige dabei ist.
-- **Filter:** In der Artikelliste kannst du nach Behälter, Qualität, KI-Status, Shop-Status, Platzierung und **Preis** (Alle / Ohne Preis / Mit Preis) filtern. Beim Sortieren nach **Preis** stehen Artikel ohne Preis immer am Ende.
+- **Filter:** In der Artikelliste kannst du nach Behälter, Qualität, KI-Status, Shop-Status, Platzierung und **Preis** (Alle / Ohne Preis / Mit Preis) filtern. Beim Sortieren nach **Preis** stehen Artikel ohne Preis immer am Ende. Gefiltert und sortiert wird nach dem Basispreis.
+- **Preise:** In der Referenz steht der **Basispreis** — der Preis eines neuwertigen Geräts. Jedes Exemplar kostet je nach Zustand einen Anteil davon (Zustand 5 = 100 %, 4 = 80 %, 3 = 60 %, 2 = 40 %, 1 oder unbekannt = 20 %, auf 5 Franken gerundet). Der Preis des Exemplars steht im Tab **Instanz**. Nur für Ausnahmen: unter **Instanz bearbeiten → Fixer Preis** einen eigenen Preis setzen (leer = wieder nach Zustand).
+- **Mietware:** Im Referenz-Formular den Schalter **Mietware** setzen — der Artikel bekommt im Shop den Tag „rental“ und bleibt trotzdem kaufbar.
 - **Direktnavigation:** Behälter-ID (z. B. `B-042`) direkt ins Suchfeld eingeben — springt sofort zur Behälterdetailansicht.
 - **Markierte Artikel:** Im Tab **Markierung** auf **Merken** klicken (optional mit Notiz). Markierungen und Notizen sehen alle — so kannst du Kolleg:innen auf einen Artikel hinweisen.
 

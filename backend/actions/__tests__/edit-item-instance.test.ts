@@ -273,5 +273,32 @@ describe('edit-item-instance action', () => {
       const sql: string = mockExecute.mock.calls[0][0];
       expect(sql).toContain('"UpdatedAt"');
     });
+
+    it('sets a price override and enqueues a shop sync', async () => {
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      const ctx = { ...makeCtx(), enqueueShopwareSyncJob: jest.fn() };
+      const req = makeRequest('/api/items/test-uuid/instance', 'PATCH', { actor: 'tester', PreisOverride: '149,50' });
+      const { res, getStatus } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      expect(getStatus()).toBe(200);
+      const [sql, params] = mockExecute.mock.calls[0];
+      expect(sql).toContain('"PreisOverride"=$1');
+      expect(params[0]).toBe(149.5);
+      expect(ctx.enqueueShopwareSyncJob).toHaveBeenCalledWith(expect.objectContaining({ JobType: 'item-upsert' }));
+    });
+
+    it('treats an override of 0 as "no override" (clears it)', async () => {
+      mockQueryOne.mockResolvedValue({ ItemUUID: 'test-uuid' });
+      const ctx = makeCtx();
+      const req = makeRequest('/api/items/test-uuid/instance', 'PATCH', { actor: 'tester', PreisOverride: 0 });
+      const { res, getStatus } = createMockResponse();
+
+      await action.handle(req, res, ctx);
+
+      expect(getStatus()).toBe(200);
+      expect(mockExecute.mock.calls[0][1][0]).toBeNull();
+    });
   });
 });

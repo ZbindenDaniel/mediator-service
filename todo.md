@@ -128,7 +128,7 @@
 
 ## Priority 2 — Feature Improvements
 
-59. **Instance pricing + Mietware shop tag.** Plan: [`docs/plans/pricing-and-shop-tags.md`](docs/plans/pricing-and-shop-tags.md). Pricing: base price on the ref (`Verkaufspreis` = like-new) × global grade factor from `contracts/quality/general.json` + `items.PreisOverride`; Shopware writes per-variant prices. Mietware: `item_refs.Mietware` flag → managed Shopware product tags (generic tag-rule mechanism). Decided: factor = grade/5, floor 20 %, unknown grade → 20 %, ERP keeps the base price, Mietware also goes to the ERP. Open: rounding (Q1b), Kivitendo cvar name (Q6b), tag name the shop expects (Q7).
+59. **Instance pricing / shop tags — live checks on the shop (built 2026-11-05, item-lifecycle #1022).** (a) A variant child PATCHed with `price: null` should fall back to the parent's price — verify in Shopware; (b) do variant children show the parent's `rental` tag in the storefront, or must tags be written to the children too? (c) after deploy, run an admin re-sync of all shop refs so existing products get variant prices + tags. (d) Agentic pricing stage: when reworked, target the base price (like-new refurb), see todo 0p.
 
 - **Item list: spec filters per subcategory** (deferred from ui #1002). Once one subcategory is chosen, offer selects for its filterable spec fields (`registry.getFilterableSpecKeys()` / spec contracts) with the values present in the loaded items. Needs its own filter state, persistence and neighbor-navigation support; keep it to "select per field", no ranges.
 
@@ -422,7 +422,7 @@
 
 ### Answered
 
-- **Price formula (2026-11-05):** one shared pure resolver (`models/pricing.ts`) used by UI, labels, stats and Shopware; ERP keeps the base price for now — see `docs/plans/pricing-and-shop-tags.md`. Rental is a `Mietware` ref flag shown via shop tags, not a taxonomy category; rented-out units aren't tracked.
+- **Price formula (2026-11-05):** one shared pure resolver (`models/pricing.ts`) used by UI, labels, stats and Shopware; ERP keeps the base price for now — see `docs/detailed/items.md` (pricing) and `docs/detailed/shopware.md` (tags). Rental is a `Mietware` ref flag shown via shop tags, not a taxonomy category; rented-out units aren't tracked.
 - **Shelf totals:** shelf weight is not interesting; item count is what matters.
 - **QR relocation failure cases:** moving an item to a box should work the same from the perspective of a box and an item. Multi-scan and scan-until will be added in future iterations.
 - **Dual-format field names:** `*_json` and `*_html`, e.g. `langtext_json`.

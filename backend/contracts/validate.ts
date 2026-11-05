@@ -105,6 +105,15 @@ export function validateContractDocument(type: ContractType, doc: unknown, name:
         if (!isObject(b) || !isFraction(b.min) || typeof b.value !== 'number' || b.value < 1 || b.value > 5) errors.push(`${name}: each grading band needs a fraction "min" and a value 1–5`);
       }
     }
+    if (doc.pricing !== undefined) {
+      const pr = doc.pricing;
+      const r = isObject(pr) ? pr.rounding : undefined;
+      if (!isObject(pr) || pr.model !== 'linear-grade') errors.push(`${name}: "pricing" needs "model": "linear-grade"`);
+      else if (!isFraction(pr.minFactor)) errors.push(`${name}: pricing "minFactor" must be a fraction 0–1`);
+      if (!isObject(r) || typeof r.step !== 'number' || !(r.step >= 0) || !['nearest', 'up', 'down'].includes(r.mode as string)) {
+        errors.push(`${name}: pricing "rounding" needs a "step" ≥ 0 and a "mode" (nearest/up/down)`);
+      }
+    }
     if (!Array.isArray(doc.questions)) return [...errors, `${name}: "questions" must be an array`];
     const ids = new Set<string>();
     for (const q of doc.questions) {

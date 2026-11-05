@@ -4,6 +4,8 @@ import { SHOPWARE_SYNC_ENABLED } from './config';
 import { describeQuality } from '../models/quality';
 import { buildItemCategoryLookups } from '../models/item-category-lookups';
 import { getFilterableSpecKeys } from './contracts/registry';
+import { getPricingConfig, instancePriceFor } from './lib/pricing';
+import { deriveShopTags, MANAGED_SHOP_TAGS } from '../models/shop-tags';
 import { resolveShopwareImageInputs } from './lib/shopware-media';
 import type { ShopwareImageInput } from './shopware/adminClient';
 import { parseLangtext, stringifyLangtext } from './lib/langtext';
@@ -499,6 +501,11 @@ ALTER TABLE items ADD COLUMN IF NOT EXISTS "QualityScoreMin" REAL;
 ALTER TABLE items ADD COLUMN IF NOT EXISTS "QualityScoreMax" REAL;
 -- Grade set by hand (instance edit / "mark as spare"): recompute leaves it alone until the next assessment
 ALTER TABLE items ADD COLUMN IF NOT EXISTS "QualityManual" BOOLEAN NOT NULL DEFAULT FALSE;
+-- Fixed price for this unit; NULL = base price × quality-grade factor (models/pricing.ts). Written only by
+-- edit-item-instance, never by the generic item upsert, so a caller that doesn't carry it can't wipe it.
+ALTER TABLE items ADD COLUMN IF NOT EXISTS "PreisOverride" REAL;
+-- Rental item: published to Shopware as the "rental" product tag (models/shop-tags.ts). Still buyable.
+ALTER TABLE item_refs ADD COLUMN IF NOT EXISTS "Mietware" BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS idx_item_attachments_artikel ON item_attachments("Artikel_Nummer");
 -- Explicit slot key for assembly relations, so it stops being overloaded onto "Notes"
 -- ("Notes" stays for genuine Zubehör relation notes). All slot writes/reads target "SlotKey".
@@ -770,6 +777,7 @@ type ItemRefRow = {
   EntityType: string | null;
   EAN: string | null;
   ShopwareProductId: string | null;
+  Mietware: boolean | null;
 };
 
 function prepareInstanceRow(instance: ItemInstance): ItemInstanceRow {
@@ -827,7 +835,8 @@ function prepareRefRow(ref: ItemRef): ItemRefRow {
     Einheit: asNullableString(ref.Einheit),
     EntityType: asNullableString(ref.EntityType),
     EAN: asNullableString((ref as ItemRef & { EAN?: string | null }).EAN),
-    ShopwareProductId: asNullableString((ref as ItemRef & { ShopwareProductId?: string | null }).ShopwareProductId)
+    ShopwareProductId: asNullableString((ref as ItemRef & { ShopwareProductId?: string | null }).ShopwareProductId),
+    Mietware: typeof ref.Mietware === 'boolean' ? ref.Mietware : null
   };
 }
 
@@ -931,6 +940,7 @@ SELECT
   i."QualityScoreMin" AS "QualityScoreMin",
   i."QualityScoreMax" AS "QualityScoreMax",
   i."QualityManual" AS "QualityManual",
+  i."PreisOverride" AS "PreisOverride",
   i."ShopwareVariantId" AS "ShopwareVariantId",
   i."SerialNumber" AS "SerialNumber",
   i."MacAddress" AS "MacAddress",
@@ -960,6 +970,7 @@ SELECT
   r."EAN" AS "EAN",
   r."ShopwareProductId" AS "ShopwareProductId",
   r."LastSyncedAt" AS "LastSyncedAt",
+  r."Mietware" AS "Mietware",
   CASE
     WHEN EXISTS (SELECT 1 FROM item_relations ir WHERE ir."ChildItemUUID" = i."ItemUUID") THEN 'connected'
     WHEN i."Artikel_Nummer" IS NOT NULL
@@ -1021,9 +1032,9 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     "Langtext", "Hersteller", "Länge_mm", "Breite_mm", "Höhe_mm", "Gewicht_kg",
     "Hauptkategorien_A", "Unterkategorien_A", "Hauptkategorien_B", "Unterkategorien_B",
     "Veröffentlicht_Status", "Quality", "Shopartikel", "Artikeltyp", "Einheit", "EntityType", "EAN", "ShopwareProductId",
-    "ContributedByTenant"
+    "ContributedByTenant", "Mietware"
   )
-  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,COALESCE($30::BOOLEAN, FALSE))
   ON CONFLICT("Artikel_Nummer") DO UPDATE SET
     "Suchbegriff"=EXCLUDED."Suchbegriff",
     "Grafikname"=EXCLUDED."Grafikname",
@@ -1049,7 +1060,9 @@ const UPSERT_ITEM_REFERENCE_SQL = `
     "EntityType"=EXCLUDED."EntityType",
     "EAN"=EXCLUDED."EAN",
     "ShopwareProductId"=EXCLUDED."ShopwareProductId",
-    "ContributedByTenant"=COALESCE(item_refs."ContributedByTenant", EXCLUDED."ContributedByTenant")
+    "ContributedByTenant"=COALESCE(item_refs."ContributedByTenant", EXCLUDED."ContributedByTenant"),
+    -- $30 NULL = the caller doesn't carry the flag (ERP import, agentic): keep it instead of resetting it.
+    "Mietware"=COALESCE($30::BOOLEAN, item_refs."Mietware")
   -- Tenancy safety net (lib/ownership.ts): only the owning org may overwrite an existing catalogue
   -- entry. $27 unrestricted, $28 requester org, $29 default org (owner of unstamped rows).
   WHERE $27 OR COALESCE(item_refs."ContributedByTenant", $29) = $28
@@ -1095,7 +1108,7 @@ async function upsertItemReferenceRow(row: ItemRefRow): Promise<void> {
     row.Hauptkategorien_A, row.Unterkategorien_A, row.Hauptkategorien_B, row.Unterkategorien_B,
     row.Veröffentlicht_Status, row.Quality, row.Shopartikel, row.Artikeltyp,
     row.Einheit, row.EntityType, row.EAN, row.ShopwareProductId,
-    requesterTenant, unrestricted, requesterTenant, defaultOrg
+    requesterTenant, unrestricted, requesterTenant, defaultOrg, row.Mietware
   ]);
   warnIfBlocked(n, 'catalogue entry', row.Artikel_Nummer);
 }
@@ -1307,7 +1320,8 @@ export async function getItemReference(artikelNummer: string): Promise<any> {
     `SELECT "Artikel_Nummer","Grafikname","ImageNames","Artikelbeschreibung","Suchbegriff","Verkaufspreis",
             "Kurzbeschreibung","Langtext","Hersteller","Länge_mm","Breite_mm","Höhe_mm","Gewicht_kg",
             "Hauptkategorien_A","Unterkategorien_A","Hauptkategorien_B","Unterkategorien_B",
-            "Veröffentlicht_Status","Quality","Shopartikel","Artikeltyp","Einheit","EntityType","ShopwareProductId"
+            "Veröffentlicht_Status","Quality","Shopartikel","Artikeltyp","Einheit","EntityType","ShopwareProductId",
+            "Mietware"
      FROM item_refs WHERE "Artikel_Nummer" = $1`,
     [artikelNummer]
   );
@@ -1413,7 +1427,7 @@ export async function listItemReferencesWithFilters(filters: {
       ROUND(NULLIF(r."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "Unterkategorien_A",
       ROUND(NULLIF(r."Hauptkategorien_B", '')::NUMERIC)::INTEGER AS "Hauptkategorien_B",
       ROUND(NULLIF(r."Unterkategorien_B", '')::NUMERIC)::INTEGER AS "Unterkategorien_B",
-      r."Veröffentlicht_Status",r."Shopartikel",r."Artikeltyp",r."Einheit",r."EntityType",r."EAN",r."ShopwareProductId",
+      r."Veröffentlicht_Status",r."Shopartikel",r."Artikeltyp",r."Einheit",r."EntityType",r."EAN",r."ShopwareProductId",r."Mietware",
       r."LastSyncedAt",
       COALESCE(ar."Status",'notStarted') AS "AgenticStatus",
       COALESCE(ar."ReviewState",'not_required') AS "AgenticReviewState",
@@ -1630,7 +1644,8 @@ export async function bulkUpdateItemRefShopFields(
   shopartikel: number | null,
   veröffentlichtStatus: string | null,
   verkaufspreis: number | null,
-  actor: string
+  actor: string,
+  mietware: boolean | null = null
 ): Promise<string[]> {
   if (!Array.isArray(groups) || groups.length === 0) return [];
 
@@ -1642,11 +1657,12 @@ export async function bulkUpdateItemRefShopFields(
         `UPDATE item_refs SET
            "Verkaufspreis"=COALESCE($2,"Verkaufspreis"),
            "Shopartikel"=COALESCE($3,"Shopartikel"),
-           "Veröffentlicht_Status"=COALESCE($4,"Veröffentlicht_Status")
+           "Veröffentlicht_Status"=COALESCE($4,"Veröffentlicht_Status"),
+           "Mietware"=COALESCE($5::BOOLEAN,"Mietware")
          WHERE "Artikel_Nummer"=$1`,
-        [artikelNummer, verkaufspreis, shopartikel, veröffentlichtStatus]
+        [artikelNummer, verkaufspreis, shopartikel, veröffentlichtStatus, mietware]
       );
-      await logEvent({ Actor: actor, EntityType: 'Item', EntityId: artikelNummer, Event: 'ShopStatusUpdated', Meta: JSON.stringify({ shopartikel, veröffentlichtStatus, verkaufspreis }) });
+      await logEvent({ Actor: actor, EntityType: 'Item', EntityId: artikelNummer, Event: 'ShopStatusUpdated', Meta: JSON.stringify({ shopartikel, veröffentlichtStatus, verkaufspreis, mietware }) });
 
       for (const itemId of itemIds) {
         try {
@@ -2036,13 +2052,27 @@ export async function sumInventoryWeightKg(): Promise<number> {
   return Number(row?.total ?? 0);
 }
 
+// Summed in TS, not SQL: the per-instance price (grade factor, rounding, override) lives in models/pricing.ts
+// and must not be duplicated as a SQL expression that could drift from it.
 export async function sumInventoryPriceValue(): Promise<number> {
-  const row = await queryOne<{ total: string }>(
-    `SELECT COALESCE(SUM(COALESCE(i."Auf_Lager",0)*COALESCE(r."Verkaufspreis",0)),0) AS total
-     FROM items i LEFT JOIN item_refs r ON i."Artikel_Nummer"=r."Artikel_Nummer"
-     WHERE r."Verkaufspreis" IS NOT NULL AND r."Verkaufspreis" > 0`
+  const rows = await query<{ Auf_Lager: number | null; Verkaufspreis: number | null; Quality: number | null; PreisOverride: number | null }>(
+    `SELECT i."Auf_Lager" AS "Auf_Lager", r."Verkaufspreis" AS "Verkaufspreis",
+            CAST(COALESCE(r."Quality", i."Quality") AS INTEGER) AS "Quality", i."PreisOverride" AS "PreisOverride"
+       FROM items i LEFT JOIN item_refs r ON i."Artikel_Nummer"=r."Artikel_Nummer"
+      WHERE COALESCE(i."Auf_Lager",0) > 0
+        AND ((r."Verkaufspreis" IS NOT NULL AND r."Verkaufspreis" > 0) OR i."PreisOverride" > 0)`
   );
-  return Number(row?.total ?? 0);
+  const config = getPricingConfig();
+  let total = 0;
+  for (const row of rows) {
+    const price = instancePriceFor({
+      Verkaufspreis: row.Verkaufspreis != null ? Number(row.Verkaufspreis) : null,
+      Quality: row.Quality != null ? Number(row.Quality) : null,
+      PreisOverride: row.PreisOverride != null ? Number(row.PreisOverride) : null
+    }, config).price;
+    if (price) total += price * Number(row.Auf_Lager);
+  }
+  return Math.round(total * 100) / 100;
 }
 
 // Returns Artikel_Nummern of shop refs that have been synced before and have changed since.
@@ -3196,6 +3226,10 @@ export interface ShopwareSyncSnapshot {
   // Category display names (main + sub, for the primary A and secondary B pairs) resolved from the ref's
   // category codes. The Shopware client links the product to EXISTING categories of these names (never creates).
   categories: string[];
+  // Tags this product should carry (models/shop-tags.ts) and every tag the mediator manages: the client
+  // adds/removes only managed tags, so tags set by hand in the shop admin survive.
+  tags: string[];
+  managedTags: string[];
 }
 
 // One Shopware variant = one physical instance of a ref (itemUUID axis makes the signature unique per
@@ -3206,6 +3240,8 @@ export interface ShopwareVariantGroup {
   options: Record<string, string>;
   stock: number;
   instanceIds: string[];
+  // The instance's own price (base × grade factor or override, models/pricing.ts); null = inherit the parent's.
+  grossPrice?: number | null;
 }
 
 // Build one variant group per instance: options are the InstanceSpecs axes + Zustand + itemUUID. The
@@ -3316,6 +3352,7 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
     unterA: number | null;
     hauptB: number | null;
     unterB: number | null;
+    mietware: boolean | null;
     stock: string | number;
   }>(
     // Approval comes from scalar subselects (LIMIT 1) so a ref with multiple agentic_runs never
@@ -3341,11 +3378,12 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
             ROUND(NULLIF(r."Unterkategorien_A", '')::NUMERIC)::INTEGER AS "unterA",
             ROUND(NULLIF(r."Hauptkategorien_B", '')::NUMERIC)::INTEGER AS "hauptB",
             ROUND(NULLIF(r."Unterkategorien_B", '')::NUMERIC)::INTEGER AS "unterB",
+            r."Mietware" AS "mietware",
             COALESCE(SUM(COALESCE(i."Auf_Lager",0)),0) AS "stock"
        FROM item_refs r
        LEFT JOIN items i ON i."Artikel_Nummer" = r."Artikel_Nummer"
       WHERE r."Artikel_Nummer" = $1
-      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext", r."Grafikname", r."ImageNames", r."Shopartikel", r."Veröffentlicht_Status", r."Länge_mm", r."Breite_mm", r."Höhe_mm", r."Gewicht_kg", r."Hauptkategorien_A", r."Unterkategorien_A", r."Hauptkategorien_B", r."Unterkategorien_B"`,
+      GROUP BY r."Artikel_Nummer", r."Kurzbeschreibung", r."Artikelbeschreibung", r."Verkaufspreis", r."ShopwareProductId", r."Langtext", r."Grafikname", r."ImageNames", r."Shopartikel", r."Veröffentlicht_Status", r."Länge_mm", r."Breite_mm", r."Höhe_mm", r."Gewicht_kg", r."Hauptkategorien_A", r."Unterkategorien_A", r."Hauptkategorien_B", r."Unterkategorien_B", r."Mietware"`,
     [artikelNummer]
   );
   if (!row) {
@@ -3359,19 +3397,30 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
 
   // Variant grouping: itemUUID is always an axis, so each instance is its own variant. Use the variant
   // path when a ref has ≥2 instances; a single-instance ref stays a plain product (no needless parent).
-  const instances = await query<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null; Quality: number | null }>(
-    `SELECT "ItemUUID", "InstanceSpecs", "Auf_Lager", "Quality" FROM items WHERE "Artikel_Nummer" = $1`,
+  const instances = await query<{ ItemUUID: string; InstanceSpecs: string | null; Auf_Lager: number | null; Quality: number | null; PreisOverride: number | null }>(
+    `SELECT "ItemUUID", "InstanceSpecs", "Auf_Lager", "Quality", "PreisOverride" FROM items WHERE "Artikel_Nummer" = $1`,
     [artikelNummer]
   );
+  const basePrice = row.grossPrice != null ? Number(row.grossPrice) : null;
+  const pricingConfig = getPricingConfig();
+  const priceOf = (inst: (typeof instances)[number]): number | null =>
+    instancePriceFor({ Verkaufspreis: basePrice, Quality: inst.Quality, PreisOverride: inst.PreisOverride != null ? Number(inst.PreisOverride) : null }, pricingConfig).price;
+  const priceByUuid = new Map(instances.map((inst) => [inst.ItemUUID, priceOf(inst)]));
   const allGroups = buildVariantGroups(instances, artikelNummer);
   const useVariants = allGroups.length >= 2 && allGroups.every((g) => Object.keys(g.options).length > 0);
-  const variants = useVariants ? allGroups : [];
+  // One instance per group (itemUUID axis), so the group's price is that instance's price.
+  const variants = useVariants
+    ? allGroups.map((g) => ({ ...g, grossPrice: priceByUuid.get(g.instanceIds[0]) ?? null }))
+    : [];
+  // Variant parent keeps the base price (operator decision Q4); a single-instance product sells at that
+  // instance's price; a ref without instances shows the base price.
+  const grossPrice = !useVariants && instances.length === 1 ? priceOf(instances[0]) : basePrice;
 
   return {
     productNumber: row.productNumber,
     name: row.name,
     description,
-    grossPrice: row.grossPrice != null ? Number(row.grossPrice) : null,
+    grossPrice,
     shopwareProductId: row.shopwareProductId ?? null,
     stock: Number(row.stock) || 0,
     lengthMm: row.lengthMm != null ? Number(row.lengthMm) : null,
@@ -3384,7 +3433,9 @@ export async function getShopwareSyncSnapshot(artikelNummer: string): Promise<Sh
     filterablePropertyKeys: [...getFilterableSpecKeys()],
     images: resolveShopwareImageInputs(row.productNumber, row.grafikname, row.imageNames),
     variants,
-    categories: resolveShopwareCategoryNames(row.hauptA, row.unterA, row.hauptB, row.unterB)
+    categories: resolveShopwareCategoryNames(row.hauptA, row.unterA, row.hauptB, row.unterB),
+    tags: deriveShopTags({ Mietware: row.mietware === true }),
+    managedTags: [...MANAGED_SHOP_TAGS]
   };
 }
 

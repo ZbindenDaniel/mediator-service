@@ -16,6 +16,8 @@ Shared TypeScript type definitions — the single source of truth for data shape
 - `agentic-request-log.ts` / `agentic-run-review-history.ts` — audit log types
 - `quality.ts` / `quality-contract.ts` / `spec-contract.ts` — quality assessment and spec contract shapes
 - `quality-score.ts` — percentage quality range (weights, uncertainty, roll-up of part ranges); shared by backend store and frontend preview
+- `pricing.ts` — instance price (base price × quality-grade factor, or the instance override); config from `pricing` in `contracts/quality/general.json`
+- `shop-tags.ts` — rules deriving the Shopware tags the mediator manages (`Mietware` → `rental`)
 - `assembly-contract.ts` — assembly (Zerlegen) contract shape + canonical slot presence values
 - `co2.ts` — CO₂ impact scoring types
 - `event-log.ts` / `event-labels.ts` / `event-resources.json` — event log display metadata

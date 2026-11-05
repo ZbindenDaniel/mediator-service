@@ -5,6 +5,15 @@ import { normalizeQuality } from '../../models/quality';
 import { stringifyLangtext } from '../lib/langtext';
 import { execute, queryOne } from '../db-client';
 import { guardWrite } from '../utils/write-guard';
+import { generateShopwareCorrelationId } from '../db';
+
+// Instance price override: a positive number, else null. 0/empty clears it (operator decision: overrides are
+// the exception, never a way to give an item away) — see models/pricing.ts.
+function normalizePriceOverride(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const n = typeof raw === 'number' ? raw : Number.parseFloat(String(raw).replace(',', '.').trim());
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+}
 
 // Normalize an operator-supplied InstanceSpecs object into a canonical string→string map.
 // Returns `null` (clear the column) when no meaningful entries remain, so deleting every
@@ -63,7 +72,9 @@ const action = defineHttpAction({
         ? normalizeInstanceSpecs(data.InstanceSpecs)
         : undefined;
 
-      if (serialNumber === undefined && macAddress === undefined && quality === undefined && instanceSpecs === undefined) {
+      const priceOverride = 'PreisOverride' in data ? normalizePriceOverride(data.PreisOverride) : undefined;
+
+      if (serialNumber === undefined && macAddress === undefined && quality === undefined && instanceSpecs === undefined && priceOverride === undefined) {
         return sendJson(res, 400, { error: 'no editable fields provided' });
       }
 
@@ -95,6 +106,11 @@ const action = defineHttpAction({
         setClauses.push(`"InstanceSpecs"=$${params.length}`);
         changed.InstanceSpecs = serialized;
       }
+      if (priceOverride !== undefined) {
+        params.push(priceOverride);
+        setClauses.push(`"PreisOverride"=$${params.length}`);
+        changed.PreisOverride = priceOverride;
+      }
       params.push(new Date().toISOString());
       setClauses.push(`"UpdatedAt"=$${params.length}`);
       params.push(uuid);
@@ -107,6 +123,18 @@ const action = defineHttpAction({
         Event: 'InstanceUpdated',
         Meta: JSON.stringify(changed)
       });
+      // Grade and override both drive the shop price (and the grade the Zustand axis), so the variant must re-sync.
+      if ((quality !== undefined || priceOverride !== undefined) && typeof ctx.enqueueShopwareSyncJob === 'function') {
+        try {
+          await ctx.enqueueShopwareSyncJob({
+            CorrelationId: generateShopwareCorrelationId('edit-item-instance', uuid),
+            JobType: 'item-upsert',
+            Payload: JSON.stringify({ itemUUID: uuid, actor, trigger: 'edit-item-instance' })
+          });
+        } catch (queueErr) {
+          console.error('[edit-item-instance] Failed to enqueue Shopware sync job', { uuid, error: queueErr });
+        }
+      }
 
       sendJson(res, 200, { ok: true });
     } catch (err) {

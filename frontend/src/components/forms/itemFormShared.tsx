@@ -134,6 +134,7 @@ const referenceFieldKeys: (keyof ItemReferenceEdit)[] = [
   'Unterkategorien_B',
   'Veröffentlicht_Status',
   'Shopartikel',
+  'Mietware',
   'Artikeltyp',
   'Einheit',
   'EntityType',
@@ -1443,8 +1444,8 @@ export function ItemDetailsFields({
       </div>
 
       <div className="row">
-        <label>
-          Verkaufspreis (CHF)
+        <label title="Preis eines neuwertigen Geräts; Exemplare kosten je nach Zustand anteilig weniger (mind. 20 %).">
+          Basispreis neuwertig (CHF)
         </label>
         <input
           type="number"
@@ -1574,6 +1575,19 @@ export function ItemDetailsFields({
               onUpdate('Shopartikel', 0);
             }
           }}
+        />
+      </div>
+
+      <div className="row">
+        <label title="Wird im Shop mit dem Tag „rental“ markiert; der Artikel bleibt kaufbar.">
+          Mietware
+        </label>
+        <input
+          type="checkbox"
+          role="switch"
+          className="item-form__binary-switch"
+          checked={form.Mietware === true}
+          onChange={(event) => onUpdate('Mietware', event.target.checked)}
         />
       </div>
 

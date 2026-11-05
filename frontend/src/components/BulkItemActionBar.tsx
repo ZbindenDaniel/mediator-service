@@ -160,6 +160,8 @@ export interface ShopStatusValues {
   shopartikel: number | null;
   veröffentlicht: string | null;
   verkaufspreis: number | null;
+  // null/undefined = leave as is (bulk "nicht ändern"); sent to the backend only when set.
+  mietware?: boolean | null;
 }
 
 interface ShopStatusFormProps {
@@ -173,12 +175,14 @@ export function ShopStatusForm({ onChange }: ShopStatusFormProps) {
   const [shopartikelEnabled, setShopartikelEnabled] = useState(false);
   const [veröffentlichtEnabled, setVeröffentlichtEnabled] = useState(false);
   const [verkaufspreisEnabled, setVerkaufspreisEnabled] = useState(false);
+  const [mietware, setMietware] = useState<boolean | null>(null);
 
   function update(patch: Partial<ShopStatusValues>) {
     const next: ShopStatusValues = {
       shopartikel: patch.shopartikel !== undefined ? patch.shopartikel : shopartikel,
       veröffentlicht: patch.veröffentlicht !== undefined ? patch.veröffentlicht : veröffentlicht,
-      verkaufspreis: patch.verkaufspreis !== undefined ? patch.verkaufspreis : verkaufspreis
+      verkaufspreis: patch.verkaufspreis !== undefined ? patch.verkaufspreis : verkaufspreis,
+      mietware: patch.mietware !== undefined ? patch.mietware : mietware
     };
     onChange(next);
   }
@@ -262,7 +266,7 @@ export function ShopStatusForm({ onChange }: ShopStatusFormProps) {
               update({ verkaufspreis: val });
             }}
           />
-          <span>Verkaufspreis (CHF)</span>
+          <span>Basispreis neuwertig (CHF)</span>
         </label>
         {verkaufspreisEnabled ? (
           <input
@@ -276,6 +280,35 @@ export function ShopStatusForm({ onChange }: ShopStatusFormProps) {
               const val = Number.isFinite(parsed) ? parsed : 0;
               setVerkaufspreis(val);
               update({ verkaufspreis: val });
+            }}
+          />
+        ) : (
+          <span className="muted shop-status-form__unchanged">nicht ändern</span>
+        )}
+      </div>
+
+      <div className="shop-status-form__row">
+        <label className="shop-status-form__enable">
+          <input
+            type="checkbox"
+            checked={mietware !== null}
+            onChange={(e) => {
+              const val = e.target.checked ? false : null;
+              setMietware(val);
+              update({ mietware: val });
+            }}
+          />
+          <span>Mietware</span>
+        </label>
+        {mietware !== null ? (
+          <input
+            type="checkbox"
+            role="switch"
+            className="item-form__binary-switch"
+            checked={mietware === true}
+            onChange={(e) => {
+              setMietware(e.target.checked);
+              update({ mietware: e.target.checked });
             }}
           />
         ) : (
@@ -1084,12 +1117,13 @@ export default function BulkItemActionBar({
 
     setIsProcessing(true);
     try {
-      const { shopartikel, veröffentlicht, verkaufspreis } = shopFormRef.current;
+      const { shopartikel, veröffentlicht, verkaufspreis, mietware } = shopFormRef.current;
       console.log('bulk update shop status requested', {
         count: selectedCount,
         shopartikel,
         veröffentlicht,
-        verkaufspreis
+        verkaufspreis,
+        mietware
       });
 
       const response = await fetch('/api/items/bulk/update-ref', {
@@ -1100,6 +1134,7 @@ export default function BulkItemActionBar({
           shopartikel,
           veröffentlicht,
           verkaufspreis,
+          ...(typeof mietware === 'boolean' ? { mietware } : {}),
           actor,
           confirm: true
         })
