@@ -296,6 +296,10 @@ describe('save-item action', () => {
   });
 
   it('does not mutate legacy persisted Grafikname paths unless explicitly replaced', async () => {
+    // The response media list only carries files that exist, so the legacy asset needs a fixture.
+    const legacyFolder = path.join(sandbox.distMediaDir, 'ART-LEGACY');
+    fs.mkdirSync(legacyFolder, { recursive: true });
+    fs.writeFileSync(path.join(legacyFolder, 'ART-LEGACY-1.jpg'), 'fixture');
     const persistItemReference = jest.fn(async () => undefined);
     const ctx = {
       getItem: jest.fn(async () => ({

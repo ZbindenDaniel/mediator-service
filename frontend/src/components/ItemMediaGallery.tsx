@@ -59,10 +59,16 @@ export function normalizeGalleryAssets(
     });
   }
 
-  addAsset(grafikname || null, true);
+  // A bare Grafikname (e.g. ERP `wETG.jpg`) is a stored name, not a URL; the backend's media list
+  // is already resolved against the media roots and leads with the primary image.
+  const grafiknameSrc = typeof grafikname === 'string' ? grafikname.trim() : '';
+  const usableGrafikname = /^(\/|https?:|data:)/i.test(grafiknameSrc) ? grafiknameSrc : '';
+  addAsset(usableGrafikname || null, true);
 
   if (Array.isArray(mediaAssets)) {
-    mediaAssets.forEach((asset) => addAsset(typeof asset === 'string' ? asset : null, false));
+    mediaAssets.forEach((asset, index) =>
+      addAsset(typeof asset === 'string' ? asset : null, !usableGrafikname && index === 0)
+    );
   }
 
   // Ensure deterministic order: keep primary first, others alphabetically
