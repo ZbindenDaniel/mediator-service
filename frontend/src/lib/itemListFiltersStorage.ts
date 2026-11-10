@@ -235,9 +235,8 @@ export function buildItemListQueryParams(filters: ItemListFilters): URLSearchPar
     if (filters.placementFilter === 'unplaced') {
       query.set('showUnplaced', 'true');
     }
-    if (filters.entityFilter !== 'all') {
-      query.set('entityFilter', filters.entityFilter);
-    }
+    // Always sent, 'all' included: the backend defaults a missing param to 'instances', so omitting it hid refs under "Alle".
+    query.set('entityFilter', filters.entityFilter);
   } catch (error) {
     logError('Failed to build item list query params', error, { filters });
   }

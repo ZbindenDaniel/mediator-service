@@ -3049,6 +3049,13 @@ export async function claimQueuedAgenticRuns(limit = 5, maxRunning?: number): Pr
   }
 }
 
+// The keep-busy feeder only spends model capacity on refs with at least one physical instance: ref-only
+// catalogue rows (ERP/CSV imports) flooded the queue with work nobody could see or use. Manual triggers
+// (KI tab, bulk queue, restart) write 'queued' directly and never pass through the feeder, so they still
+// work for ref-only items.
+const AUTO_FEED_REQUIRES_INSTANCE_SQL = (artikelNummerColumn: string): string =>
+  `EXISTS (SELECT 1 FROM items it WHERE it."Artikel_Nummer" = ${artikelNummerColumn})`;
+
 export async function claimNotStartedAgenticRuns(limit = 3): Promise<AgenticRun[]> {
   const effectiveLimit = Number.isFinite(limit) && limit > 0 ? Math.floor(limit) : 3;
   const now = new Date().toISOString();
@@ -3066,6 +3073,7 @@ export async function claimNotStartedAgenticRuns(limit = 3): Promise<AgenticRun[
          FROM agentic_runs
          WHERE "Status" = 'notStarted'
            AND "SearchQuery" IS NOT NULL AND TRIM("SearchQuery") != ''
+           AND ${AUTO_FEED_REQUIRES_INSTANCE_SQL('agentic_runs."Artikel_Nummer"')}
          ORDER BY "LastModified" ASC, "Id" ASC
          LIMIT $1
          FOR UPDATE SKIP LOCKED
@@ -3103,8 +3111,8 @@ export async function listItemRefsWithoutAgenticRun(limit = 3): Promise<Array<{
      FROM item_refs i
      WHERE NOT EXISTS (SELECT 1 FROM agentic_runs r WHERE r."Artikel_Nummer" = i."Artikel_Nummer")
        AND TRIM(COALESCE(i."Artikelbeschreibung", '')) <> ''
-     ORDER BY EXISTS (SELECT 1 FROM items it WHERE it."Artikel_Nummer" = i."Artikel_Nummer") DESC,
-              i."Artikel_Nummer" ASC
+       AND ${AUTO_FEED_REQUIRES_INSTANCE_SQL('i."Artikel_Nummer"')}
+     ORDER BY i."Artikel_Nummer" ASC
      LIMIT $1`,
     [effectiveLimit]
   );
@@ -3117,15 +3125,16 @@ export async function enrolItemRefsWithoutAgenticRun(limit = 3): Promise<number>
     // Lazy enrolment for the keep-busy feeder: refs that never got an agentic_runs row (bulk imports,
     // intake, legacy data) were invisible to it. Enrolling only as many as there are free waiting slots —
     // instead of a one-off backfill — keeps the notStarted pool small and lets the whole catalogue trickle
-    // through the capped queue. Refs with stock first; ON CONFLICT covers a racing create/instance.
+    // through the capped queue. Only refs with an instance (see AUTO_FEED_REQUIRES_INSTANCE_SQL); ON CONFLICT
+    // covers a racing create/instance.
     return execute(
       `INSERT INTO agentic_runs ("Artikel_Nummer","SearchQuery","Status","LastModified","ReviewState")
        SELECT i."Artikel_Nummer", TRIM(i."Artikelbeschreibung"), 'notStarted', $2, 'not_required'
        FROM item_refs i
        WHERE NOT EXISTS (SELECT 1 FROM agentic_runs r WHERE r."Artikel_Nummer" = i."Artikel_Nummer")
          AND TRIM(COALESCE(i."Artikelbeschreibung", '')) <> ''
-       ORDER BY EXISTS (SELECT 1 FROM items it WHERE it."Artikel_Nummer" = i."Artikel_Nummer") DESC,
-                i."Artikel_Nummer" ASC
+         AND ${AUTO_FEED_REQUIRES_INSTANCE_SQL('i."Artikel_Nummer"')}
+       ORDER BY i."Artikel_Nummer" ASC
        LIMIT $1
        ON CONFLICT ("Artikel_Nummer") DO NOTHING`,
       [effectiveLimit, now]
