@@ -48,7 +48,8 @@ removed once all items carry `Artikel_Nummer`.
 | ERP mirror target | `MEDIA_ROOT_DIR` → `<root>/shopbilder-import` | Destination for `/api/sync/erp` media copy stage |
 
 Set `MEDIA_STORAGE_MODE=webdav` and `MEDIA_ROOT_DIR=/mnt/webdav` (absolute filesystem path, not a URL)
-to enable the WebDAV read root. See `docs/ENVIRONMENT.md` for full configuration reference.
+to enable the WebDAV read root. See `docs/ENVIRONMENT.md` for full configuration reference. The host-side
+davfs2 mounts behind it (fstab, credentials, migration) are in [webdav-mounts.md](webdav-mounts.md).
 
 ### API surface
 

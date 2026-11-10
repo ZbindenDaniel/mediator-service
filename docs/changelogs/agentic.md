@@ -4,7 +4,7 @@ Covers: AI enrichment pipeline, search, extraction, categorization, pricing, sup
 
 ---
 
-## 1081. ✅ Keep-busy auto-feeder skips ref-only refs (no instance → no automatic run)
+## 1083. ✅ Keep-busy auto-feeder skips ref-only refs (no instance → no automatic run)
 **Why:** The feeder (`enrolItemRefsWithoutAgenticRun` + `claimNotStartedAgenticRuns`) enrolled *every* `item_refs` row with a description and only sorted stocked refs first, so once instance-backed refs ran out it spent model capacity on ref-only catalogue rows (ERP/CSV imports) that the item list hides by default. All three feeder queries (enrol, enrol-time triage list, notStarted→queued promotion) now require `EXISTS (items with that Artikel_Nummer)` via the shared `AUTO_FEED_REQUIRES_INSTANCE_SQL` in `db.ts`. The guard sits in the feeder, not in the queued→running claim, on purpose: manual starts (KI tab `/api/agentic/run`, bulk queue, restart) write `queued` directly and never pass through the feeder, so a ref-only item can still be enriched on request. Rejected: gating the claim, which can't tell a manual `queued` from an auto-fed one without a new column. Regression test `test/agentic-auto-feed-instance-guard.test.ts` pins the guard in the SQL (no live Postgres in the suite).
 **Deferred:** existing ref-only runs that the feeder had *already* moved to `queued` are not touched by code (a startup migration can't tell them from manual starts); operators demote them once with SQL (`queued` + no instance → `notStarted`, which the feeder now leaves alone). A ref whose last instance is deleted keeps an already-queued run. The cockpit's notStarted/waiting counts still include ref-only runs.
 

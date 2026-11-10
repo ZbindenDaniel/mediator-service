@@ -4,7 +4,7 @@ Covers: frontend layout, navigation, cross-cutting UI changes, mobile/desktop re
 
 ---
 
-## 1080. ✅ Item list Typ filter "Alle" shows references again
+## 1082. ✅ Item list Typ filter "Alle" shows references again
 **Why:** `buildItemListQueryParams` skipped `entityFilter` when it was `all`, assuming that was the server default, but `list-items` defaults a missing param to `instances`. "Alle" therefore behaved like "Instanzen" and ref-only items (no `items` row) were invisible except under "Referenzen", which made agentic-queued refs look like they didn't exist. The param is now always sent; the backend default stays `instances` so other API callers keep their behaviour. Regression test in `test/item-list-filters.test.ts`.
 **Deferred:** nothing deferred.
 

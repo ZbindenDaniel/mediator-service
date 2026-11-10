@@ -13,6 +13,7 @@ New runbooks can start from [`_template.md`](_template.md).
 | [printing.md](printing.md) | Label rendering, preview, dispatch to CUPS queues |
 | [printer-server-setup.md](printer-server-setup.md) | Raspberry Pi CUPS server install and connection |
 | [media-storage.md](media-storage.md) | Photos, attachments, identifier-keyed external docs |
+| [webdav-mounts.md](webdav-mounts.md) | Host davfs2 mounts of the kivitendo WebDAV shares: server migration guide |
 | [import_export.md](import_export.md) | CSV/ZIP import, export regimes (backup vs ERP), column aliases |
 | [nightly-erp-sync.md](nightly-erp-sync.md) | Nightly kivitendo sync: opt-in model, toggle, troubleshooting |
 | [shopware.md](shopware.md) | Shopware search and the queued product/stock sync |

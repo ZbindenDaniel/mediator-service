@@ -43,7 +43,7 @@ Without `MEDIATOR_IMAGE` the compose file falls back to the old `ghcr.io/…:3.0
 
 **Paths in `.env` are paths inside the container**, not on the host. The container only sees its
 volumes: `/var/lib/mediator` (persistent `mediator-data`, writable), `/app/dist/backend/media` and the
-WebDAV mount. Don't copy a `.env` from a non-Docker install (e.g. `/opt/<something>/data/inbox`) or from
+WebDAV mount (host setup: [webdav-mounts.md](webdav-mounts.md)). Don't copy a `.env` from a non-Docker install (e.g. `/opt/<something>/data/inbox`) or from
 the dev override (`/srv/catalogue/…` exists only with `docker-compose.catalogue.yml`):
 ```bash
 INBOX_DIR=/var/lib/mediator/inbox

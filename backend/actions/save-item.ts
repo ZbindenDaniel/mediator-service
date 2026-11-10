@@ -11,9 +11,11 @@ import { defineHttpAction } from './index';
 import {
   formatArtikelNummerForMedia,
   MEDIA_UPLOAD_STAGING_DIR,
+  resolveFetchMediaRoots,
   resolveMediaFolder,
   resolveUploadMediaPath
 } from '../lib/media';
+import { resolveExistingMediaPaths } from '../lib/media-request';
 import { emitMediaAudit } from '../lib/media-audit';
 import { assertPathWithinRoot, resolvePathWithinRoot } from '../lib/path-guard';
 import { generateShopwareCorrelationId } from '../db';
@@ -221,19 +223,42 @@ function normalizeGrafiknameForPersistence(
 
 // TODO(media-enumeration): Confirm non-image files never leak into media folders once new sources are added.
 
+export interface CollectMediaAssetsOptions {
+  // Also list the read-only ERP root (shopbilder) and drop a Grafikname that exists in no root.
+  // Display paths only: the slot/write paths keep scanning the writable staging root alone.
+  includeReadOnlyRoots?: boolean;
+}
+
+function existsInFetchRoots(asset: string): boolean {
+  const relative = asset.startsWith(MEDIA_PREFIX) ? asset.slice(MEDIA_PREFIX.length) : asset;
+  return resolveExistingMediaPaths(resolveFetchMediaRoots(), relative).length > 0;
+}
+
 export function collectMediaAssets(
   itemId: string,
   primary?: string | null,
-  artikelNummer?: string | null
+  artikelNummer?: string | null,
+  options: CollectMediaAssetsOptions = {}
 ): string[] {
   // TODO(media-filtering): Keep legacy folder filtering aligned with Artikel_Nummer rules.
+  const includeReadOnlyRoots = options.includeReadOnlyRoots === true;
   const assets: string[] = [];
   const seen = new Set<string>();
   const trimmedPrimary = typeof primary === 'string' ? primary.trim() : '';
-  const normalisedPrimary =
+  let normalisedPrimary =
     trimmedPrimary && trimmedPrimary.startsWith(MEDIA_PREFIX)
       ? trimmedPrimary
       : normaliseMediaReference(itemId, artikelNummer, trimmedPrimary || null);
+  // Kivitendo stores a logical name (e.g. `wETG.jpg`) while shopbilder holds
+  // `wETG_<artnr>_<timestamp>.jpg`; the stored name must not become a dead /media URL.
+  if (includeReadOnlyRoots && normalisedPrimary && !existsInFetchRoots(normalisedPrimary)) {
+    console.info('[save-item] Dropping Grafikname that resolves to no media file', {
+      itemId,
+      artikelNummer: artikelNummer ?? null,
+      candidate: normalisedPrimary
+    });
+    normalisedPrimary = null;
+  }
   if (normalisedPrimary && !isAllowedMediaAsset(normalisedPrimary)) {
     console.info('[save-item] Skipping non-image media asset from Grafikname', {
       itemId,
@@ -256,8 +281,10 @@ export function collectMediaAssets(
     if (formattedArtikelNummer && formattedArtikelNummer !== trimmedArtikelNummer) {
       artikelPrefixes.add(formattedArtikelNummer);
     }
-    for (const folder of foldersToScan) {
-      const dir = resolvePathWithinRoot(MEDIA_UPLOAD_STAGING_DIR, folder, {
+    const scanRoots = includeReadOnlyRoots ? resolveFetchMediaRoots() : [MEDIA_UPLOAD_STAGING_DIR];
+    const scanTargets = scanRoots.flatMap((root) => foldersToScan.map((folder) => ({ root, folder })));
+    for (const { root, folder } of scanTargets) {
+      const dir = resolvePathWithinRoot(root, folder, {
         logger: console,
         operation: 'save-item:collect-media-assets'
       });
@@ -275,7 +302,7 @@ export function collectMediaAssets(
         }
         entries = fs.readdirSync(dir).sort();
       } catch (error) {
-        console.error('[save-item] Failed to read media directory', { itemId, folder, dir, error });
+        console.error('[save-item] Failed to read media directory', { itemId, folder, root, dir, error });
         continue;
       }
       const shouldFilterByArtikel =
@@ -694,7 +721,7 @@ const action = defineHttpAction({
               events: [],
               agentic: null,
               agenticReviewAutomation: null,
-              media: collectMediaAssets(itemId, fallbackReference.Grafikname, fallbackReference.Artikel_Nummer),
+              media: collectMediaAssets(itemId, fallbackReference.Grafikname, fallbackReference.Artikel_Nummer, { includeReadOnlyRoots: true }),
               instances: [],
               permissions: await resolveItemPermissions(null, fallbackReference.Artikel_Nummer)
             });
@@ -762,7 +789,7 @@ const action = defineHttpAction({
           }
         }
         const normalisedGrafikname = normaliseMediaReference(itemId, item.Artikel_Nummer, item.Grafikname);
-        const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer);
+        const media = collectMediaAssets(itemId, normalisedGrafikname, item.Artikel_Nummer, { includeReadOnlyRoots: true });
         // Only article-less parts need the slot lookup; everything else already carries its category.
         let effectiveSubCategory: number | null = typeof item.Unterkategorien_A === 'number' ? item.Unterkategorien_A : null;
         if (effectiveSubCategory === null) {
@@ -1168,7 +1195,10 @@ const action = defineHttpAction({
 
         if (removalSlots.length > 0 || assetsToRemove.size > 0) {
           let removedCount = 0;
-          for (const slot of removalSlots) {
+          // The UI's slot index counts read-only shopbilder images too, so it does not line up with the
+          // staging-only list here; an explicit removeAsset is authoritative and the slot is ignored.
+          const slotsToMap = assetsToRemove.size > 0 ? [] : removalSlots;
+          for (const slot of slotsToMap) {
             const asset = existingMediaBeforeUpdate[slot];
             if (asset) {
               assetsToRemove.add(asset);
@@ -1179,7 +1209,7 @@ const action = defineHttpAction({
               removedCount += 1;
             }
           }
-          if (removalSlots.includes(0)) {
+          if (slotsToMap.includes(0)) {
             grafik = '';
           }
           if (normalisedExistingGrafik && assetsToRemove.has(normalisedExistingGrafik)) {
@@ -1461,7 +1491,7 @@ const action = defineHttpAction({
         console.error('[save-item] Failed to persist item reference update', { itemId, artikelNummer, error });
         return sendJson(res, 500, { error: 'Failed to persist item reference' });
       }
-      const media = collectMediaAssets(itemId, normalisedGrafikname, reference.Artikel_Nummer);
+      const media = collectMediaAssets(itemId, normalisedGrafikname, reference.Artikel_Nummer, { includeReadOnlyRoots: true });
       const responseBody = { ok: true, media };
       console.info('[save-item] Prepared item update response', {
         itemId,
