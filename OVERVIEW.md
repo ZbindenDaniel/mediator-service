@@ -37,7 +37,8 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
-1080. ✅ WebDAV mounts migration guide (davfs2 fstab entries, credentials, verify checklist) in `docs/detailed/webdav-mounts.md` → [media]
+1081. ✅ WebDAV mounts migration guide (davfs2 fstab entries, credentials, verify checklist) in `docs/detailed/webdav-mounts.md` → [media]
+1080. ✅ Item images resolve by Artikelnummer across both media roots (shopbilder listed, dead ERP `Grafikname` like `wETG.jpg` dropped), removal pinned to the clicked file → [media]
 1079. ✅ User docs rewritten in plain, factual language (no filler, no "the AI learns"), wrong UI labels and a wrong CO₂ example fixed, writing rules in `docs/user/README.md` → [ui]
 1078. ✅ Help docs follow feature flags (page + section markers, stripped server-side), new pages Administration / Fundsachen / Aktivitäten / KI-Cockpit, light-on-light help CSS fixed → [ui]
 1077. ✅ Merged Gitea `main` (Iyed's Sass build fix, same bug already fixed here) into `main` so the push fast-forwards → [docs-infra]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 1074. ✅ Plan: instance pricing (base price × quality-grade factor + override) and `Mietware` ref flag → Shopware tags (plan shipped in #1075) → [item-lifecycle]
 1073. ✅ Activity log level colours: subtle left bar per row (Fehler red + faint tint, Wichtig amber, Info pale blue, Technisch dimmed) + legend; level also in tooltip/aria → [ui]
 1072. ✅ KI cockpit audit trail: lever changes (auto-flags, dispatch, manual self-heal) + auto-approvals logged, 6 unregistered self-heal keys no longer show as errors, cockpit shows "Letzte KI-Ereignisse" → [agentic]
-1071. ✅ Event log usable for operators: debug level demotes per-item bulk noise (shop sync, KI results), bulk actions write one summary row, `/api/activities` filters topics/levels server-side with cursor paging (100/page), activities page gets Wichtig/Standard/Alles, day headers, folded bursts, error accent → [ui]
