@@ -4,6 +4,10 @@ Covers: item photos, file attachments, external docs (EAN/Serial/MAC-keyed), Web
 
 ---
 
+## 1080. ✅ WebDAV mounts migration guide for the host's davfs2 shares
+**Why:** The host-side mounts (`/etc/fstab` davfs2 entries for `shopbilder`, `shopbilder-import`, `artikeldokumente`, plus `/etc/davfs2/secrets`) lived only on the server, so a server move meant reverse-engineering them. New runbook `docs/detailed/webdav-mounts.md` records the entries, credential handling, UID/GID 33 and a verify checklist, and explains how host `/mnt` reaches the container (`/app/dist/backend/webDav` = `MEDIA_ROOT_DIR`). Linked from the runbook index, `media-storage.md` and `deployment.md`.
+**Deferred:** No automation (setup script/Ansible) for the mounts; credentials stay out of the repo on purpose. The service's own use of `artikeldokumente` is not documented here.
+
 ## 959. ✅ Item images tab can capture photos directly from the camera
 **Why:** Adding a photo on the item detail *Fotos* tab always went through the OS file picker, so on a tablet/phone the operator had to leave the app, shoot, and come back. `PhotoCaptureModal` (already used by `ItemCreate` for the Typenschild OCR photo) is now reused in `ItemImagesTab` behind a "Foto aufnehmen" button; the captured data URL rides the existing `persistMediaUpdate({ action: 'add' })` path via a new `handleMediaCapture` in `ItemDetail`, so slot resolution, the 3-slot limit, and the in-progress guard are identical to the file flow. The button is hidden when `navigator.mediaDevices.getUserMedia` is missing (same check as `ItemCreate`) so a non-camera desktop sees no change.
 **Deferred:** The "Keine freien Plätze" alert fires after the shot rather than before opening the camera (modal state lives in the tab, the slot count in `ItemDetail`); acceptable for a 3-slot maximum. No rear-camera preference (`facingMode`) — `PhotoCaptureModal` requests `{ video: true }` for all callers.
