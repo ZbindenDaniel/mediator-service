@@ -1503,7 +1503,8 @@ export async function dispatchQueuedAgenticRuns(
         autoFed = fedRuns.length;
         if (autoFed < feedSlots) {
           // notStarted pool exhausted: enrol just enough never-enrolled refs to fill the free slots, so
-          // every ref eventually reaches the pipeline without flooding it.
+          // every ref WITH an instance eventually reaches the pipeline without flooding it (ref-only rows
+          // are manual-only, see AUTO_FEED_REQUIRES_INSTANCE_SQL in db.ts).
           const toEnrol = feedSlots - autoFed;
           // Enrol-time triage: route refs whose EXISTING data is already complete + clean to the
           // validate-only path (assess, no LLM — saves the full run and avoids churning good data). The
