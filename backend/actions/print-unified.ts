@@ -349,6 +349,7 @@ async function respondForBrowserDispatch(options: {
   jobName: string;
   queue: string;
   browserUrl: string;
+  browserAuthorization: string;
   labelPayload: unknown;
   logContext: Record<string, unknown>;
   entityType: 'Box' | 'Item';
@@ -399,7 +400,11 @@ async function respondForBrowserDispatch(options: {
     previewUrl,
     pdfUrl,
     jobName,
-    printer: { url: browserUrl, queue },
+    printer: {
+      url: browserUrl,
+      queue,
+      ...(options.browserAuthorization ? { authorization: options.browserAuthorization } : {})
+    },
     qrPayload: labelPayload
   });
 }
@@ -581,6 +586,7 @@ export async function handleUnifiedPrintRequest(
         jobName,
         queue: queueResolution.queue,
         browserUrl: dispatch.browserUrl,
+        browserAuthorization: dispatch.browserAuthorization,
         labelPayload,
         logContext,
         entityType,

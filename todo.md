@@ -409,7 +409,7 @@
 
 36. **Automatic printer server handling after restart.** Manual restart recovery causes avoidable downtime. **Goal:** add startup/reconnect checks with actionable logging.
 
-36b. **Browser print mode follow-ups (from #1080).** (a) Background `label_queue` jobs (importer auto-labels) stay Queued in `printer.mode=browser` — need a browser-side drain or a polling print agent. (b) Wire `probeBrowserPrinter` (IPP Get-Printer-Attributes) into the printer status card; `/api/printer/status` still runs `lpstat` from the cloud. (c) Admin Drucker-Queues (lpadmin, Scannen, Jobs abbrechen, Diagnose) cannot reach the LAN CUPS from the cloud — manage queues via the Raspi's CUPS web UI or hide the card in browser mode. (d) Firefox/Safari support needs the proxy on HTTPS with a trusted certificate.
+36b. **Browser print mode follow-ups (from #1080).** (a) Background `label_queue` jobs (importer auto-labels) stay Queued in `printer.mode=browser` — need a browser-side drain or a polling print agent. (b) Wire `probeBrowserPrinter` (IPP Get-Printer-Attributes) into the printer status card; `/api/printer/status` still runs `lpstat` from the cloud. (c) Admin Drucker-Queues (lpadmin, Scannen, Jobs abbrechen, Diagnose) cannot reach the LAN CUPS from the cloud — manage queues via the Raspi's CUPS web UI or hide the card in browser mode. (d) Every client must trust the print proxy's CA (`/etc/nginx/print-tls/ca.crt` on the Raspi) — document the per-OS/browser import for operators (Firefox on Linux has its own store).
 
 37. **Declutter QR/relocation logging.** Logs are cluttered with low-value entries. Demote noisy events to `debug` level or remove them; keep only operationally relevant fields. No compliance requirements mandate retaining these.
 

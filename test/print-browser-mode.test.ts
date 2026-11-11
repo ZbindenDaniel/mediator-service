@@ -134,3 +134,33 @@ describe('browser proxy URL normalization', () => {
     expect(validateSettingsBody({ browserUrl: '192.168.10.183:8765' })).toBeNull();
   });
 });
+
+describe('browser proxy basic auth', () => {
+  let previewDir: string;
+  beforeEach(() => {
+    previewDir = fs.mkdtempSync(path.join(os.tmpdir(), 'print-browser-auth-'));
+    for (const key of Object.keys(settings)) delete settings[key];
+  });
+  afterEach(() => fs.rmSync(previewDir, { recursive: true, force: true }));
+
+  it('hands the browser a ready Authorization header when proxy credentials are set', async () => {
+    Object.assign(settings, {
+      'printer.mode': 'browser',
+      'printer.browser_url': 'https://192.168.10.183:8765',
+      'printer.browser_user': 'print',
+      'printer.browser_password': 's3cret:x',
+      'printer.queue.box': 'QL800_box'
+    });
+    const res = makeRes();
+    await handleUnifiedPrintRequest(makeReq('/api/print/box/B-9', { actor: 'tester' }), res, makeCtx(previewDir));
+
+    const { printer } = JSON.parse(res.body);
+    expect(printer.authorization).toBe(`Basic ${Buffer.from('print:s3cret:x').toString('base64')}`);
+  });
+
+  it('omits the header when no proxy user is set', async () => {
+    const { buildBasicAuthorization } = await import('../backend/print');
+    expect(buildBasicAuthorization('', 'pw')).toBe('');
+    expect(buildBasicAuthorization('u', '')).toBe(`Basic ${Buffer.from('u:').toString('base64')}`);
+  });
+});

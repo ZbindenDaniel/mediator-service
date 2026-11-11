@@ -9,6 +9,8 @@ interface SettingValue {
 interface PrinterSettings {
   mode: SettingValue;
   browserUrl: SettingValue;
+  browserUser: SettingValue;
+  browserPassword: SettingValue;
   server: SettingValue;
   queueDefault: SettingValue;
   queueBox: SettingValue;
@@ -25,7 +27,9 @@ interface Props {
 
 const FIELD_LABELS: Array<{ field: keyof PrinterSettings; label: string }> = [
   { field: 'mode',          label: 'Druckweg' },
-  { field: 'browserUrl',    label: 'Druck-Proxy für Browser (z. B. http://192.168.1.20:8631)' },
+  { field: 'browserUrl',    label: 'Druck-Proxy für Browser (z. B. https://192.168.10.183:8765)' },
+  { field: 'browserUser',   label: 'Druck-Proxy Benutzer (Basic Auth)' },
+  { field: 'browserPassword', label: 'Druck-Proxy Passwort' },
   { field: 'server',        label: 'CUPS Server (leer = Docker-Socket)' },
   { field: 'queueDefault',  label: 'Standard-Queue (Fallback)' },
   { field: 'queueBox',      label: 'Box-Etiketten' },
@@ -126,7 +130,8 @@ export default function PrinterSettingsCard({ authToken, onAuthFailure }: Props)
                   </select>
                 ) : (
                   <input
-                    type="text"
+                    type={field === 'browserPassword' ? 'password' : 'text'}
+                    autoComplete={field === 'browserPassword' ? 'new-password' : undefined}
                     value={draft[field] ?? ''}
                     onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
                     placeholder={settings[field]?.source === 'env' ? `env: ${settings[field].value}` : ''}

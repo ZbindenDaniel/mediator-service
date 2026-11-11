@@ -4,6 +4,8 @@ import {
   PRINTER_SERVER,
   PRINTER_MODE,
   PRINTER_BROWSER_URL,
+  PRINTER_BROWSER_USER,
+  PRINTER_BROWSER_PASSWORD,
   PRINTER_QUEUE,
   PRINTER_QUEUE_BOX,
   PRINTER_QUEUE_ITEM,
@@ -31,6 +33,8 @@ async function readBody(req: IncomingMessage): Promise<string> {
 const SETTING_DEFS = [
   { key: 'printer.mode',             field: 'mode',           envFallback: PRINTER_MODE },
   { key: 'printer.browser_url',      field: 'browserUrl',     envFallback: PRINTER_BROWSER_URL },
+  { key: 'printer.browser_user',     field: 'browserUser',    envFallback: PRINTER_BROWSER_USER },
+  { key: 'printer.browser_password', field: 'browserPassword', envFallback: PRINTER_BROWSER_PASSWORD },
   { key: 'printer.server',           field: 'server',         envFallback: PRINTER_SERVER },
   { key: 'printer.queue.default',    field: 'queueDefault',   envFallback: PRINTER_QUEUE },
   { key: 'printer.queue.box',        field: 'queueBox',       envFallback: PRINTER_QUEUE_BOX },
@@ -60,13 +64,17 @@ export function validateSettingsBody(body: Record<string, string | null | undefi
   return null;
 }
 
+export const PASSWORD_MASK = '********';
+
 async function buildSettingsResponse() {
   const envMap = Object.fromEntries(SETTING_DEFS.map((d) => [d.key, d.envFallback]));
   const values = await getAllSettings(envMap);
   const result: Record<string, { value: string; source: 'db' | 'env' }> = {};
   for (const def of SETTING_DEFS) {
     const override = await hasOverride(def.key);
-    result[def.field] = { value: values[def.key], source: override ? 'db' : 'env' };
+    // The proxy password is write-only in the admin UI; only whether it is set is reported.
+    const value = def.field === 'browserPassword' ? (values[def.key] ? PASSWORD_MASK : '') : values[def.key];
+    result[def.field] = { value, source: override ? 'db' : 'env' };
   }
   return result;
 }
@@ -99,10 +107,12 @@ const action = defineHttpAction({
       for (const def of SETTING_DEFS) {
         const incoming = body[def.field];
         if (incoming === undefined) continue;
+        // Saving the form unchanged sends the mask back; that must not overwrite the real password.
+        if (def.field === 'browserPassword' && incoming === PASSWORD_MASK) continue;
         if (incoming === null || incoming === '') {
           await clearSetting(def.key);
         } else {
-          await setSetting(def.key, incoming.trim());
+          await setSetting(def.key, def.field === 'browserPassword' ? incoming : incoming.trim());
         }
       }
 

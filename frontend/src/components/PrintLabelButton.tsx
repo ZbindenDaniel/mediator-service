@@ -22,9 +22,12 @@ function formatPrintReason(reason: string): string {
   ) {
     return 'Kein Drucker konfiguriert';
   }
+  if (reason === 'printer_auth_failed') {
+    return 'Druckserver lehnt Zugangsdaten ab (Benutzer/Passwort in Drucker-Einstellungen prüfen)';
+  }
   if (reason === 'printer_unreachable') {
     // Browser mode: CORS, mixed content and a denied network prompt are indistinguishable here.
-    return 'Druckserver nicht erreichbar (im Netz des Druckers? Chrome/Edge? Netzwerkzugriff erlaubt?)';
+    return 'Druckserver nicht erreichbar (im Netz des Druckers? Zertifikat vertraut? Netzwerkzugriff erlaubt?)';
   }
   if (r.includes('timeout') || r.includes('timed out') || r === 'status_timeout') {
     return 'Drucker antwortet nicht';

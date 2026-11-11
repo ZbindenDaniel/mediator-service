@@ -118,10 +118,10 @@
 ## Browser dispatch mode (`printer.mode=browser`)
 - Purpose: cloud backend, printers on the LAN. The backend cannot reach CUPS; the browser (inside the LAN) can.
 - Flow: `POST /api/print/:labelType/:id` → preview HTML + PDF render → response `{ dispatch: 'browser', pdfUrl, jobName, printer: { url, queue } }` → `requestPrintLabel` fetches the PDF and posts an IPP Print-Job to `<printer.url>/printers/<queue>` (`frontend/src/utils/browserPrint.ts`, `frontend/src/utils/ipp.ts`) → outcome reported to `POST /api/print/result` (logs `PrintFailed`).
-- Settings (Admin → Drucker-Einstellungen): `printer.mode` (`PRINTER_MODE`, default `server`), `printer.browser_url` (`PRINTER_BROWSER_URL`, e.g. `http://192.168.1.20:8631`). Queue names (`printer.queue.*`) must match the queues on the print server.
-- Print server: nginx from `cups/nginx-print-proxy.conf` (CORS headers, only `/printers/` exposed, Host rewritten to localhost). CUPS itself stays unchanged.
-- Browser requirements: Chrome or Edge with Local Network Access; the user accepts the "access devices on your local network" prompt once per site. Firefox/Safari block the request as mixed content.
-- Failure reasons: `printer_browser_url_not_configured`, `printer_unreachable` (network, CORS, mixed content or denied prompt — the browser does not say which), `printer_http_<status>`, IPP status names such as `client-error-not-found` (wrong queue name).
+- Settings (Admin → Drucker-Einstellungen): `printer.mode` (`PRINTER_MODE`, default `server`), `printer.browser_url` (`PRINTER_BROWSER_URL`, e.g. `https://192.168.10.183:8765`; a bare `host:port` gets `http://`), `printer.browser_user` / `printer.browser_password` (`PRINTER_BROWSER_USER` / `_PASSWORD`, nginx basic auth; password write-only in the UI, sent to logged-in browsers as an `Authorization` header). Queue names (`printer.queue.*`) must match the queues on the print server.
+- Print server: nginx per `cups/nginx-print-proxy.conf` — TLS (`/etc/nginx/print-tls/`), origin allowlist (`/etc/nginx/conf.d/print-origins.conf`), basic auth (`/etc/nginx/print-users`), only `/printers/` exposed, Host rewritten to localhost. CUPS itself stays unchanged.
+- Browser requirements: the client trusts the proxy CA (`ca.crt`). With an `https://` proxy any current browser works; with plain `http://` only Chrome/Edge (Local Network Access). Chrome/Edge still ask once per site for "access devices on your local network".
+- Failure reasons: `printer_browser_url_not_configured`, `printer_unreachable` (network, CORS, untrusted certificate, mixed content or denied prompt — the browser does not say which), `printer_auth_failed` (401/403 from the proxy), `printer_http_<status>`, IPP status names such as `client-error-not-found` (wrong queue name).
 - Not covered in this mode: background `label_queue` jobs (stay Queued), `/api/printer/status`, admin CUPS queue management.
 
 ## Config & environment dependencies

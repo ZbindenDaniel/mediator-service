@@ -10,6 +10,8 @@ export interface PrintLabelBrowserTarget {
   /** CORS proxy in front of CUPS, reachable from the browser's network (e.g. http://192.168.1.20:8631). */
   url: string;
   queue: string;
+  /** `Authorization` header for the proxy's basic auth, when one is configured. */
+  authorization?: string;
 }
 
 export interface PrintLabelResponsePayload {

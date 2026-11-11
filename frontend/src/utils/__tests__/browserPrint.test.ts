@@ -73,6 +73,26 @@ describe('dispatchBrowserPrint', () => {
     expect(result).toEqual({ sent: false, reason: 'client-error-not-found' });
   });
 
+  it('sends the proxy basic-auth header and reports rejected credentials', async () => {
+    const fetchImpl = jest.fn()
+      .mockResolvedValueOnce(binaryResponse(new ArrayBuffer(2)))
+      .mockResolvedValueOnce(binaryResponse(new ArrayBuffer(0), 401));
+
+    const result = await dispatchBrowserPrint({
+      pdfUrl: '/prints/x.pdf',
+      printer: { ...printer, authorization: 'Basic dTpw' },
+      actor: 'tester',
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    expect(result).toEqual({ sent: false, reason: 'printer_auth_failed' });
+    expect(fetchImpl.mock.calls[1][1].headers).toEqual({
+      'Content-Type': 'application/ipp',
+      Authorization: 'Basic dTpw'
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2); // auth failures are not retried
+  });
+
   it('builds the queue endpoint without double slashes', () => {
     expect(buildQueueEndpoint({ url: 'http://h:8631//', queue: 'q' })).toBe('http://h:8631/printers/q');
   });

@@ -154,6 +154,10 @@ export const PRINTER_SERVER = (process.env.PRINTER_SERVER || '').trim();
 export const PRINTER_MODE = (process.env.PRINTER_MODE || 'server').trim().toLowerCase();
 // CORS-enabled proxy in front of CUPS as seen from the browser, e.g. http://192.168.1.20:8631
 export const PRINTER_BROWSER_URL = (process.env.PRINTER_BROWSER_URL || '').trim();
+// Basic-auth credentials of the print proxy (nginx auth_basic). Sent to every logged-in browser,
+// so they only keep other LAN devices out, not app users.
+export const PRINTER_BROWSER_USER = (process.env.PRINTER_BROWSER_USER || '').trim();
+export const PRINTER_BROWSER_PASSWORD = process.env.PRINTER_BROWSER_PASSWORD || '';
 if (!PRINTER_QUEUE_BOX) {
   console.warn('[config] PRINTER_QUEUE_BOX not set; box labels will fall back to PRINTER_QUEUE.');
 }

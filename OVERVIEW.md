@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+1082. ✅ Browser print proxy basic auth (`printer.browser_user`/`_password`, write-only in admin UI) + nginx reference updated for TLS, origin map, htpasswd → [printing]
 1081. ✅ Fix label PDF rendering as www-data (Chromium `render_exit_1`: no writable HOME) + bare `host:port` proxy URL gets `http://` → [printing]
 1080. ✅ Browser print mode: backend renders the PDF, the browser sends the IPP job to an nginx CORS proxy in front of the LAN CUPS (cloud backend can't reach printers) → [printing]
 1079. ✅ User docs rewritten in plain, factual language (no filler, no "the AI learns"), wrong UI labels and a wrong CO₂ example fixed, writing rules in `docs/user/README.md` → [ui]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 1075. ✅ Instance pricing (base price × grade/5, min 20 %, CHF 5 rounding, per-instance override) + `Mietware` flag → Shopware tag `rental`; variant children carry their own price. 1146 tests → [item-lifecycle]
 1074. ✅ Plan: instance pricing (base price × quality-grade factor + override) and `Mietware` ref flag → Shopware tags (plan shipped in #1075) → [item-lifecycle]
 1073. ✅ Activity log level colours: subtle left bar per row (Fehler red + faint tint, Wichtig amber, Info pale blue, Technisch dimmed) + legend; level also in tooltip/aria → [ui]
-1072. ✅ KI cockpit audit trail: lever changes (auto-flags, dispatch, manual self-heal) + auto-approvals logged, 6 unregistered self-heal keys no longer show as errors, cockpit shows "Letzte KI-Ereignisse" → [agentic]

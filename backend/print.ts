@@ -11,6 +11,8 @@ import {
   PRINTER_SERVER,
   PRINTER_MODE,
   PRINTER_BROWSER_URL,
+  PRINTER_BROWSER_USER,
+  PRINTER_BROWSER_PASSWORD,
   LP_COMMAND,
   LPSTAT_COMMAND,
   PRINT_TIMEOUT_MS
@@ -53,6 +55,14 @@ export interface PrinterDispatchConfig {
   mode: PrinterDispatchMode;
   /** Base URL of the CORS proxy in front of CUPS, as reachable from the browser (browser mode only). */
   browserUrl: string;
+  /** Ready-to-send `Authorization` header value for the proxy's basic auth, or '' when none is set. */
+  browserAuthorization: string;
+}
+
+export function buildBasicAuthorization(user: string | undefined | null, password: string | undefined | null): string {
+  const trimmedUser = (user || '').trim();
+  if (!trimmedUser) return '';
+  return `Basic ${Buffer.from(`${trimmedUser}:${password ?? ''}`, 'utf8').toString('base64')}`;
 }
 
 export function normalizePrinterDispatchMode(raw: string | undefined | null): PrinterDispatchMode {
@@ -71,10 +81,13 @@ export async function resolvePrinterDispatch(): Promise<PrinterDispatchConfig> {
   const settings = await getAllSettings({
     'printer.mode': PRINTER_MODE,
     'printer.browser_url': PRINTER_BROWSER_URL,
+    'printer.browser_user': PRINTER_BROWSER_USER,
+    'printer.browser_password': PRINTER_BROWSER_PASSWORD,
   });
   return {
     mode: normalizePrinterDispatchMode(settings['printer.mode']),
     browserUrl: normalizeBrowserUrl(settings['printer.browser_url']),
+    browserAuthorization: buildBasicAuthorization(settings['printer.browser_user'], settings['printer.browser_password']),
   };
 }
 

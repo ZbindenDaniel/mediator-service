@@ -43,13 +43,17 @@ function wait(ms: number): Promise<void> {
 async function postIpp(
   endpoint: string,
   body: Uint8Array,
-  fetchImpl: typeof fetch
+  fetchImpl: typeof fetch,
+  authorization?: string
 ): Promise<{ ok: true; data: ArrayBuffer } | { ok: false; reason: string; transient: boolean }> {
   let response: Response;
   try {
     const init: LocalNetworkRequestInit = {
       method: 'POST',
-      headers: { 'Content-Type': 'application/ipp' },
+      headers: {
+        'Content-Type': 'application/ipp',
+        ...(authorization ? { Authorization: authorization } : {})
+      },
       body: body as BodyInit,
       targetAddressSpace: 'local'
     };
@@ -59,6 +63,9 @@ async function postIpp(
     // same TypeError — the browser deliberately hides which one it was.
     logError('Browser IPP request failed before a response', err, { endpoint });
     return { ok: false, reason: 'printer_unreachable', transient: true };
+  }
+  if (response.status === 401 || response.status === 403) {
+    return { ok: false, reason: 'printer_auth_failed', transient: false };
   }
   if (!response.ok) {
     return { ok: false, reason: `printer_http_${response.status}`, transient: response.status >= 500 };
@@ -105,7 +112,7 @@ export async function dispatchBrowserPrint({
   // Two attempts: the backend retries transient lp failures too; one retry covers a sleeping proxy.
   const maxAttempts = 2;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const result = await postIpp(endpoint, body, fetchImpl);
+    const result = await postIpp(endpoint, body, fetchImpl, printer.authorization);
     if (!result.ok) {
       if (result.transient && attempt < maxAttempts) {
         logger.warn?.('Browser print attempt failed; retrying', { endpoint, attempt, reason: result.reason });
@@ -143,7 +150,7 @@ export async function probeBrowserPrinter(
     printerUri: buildPrinterUri(printer.queue),
     requestedAttributes: ['printer-state', 'printer-is-accepting-jobs']
   });
-  const result = await postIpp(buildQueueEndpoint(printer), body, fetchImpl);
+  const result = await postIpp(buildQueueEndpoint(printer), body, fetchImpl, printer.authorization);
   if (!result.ok) return { ok: false, state: 'unknown', reason: result.reason };
   try {
     const ipp = decodeIppResponse(result.data);
