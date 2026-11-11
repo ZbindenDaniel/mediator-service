@@ -4,6 +4,10 @@ Covers: label printing, CUPS integration, printer queue management, print templa
 
 ---
 
+## 1084. ✅ Browser printing verified on the Raspi; nginx routes every queue by regex
+**Why:** First real label printed through browser → nginx (TLS, origin map, basic auth) → CUPS. The production config only allowed one exact queue (`location = /printers/Brother_QL560_klein`), so any other label-type queue got a 404 preflight and showed as `printer_unreachable`. The reference config now uses `location ~ ^/printers/[A-Za-z0-9_.-]+$`: all queues, no sub-paths (CUPS admin/jobs and traversal stay closed), and port 443 like the deployed proxy. Lessons from the rollout: the queue names in Drucker-Einstellungen must match `lpstat -p` on the Raspi, and the proxy user/password must be set or nginx answers 401.
+**Deferred:** nothing deferred.
+
 ## 1083. ✅ Print proxy CA certificate downloadable from the mediator
 **Why:** Every workstation must trust the Raspi proxy's own CA, and copying `ca.crt` off the Raspi per machine is tedious. Admins paste the CA once into Drucker-Einstellungen (`printer.browser_ca_pem`); `GET /api/print/proxy-ca.crt` serves it as `application/x-x509-ca-cert` (Windows/Android offer "install" directly). The print button links it next to "Druckserver nicht erreichbar", the most common first-time failure. Validation rejects anything containing `PRIVATE KEY`, since the value is served to every user.
 **Deferred:** Removing the import step entirely needs a publicly trusted certificate (DNS name → 192.168.10.183, Let's Encrypt via DNS-01 on the Raspi) — tracked in todo.md 36b(d).

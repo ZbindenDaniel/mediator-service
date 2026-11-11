@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+1084. ✅ Browser printing verified end-to-end on the Raspi; nginx reference now routes every queue via `^/printers/[A-Za-z0-9_.-]+$` → [printing]
 1083. ✅ Print proxy CA downloadable: paste `ca.crt` in Drucker-Einstellungen → `GET /api/print/proxy-ca.crt`, link on "Druckserver nicht erreichbar" → [printing]
 1082. ✅ Browser print proxy basic auth (`printer.browser_user`/`_password`, write-only in admin UI) + nginx reference updated for TLS, origin map, htpasswd → [printing]
 1081. ✅ Fix label PDF rendering as www-data (Chromium `render_exit_1`: no writable HOME) + bare `host:port` proxy URL gets `http://` → [printing]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 1077. ✅ Merged Gitea `main` (Iyed's Sass build fix, same bug already fixed here) into `main` so the push fast-forwards → [docs-infra]
 1076. ✅ Item shop dialog gets "Jetzt mit Shop synchronisieren" (admins; same gate + endpoint as the bulk Shop Sync, now shared via `lib/shopSync.ts`) → [ui]
 1075. ✅ Instance pricing (base price × grade/5, min 20 %, CHF 5 rounding, per-instance override) + `Mietware` flag → Shopware tag `rental`; variant children carry their own price. 1146 tests → [item-lifecycle]
-1074. ✅ Plan: instance pricing (base price × quality-grade factor + override) and `Mietware` ref flag → Shopware tags (plan shipped in #1075) → [item-lifecycle]
