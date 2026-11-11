@@ -7,6 +7,7 @@ Two modes are supported and can be combined:
 |------|-------------|
 | **Docker CUPS** (default) | USB printer physically attached to the server running Docker |
 | **Remote CUPS server** | Printer on a Raspberry Pi, NAS, or another machine; or IPP-capable network printer |
+| **Browser mode** | Mediator runs in the cloud and cannot reach the LAN; the browser sends the job (Mode 4) |
 
 Both modes are configured at runtime via Admin → Drucker-Queues and Admin → Drucker-Einstellungen. No container restart is needed after the initial setup.
 
@@ -150,6 +151,54 @@ PRINTER_SERVER=                 # empty = use Docker CUPS socket
 ```
 
 The priority chain is: **DB setting → env var → empty** (no print attempted).
+
+---
+
+## Mode 4 — Browser mode (cloud mediator, printers on the LAN)
+
+The backend renders the PDF; the browser, which is inside the printer's LAN, sends it as an IPP
+Print-Job to an nginx proxy in front of CUPS. CUPS cannot send CORS headers, hence the proxy.
+Reference config: [`cups/nginx-print-proxy.conf`](../../cups/nginx-print-proxy.conf).
+
+**Print server (e.g. Raspberry Pi), once**
+1. CUPS with the queues (`lpstat -p`).
+2. nginx with the site from the reference config:
+   - `/etc/nginx/conf.d/print-origins.conf`: map of allowed **app origins** (e.g. `https://localhost`,
+     `https://<cloud-domain>`), not client IPs.
+   - `/etc/nginx/print-tls/`: server cert (SAN must include the address browsers use) + key; `ca.crt`.
+   - `/etc/nginx/print-users`: `sudo htpasswd -c /etc/nginx/print-users print`.
+   - `location ~ ^/printers/[A-Za-z0-9_.-]+$` so every queue (and nothing else) is reachable.
+3. `sudo nginx -t && sudo systemctl reload nginx` after every change.
+
+**Mediator, Admin → Drucker-Einstellungen**
+| Field | Value |
+|---|---|
+| Druckweg | `Browser` |
+| Druck-Proxy für Browser | `https://<print-server-ip>` (port only if nginx doesn't listen on 443) |
+| Druck-Proxy Benutzer / Passwort | an entry of `/etc/nginx/print-users` |
+| Druck-Proxy CA-Zertifikat | contents of `ca.crt` (enables the download link) |
+| Queue per label type | exact names from `lpstat -p` on the print server |
+
+**Each workstation**: import the CA (download at `/api/print/proxy-ca.crt`); Firefox needs its own
+import. Check: `https://<print-server-ip>/printers/` shows an nginx error page without a certificate
+warning.
+
+**Verify from a LAN machine**
+```bash
+curl -k -i -X OPTIONS https://<print-server-ip>/printers/<queue> -H 'Origin: https://localhost' -H 'Access-Control-Request-Method: POST'
+```
+Expect `204` with `Access-Control-Allow-Origin`. Don't test the POST with an empty body: CUPS waits for
+a complete IPP request and nginx answers 504.
+
+| Reason in the print response | Meaning |
+|---|---|
+| `printer_unreachable` | certificate not trusted, origin not in the map, queue not routed by nginx (404 preflight), or wrong port |
+| `printer_auth_failed` | proxy user/password missing or wrong |
+| `client-error-not-found` | queue name doesn't exist in CUPS |
+| `render_exit_1` | backend couldn't render the PDF (renderer environment) |
+
+Not covered in this mode: background label jobs (`label_queue`), `/api/printer/status`, and the
+CUPS-Queues admin card (manage queues on the print server at `http://localhost:631`).
 
 ---
 
