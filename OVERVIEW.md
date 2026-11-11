@@ -37,11 +37,15 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
-1084. ✅ Browser printing verified end-to-end on the Raspi; nginx reference now routes every queue via `^/printers/[A-Za-z0-9_.-]+$` → [printing]
-1083. ✅ Print proxy CA downloadable: paste `ca.crt` in Drucker-Einstellungen → `GET /api/print/proxy-ca.crt`, link on "Druckserver nicht erreichbar" → [printing]
-1082. ✅ Browser print proxy basic auth (`printer.browser_user`/`_password`, write-only in admin UI) + nginx reference updated for TLS, origin map, htpasswd → [printing]
-1081. ✅ Fix label PDF rendering as www-data (Chromium `render_exit_1`: no writable HOME) + bare `host:port` proxy URL gets `http://` → [printing]
-1080. ✅ Browser print mode: backend renders the PDF, the browser sends the IPP job to an nginx CORS proxy in front of the LAN CUPS (cloud backend can't reach printers) → [printing]
+1088. ✅ Browser printing verified end-to-end on the Raspi; nginx reference now routes every queue via `^/printers/[A-Za-z0-9_.-]+$` → [printing]
+1087. ✅ Print proxy CA downloadable: paste `ca.crt` in Drucker-Einstellungen → `GET /api/print/proxy-ca.crt`, link on "Druckserver nicht erreichbar" → [printing]
+1086. ✅ Browser print proxy basic auth (`printer.browser_user`/`_password`, write-only in admin UI) + nginx reference updated for TLS, origin map, htpasswd → [printing]
+1085. ✅ Fix label PDF rendering as www-data (Chromium `render_exit_1`: no writable HOME) + bare `host:port` proxy URL gets `http://` → [printing]
+1084. ✅ Browser print mode: backend renders the PDF, the browser sends the IPP job to an nginx CORS proxy in front of the LAN CUPS (cloud backend can't reach printers) → [printing]
+1083. ✅ Keep-busy auto-feeder only enrols/promotes refs that have an instance; ref-only refs are manual-only (KI tab, bulk queue, restart) → [agentic]
+1082. ✅ Item list Typ "Alle" really shows all: frontend always sends `entityFilter` (backend defaulted the missing param to instances, hiding refs) → [ui]
+1081. ✅ WebDAV mounts migration guide (davfs2 fstab entries, credentials, verify checklist) in `docs/detailed/webdav-mounts.md` → [media]
+1080. ✅ Item images resolve by Artikelnummer across both media roots (shopbilder listed, dead ERP `Grafikname` like `wETG.jpg` dropped), removal pinned to the clicked file → [media]
 1079. ✅ User docs rewritten in plain, factual language (no filler, no "the AI learns"), wrong UI labels and a wrong CO₂ example fixed, writing rules in `docs/user/README.md` → [ui]
 1078. ✅ Help docs follow feature flags (page + section markers, stripped server-side), new pages Administration / Fundsachen / Aktivitäten / KI-Cockpit, light-on-light help CSS fixed → [ui]
 1077. ✅ Merged Gitea `main` (Iyed's Sass build fix, same bug already fixed here) into `main` so the push fast-forwards → [docs-infra]

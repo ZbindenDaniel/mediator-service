@@ -95,6 +95,13 @@ describe('item list server query', () => {
     expect(query.has('box')).toBe(false);
     expect(query.has('sortKey')).toBe(false);
   });
+
+  test('Typ "Alle" is sent explicitly, since the backend defaults a missing entityFilter to instances', () => {
+    for (const entityFilter of ['all', 'instances', 'references'] as const) {
+      const query = buildItemListQueryParams({ ...getDefaultItemListFilters(), entityFilter });
+      expect(query.get('entityFilter')).toBe(entityFilter);
+    }
+  });
 });
 
 describe('item list lastModified sort', () => {
