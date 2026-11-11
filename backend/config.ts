@@ -149,6 +149,11 @@ export const PRINTER_QUEUE_ITEM_SMALL = (process.env.PRINTER_QUEUE_ITEM_SMALL ||
 export const PRINTER_QUEUE_SHELF = (process.env.PRINTER_QUEUE_SHELF || '').trim();
 export const PRINTER_QUEUE_MARKETING = (process.env.PRINTER_QUEUE_MARKETING || '').trim();
 export const PRINTER_SERVER = (process.env.PRINTER_SERVER || '').trim();
+// 'server' = backend runs lp (CUPS reachable from the backend); 'browser' = backend only renders the
+// PDF and the browser sends the IPP job to PRINTER_BROWSER_URL (cloud backend, printers on the LAN).
+export const PRINTER_MODE = (process.env.PRINTER_MODE || 'server').trim().toLowerCase();
+// CORS-enabled proxy in front of CUPS as seen from the browser, e.g. http://192.168.1.20:8631
+export const PRINTER_BROWSER_URL = (process.env.PRINTER_BROWSER_URL || '').trim();
 if (!PRINTER_QUEUE_BOX) {
   console.warn('[config] PRINTER_QUEUE_BOX not set; box labels will fall back to PRINTER_QUEUE.');
 }

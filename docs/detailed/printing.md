@@ -115,6 +115,15 @@
   - Preview generation.
   - Print invocation and outer unified handler catch-all.
 
+## Browser dispatch mode (`printer.mode=browser`)
+- Purpose: cloud backend, printers on the LAN. The backend cannot reach CUPS; the browser (inside the LAN) can.
+- Flow: `POST /api/print/:labelType/:id` → preview HTML + PDF render → response `{ dispatch: 'browser', pdfUrl, jobName, printer: { url, queue } }` → `requestPrintLabel` fetches the PDF and posts an IPP Print-Job to `<printer.url>/printers/<queue>` (`frontend/src/utils/browserPrint.ts`, `frontend/src/utils/ipp.ts`) → outcome reported to `POST /api/print/result` (logs `PrintFailed`).
+- Settings (Admin → Drucker-Einstellungen): `printer.mode` (`PRINTER_MODE`, default `server`), `printer.browser_url` (`PRINTER_BROWSER_URL`, e.g. `http://192.168.1.20:8631`). Queue names (`printer.queue.*`) must match the queues on the print server.
+- Print server: nginx from `cups/nginx-print-proxy.conf` (CORS headers, only `/printers/` exposed, Host rewritten to localhost). CUPS itself stays unchanged.
+- Browser requirements: Chrome or Edge with Local Network Access; the user accepts the "access devices on your local network" prompt once per site. Firefox/Safari block the request as mixed content.
+- Failure reasons: `printer_browser_url_not_configured`, `printer_unreachable` (network, CORS, mixed content or denied prompt — the browser does not say which), `printer_http_<status>`, IPP status names such as `client-error-not-found` (wrong queue name).
+- Not covered in this mode: background `label_queue` jobs (stay Queued), `/api/printer/status`, admin CUPS queue management.
+
 ## Config & environment dependencies
 - Required for real printer integration:
   - `PRINTER_QUEUE` or label-specific queues (`PRINTER_QUEUE_BOX`, `PRINTER_QUEUE_ITEM`, `PRINTER_QUEUE_ITEM_SMALL`, `PRINTER_QUEUE_SHELF`).

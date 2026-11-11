@@ -409,6 +409,8 @@
 
 36. **Automatic printer server handling after restart.** Manual restart recovery causes avoidable downtime. **Goal:** add startup/reconnect checks with actionable logging.
 
+36b. **Browser print mode follow-ups (from #1080).** (a) Background `label_queue` jobs (importer auto-labels) stay Queued in `printer.mode=browser` — need a browser-side drain or a polling print agent. (b) Wire `probeBrowserPrinter` (IPP Get-Printer-Attributes) into the printer status card; `/api/printer/status` still runs `lpstat` from the cloud. (c) Admin Drucker-Queues (lpadmin, Scannen, Jobs abbrechen, Diagnose) cannot reach the LAN CUPS from the cloud — manage queues via the Raspi's CUPS web UI or hide the card in browser mode. (d) Firefox/Safari support needs the proxy on HTTPS with a trusted certificate.
+
 37. **Declutter QR/relocation logging.** Logs are cluttered with low-value entries. Demote noisy events to `debug` level or remove them; keep only operationally relevant fields. No compliance requirements mandate retaining these.
 
 38. **Standardize relocation logs with explicit `from → to` semantics.** Ambiguous move logs hinder audits and incident reconstruction. **Goal:** unify event payload fields with minimal schema changes.
@@ -421,6 +423,7 @@
 
 ### Still Open
 
+- **Per-device print target (browser mode):** one `printer.browser_url` for all clients is enough while the Raspi is the only print server. With a second site, each device needs its own proxy URL (localStorage override + small UI). Decide when a second print server appears.
 - **Public item list without login (parked 2026-10-21):** customers browsing what's available. Unauthenticated requests are currently *unrestricted* (`ownership.ts` `isUnrestricted`), so a login exception on existing routes would expose box/shelf and actors. If picked up: dedicated `/api/public/*` with a column allowlist, proxy route that blanks the identity headers (like `/api/intake/`), opt-in flag, public media route, server-side paging. Open: which deployments, which items, which fields (price, org), ordering by mailto vs stored requests.
 
 - **Startup path check (#989):** misconfigured `.env` paths surface one by one as stack traces (seed ENOENT is fatal, inbox EACCES isn't). A single startup summary of configured paths that are missing/unwritable would make container deploys easier to debug.

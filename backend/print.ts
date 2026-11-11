@@ -9,6 +9,8 @@ import {
   PRINTER_QUEUE_SHELF,
   PRINTER_QUEUE_MARKETING,
   PRINTER_SERVER,
+  PRINTER_MODE,
+  PRINTER_BROWSER_URL,
   LP_COMMAND,
   LPSTAT_COMMAND,
   PRINT_TIMEOUT_MS
@@ -43,6 +45,29 @@ export type PrinterQueueSource = 'label' | 'default' | 'missing';
 export interface PrinterQueueResolution {
   queue: string;
   source: PrinterQueueSource;
+}
+
+export type PrinterDispatchMode = 'server' | 'browser';
+
+export interface PrinterDispatchConfig {
+  mode: PrinterDispatchMode;
+  /** Base URL of the CORS proxy in front of CUPS, as reachable from the browser (browser mode only). */
+  browserUrl: string;
+}
+
+export function normalizePrinterDispatchMode(raw: string | undefined | null): PrinterDispatchMode {
+  return (raw || '').trim().toLowerCase() === 'browser' ? 'browser' : 'server';
+}
+
+export async function resolvePrinterDispatch(): Promise<PrinterDispatchConfig> {
+  const settings = await getAllSettings({
+    'printer.mode': PRINTER_MODE,
+    'printer.browser_url': PRINTER_BROWSER_URL,
+  });
+  return {
+    mode: normalizePrinterDispatchMode(settings['printer.mode']),
+    browserUrl: (settings['printer.browser_url'] || '').trim().replace(/\/+$/, ''),
+  };
 }
 
 export async function resolvePrinterQueue(

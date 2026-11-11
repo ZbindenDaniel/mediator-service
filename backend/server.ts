@@ -129,7 +129,7 @@ import { sendAppShellFile } from './utils/app-shell';
 import { runWithIdentity } from './lib/ownership';
 import type { RequestIdentity } from './lib/identity';
 import type { Item, LabelJob } from './db';
-import { printFile, resolvePrinterQueue, testPrinterConnection } from './print';
+import { printFile, resolvePrinterDispatch, resolvePrinterQueue, testPrinterConnection } from './print';
 import { syncPrinterQueuesToCups, startPrinterQueueSyncInterval } from './utils/sync-printer-queues';
 import { htmlForBox, htmlForItem, htmlForShelf } from './lib/labelHtml';
 import type { ItemLabelPayload } from './lib/labelHtml';
@@ -365,7 +365,18 @@ try {
   process.exit(1);
 }
 
+let printWorkerBrowserModeLogged = false;
 async function runPrintWorker(): Promise<void> {
+  // In browser mode the backend cannot reach CUPS; claiming would only turn every queued job into
+  // an Error. Jobs stay Queued and print once the mode is switched back (or an agent picks them up).
+  if ((await resolvePrinterDispatch()).mode === 'browser') {
+    if (!printWorkerBrowserModeLogged) {
+      console.warn('[print-worker] printer.mode=browser; background label jobs stay queued (no browser to send them)');
+      printWorkerBrowserModeLogged = true;
+    }
+    return;
+  }
+  printWorkerBrowserModeLogged = false;
   const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
   await recoverStaleLabelJobs(staleThreshold);
   const job = await claimNextLabelJob() as LabelJob | undefined;

@@ -15,8 +15,16 @@ interface Props {
 
 function formatPrintReason(reason: string): string {
   const r = reason.toLowerCase();
-  if (reason === 'printer_queue_not_configured' || reason === 'print_not_attempted') {
+  if (
+    reason === 'printer_queue_not_configured' ||
+    reason === 'print_not_attempted' ||
+    reason === 'printer_browser_url_not_configured'
+  ) {
     return 'Kein Drucker konfiguriert';
+  }
+  if (reason === 'printer_unreachable') {
+    // Browser mode: CORS, mixed content and a denied network prompt are indistinguishable here.
+    return 'Druckserver nicht erreichbar (im Netz des Druckers? Chrome/Edge? Netzwerkzugriff erlaubt?)';
   }
   if (r.includes('timeout') || r.includes('timed out') || r === 'status_timeout') {
     return 'Drucker antwortet nicht';

@@ -7,6 +7,8 @@ interface SettingValue {
 }
 
 interface PrinterSettings {
+  mode: SettingValue;
+  browserUrl: SettingValue;
   server: SettingValue;
   queueDefault: SettingValue;
   queueBox: SettingValue;
@@ -22,6 +24,8 @@ interface Props {
 }
 
 const FIELD_LABELS: Array<{ field: keyof PrinterSettings; label: string }> = [
+  { field: 'mode',          label: 'Druckweg' },
+  { field: 'browserUrl',    label: 'Druck-Proxy für Browser (z. B. http://192.168.1.20:8631)' },
   { field: 'server',        label: 'CUPS Server (leer = Docker-Socket)' },
   { field: 'queueDefault',  label: 'Standard-Queue (Fallback)' },
   { field: 'queueBox',      label: 'Box-Etiketten' },
@@ -51,7 +55,8 @@ export default function PrinterSettingsCard({ authToken, onAuthFailure }: Props)
         setSettings(data);
         const d: Record<string, string> = {};
         for (const { field } of FIELD_LABELS) {
-          d[field] = data[field]?.value ?? '';
+          // Env-sourced values stay empty in the draft so saving doesn't pin them as DB overrides.
+          d[field] = field === 'mode' && data[field]?.source !== 'db' ? '' : data[field]?.value ?? '';
         }
         setDraft(d);
       }
@@ -82,7 +87,8 @@ export default function PrinterSettingsCard({ authToken, onAuthFailure }: Props)
         setSettings(data);
         setMessage('Gespeichert');
       } else {
-        setMessage('Fehler beim Speichern');
+        const err = await res.json().catch(() => null) as { error?: string } | null;
+        setMessage(err?.error ? `Fehler: ${err.error}` : 'Fehler beim Speichern');
       }
     } catch (err) {
       logError('Failed to save printer settings', err);
@@ -108,13 +114,25 @@ export default function PrinterSettingsCard({ authToken, onAuthFailure }: Props)
                 {label}
               </td>
               <td style={{ padding: '0.3rem 0.5rem' }}>
-                <input
-                  type="text"
-                  value={draft[field] ?? ''}
-                  onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
-                  placeholder={settings[field]?.source === 'env' ? `env: ${settings[field].value}` : ''}
-                  style={{ width: '100%', fontSize: '0.875rem' }}
-                />
+                {field === 'mode' ? (
+                  <select
+                    value={draft[field] ?? ''}
+                    onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
+                    style={{ width: '100%', fontSize: '0.875rem' }}
+                  >
+                    <option value="">{`Standard (env: ${settings.mode?.value || 'server'})`}</option>
+                    <option value="server">Server – Backend sendet an CUPS</option>
+                    <option value="browser">Browser – Browser sendet an Druck-Proxy im LAN</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={draft[field] ?? ''}
+                    onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
+                    placeholder={settings[field]?.source === 'env' ? `env: ${settings[field].value}` : ''}
+                    style={{ width: '100%', fontSize: '0.875rem' }}
+                  />
+                )}
               </td>
               <td style={{ padding: '0.3rem 0', whiteSpace: 'nowrap' }}>
                 {settings[field]?.source === 'db' && (
