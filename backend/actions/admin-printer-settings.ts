@@ -35,6 +35,7 @@ const SETTING_DEFS = [
   { key: 'printer.browser_url',      field: 'browserUrl',     envFallback: PRINTER_BROWSER_URL },
   { key: 'printer.browser_user',     field: 'browserUser',    envFallback: PRINTER_BROWSER_USER },
   { key: 'printer.browser_password', field: 'browserPassword', envFallback: PRINTER_BROWSER_PASSWORD },
+  { key: 'printer.browser_ca_pem',   field: 'browserCaPem',   envFallback: '' },
   { key: 'printer.server',           field: 'server',         envFallback: PRINTER_SERVER },
   { key: 'printer.queue.default',    field: 'queueDefault',   envFallback: PRINTER_QUEUE },
   { key: 'printer.queue.box',        field: 'queueBox',       envFallback: PRINTER_QUEUE_BOX },
@@ -59,6 +60,16 @@ export function validateSettingsBody(body: Record<string, string | null | undefi
       }
     } catch {
       return 'browserUrl must be an http(s) URL';
+    }
+  }
+  const caPem = body.browserCaPem?.trim();
+  if (caPem) {
+    // Guard against pasting the server key by mistake: it would be served to every user.
+    if (/PRIVATE KEY/.test(caPem)) {
+      return 'browserCaPem contains a private key — paste only ca.crt';
+    }
+    if (!/^-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----$/.test(caPem)) {
+      return 'browserCaPem must be a PEM certificate (-----BEGIN CERTIFICATE----- …)';
     }
   }
   return null;

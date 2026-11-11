@@ -164,3 +164,28 @@ describe('browser proxy basic auth', () => {
     expect(buildBasicAuthorization('u', '')).toBe(`Basic ${Buffer.from('u:').toString('base64')}`);
   });
 });
+
+describe('print proxy CA certificate', () => {
+  const pem = '-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIU\n-----END CERTIFICATE-----';
+
+  it('accepts a PEM certificate and rejects keys or junk', () => {
+    expect(validateSettingsBody({ browserCaPem: pem })).toBeNull();
+    expect(validateSettingsBody({ browserCaPem: `${pem}\n-----BEGIN PRIVATE KEY-----\nx\n-----END PRIVATE KEY-----` })).toMatch(/private key/);
+    expect(validateSettingsBody({ browserCaPem: 'hello' })).toMatch(/PEM/);
+  });
+
+  it('serves the stored certificate as a download, 404 when none is set', async () => {
+    const action = (await import('../backend/actions/print-proxy-ca')).default as any;
+    expect(action.matches('/api/print/proxy-ca.crt', 'GET')).toBe(true);
+
+    let res = makeRes();
+    await action.handle({} as any, res);
+    expect(res.status).toBe(404);
+
+    settings['printer.browser_ca_pem'] = pem;
+    res = makeRes();
+    await action.handle({} as any, res);
+    expect(res.status).toBe(200);
+    expect(res.body).toBe(`${pem}\n`);
+  });
+});

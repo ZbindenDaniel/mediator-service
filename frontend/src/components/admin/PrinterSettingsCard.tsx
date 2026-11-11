@@ -11,6 +11,7 @@ interface PrinterSettings {
   browserUrl: SettingValue;
   browserUser: SettingValue;
   browserPassword: SettingValue;
+  browserCaPem: SettingValue;
   server: SettingValue;
   queueDefault: SettingValue;
   queueBox: SettingValue;
@@ -30,6 +31,7 @@ const FIELD_LABELS: Array<{ field: keyof PrinterSettings; label: string }> = [
   { field: 'browserUrl',    label: 'Druck-Proxy für Browser (z. B. https://192.168.10.183:8765)' },
   { field: 'browserUser',   label: 'Druck-Proxy Benutzer (Basic Auth)' },
   { field: 'browserPassword', label: 'Druck-Proxy Passwort' },
+  { field: 'browserCaPem',  label: 'Druck-Proxy CA-Zertifikat (Inhalt von ca.crt)' },
   { field: 'server',        label: 'CUPS Server (leer = Docker-Socket)' },
   { field: 'queueDefault',  label: 'Standard-Queue (Fallback)' },
   { field: 'queueBox',      label: 'Box-Etiketten' },
@@ -118,7 +120,22 @@ export default function PrinterSettingsCard({ authToken, onAuthFailure }: Props)
                 {label}
               </td>
               <td style={{ padding: '0.3rem 0.5rem' }}>
-                {field === 'mode' ? (
+                {field === 'browserCaPem' ? (
+                  <>
+                    <textarea
+                      value={draft[field] ?? ''}
+                      onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
+                      placeholder="-----BEGIN CERTIFICATE-----"
+                      rows={4}
+                      style={{ width: '100%', fontSize: '0.75rem', fontFamily: 'monospace' }}
+                    />
+                    {settings.browserCaPem?.value && (
+                      <a href="/api/print/proxy-ca.crt" download style={{ fontSize: '0.8rem' }}>
+                        Zertifikat herunterladen
+                      </a>
+                    )}
+                  </>
+                ) : field === 'mode' ? (
                   <select
                     value={draft[field] ?? ''}
                     onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}

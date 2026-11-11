@@ -228,6 +228,10 @@ function PrintLabelButtonInner({ boxId, itemId, onPrintStart, inline = false }: 
             {status}
           </span>
           {pdfLink && <> – {pdfLink}</>}
+          {status.startsWith('Druckserver nicht erreichbar') && (
+            // Most first-time failures are a workstation that doesn't trust the proxy CA yet.
+            <> – <a href="/api/print/proxy-ca.crt" download>Druckserver-Zertifikat herunterladen</a></>
+          )}
         </div>
       )}
       {labelDialog}

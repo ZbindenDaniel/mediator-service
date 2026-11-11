@@ -4,6 +4,10 @@ Covers: label printing, CUPS integration, printer queue management, print templa
 
 ---
 
+## 1083. ✅ Print proxy CA certificate downloadable from the mediator
+**Why:** Every workstation must trust the Raspi proxy's own CA, and copying `ca.crt` off the Raspi per machine is tedious. Admins paste the CA once into Drucker-Einstellungen (`printer.browser_ca_pem`); `GET /api/print/proxy-ca.crt` serves it as `application/x-x509-ca-cert` (Windows/Android offer "install" directly). The print button links it next to "Druckserver nicht erreichbar", the most common first-time failure. Validation rejects anything containing `PRIVATE KEY`, since the value is served to every user.
+**Deferred:** Removing the import step entirely needs a publicly trusted certificate (DNS name → 192.168.10.183, Let's Encrypt via DNS-01 on the Raspi) — tracked in todo.md 36b(d).
+
 ## 1082. ✅ Browser print proxy: basic auth + TLS/origin-map reference config
 **Why:** The Raspi nginx now uses TLS with an own CA (`/etc/nginx/print-tls/ca.crt`), an origin allowlist map (`/etc/nginx/conf.d/print-origins.conf`) and basic auth (`/etc/nginx/print-users`). A cross-origin `fetch` can't rely on the browser's auth prompt, so the credentials live in new settings `printer.browser_user` / `printer.browser_password` (env `PRINTER_BROWSER_USER` / `PRINTER_BROWSER_PASSWORD`); the backend sends a ready `Authorization` header in the browser-dispatch response and `browserPrint` adds it. The password is write-only in Drucker-Einstellungen (GET returns a mask; saving the mask keeps the stored value). 401/403 → `printer_auth_failed`, not retried. `cups/nginx-print-proxy.conf` now shows the matching layout: preflight answered before `auth_basic` (rewrite phase precedes access phase), `Authorization` in `Access-Control-Allow-Headers`, CORS headers `always` so 401s are readable, proxy auth stripped before CUPS. With TLS and a trusted CA, Firefox/Safari work too (no mixed content).
 **Deferred:** The credentials reach every logged-in browser — they keep other LAN devices out, not app users. Per-user credentials or short-lived tokens (nginx `auth_request` against the backend) were not built.
