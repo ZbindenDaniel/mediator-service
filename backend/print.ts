@@ -59,6 +59,14 @@ export function normalizePrinterDispatchMode(raw: string | undefined | null): Pr
   return (raw || '').trim().toLowerCase() === 'browser' ? 'browser' : 'server';
 }
 
+// "192.168.10.183:8765" without a scheme would make the browser fetch a path relative to the app
+// (https://app/192.168.10.183:8765/...), so a bare host:port gets http:// prepended.
+export function normalizeBrowserUrl(raw: string | undefined | null): string {
+  const trimmed = (raw || '').trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+}
+
 export async function resolvePrinterDispatch(): Promise<PrinterDispatchConfig> {
   const settings = await getAllSettings({
     'printer.mode': PRINTER_MODE,
@@ -66,7 +74,7 @@ export async function resolvePrinterDispatch(): Promise<PrinterDispatchConfig> {
   });
   return {
     mode: normalizePrinterDispatchMode(settings['printer.mode']),
-    browserUrl: (settings['printer.browser_url'] || '').trim().replace(/\/+$/, ''),
+    browserUrl: normalizeBrowserUrl(settings['printer.browser_url']),
   };
 }
 

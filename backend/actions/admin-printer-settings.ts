@@ -48,7 +48,8 @@ export function validateSettingsBody(body: Record<string, string | null | undefi
   const browserUrl = body.browserUrl?.trim();
   if (browserUrl) {
     try {
-      const parsed = new URL(browserUrl);
+      // A bare host:port is allowed (http:// is assumed, see normalizeBrowserUrl); other schemes are not.
+      const parsed = new URL(browserUrl.includes('://') ? browserUrl : `http://${browserUrl}`);
       if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
         return 'browserUrl must be an http(s) URL';
       }

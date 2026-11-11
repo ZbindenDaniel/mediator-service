@@ -124,3 +124,13 @@ describe('validateSettingsBody', () => {
     expect(validateSettingsBody({ browserUrl: 'not a url' })).toMatch(/browserUrl/);
   });
 });
+
+describe('browser proxy URL normalization', () => {
+  it('assumes http:// for a bare host:port and strips trailing slashes', async () => {
+    const { normalizeBrowserUrl } = await import('../backend/print');
+    expect(normalizeBrowserUrl('192.168.10.183:8765')).toBe('http://192.168.10.183:8765');
+    expect(normalizeBrowserUrl('https://print.lan/')).toBe('https://print.lan');
+    expect(normalizeBrowserUrl('  ')).toBe('');
+    expect(validateSettingsBody({ browserUrl: '192.168.10.183:8765' })).toBeNull();
+  });
+});
