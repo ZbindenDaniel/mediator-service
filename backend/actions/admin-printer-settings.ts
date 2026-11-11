@@ -2,6 +2,10 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import { defineHttpAction } from './index';
 import {
   PRINTER_SERVER,
+  PRINTER_MODE,
+  PRINTER_BROWSER_URL,
+  PRINTER_BROWSER_USER,
+  PRINTER_BROWSER_PASSWORD,
   PRINTER_QUEUE,
   PRINTER_QUEUE_BOX,
   PRINTER_QUEUE_ITEM,
@@ -27,6 +31,11 @@ async function readBody(req: IncomingMessage): Promise<string> {
 }
 
 const SETTING_DEFS = [
+  { key: 'printer.mode',             field: 'mode',           envFallback: PRINTER_MODE },
+  { key: 'printer.browser_url',      field: 'browserUrl',     envFallback: PRINTER_BROWSER_URL },
+  { key: 'printer.browser_user',     field: 'browserUser',    envFallback: PRINTER_BROWSER_USER },
+  { key: 'printer.browser_password', field: 'browserPassword', envFallback: PRINTER_BROWSER_PASSWORD },
+  { key: 'printer.browser_ca_pem',   field: 'browserCaPem',   envFallback: '' },
   { key: 'printer.server',           field: 'server',         envFallback: PRINTER_SERVER },
   { key: 'printer.queue.default',    field: 'queueDefault',   envFallback: PRINTER_QUEUE },
   { key: 'printer.queue.box',        field: 'queueBox',       envFallback: PRINTER_QUEUE_BOX },
@@ -36,13 +45,47 @@ const SETTING_DEFS = [
   { key: 'printer.queue.marketing',  field: 'queueMarketing', envFallback: PRINTER_QUEUE_MARKETING },
 ] as const;
 
+export function validateSettingsBody(body: Record<string, string | null | undefined>): string | null {
+  const mode = body.mode?.trim();
+  if (mode && mode !== 'server' && mode !== 'browser') {
+    return 'mode must be "server" or "browser"';
+  }
+  const browserUrl = body.browserUrl?.trim();
+  if (browserUrl) {
+    try {
+      // A bare host:port is allowed (http:// is assumed, see normalizeBrowserUrl); other schemes are not.
+      const parsed = new URL(browserUrl.includes('://') ? browserUrl : `http://${browserUrl}`);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        return 'browserUrl must be an http(s) URL';
+      }
+    } catch {
+      return 'browserUrl must be an http(s) URL';
+    }
+  }
+  const caPem = body.browserCaPem?.trim();
+  if (caPem) {
+    // Guard against pasting the server key by mistake: it would be served to every user.
+    if (/PRIVATE KEY/.test(caPem)) {
+      return 'browserCaPem contains a private key — paste only ca.crt';
+    }
+    if (!/^-----BEGIN CERTIFICATE-----[\s\S]+-----END CERTIFICATE-----$/.test(caPem)) {
+      return 'browserCaPem must be a PEM certificate (-----BEGIN CERTIFICATE----- …)';
+    }
+  }
+  return null;
+}
+
+export const PASSWORD_MASK = '********';
+
 async function buildSettingsResponse() {
   const envMap = Object.fromEntries(SETTING_DEFS.map((d) => [d.key, d.envFallback]));
   const values = await getAllSettings(envMap);
   const result: Record<string, { value: string; source: 'db' | 'env' }> = {};
   for (const def of SETTING_DEFS) {
     const override = await hasOverride(def.key);
-    result[def.field] = { value: values[def.key], source: override ? 'db' : 'env' };
+    // The proxy password is write-only in the admin UI; only whether it is set is reported.
+    const value = def.field === 'browserPassword' ? (values[def.key] ? PASSWORD_MASK : '') : values[def.key];
+    result[def.field] = { value, source: override ? 'db' : 'env' };
   }
   return result;
 }
@@ -66,13 +109,21 @@ const action = defineHttpAction({
       const raw = await readBody(req);
       const body = JSON.parse(raw) as Record<string, string | null | undefined>;
 
+      const invalid = validateSettingsBody(body);
+      if (invalid) {
+        sendJson(res, 400, { error: invalid });
+        return;
+      }
+
       for (const def of SETTING_DEFS) {
         const incoming = body[def.field];
         if (incoming === undefined) continue;
+        // Saving the form unchanged sends the mask back; that must not overwrite the real password.
+        if (def.field === 'browserPassword' && incoming === PASSWORD_MASK) continue;
         if (incoming === null || incoming === '') {
           await clearSetting(def.key);
         } else {
-          await setSetting(def.key, incoming.trim());
+          await setSetting(def.key, def.field === 'browserPassword' ? incoming : incoming.trim());
         }
       }
 

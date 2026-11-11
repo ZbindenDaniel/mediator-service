@@ -1,5 +1,6 @@
 // TODO(agent): Confirm Docker runtime renderer install stays in sync with PRINT_RENDERER docs.
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { spawn, spawnSync } from 'child_process';
 
@@ -45,6 +46,24 @@ function resolveRenderer(preferred?: string): string | null {
     }
   }
   return null;
+}
+
+// The runtime image runs as www-data (uid 33) whose HOME (/var/www) doesn't exist; Chromium then
+// fails with "Failed to create headless user data directory" (render_exit_1). Give it its own HOME.
+function buildRendererEnv(logger: Pick<Console, 'warn'>): NodeJS.ProcessEnv {
+  const rendererHome = path.join(os.tmpdir(), 'mediator-renderer-home');
+  try {
+    fs.mkdirSync(rendererHome, { recursive: true });
+  } catch (err) {
+    logger.warn('[label-pdf] Could not prepare renderer HOME; using inherited environment', { rendererHome, error: err });
+    return process.env;
+  }
+  return {
+    ...process.env,
+    HOME: rendererHome,
+    XDG_CONFIG_HOME: path.join(rendererHome, '.config'),
+    XDG_CACHE_HOME: path.join(rendererHome, '.cache')
+  };
 }
 
 function buildRendererArgs(command: string, htmlPath: string, outputPath: string, customArgs?: string[]): string[] {
@@ -132,7 +151,8 @@ export async function renderHtmlToPdf(options: HtmlToPdfOptions): Promise<string
 
     try {
       child = spawn(resolvedRenderer, args, {
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: buildRendererEnv(logger)
       });
     } catch (spawnErr) {
       logger.error('[label-pdf] Failed to start renderer process', {

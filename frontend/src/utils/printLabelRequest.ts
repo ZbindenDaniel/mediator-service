@@ -1,5 +1,23 @@
-import type { PrintLabelRequestBody, PrintLabelResponsePayload, PrintLabelType } from '../../../models';
+import type {
+  PrintBrowserResultBody,
+  PrintLabelRequestBody,
+  PrintLabelResponsePayload,
+  PrintLabelType
+} from '../../../models';
+import { dispatchBrowserPrint } from './browserPrint';
 import { logError, logger } from './logger';
+
+async function reportBrowserPrintResult(fetchImpl: typeof fetch, body: PrintBrowserResultBody): Promise<void> {
+  try {
+    await fetchImpl('/api/print/result', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  } catch (err) {
+    logError('Failed to report browser print result', err, { labelType: body.labelType, entityId: body.entityId });
+  }
+}
 
 export interface PrintLabelRequestResult {
   ok: boolean;
@@ -107,6 +125,27 @@ export async function requestPrintLabel({
       labelType,
       entityId,
       status: response.status
+    });
+  }
+
+  // Browser mode: the backend rendered the PDF but can't reach CUPS, so this browser (inside the
+  // printer's LAN) sends the job. Done here so every caller (button, auto-print) gets it for free.
+  if (response.ok && data.dispatch === 'browser' && data.pdfUrl && data.printer) {
+    const browserResult = await dispatchBrowserPrint({
+      pdfUrl: data.pdfUrl,
+      printer: data.printer,
+      actor: trimmedActor,
+      jobName: data.jobName,
+      fetchImpl
+    });
+    data = { ...data, sent: browserResult.sent, reason: browserResult.reason };
+    void reportBrowserPrintResult(fetchImpl, {
+      actor: trimmedActor,
+      labelType,
+      entityId,
+      sent: browserResult.sent,
+      reason: browserResult.reason,
+      queue: data.printer?.queue
     });
   }
 

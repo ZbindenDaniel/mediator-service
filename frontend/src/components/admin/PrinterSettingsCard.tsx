@@ -7,6 +7,11 @@ interface SettingValue {
 }
 
 interface PrinterSettings {
+  mode: SettingValue;
+  browserUrl: SettingValue;
+  browserUser: SettingValue;
+  browserPassword: SettingValue;
+  browserCaPem: SettingValue;
   server: SettingValue;
   queueDefault: SettingValue;
   queueBox: SettingValue;
@@ -22,6 +27,11 @@ interface Props {
 }
 
 const FIELD_LABELS: Array<{ field: keyof PrinterSettings; label: string }> = [
+  { field: 'mode',          label: 'Druckweg' },
+  { field: 'browserUrl',    label: 'Druck-Proxy für Browser (z. B. https://192.168.10.183:8765)' },
+  { field: 'browserUser',   label: 'Druck-Proxy Benutzer (Basic Auth)' },
+  { field: 'browserPassword', label: 'Druck-Proxy Passwort' },
+  { field: 'browserCaPem',  label: 'Druck-Proxy CA-Zertifikat (Inhalt von ca.crt)' },
   { field: 'server',        label: 'CUPS Server (leer = Docker-Socket)' },
   { field: 'queueDefault',  label: 'Standard-Queue (Fallback)' },
   { field: 'queueBox',      label: 'Box-Etiketten' },
@@ -51,7 +61,8 @@ export default function PrinterSettingsCard({ authToken, onAuthFailure }: Props)
         setSettings(data);
         const d: Record<string, string> = {};
         for (const { field } of FIELD_LABELS) {
-          d[field] = data[field]?.value ?? '';
+          // Env-sourced values stay empty in the draft so saving doesn't pin them as DB overrides.
+          d[field] = field === 'mode' && data[field]?.source !== 'db' ? '' : data[field]?.value ?? '';
         }
         setDraft(d);
       }
@@ -82,7 +93,8 @@ export default function PrinterSettingsCard({ authToken, onAuthFailure }: Props)
         setSettings(data);
         setMessage('Gespeichert');
       } else {
-        setMessage('Fehler beim Speichern');
+        const err = await res.json().catch(() => null) as { error?: string } | null;
+        setMessage(err?.error ? `Fehler: ${err.error}` : 'Fehler beim Speichern');
       }
     } catch (err) {
       logError('Failed to save printer settings', err);
@@ -108,13 +120,41 @@ export default function PrinterSettingsCard({ authToken, onAuthFailure }: Props)
                 {label}
               </td>
               <td style={{ padding: '0.3rem 0.5rem' }}>
-                <input
-                  type="text"
-                  value={draft[field] ?? ''}
-                  onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
-                  placeholder={settings[field]?.source === 'env' ? `env: ${settings[field].value}` : ''}
-                  style={{ width: '100%', fontSize: '0.875rem' }}
-                />
+                {field === 'browserCaPem' ? (
+                  <>
+                    <textarea
+                      value={draft[field] ?? ''}
+                      onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
+                      placeholder="-----BEGIN CERTIFICATE-----"
+                      rows={4}
+                      style={{ width: '100%', fontSize: '0.75rem', fontFamily: 'monospace' }}
+                    />
+                    {settings.browserCaPem?.value && (
+                      <a href="/api/print/proxy-ca.crt" download style={{ fontSize: '0.8rem' }}>
+                        Zertifikat herunterladen
+                      </a>
+                    )}
+                  </>
+                ) : field === 'mode' ? (
+                  <select
+                    value={draft[field] ?? ''}
+                    onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
+                    style={{ width: '100%', fontSize: '0.875rem' }}
+                  >
+                    <option value="">{`Standard (env: ${settings.mode?.value || 'server'})`}</option>
+                    <option value="server">Server – Backend sendet an CUPS</option>
+                    <option value="browser">Browser – Browser sendet an Druck-Proxy im LAN</option>
+                  </select>
+                ) : (
+                  <input
+                    type={field === 'browserPassword' ? 'password' : 'text'}
+                    autoComplete={field === 'browserPassword' ? 'new-password' : undefined}
+                    value={draft[field] ?? ''}
+                    onChange={(e) => setDraft((d) => ({ ...d, [field]: e.target.value }))}
+                    placeholder={settings[field]?.source === 'env' ? `env: ${settings[field].value}` : ''}
+                    style={{ width: '100%', fontSize: '0.875rem' }}
+                  />
+                )}
               </td>
               <td style={{ padding: '0.3rem 0', whiteSpace: 'nowrap' }}>
                 {settings[field]?.source === 'db' && (

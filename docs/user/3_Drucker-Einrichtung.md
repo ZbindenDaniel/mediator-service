@@ -13,6 +13,7 @@ Das System druckt über **CUPS** (Druckdienst unter Linux). Zwei Varianten:
 |----------|------|
 | **USB-Drucker am Server** | Der Drucker hängt per USB am Rechner, auf dem Docker läuft |
 | **Netzwerkdrucker / externer Druckserver** | Der Drucker hat eine eigene Netzwerkverbindung oder hängt an einem anderen Gerät (Raspberry Pi, NAS) |
+| **Drucken über den Browser** | Das System läuft in der Cloud. Der Browser im Netz des Druckers schickt den Auftrag (Teil C) |
 
 Die Einrichtung erfolgt in der **Administration**, Karten **CUPS-Queues verwalten** und **Drucker-Einstellungen**. Ein Neustart der App ist nicht nötig.
 
@@ -116,6 +117,41 @@ Netzwerkfähige Drucker (z. B. Brother QL-820NWB, QL-1110NWB, die meisten Laser-
 
 ---
 
+## Teil C: Drucken über den Browser (System in der Cloud)
+
+Der Server rendert das Etikett als PDF. Dein Browser schickt es an den Druckserver im lokalen Netz. Dafür muss das Gerät, an dem du druckst, im selben Netz wie der Druckserver sein.
+
+Den Druckserver (nginx vor CUPS) richtet die Technik ein. Anleitung: `docs/detailed/printer-server-setup.md`, Mode 4.
+
+### 1. Einstellungen in der Administration
+
+Karte **Drucker-Einstellungen**:
+
+| Feld | Wert |
+|------|------|
+| **Druckweg** | **Browser – Browser sendet an Druck-Proxy im LAN** |
+| **Druck-Proxy für Browser** | Adresse des Druckservers, z. B. `https://192.168.10.183` |
+| **Druck-Proxy Benutzer** / **Druck-Proxy Passwort** | Zugang für den Druckserver (von der Technik) |
+| **Druck-Proxy CA-Zertifikat** | Inhalt der Datei `ca.crt` vom Druckserver |
+| Queue pro Etikettentyp | Genauer Queue-Name auf dem Druckserver, z. B. `Brother_QL560_klein` |
+
+Danach **Speichern**.
+
+### 2. Jedes Gerät einmal vorbereiten
+
+1. Zertifikat herunterladen: Link **Zertifikat herunterladen** in den **Drucker-Einstellungen**. Erscheint beim Drucken «Druckserver nicht erreichbar», steht der Link auch dort.
+2. Zertifikat importieren:
+   - Windows: Datei öffnen → **Zertifikat installieren** → **Lokaler Computer** → **Vertrauenswürdige Stammzertifizierungsstellen**.
+   - Firefox: **Einstellungen** → **Datenschutz & Sicherheit** → **Zertifikate anzeigen** → **Zertifizierungsstellen** → **Importieren**. Häkchen bei «Dieser CA vertrauen, um Websites zu identifizieren».
+3. Ein Etikett drucken. Chrome und Edge fragen einmal nach Zugriff auf Geräte im lokalen Netzwerk. Erlauben.
+
+### Was in diesem Modus nicht geht
+
+- Etiketten aus dem Import werden nicht automatisch gedruckt.
+- Die Karte **CUPS-Queues verwalten** erreicht den Druckserver nicht. Queues verwaltet die Technik direkt auf dem Druckserver.
+
+---
+
 ## Häufige Probleme
 
 | Problem | Ursache | Lösung |
@@ -126,6 +162,8 @@ Netzwerkfähige Drucker (z. B. Brother QL-820NWB, QL-1110NWB, die meisten Laser-
 | Label zu klein oder zu gross | Media passt nicht zur Rolle | **Media** der Queue auf die eingelegte Rolle setzen |
 | Es wird nichts gedruckt | Label-Typ hat keine Queue | **Drucker-Einstellungen** prüfen |
 | Laut Log gedruckt, aber kein Label | Falscher Treiber oder falsches Media | PPD-Modell und Media der Queue prüfen |
+| «Druckserver nicht erreichbar» (Browser-Modus) | Zertifikat fehlt, Gerät nicht im Netz des Druckservers oder Queue-Name falsch | Zertifikat importieren (Teil C, Schritt 2), Queue-Namen prüfen |
+| «Druckserver lehnt Zugangsdaten ab» | **Druck-Proxy Benutzer** oder **Druck-Proxy Passwort** falsch | In den **Drucker-Einstellungen** korrigieren |
 
 Die Karte **CUPS-Queues verwalten** hat unter **Einrichtungshilfe** dieselben Hinweise und eine Diagnose-Ansicht.
 

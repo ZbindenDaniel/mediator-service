@@ -14,7 +14,8 @@ import type { BoxLabelPayload, ItemLabelPayload, MarketingSheetPayload, ShelfLab
 import { htmlForMarketingSheet, htmlForSmallItem } from '../lib/labelHtml';
 import { calculateCo2Impact } from '../lib/co2Calculator';
 import type { PrintFileResult, PrintLabelType } from '../print';
-import { resolvePrinterQueue } from '../print';
+import { resolvePrinterQueue, resolvePrinterDispatch } from '../print';
+import { renderHtmlToPdf } from '../labelpdf';
 import { buildItemCategoryLookups } from '../../models/item-category-lookups';
 import { resolveActor } from '../utils/actor';
 import { instancePriceFor } from '../lib/pricing';
@@ -314,6 +315,100 @@ export interface PrintRequestOptions {
   labelTypeOverride?: PrintLabelType;
 }
 
+async function logBrowserDispatchFailure(
+  ctx: any,
+  details: { actor: string; entityType: 'Box' | 'Item'; entityId: string; previewUrl: string; reason: string; labelType: PrintLabelType }
+): Promise<void> {
+  try {
+    await ctx.logEvent({
+      Actor: details.actor,
+      EntityType: details.entityType,
+      EntityId: details.entityId,
+      Event: 'PrintFailed',
+      Meta: JSON.stringify({
+        transport: 'browser-ipp',
+        file: details.previewUrl,
+        reason: details.reason,
+        labelType: details.labelType
+      })
+    });
+  } catch (err) {
+    console.error('[print-unified] Failed to log browser dispatch failure', { ...details, error: err });
+  }
+}
+
+/**
+ * Browser mode: the backend (in the cloud) cannot reach CUPS, so it renders the PDF and hands
+ * the browser everything it needs to send the IPP job itself from inside the printer's LAN.
+ */
+async function respondForBrowserDispatch(options: {
+  res: ServerResponse;
+  ctx: any;
+  htmlPath: string;
+  previewUrl: string;
+  jobName: string;
+  queue: string;
+  browserUrl: string;
+  browserAuthorization: string;
+  labelPayload: unknown;
+  logContext: Record<string, unknown>;
+  entityType: 'Box' | 'Item';
+  entityId: string;
+  actor: string;
+  labelType: PrintLabelType;
+}): Promise<void> {
+  const { res, ctx, htmlPath, previewUrl, jobName, queue, browserUrl, labelPayload, logContext } = options;
+  const failureDetails = {
+    actor: options.actor,
+    entityType: options.entityType,
+    entityId: options.entityId,
+    previewUrl,
+    labelType: options.labelType
+  };
+
+  const configReason = !queue
+    ? 'printer_queue_not_configured'
+    : !browserUrl
+      ? 'printer_browser_url_not_configured'
+      : '';
+  if (configReason) {
+    console.warn('[print-unified] Browser dispatch not configured', { ...logContext, reason: configReason });
+    await logBrowserDispatchFailure(ctx, { ...failureDetails, reason: configReason });
+    return sendJson(res, 200, { sent: false, previewUrl, reason: configReason, qrPayload: labelPayload });
+  }
+
+  let pdfPath: string;
+  try {
+    pdfPath = await renderHtmlToPdf({ htmlPath, logger: console });
+  } catch (renderErr) {
+    const reason = (renderErr as Error).message || 'pdf_render_failed';
+    console.error('[print-unified] PDF rendering for browser dispatch failed', { ...logContext, error: renderErr });
+    await logBrowserDispatchFailure(ctx, { ...failureDetails, reason });
+    return sendJson(res, 200, { sent: false, previewUrl, reason, qrPayload: labelPayload });
+  }
+
+  const pdfUrl = `/prints/${path.basename(pdfPath)}`;
+  console.info('[print-unified] Label handed to browser for IPP dispatch', {
+    ...logContext,
+    pdfUrl,
+    queue,
+    browserUrl
+  });
+  return sendJson(res, 200, {
+    sent: false,
+    dispatch: 'browser',
+    previewUrl,
+    pdfUrl,
+    jobName,
+    printer: {
+      url: browserUrl,
+      queue,
+      ...(options.browserAuthorization ? { authorization: options.browserAuthorization } : {})
+    },
+    qrPayload: labelPayload
+  });
+}
+
 export async function handleUnifiedPrintRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -471,16 +566,37 @@ export async function handleUnifiedPrintRequest(
     if (queueResolution.source === 'missing') {
       console.warn('[print-unified] Printer queue missing for label type', { ...logContext });
     }
+    const jobName = labelType === 'item'
+      ? `Item ${entityId}`
+      : labelType === 'smallitem'
+        ? `Small Item ${entityId}`
+        : labelType === 'shelf'
+          ? `Shelf ${entityId}`
+          : labelType === 'marketingsheet'
+            ? `Marketing ${entityId}`
+            : `Box ${entityId}`;
+
+    const dispatch = await resolvePrinterDispatch();
+    if (dispatch.mode === 'browser') {
+      return await respondForBrowserDispatch({
+        res,
+        ctx,
+        htmlPath,
+        previewUrl,
+        jobName,
+        queue: queueResolution.queue,
+        browserUrl: dispatch.browserUrl,
+        browserAuthorization: dispatch.browserAuthorization,
+        labelPayload,
+        logContext,
+        entityType,
+        entityId,
+        actor,
+        labelType
+      });
+    }
+
     try {
-      const jobName = labelType === 'item'
-        ? `Item ${entityId}`
-        : labelType === 'smallitem'
-          ? `Small Item ${entityId}`
-          : labelType === 'shelf'
-            ? `Shelf ${entityId}`
-            : labelType === 'marketingsheet'
-              ? `Marketing ${entityId}`
-              : `Box ${entityId}`;
       printResult = await ctx.printFile({
         filePath: htmlPath,
         jobName,

@@ -15,8 +15,19 @@ interface Props {
 
 function formatPrintReason(reason: string): string {
   const r = reason.toLowerCase();
-  if (reason === 'printer_queue_not_configured' || reason === 'print_not_attempted') {
+  if (
+    reason === 'printer_queue_not_configured' ||
+    reason === 'print_not_attempted' ||
+    reason === 'printer_browser_url_not_configured'
+  ) {
     return 'Kein Drucker konfiguriert';
+  }
+  if (reason === 'printer_auth_failed') {
+    return 'Druckserver lehnt Zugangsdaten ab (Benutzer/Passwort in Drucker-Einstellungen prüfen)';
+  }
+  if (reason === 'printer_unreachable') {
+    // Browser mode: CORS, mixed content and a denied network prompt are indistinguishable here.
+    return 'Druckserver nicht erreichbar (im Netz des Druckers? Zertifikat vertraut? Netzwerkzugriff erlaubt?)';
   }
   if (r.includes('timeout') || r.includes('timed out') || r === 'status_timeout') {
     return 'Drucker antwortet nicht';
@@ -217,6 +228,10 @@ function PrintLabelButtonInner({ boxId, itemId, onPrintStart, inline = false }: 
             {status}
           </span>
           {pdfLink && <> – {pdfLink}</>}
+          {status.startsWith('Druckserver nicht erreichbar') && (
+            // Most first-time failures are a workstation that doesn't trust the proxy CA yet.
+            <> – <a href="/api/print/proxy-ca.crt" download>Druckserver-Zertifikat herunterladen</a></>
+          )}
         </div>
       )}
       {labelDialog}
