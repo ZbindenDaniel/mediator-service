@@ -4,6 +4,9 @@ import { useIdentity } from '../context/IdentityContext';
 import type { Role } from '../context/IdentityContext';
 import { applyTheme, getThemePreference, setThemePreference } from '../lib/theme';
 import type { ThemePreference } from '../lib/theme';
+import { useFeature } from '../context/FeaturesContext';
+import { hasPrintProxyCa, PRINT_PROXY_CA_URL } from '../data/printProxyCa';
+import { logError } from '../utils/logger';
 
 const ROLE_LABELS: Record<Role, string> = {
   'platform-admin': 'Plattform-Administration',
@@ -29,11 +32,27 @@ interface Props {
 
 export default function UserSettingsDialog({ currentUser, currentSimpleMode, onSave, onCancel }: Props) {
   const identity = useIdentity();
+  const printingEnabled = useFeature('printing');
+  const [certificateAvailable, setCertificateAvailable] = useState(false);
   const [username, setUsername] = useState(currentUser);
   const [simpleMode, setSimpleModeState] = useState(currentSimpleMode);
   const [initialTheme] = useState(getThemePreference);
   const [theme, setTheme] = useState<ThemePreference>(initialTheme);
   const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    setCertificateAvailable(false);
+    if (!printingEnabled) return;
+    const controller = new AbortController();
+    void hasPrintProxyCa(controller.signal)
+      .then((available) => {
+        if (!controller.signal.aborted) setCertificateAvailable(available);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) logError('Failed to check print certificate availability', error);
+      });
+    return () => controller.abort();
+  }, [printingEnabled]);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -110,6 +129,11 @@ export default function UserSettingsDialog({ currentUser, currentSimpleMode, onS
             ))}
           </select>
         </label>
+        {printingEnabled && certificateAvailable && (
+          <a href={PRINT_PROXY_CA_URL} download style={{ fontSize: '0.8rem' }}>
+            Zertifikat herunterladen
+          </a>
+        )}
         <DialogButtons
           type="prompt"
           confirmLabel="Speichern"

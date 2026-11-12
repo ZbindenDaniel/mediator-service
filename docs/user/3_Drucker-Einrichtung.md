@@ -139,7 +139,7 @@ Danach **Speichern**.
 
 ### 2. Jedes Gerät einmal vorbereiten
 
-1. Zertifikat herunterladen: Link **Zertifikat herunterladen** in den **Drucker-Einstellungen**. Erscheint beim Drucken «Druckserver nicht erreichbar», steht der Link auch dort.
+1. Zertifikat herunterladen: Im Benutzermenü **Einstellungen** öffnen und unter **Farbschema** auf **Zertifikat herunterladen** klicken. Der Link erscheint, wenn ein Administrator das Zertifikat hinterlegt hat und Drucken aktiviert ist. Für Administratoren steht der Link auch in den **Drucker-Einstellungen**. Erscheint beim Drucken «Druckserver nicht erreichbar», steht der Link auch dort.
 2. Zertifikat importieren:
    - Windows: Datei öffnen → **Zertifikat installieren** → **Lokaler Computer** → **Vertrauenswürdige Stammzertifizierungsstellen**.
    - Firefox: **Einstellungen** → **Datenschutz & Sicherheit** → **Zertifikate anzeigen** → **Zertifizierungsstellen** → **Importieren**. Häkchen bei «Dieser CA vertrauen, um Websites zu identifizieren».

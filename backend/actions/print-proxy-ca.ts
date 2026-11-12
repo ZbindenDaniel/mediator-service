@@ -12,13 +12,13 @@ const action = defineHttpAction({
   key: 'print-proxy-ca',
   label: 'Print proxy CA certificate download',
   appliesTo: () => false,
-  matches: (p, m) => p === PRINT_PROXY_CA_PATH && m === 'GET',
-  async handle(_req: IncomingMessage, res: ServerResponse) {
+  matches: (p, m) => p === PRINT_PROXY_CA_PATH && (m === 'GET' || m === 'HEAD'),
+  async handle(req: IncomingMessage, res: ServerResponse) {
     try {
       const pem = (await getSetting('printer.browser_ca_pem', '')).trim();
       if (!pem) {
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('Kein Druckserver-Zertifikat hinterlegt (Admin → Drucker-Einstellungen).');
+        res.end(req.method === 'HEAD' ? undefined : 'Kein Druckserver-Zertifikat hinterlegt (Admin → Drucker-Einstellungen).');
         return;
       }
       res.writeHead(200, {
@@ -27,11 +27,11 @@ const action = defineHttpAction({
         'Content-Disposition': 'attachment; filename="druckserver-ca.crt"',
         'Cache-Control': 'no-store'
       });
-      res.end(`${pem}\n`);
+      res.end(req.method === 'HEAD' ? undefined : `${pem}\n`);
     } catch (err) {
       console.error('[print-proxy-ca] Failed to serve CA certificate', err);
       res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end('error');
+      res.end(req.method === 'HEAD' ? undefined : 'error');
     }
   },
   view: () => '<div class="card"><p class="muted">Print proxy CA download</p></div>'

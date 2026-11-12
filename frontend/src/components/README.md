@@ -23,7 +23,7 @@ All React UI components for the application — organized by feature area in sub
 - Agentic: `AgenticStatusCard.tsx`, `AgenticReviewWizard.tsx` (review), `AgenticSearchSources.tsx`, `AgenticSnapshotsPanel.tsx`, `AgenticReviewMetricsRows.tsx`, `ItemForm_agentic.tsx`
 - Item actions: `EditInstanceCard.tsx`, `ItemEdit.tsx`, `ItemForm.tsx`, `ItemBasicInfoForm.tsx`, `ItemMatchSelection.tsx`
 - Media: `ItemMediaGallery.tsx`, `PhotoCaptureModal.tsx`, `AttachmentsCard.tsx`, `AttachmentBindingModal.tsx`
-- Printing: `PrintLabelButton.tsx`
+- Printing: `PrintLabelButton.tsx`; `UserSettingsDialog.tsx` offers the configured proxy CA download beside the colour-scheme selector
 - Spare parts: `einzelteile/` (Einzelteile page: `EinzelteilePage`, `PartsTreeView`, `PartNodePanel`), `SparepartSlotPopup.tsx`; accessories: `ZubehoerCard.tsx`, `ZubehoerBadge.tsx`
 - Badges: `QualityBadge.tsx`, `ShopBadge.tsx`, `LocationTag.tsx`
 - Bulk: `BulkItemActionBar.tsx`, `MultiItemSummary.tsx`

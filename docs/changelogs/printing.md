@@ -4,6 +4,14 @@ Covers: label printing, CUPS integration, printer queue management, print templa
 
 ---
 
+## 1090. ✅ Make the user-settings certificate download compact
+**Why:** The extra field label and pill styling took unnecessary space in the popup. Replaced them with the same small text download link used by the admin page; availability and endpoint are unchanged.
+**Deferred:** nothing deferred.
+
+## 1089. ✅ Expose configured print-proxy CA download in user settings
+**Why:** Operators need to prepare their workstation without admin access or first triggering a print failure. The user settings popup now checks the existing download endpoint with HEAD and shows “Zertifikat herunterladen” beside the colour scheme only when a CA is configured and printing is enabled. Uses a relative `/api/print/proxy-ca.crt` URL on the current host. The admin link and existing GET download remain available; no admin settings or credentials are fetched. Availability checks are cancelled when the dialog closes.
+**Deferred:** nothing deferred; downloading still requires the user to import the certificate into their workstation/browser trust store.
+
 ## 1088. ✅ Browser printing verified on the Raspi; nginx routes every queue by regex
 **Why:** First real label printed through browser → nginx (TLS, origin map, basic auth) → CUPS. The production config only allowed one exact queue (`location = /printers/Brother_QL560_klein`), so any other label-type queue got a 404 preflight and showed as `printer_unreachable`. The reference config now uses `location ~ ^/printers/[A-Za-z0-9_.-]+$`: all queues, no sub-paths (CUPS admin/jobs and traversal stay closed), and port 443 like the deployed proxy. Lessons from the rollout: the queue names in Drucker-Einstellungen must match `lpstat -p` on the Raspi, and the proxy user/password must be set or nginx answers 401.
 **Deferred:** nothing deferred.
