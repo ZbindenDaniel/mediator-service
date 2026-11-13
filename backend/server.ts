@@ -81,6 +81,7 @@ import {
   sumInventoryWeightKg,
   sumInventoryPriceValue,
   listRefsChangedSinceSync,
+  listItemUUIDsForArtikelNummern,
   markRefsSynced,
   getSystemSetting,
   setSystemSetting,
@@ -725,7 +726,13 @@ setInterval(() => {
     // Set date BEFORE the HTTP call so a slow sync or restart doesn't trigger a second run for the same day.
     lastErpNightlySyncDate = today;
 
-    const body = JSON.stringify({ artikelNummern });
+    // The endpoint only accepts itemIds; posting artikelNummern got a 400 every night.
+    const itemIds = await listItemUUIDsForArtikelNummern(artikelNummern);
+    if (itemIds.length === 0) {
+      console.warn('[nightly-erp-sync] Changed refs have no instances to sync', { count: artikelNummern.length });
+      return;
+    }
+    const body = JSON.stringify({ itemIds });
     const req = http.request(
       {
         hostname: '127.0.0.1',

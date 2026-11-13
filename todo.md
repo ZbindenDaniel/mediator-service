@@ -17,6 +17,7 @@
 
 ## Priority 1 — Bugs & Active Work
 
+- **ERP sync log noise (erp-sync #1091 follow-up).** (a) `resolveExplicitMediaMirrorSources` only looks in `dist/backend/media`. Images that come from the ERP and live in `/mnt/shopbilder` get logged as a missing file with a full ENOENT stack trace (twice: the sync-erp line and media-audit). Check `MEDIA_ERP_ROOT` too, or log at info level without the stack. (b) `deriveLastObservedPhase` reads stdout+stderr joined, not in order, so it reports `import` after the media phase. (c) `media_mirroring_runtime enabled:true` even when `ERP_WEBDAV_SHOPBILDER_URL` is unset, so the script always skips the upload. Fold the URL into the enabled check.
 - **Cockpit counts include ref-only runs (agentic #1083 follow-up).** The feeder no longer auto-runs refs without an instance, but the cockpit's notStarted/waiting tiles still count them, and runs already `queued` before #1081 must be demoted once by SQL (`queued` + no `items` row → `notStarted`). Consider an "ohne Instanz" split in the cockpit so the backlog shows real work.
 - **Item gallery: read-only shopbilder images (media #1080).** The detail gallery now lists WebDAV `shopbilder` files, but (a) they count toward the 3-slot upload limit, so ERP items with 3+ shop images can't get uploads, and (b) "remove" is offered on them and silently does nothing (the server deletes from staging only). Mark the assets read-only in the payload (e.g. `{src, readOnly}`), hide remove for them, and count only staging uploads toward the slots.
 

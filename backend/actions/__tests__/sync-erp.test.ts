@@ -7,6 +7,7 @@ import action, {
   resolveArtikelNummerMirrorScope,
   resolveExplicitMediaMirrorSources,
   resolveErpSyncScriptPath,
+  resolveSyncedArtikelNummern,
   validateErpSyncScriptPath
 } from '../sync-erp';
 import { MEDIA_DIR } from '../../lib/media';
@@ -58,6 +59,19 @@ describe('sync-erp payload normalization', () => {
 
     expect(resolved).toEqual(['000123', '000077']);
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('marks refs synced with raw Artikel_Nummer keys, not padded media folder names', () => {
+    // Regression: padded '001158' matched no item_refs row, so LastSyncedAt stayed empty.
+    const resolved = resolveSyncedArtikelNummern([
+      { Artikel_Nummer: '1158' },
+      { Artikel_Nummer: ' 1158 ' },
+      { Artikel_Nummer: '14013' },
+      { Artikel_Nummer: null },
+      { Artikel_Nummer: '' }
+    ]);
+
+    expect(resolved).toEqual(['1158', '14013']);
   });
 
   it('generates explicit mirror scope list from normalized Artikelnummer values only', () => {

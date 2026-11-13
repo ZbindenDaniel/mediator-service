@@ -2149,6 +2149,17 @@ export async function listRefsChangedSinceSync(): Promise<string[]> {
   return rows.map((r) => r.Artikel_Nummer);
 }
 
+// /api/sync/erp is keyed by ItemUUID; the nightly scheduler selects by Artikel_Nummer.
+export async function listItemUUIDsForArtikelNummern(artikelNummern: string[]): Promise<string[]> {
+  if (artikelNummern.length === 0) return [];
+  const placeholders = artikelNummern.map((_, i) => `$${i + 1}`).join(', ');
+  const rows = await query<{ ItemUUID: string }>(
+    `SELECT "ItemUUID" FROM items WHERE "Artikel_Nummer" IN (${placeholders}) ORDER BY "ItemUUID"`,
+    artikelNummern
+  );
+  return rows.map((r) => r.ItemUUID);
+}
+
 export async function markRefsSynced(artikelNummern: string[]): Promise<void> {
   if (artikelNummern.length === 0) return;
   const placeholders = artikelNummern.map((_, i) => `$${i + 1}`).join(', ');

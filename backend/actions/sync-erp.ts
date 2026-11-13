@@ -283,6 +283,19 @@ export function resolveArtikelNummerMirrorScope(
   return Array.from(resolved);
 }
 
+export function resolveSyncedArtikelNummern(
+  items: Array<{ Artikel_Nummer?: string | null }>
+): string[] {
+  const resolved = new Set<string>();
+  for (const item of items) {
+    const value = typeof item.Artikel_Nummer === 'string' ? item.Artikel_Nummer.trim() : '';
+    if (value) {
+      resolved.add(value);
+    }
+  }
+  return Array.from(resolved);
+}
+
 interface ScriptExecutionResult {
   exitCode: number;
   stdout: string;
@@ -789,10 +802,17 @@ const action = defineHttpAction({
       });
 
       if (scriptResult.exitCode === 0) {
-        if (scopedArtikelNummern.length > 0 && typeof ctx.markRefsSynced === 'function') {
-          void ctx.markRefsSynced(scopedArtikelNummern).catch(
-            (err: unknown) => console.error('[sync-erp] Failed to mark refs synced', err)
-          );
+        // Raw DB keys, not scopedArtikelNummern: those are zero-padded media folder names ('001158')
+        // and matched no item_refs row, so LastSyncedAt was never written.
+        const syncedArtikelNummern = resolveSyncedArtikelNummern(approvedItems);
+        if (syncedArtikelNummern.length > 0 && typeof ctx.markRefsSynced === 'function') {
+          // Awaited so the client's refresh after this response already sees LastSyncedAt.
+          try {
+            await ctx.markRefsSynced(syncedArtikelNummern);
+            console.info('[sync-erp] refs_marked_synced', { artikelNummern: syncedArtikelNummern });
+          } catch (err) {
+            console.error('[sync-erp] Failed to mark refs synced', err);
+          }
         }
         return sendJson(res, 200, {
           ok: true,

@@ -37,6 +37,7 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 
 ## Recent changes (last 10)
 
+1091. ✅ ERP sync now sets LastSyncedAt (was keyed by padded media folder `001158`); nightly sync posts `itemIds` instead of a rejected `artikelNummern` body → [erp-sync]
 1090. ✅ Made the user-settings certificate download a compact text link matching the admin page → [printing]
 1089. ✅ Added the configured print-proxy CA download to user settings beside the colour-scheme selector → [printing]
 1088. ✅ Browser printing verified end-to-end on the Raspi; nginx reference now routes every queue via `^/printers/[A-Za-z0-9_.-]+$` → [printing]
@@ -46,4 +47,3 @@ Runbooks: [docs/detailed/](docs/detailed/README.md) · Changelogs: [docs/changel
 1084. ✅ Browser print mode: backend renders the PDF, the browser sends the IPP job to an nginx CORS proxy in front of the LAN CUPS (cloud backend can't reach printers) → [printing]
 1083. ✅ Keep-busy auto-feeder only enrols/promotes refs that have an instance; ref-only refs are manual-only (KI tab, bulk queue, restart) → [agentic]
 1082. ✅ Item list Typ "Alle" really shows all: frontend always sends `entityFilter` (backend defaulted the missing param to instances, hiding refs) → [ui]
-1081. ✅ WebDAV mounts migration guide (davfs2 fstab entries, credentials, verify checklist) in `docs/detailed/webdav-mounts.md` → [media]
